@@ -37,6 +37,11 @@ FLOW_FILE="${APP_DIR}/flow.json"
 PACKAGE_FILE="${APP_DIR}/package.json"
 RED_JS="${APP_DIR}/node_modules/node-red/red.js"
 
+# All steps (especially npm install) must run inside the app directory,
+# regardless of where this script was invoked from (e.g. curl | sudo bash
+# keeps the caller's cwd, which would make npm look for ~/package.json).
+cd "${APP_DIR}"
+
 # --------------------------------------------------------------------------- #
 # Output helpers (ASCII only to avoid locale/codepage issues)
 # --------------------------------------------------------------------------- #

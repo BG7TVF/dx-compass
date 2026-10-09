@@ -15,3 +15,6 @@ flows_*.json
 
 # Backup of the original upstream git history (not part of this project)
 .git-old-backup/
+
+# Leftover templates from the upstream project (not part of DX-Compass)
+.github/
