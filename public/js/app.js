@@ -90,17 +90,31 @@ function setLayout(layout) {
     grid.className = 'grid layout-' + layout;
 
     const count = cellCountForLayout(layout);
-    // Rebuild cells array preserving existing callsigns; destroy old maps
-    const oldCalls = state.cells.map(c => c.call);
-    state.cells.forEach(c => { if (c.map) c.map.remove(); });
+    // Preserve callsigns AND surviving spots across the rebuild
+    const now = Date.now();
+    const oldData = state.cells.map(c => ({
+        call: c.call,
+        spots: c.markers.map(g => ({
+            spot: g._spot,
+            remaining: MARKER_TTL_MS - (now - (g._addedAt || now))
+        })).filter(s => s.remaining > 0)
+    }));
+    state.cells.forEach(c => {
+        c.markers.forEach(g => clearTimeout(g._ttl));
+        if (c.map) c.map.remove();
+    });
     state.cells = [];
     grid.innerHTML = '';
 
     for (let i = 0; i < count; i++) {
-        const cell = createCell(i, oldCalls[i] || '');
+        const cell = createCell(i, oldData[i] ? oldData[i].call : '');
         state.cells.push(cell);
         grid.appendChild(cell.el);
         setTimeout(() => { if (cell.map) cell.map.invalidateSize(); }, 50);
+        // Restore surviving markers with their remaining TTL
+        if (oldData[i]) {
+            oldData[i].spots.forEach(s => addMarkerToCell(cell, s.spot, s.remaining));
+        }
     }
     // Highlight active layout button
     $all('.layout-btn').forEach(b => {
@@ -219,7 +233,7 @@ function dotIcon(color, size) {
     });
 }
 
-function addMarkerToCell(cell, spot) {
+function addMarkerToCell(cell, spot, ttlMs = MARKER_TTL_MS) {
     const hasDe = spot.lat !== null && spot.lat !== undefined &&
                   spot.lon !== null && spot.lon !== undefined;
     const hasDx = spot.dx_lat !== null && spot.dx_lat !== undefined &&
@@ -265,8 +279,8 @@ function addMarkerToCell(cell, spot) {
         ).addTo(cell.map));
     }
 
-    const group = {layers, _spot: spot};
-    group._ttl = setTimeout(() => removeMarker(cell, group), MARKER_TTL_MS);
+    const group = {layers, _spot: spot, _addedAt: Date.now()};
+    group._ttl = setTimeout(() => removeMarker(cell, group), ttlMs);
 
     cell.markers.push(group);
     cell.count++;
