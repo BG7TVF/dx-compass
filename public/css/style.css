@@ -211,6 +211,29 @@ html, body {
 }
 .cell-empty-hint .hint-icon { font-size: 32px; display: block; margin-bottom: 6px; opacity: .4; }
 
+/* Cell info bar: band / freq / mode / signal of the latest spot, RBN style */
+.cell-info {
+    position: absolute;
+    top: 34px; left: 0; right: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 3px 8px;
+    background: linear-gradient(180deg, rgba(10,13,16,.75), rgba(10,13,16,0));
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: .5px;
+    pointer-events: none;
+    z-index: 1100; /* above Leaflet panes (max 1000) inside the cell stacking context */
+    min-height: 20px;
+}
+.cell-info:empty { display: none; }
+.cell-info .ci-band { font-size: 13px; }
+.cell-info .ci-freq { color: var(--text); }
+.cell-info .ci-mode { color: var(--accent); }
+.cell-info .ci-sig { color: var(--text-dim); }
+
 /* ---------- Side Panels ---------- */
 .side-panel {
     position: absolute;

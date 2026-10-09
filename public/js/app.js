@@ -35,21 +35,6 @@ function setConnState(state) {
                        state === 'connecting' ? 'connecting...' : 'disconnected';
 }
 
-function signalColor(spot) {
-    if (spot.snr !== null && spot.snr !== undefined) {
-        if (spot.snr >= 0) return '#2ecc71';
-        if (spot.snr >= -10) return '#f1c40f';
-        return '#e74c3c';
-    }
-    if (spot.signal) {
-        const n = parseInt(spot.signal.charAt(1));
-        if (n >= 9) return '#2ecc71';
-        if (n >= 7) return '#f1c40f';
-        return '#e74c3c';
-    }
-    return '#00e5ff';
-}
-
 function modeBadge(mode) {
     if (!mode) return '';
     const cls = mode === 'CW' ? 'mode-cw' : mode === 'DIGI' ? 'mode-digi' : 'mode-phone';
@@ -103,6 +88,7 @@ function createCell(index, call) {
             <span class="spot-count">0</span>
             <button class="clear-cell-btn" title="Clear map">&times;</button>
         </div>
+        <div class="cell-info"></div>
         <div class="map"></div>
         <div class="cell-empty-hint"><span class="hint-icon">📡</span>Enter a callsign to monitor</div>
     `;
@@ -111,6 +97,7 @@ function createCell(index, call) {
     const countEl = el.querySelector('.spot-count');
     const clearBtn = el.querySelector('.clear-cell-btn');
     const hint = el.querySelector('.cell-empty-hint');
+    const info = el.querySelector('.cell-info');
 
     const map = L.map(mapEl, {
         zoomControl: true,
@@ -125,7 +112,7 @@ function createCell(index, call) {
 
     const cell = {
         index, call: call || '', map, markers: [], count: 0,
-        el, input, countEl, clearBtn, hint
+        el, input, countEl, clearBtn, hint, info
     };
 
     input.value = call || '';
@@ -166,12 +153,13 @@ function syncCallsigns() {
 function clearCell(cell, resetInput = true) {
     cell.markers.forEach(m => {
         clearTimeout(m._ttl);
-        cell.map.removeLayer(m);
+        (m.layers || [m]).forEach(l => cell.map.removeLayer(l));
     });
     cell.markers = [];
     cell.count = 0;
     cell.countEl.textContent = '0';
     cell.countEl.classList.remove('has-spots');
+    cell.info.innerHTML = '';
     if (resetInput) {
         cell.call = '';
         cell.input.value = '';
@@ -181,53 +169,100 @@ function clearCell(cell, resetInput = true) {
 }
 
 /* ---------- Markers ---------- */
-function addMarkerToCell(cell, spot) {
-    if (!spot.lat || !spot.lon) return;
-    const color = signalColor(spot);
-    const icon = L.divIcon({
+const BAND_COLORS = {
+    '160m': '#b565d8', '80m': '#e67e22', '60m': '#fd79a8', '40m': '#f1c40f',
+    '30m': '#1abc9c', '20m': '#00e5ff', '17m': '#3498db', '15m': '#9b59b6',
+    '12m': '#e84393', '10m': '#e17055', '6m': '#dfe6e9', '2m': '#55efc4'
+};
+
+function dotIcon(color, size) {
+    return L.divIcon({
         className: 'fresh-marker',
         html: `<div style="
-            width:14px;height:14px;border-radius:50%;
+            width:${size}px;height:${size}px;border-radius:50%;
             background:${color};border:2px solid #fff;
             box-shadow:0 0 6px ${color};"></div>`,
-        iconSize: [14, 14],
-        iconAnchor: [7, 7]
+        iconSize: [size, size],
+        iconAnchor: [size / 2, size / 2]
     });
+}
 
-    const sigText = spot.signal ? `Signal: ${spot.signal}` :
-                    spot.snr !== null ? `SNR: ${spot.snr} dB` : '';
-    const popup = `
-        <b>${spot.de}</b><br>
-        Freq: ${spot.freq} kHz<br>
-        ${sigText}<br>
-        Mode: ${spot.mode || '—'}<br>
-        Distance: ${spot.distance_km} km (${spot.distance_miles} mi)<br>
-        Time: ${formatTime(spot.timestamp)}<br>
-        <i>${spot.comment || ''}</i>
-    `;
+function addMarkerToCell(cell, spot) {
+    const hasDe = spot.lat !== null && spot.lat !== undefined &&
+                  spot.lon !== null && spot.lon !== undefined;
+    const hasDx = spot.dx_lat !== null && spot.dx_lat !== undefined &&
+                  spot.dx_lon !== null && spot.dx_lon !== undefined;
+    if (!hasDe && !hasDx) return;
 
-    const marker = L.marker([spot.lat, spot.lon], {icon}).addTo(cell.map);
-    marker.bindPopup(popup);
-    marker._spot = spot;
-    marker._ttl = setTimeout(() => removeMarker(cell, marker), MARKER_TTL_MS);
+    const bandColor = BAND_COLORS[spot.band] || '#00e5ff';
+    const layers = [];
 
-    cell.markers.push(marker);
+    // Green dot: monitored (DX) station
+    if (hasDx) {
+        const dxMarker = L.marker([spot.dx_lat, spot.dx_lon],
+            {icon: dotIcon('#2ecc71', 14)}).addTo(cell.map);
+        dxMarker.bindPopup(`<b>${spot.monitored_call || spot.spot_call}</b> (monitored)<br>` +
+            `${spot.dx_lat.toFixed(4)}, ${spot.dx_lon.toFixed(4)}`);
+        layers.push(dxMarker);
+    }
+
+    // Red dot: spotter (DE)
+    if (hasDe) {
+        const sigText = spot.signal ? `Signal: ${spot.signal}` :
+                        spot.snr !== null && spot.snr !== undefined ? `SNR: ${spot.snr} dB` : '';
+        const popup = `
+            <b>${spot.de}</b> (spotter)<br>
+            Freq: ${spot.freq} kHz ${spot.band ? '(' + spot.band + ')' : ''}<br>
+            ${sigText}<br>
+            Mode: ${spot.mode || '—'}<br>
+            Distance: ${spot.distance_km} km (${spot.distance_miles} mi)<br>
+            Time: ${formatTime(spot.timestamp)}<br>
+            <i>${spot.comment || ''}</i>
+        `;
+        const deMarker = L.marker([spot.lat, spot.lon],
+            {icon: dotIcon('#e74c3c', 12)}).addTo(cell.map);
+        deMarker.bindPopup(popup);
+        layers.push(deMarker);
+    }
+
+    // Link line between monitored station and spotter (band colored, RBN style)
+    if (hasDe && hasDx) {
+        layers.push(L.polyline(
+            [[spot.dx_lat, spot.dx_lon], [spot.lat, spot.lon]],
+            {color: bandColor, weight: 2, opacity: 0.85}
+        ).addTo(cell.map));
+    }
+
+    const group = {layers, _spot: spot};
+    group._ttl = setTimeout(() => removeMarker(cell, group), MARKER_TTL_MS);
+
+    cell.markers.push(group);
     cell.count++;
     cell.countEl.textContent = cell.count;
     cell.countEl.classList.add('has-spots');
 
-    // Remove old markers beyond a reasonable limit
+    // Info bar: band / freq / mode / signal of the latest spot
+    const sig = spot.snr !== null && spot.snr !== undefined ? spot.snr + ' dB' :
+                (spot.signal || '');
+    cell.info.innerHTML = [
+        spot.band ? `<span class="ci-band" style="color:${bandColor}">${spot.band}</span>` : '',
+        spot.freq ? `<span class="ci-freq">${spot.freq} kHz</span>` : '',
+        spot.mode ? `<span class="ci-mode">${spot.mode}</span>` : '',
+        sig ? `<span class="ci-sig">${sig}</span>` : ''
+    ].filter(Boolean).join('');
+
+    // Remove old groups beyond a reasonable limit
     if (cell.markers.length > 500) {
         const old = cell.markers.shift();
         clearTimeout(old._ttl);
-        cell.map.removeLayer(old);
+        old.layers.forEach(l => cell.map.removeLayer(l));
     }
 }
 
-function removeMarker(cell, marker) {
-    const i = cell.markers.indexOf(marker);
+function removeMarker(cell, group) {
+    const i = cell.markers.indexOf(group);
     if (i >= 0) cell.markers.splice(i, 1);
-    cell.map.removeLayer(marker);
+    group.layers.forEach(l => cell.map.removeLayer(l));
 }
 
 /* ---------- WebSocket ---------- */
