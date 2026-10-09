@@ -2,6 +2,29 @@
 
 基于 Node-RED 的多呼号 DX Spot 实时监测大屏。连接 DX Cluster（DXSpider），同时监测最多 **9 个呼号**收到的 spot，在地图上实时打点显示，支持硬盘录像机（DVR）风格的多分屏切换，并将所有 spot 记录到数据库用于赛后分析。
 
+## 一键安装（复制即用）
+
+在 **Ubuntu 服务器终端**直接粘贴下面一行命令，即可自动完成"下载代码 → 安装依赖 → 启动服务"：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/BG7TVF/dx-compass/main/bootstrap.sh | sudo bash
+```
+
+没有 `curl` 时可用 `wget`：
+
+```bash
+wget -qO- https://raw.githubusercontent.com/BG7TVF/dx-compass/main/bootstrap.sh | sudo bash
+```
+
+脚本会将代码安装到 `/opt/dx-compass`，注册并启动开机自启服务 `dx-compass`（端口 **5758**）。完成后访问：
+
+- 监测大屏：`http://<服务器IP>:5758/`
+- Node-RED 编辑器：`http://<服务器IP>:5758/red`
+
+> 该命令可**重复执行**：已安装时会自动更新代码到最新版本后重新部署。
+> 服务器通过代理访问 GitHub 时：先下载脚本再带代理变量运行，见文末[常见问题](#常见问题)。
+> 云服务器记得在安全组放行 **TCP 5758**。
+
 ## 功能特性
 
 - **多分屏布局**：`1×1` / `1×2` / `2×2` / `3×3` 自由切换，一个呼号对应一张地图，最多同时监测 9 个呼号
@@ -33,7 +56,8 @@ dx-compass/
 ├── settings.js        # Node-RED 配置（端口 5758、静态目录、上下文持久化）
 ├── package.json       # 依赖（node-red、node-red-node-sqlite）
 ├── flow_cred.json     # 凭据文件（为空）
-├── install.sh         # Ubuntu 一键安装脚本
+├── install.sh         # Ubuntu 一键安装脚本（依赖 + systemd 服务）
+├── bootstrap.sh       # 引导脚本：一行命令从 GitHub 下载并调用 install.sh
 ├── public/            # 前端大屏
 │   ├── index.html
 │   ├── css/style.css
@@ -53,29 +77,29 @@ dx-compass/
 
 安装脚本已处理好环境检测、依赖安装、systemd 服务注册，并与服务器上已有的 Node-RED 实例**四重隔离、互不影响**。
 
-### 1. 上传代码
+### 方式一：一行命令（自动下载 + 安装）
 
-将整个项目目录上传到服务器，例如 `/opt/dx-compass`：
+在服务器终端直接执行（详见顶部[一键安装](#一键安装复制即用)）：
 
 ```bash
-sudo mkdir -p /opt/dx-compass
-# 方式一：用 scp 上传（在本地执行）
-scp -r ./* user@<服务器IP>:/opt/dx-compass/
+curl -fsSL https://raw.githubusercontent.com/BG7TVF/dx-compass/main/bootstrap.sh | sudo bash
+```
 
-# 方式二：直接在服务器上克隆
+引导脚本会自动安装 git/curl、克隆代码到 `/opt/dx-compass`（已安装则更新到最新版），随后调用 `install.sh` 完成全部部署。
+
+### 方式二：手动下载代码后安装
+
+```bash
+# 直接在服务器上克隆
 cd /opt
 sudo git clone https://github.com/BG7TVF/dx-compass.git
 cd dx-compass
-```
 
-### 2. 执行一键安装
-
-```bash
-cd /opt/dx-compass
+# 或用 scp 上传本项目后进入目录，然后执行：
 sudo bash install.sh
 ```
 
-脚本会自动完成：
+安装脚本会自动完成：
 
 1. 校验系统与必要文件，检查 **5758** 端口是否被占用
 2. 安装系统编译工具（SQLite 原生模块需要 `build-essential`）
@@ -86,7 +110,7 @@ sudo bash install.sh
 
 脚本可重复执行（幂等），日志会明确提示不会触碰已有的 `nodered` 服务与 `~/.node-red` 目录。
 
-### 3. 访问
+### 访问
 
 - **监测大屏**：`http://<服务器IP>:5758/`
 - **Node-RED 编辑器**：`http://<服务器IP>:5758/red`
@@ -140,6 +164,17 @@ journalctl -u dx-compass -f            # 实时查看日志
   - `POST /api/connect`：触发重新连接集群
 
 ## 常见问题
+
+**0. 一键命令下载失败（服务器需代理访问 GitHub）？**
+
+先下载引导脚本，再带代理变量执行（按实际代理端口修改）：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/BG7TVF/dx-compass/main/bootstrap.sh -o /tmp/dxc-bootstrap.sh
+sudo https_proxy=http://127.0.0.1:7890 http_proxy=http://127.0.0.1:7890 bash /tmp/dxc-bootstrap.sh
+```
+
+代理变量会被后续的 git / npm 步骤继承；npm 部分还会自动切换国内镜像重试。
 
 **1. 大屏打开正常但收不到 spot？**
 
