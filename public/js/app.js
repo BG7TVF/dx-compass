@@ -116,6 +116,7 @@ function createCell(index) {
         </div>
         <div class="cell-info"></div>
         <div class="map"></div>
+        <div class="stale-overlay">NO RUNING</div>
         <div class="cell-empty-hint"><span class="hint-icon">📡</span>Set callsigns in Config</div>
     `;
     const mapEl = el.querySelector('.map');
@@ -140,7 +141,9 @@ function createCell(index) {
     const cell = {
         index, call: '', map, markers: [], count: 0,
         bandInfo: {},   // band -> latest spot
-        el, callLabel, countEl, clearBtn, hint, info
+        lastSpotAt: null,   // last time a spot hit this cell
+        el, callLabel, countEl, clearBtn, hint, info,
+        stale: el.querySelector('.stale-overlay')
     };
 
     clearBtn.addEventListener('click', () => clearCell(cell));
@@ -160,6 +163,8 @@ function applyCallsigns(calls) {
         cell.call = call;
         cell.callLabel.textContent = call || '\u2014';
         cell.hint.style.display = call ? 'none' : '';
+        cell.lastSpotAt = null;
+        cell.stale.classList.remove('show');
     }
 }
 
@@ -257,6 +262,8 @@ function addMarkerToCell(cell, spot, ttlMs = MARKER_TTL_MS) {
     cell.count++;
     cell.countEl.textContent = cell.count;
     cell.countEl.classList.add('has-spots');
+    cell.lastSpotAt = Date.now();
+    cell.stale.classList.remove('show');
 
     // Info bar: one chip per band, refreshed with the latest spot of that band
     cell.bandInfo[spot.band || '?'] = spot;
@@ -501,9 +508,13 @@ function init() {
         $('#utcClock').textContent = d.toISOString().substring(11, 19) + 'Z';
     }, 1000);
 
-    // Refresh relative-time labels in the cell info bars
+    // Refresh relative-time labels in the cell info bars + stale check
     setInterval(() => state.cells.forEach(c => {
         if (Object.keys(c.bandInfo).length) renderCellInfo(c);
+        // Show "NO RUNING" overlay when no spot has hit this cell for > 1 hour
+        const isStale = c.call && c.lastSpotAt &&
+                        (Date.now() - c.lastSpotAt) > MARKER_TTL_MS;
+        c.stale.classList.toggle('show', !!isStale);
     }), 30000);
 }
 
