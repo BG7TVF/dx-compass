@@ -138,6 +138,8 @@ function createCell(index) {
         maxZoom: 18
     }).addTo(map);
 
+    addGraticule(map);
+
     const cell = {
         index, call: '', map, markers: [], count: 0,
         bandInfo: {},   // band -> latest spot
@@ -149,6 +151,17 @@ function createCell(index) {
     clearBtn.addEventListener('click', () => clearCell(cell));
 
     return cell;
+}
+
+/* Gray lat/lon graticule, like the RBN map */
+function addGraticule(map) {
+    const style = {color: '#888', weight: 1, opacity: 0.35, interactive: false};
+    for (let lat = -80; lat <= 80; lat += 20) {
+        L.polyline([[lat, -180], [lat, 180]], style).addTo(map);
+    }
+    for (let lon = -180; lon <= 180; lon += 20) {
+        L.polyline([[-85, lon], [85, lon]], style).addTo(map);
+    }
 }
 
 function applyCallsigns(calls) {
