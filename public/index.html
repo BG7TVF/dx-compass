@@ -84,18 +84,36 @@
             </div>
             <div class="panel-body">
                 <form id="configForm" class="config-form">
-                    <div class="form-row">
-                        <label>Home latitude</label>
-                        <input type="text" id="cfgHomeLat" placeholder="e.g. 23.0">
+                    <div class="form-section">
+                        <div class="section-title">Monitored Callsigns</div>
+                        <div class="call-inputs" id="callInputs">
+                            <input type="text" class="cfg-call" placeholder="Slot 1" maxlength="16">
+                            <input type="text" class="cfg-call" placeholder="Slot 2" maxlength="16">
+                            <input type="text" class="cfg-call" placeholder="Slot 3" maxlength="16">
+                            <input type="text" class="cfg-call" placeholder="Slot 4" maxlength="16">
+                            <input type="text" class="cfg-call" placeholder="Slot 5" maxlength="16">
+                            <input type="text" class="cfg-call" placeholder="Slot 6" maxlength="16">
+                            <input type="text" class="cfg-call" placeholder="Slot 7" maxlength="16">
+                            <input type="text" class="cfg-call" placeholder="Slot 8" maxlength="16">
+                            <input type="text" class="cfg-call" placeholder="Slot 9" maxlength="16">
+                        </div>
                     </div>
-                    <div class="form-row">
-                        <label>Home longitude</label>
-                        <input type="text" id="cfgHomeLon" placeholder="e.g. 111.0">
+                    <div class="form-section">
+                        <div class="section-title">Home Coordinates</div>
+                        <div class="form-row">
+                            <label>Latitude</label>
+                            <input type="text" id="cfgHomeLat" placeholder="e.g. 23.0">
+                        </div>
+                        <div class="form-row">
+                            <label>Longitude</label>
+                            <input type="text" id="cfgHomeLon" placeholder="e.g. 111.0">
+                        </div>
                     </div>
                     <div class="form-row">
                         <button type="submit" class="primary-btn">Save</button>
                     </div>
-                    <p class="hint">Home coordinates are used to compute the distance to each spotting station.<br>
+                    <p class="hint">Callsigns are assigned to map slots in order. Empty slots stay blank on the dashboard.<br>
+                    Home coordinates are used to compute the distance to each spotting station.<br>
                     Spots are provided automatically: CW by reversebeacon.net RBN (10s), other modes by dxwatch.com (30s) - no cluster login or connection setup is needed.</p>
                 </form>
             </div>

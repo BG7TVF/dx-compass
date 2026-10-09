@@ -90,61 +90,44 @@ function setLayout(layout) {
     grid.className = 'grid layout-' + layout;
 
     const count = cellCountForLayout(layout);
-    // Preserve callsigns AND surviving spots across the rebuild
-    const now = Date.now();
-    const oldData = state.cells.map(c => ({
-        call: c.call,
-        spots: c.markers.map(g => ({
-            spot: g._spot,
-            remaining: MARKER_TTL_MS - (now - (g._addedAt || now))
-        })).filter(s => s.remaining > 0)
-    }));
-    state.cells.forEach(c => {
-        c.markers.forEach(g => clearTimeout(g._ttl));
-        if (c.map) c.map.remove();
+    // Cells are created once and kept alive; only visibility changes,
+    // so maps and markers survive every layout switch.
+    state.cells.forEach((c, i) => {
+        c.el.style.display = i < count ? '' : 'none';
     });
-    state.cells = [];
-    grid.innerHTML = '';
-
-    for (let i = 0; i < count; i++) {
-        const cell = createCell(i, oldData[i] ? oldData[i].call : '');
-        state.cells.push(cell);
-        grid.appendChild(cell.el);
-        setTimeout(() => { if (cell.map) cell.map.invalidateSize(); }, 50);
-        // Restore surviving markers with their remaining TTL
-        if (oldData[i]) {
-            oldData[i].spots.forEach(s => addMarkerToCell(cell, s.spot, s.remaining));
-        }
-    }
+    setTimeout(() => state.cells.forEach(c => {
+        if (c.el.style.display !== 'none' && c.map) c.map.invalidateSize();
+    }), 50);
     // Highlight active layout button
     $all('.layout-btn').forEach(b => {
         b.classList.toggle('active', b.dataset.layout === layout);
     });
 }
 
-function createCell(index, call) {
+function createCell(index) {
     const el = document.createElement('div');
     el.className = 'cell';
     el.dataset.index = index;
     el.innerHTML = `
         <div class="cell-header">
-            <input type="text" class="call-input" placeholder="Enter callsign..." maxlength="16">
+            <span class="call-label">&mdash;</span>
             <span class="spot-count">0</span>
             <button class="clear-cell-btn" title="Clear map">&times;</button>
         </div>
         <div class="cell-info"></div>
         <div class="map"></div>
-        <div class="cell-empty-hint"><span class="hint-icon">📡</span>Enter a callsign to monitor</div>
+        <div class="cell-empty-hint"><span class="hint-icon">📡</span>Set callsigns in Config</div>
     `;
     const mapEl = el.querySelector('.map');
-    const input = el.querySelector('.call-input');
+    const callLabel = el.querySelector('.call-label');
     const countEl = el.querySelector('.spot-count');
     const clearBtn = el.querySelector('.clear-cell-btn');
     const hint = el.querySelector('.cell-empty-hint');
     const info = el.querySelector('.cell-info');
 
     const map = L.map(mapEl, {
-        zoomControl: true,
+        zoomControl: false,      // buttons removed; scroll-wheel zoom stays on
+        scrollWheelZoom: true,
         attributionControl: true,
         worldCopyJump: true
     }).setView([20, 0], 2);
@@ -155,47 +138,41 @@ function createCell(index, call) {
     }).addTo(map);
 
     const cell = {
-        index, call: call || '', map, markers: [], count: 0,
+        index, call: '', map, markers: [], count: 0,
         bandInfo: {},   // band -> latest spot
-        el, input, countEl, clearBtn, hint, info
+        el, callLabel, countEl, clearBtn, hint, info
     };
 
-    input.value = call || '';
-    input.addEventListener('change', () => onCallChange(cell));
-    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') input.blur(); });
     clearBtn.addEventListener('click', () => clearCell(cell));
 
-    if (call) hint.style.display = 'none';
     return cell;
 }
 
-function onCallChange(cell) {
-    const call = cell.input.value.trim().toUpperCase();
-    cell.call = call;
-    if (call) {
-        cell.hint.style.display = 'none';
-        cell.countEl.textContent = cell.count;
-    } else {
-        cell.hint.style.display = '';
-        clearCell(cell, false);
+function applyCallsigns(calls) {
+    // Slot i of the Config list owns cell i. A changed/removed call
+    // clears that cell's markers; maps and other cells are untouched.
+    for (let i = 0; i < MAX_CELLS; i++) {
+        const cell = state.cells[i];
+        if (!cell) continue;
+        const call = (calls[i] || '').toUpperCase();
+        if (call === cell.call) continue;
+        if (cell.call) clearCell(cell);          // old call's spots no longer wanted
+        cell.call = call;
+        cell.callLabel.textContent = call || '\u2014';
+        cell.hint.style.display = call ? 'none' : '';
     }
-    syncCallsigns();
 }
 
 function syncCallsigns() {
-    const calls = state.cells.map(c => c.call).filter(Boolean);
+    const calls = state.cells.map(c => c.call);
     fetch('/api/callsigns', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(calls)
-    }).then(r => r.json()).then(data => {
-        if (data.calls) {
-            // nothing to do
-        }
+        body: JSON.stringify(calls.filter(Boolean))
     }).catch(() => showToast('Failed to save callsigns'));
 }
 
-function clearCell(cell, resetInput = true) {
+function clearCell(cell) {
     cell.markers.forEach(m => {
         clearTimeout(m._ttl);
         (m.layers || [m]).forEach(l => cell.map.removeLayer(l));
@@ -206,12 +183,6 @@ function clearCell(cell, resetInput = true) {
     cell.countEl.classList.remove('has-spots');
     cell.info.innerHTML = '';
     cell.bandInfo = {};
-    if (resetInput) {
-        cell.call = '';
-        cell.input.value = '';
-        cell.hint.style.display = '';
-        syncCallsigns();
-    }
 }
 
 /* ---------- Markers ---------- */
@@ -448,6 +419,14 @@ function loadConfig() {
         $('#cfgHomeLat').value = cfg.homelat || '';
         $('#cfgHomeLon').value = cfg.homelon || '';
     });
+    fetch('/api/callsigns').then(r => r.json()).then(calls => {
+        if (Array.isArray(calls)) {
+            applyCallsigns(calls);
+            // Fill the Config inputs
+            const inputs = document.querySelectorAll('.cfg-call');
+            inputs.forEach((inp, i) => { inp.value = calls[i] || ''; });
+        }
+    });
 }
 
 function saveConfig(e) {
@@ -456,14 +435,26 @@ function saveConfig(e) {
         homelat: $('#cfgHomeLat').value.trim(),
         homelon: $('#cfgHomeLon').value.trim()
     };
+    const calls = Array.from(document.querySelectorAll('.cfg-call'))
+        .map(inp => inp.value.trim().toUpperCase());
+
+    // Save coordinates
     fetch('/api/config', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(cfg)
+    }).then(r => r.json()).catch(() => showToast('Failed to save config'));
+
+    // Save callsigns (slot order matters)
+    fetch('/api/callsigns', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(calls)
     }).then(r => r.json()).then(() => {
+        applyCallsigns(calls);
         showToast('Configuration saved');
         closeConfig();
-    }).catch(() => showToast('Failed to save config'));
+    }).catch(() => showToast('Failed to save callsigns'));
 }
 
 /* ---------- Init ---------- */
@@ -487,23 +478,19 @@ function init() {
     $('#recordCallSelect').addEventListener('change', refreshRecords);
     $('#configForm').addEventListener('submit', saveConfig);
 
+    // Create all 9 cells once (never rebuilt; layout only toggles visibility)
+    const grid = $('#grid');
+    for (let i = 0; i < MAX_CELLS; i++) {
+        const cell = createCell(i);
+        state.cells.push(cell);
+        grid.appendChild(cell.el);
+    }
+
     // Initial layout
     setLayout('1x1');
 
     // Load config + callsigns
     loadConfig();
-    fetch('/api/callsigns').then(r => r.json()).then(calls => {
-        if (Array.isArray(calls) && calls.length) {
-            // Distribute calls into cells
-            calls.forEach((call, i) => {
-                if (state.cells[i]) {
-                    state.cells[i].call = call;
-                    state.cells[i].input.value = call;
-                    state.cells[i].hint.style.display = 'none';
-                }
-            });
-        }
-    });
 
     // WebSocket
     connectWS();

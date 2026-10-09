@@ -158,22 +158,18 @@ html, body {
     background: linear-gradient(180deg, #1a2129, #141a20);
     border-bottom: 1px solid var(--border);
 }
-.call-input {
+.call-label {
     flex: 1;
-    background: #0d1116;
-    border: 1px solid var(--border);
     color: var(--accent);
-    padding: 4px 8px;
-    font-size: 13px;
-    font-weight: 600;
-    letter-spacing: 1px;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
     text-transform: uppercase;
-    border-radius: 3px;
-    outline: none;
-    font-family: inherit;
+    padding: 2px 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
-.call-input:focus { border-color: var(--accent); }
-.call-input::placeholder { color: #4a5663; font-weight: 400; }
 .spot-count {
     background: var(--panel-2);
     border: 1px solid var(--border);
@@ -348,6 +344,33 @@ tbody tr:nth-child(even) { background: #141a20; }
 }
 .form-row input:focus { border-color: var(--accent); }
 .form-row .primary-btn { align-self: flex-start; }
+.form-section { display: flex; flex-direction: column; gap: 8px; }
+.section-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 4px;
+}
+.call-inputs {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+}
+.call-inputs input {
+    background: #0d1116;
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 7px 10px;
+    border-radius: 3px;
+    font-size: 13px;
+    font-family: inherit;
+    outline: none;
+    text-transform: uppercase;
+}
+.call-inputs input:focus { border-color: var(--accent); }
 .hint { font-size: 11px; color: var(--text-dim); margin-top: 4px; line-height: 1.5; }
 
 /* ---------- Toast ---------- */
