@@ -120,6 +120,33 @@ if [[ -d "${HOME}/.node-red" ]]; then
 fi
 
 # --------------------------------------------------------------------------- #
+# 1b. Disk space preflight (npm install needs room; fail clearly instead of
+#     producing cryptic ENOSPC / apt "write (28: No space left on device)")
+# --------------------------------------------------------------------------- #
+MIN_FREE_KB=$((500 * 1024))   # require at least ~500 MB free on target fs
+FREE_KB="$(df -Pk "${APP_DIR}" | awk 'NR==2 {print $4}')"
+if [[ -z "${FREE_KB}" || "${FREE_KB}" -lt ${MIN_FREE_KB} ]]; then
+    free_mb="$(( ${FREE_KB:-0} / 1024 ))"
+    need_mb="$(( MIN_FREE_KB / 1024 ))"
+    echo
+    err "Not enough disk space: only ${free_mb} MB free on the filesystem of ${APP_DIR}; need ${need_mb} MB."
+    echo
+    echo "Current disk usage:"
+    df -h "${APP_DIR}" | sed 's/^/    /'
+    echo
+    echo "Common ways to free space (review before running):"
+    echo "    sudo apt-get clean                       # clear cached .deb packages"
+    echo "    sudo journalctl --vacuum-size=100M       # shrink systemd journal logs"
+    echo "    sudo docker system prune -af             # if Docker is used (removes unused images)"
+    echo "    npm cache clean --force                  # clear npm cache"
+    echo "    sudo rm -rf /tmp/*                        # clear temp files"
+    echo "    sudo du -xh / 2>/dev/null | sort -h | tail -n 20   # find biggest space users"
+    echo
+    die "Free at least ${need_mb} MB and re-run this installer."
+fi
+ok "Disk space OK ($(( FREE_KB / 1024 )) MB available)"
+
+# --------------------------------------------------------------------------- #
 # 2. System packages (build tools needed by the sqlite native module)
 # --------------------------------------------------------------------------- #
 info "Installing system packages (ca-certificates, curl, build tools)..."
