@@ -370,9 +370,6 @@ function closeConfig() { $('#configPanel').classList.add('hidden'); }
 function loadConfig() {
     fetch('/api/config').then(r => r.json()).then(cfg => {
         state.config = cfg;
-        $('#cfgSkimmerCall').value = cfg.skimmerCall || '';
-        $('#cfgClusterServer').value = cfg.clusterServer || '';
-        $('#cfgClusterPort').value = cfg.clusterPort || '';
         $('#cfgHomeLat').value = cfg.homelat || '';
         $('#cfgHomeLon').value = cfg.homelon || '';
     });
@@ -381,9 +378,6 @@ function loadConfig() {
 function saveConfig(e) {
     e.preventDefault();
     const cfg = {
-        skimmerCall: $('#cfgSkimmerCall').value.trim().toUpperCase(),
-        clusterServer: $('#cfgClusterServer').value.trim(),
-        clusterPort: $('#cfgClusterPort').value.trim(),
         homelat: $('#cfgHomeLat').value.trim(),
         homelon: $('#cfgHomeLon').value.trim()
     };
@@ -395,13 +389,6 @@ function saveConfig(e) {
         showToast('Configuration saved');
         closeConfig();
     }).catch(() => showToast('Failed to save config'));
-}
-
-function connectCluster() {
-    fetch('/api/connect', {method: 'POST'})
-        .then(r => r.json())
-        .then(() => showToast('Connecting to cluster...'))
-        .catch(() => showToast('Connect command failed'));
 }
 
 /* ---------- Init ---------- */
@@ -420,12 +407,10 @@ function init() {
 
     $('#btnRecords').addEventListener('click', openRecords);
     $('#btnConfig').addEventListener('click', openConfig);
-    $('#btnConnect').addEventListener('click', connectCluster);
     $('#btnRefreshRecords').addEventListener('click', refreshRecords);
     $('#btnExportCsv').addEventListener('click', exportCsv);
     $('#recordCallSelect').addEventListener('change', refreshRecords);
     $('#configForm').addEventListener('submit', saveConfig);
-    $('#btnTestConnect').addEventListener('click', () => { saveConfig({preventDefault:()=>{}}); connectCluster(); });
 
     // Initial layout
     setLayout('1x1');

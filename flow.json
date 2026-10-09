@@ -4,16 +4,16 @@
         "type": "tab",
         "label": "DX-Compass",
         "disabled": false,
-        "info": "# DX-Compass\n\nMulti-callsign DX Spot monitor with DVR-style map grid.\n\nConnects to a DX cluster via telnet, parses spots, geolocates the reporting\nstation (DE), computes distance from home, records every spot to SQLite\nand pushes matching spots to the frontend over WebSocket.\n\nFrontend is served from the ./public folder (httpStatic).",
+        "info": "# DX-Compass\n\nMulti-callsign DX Spot monitor with DVR-style map grid.\n\nData source: dxwatch.com public spot feed (polled every 30s over HTTPS).\nNo DX cluster telnet connection is required. Each spot already carries\nspotter/DX coordinates (ci object), so distance is computed without any\nexternal geolocation lookup.\n\nSpots matching a monitored callsign are recorded to SQLite and broadcast\nto the frontend over WebSocket. Adding a new callsign triggers a one-shot\nhistorical backfill (up to 7 days / 150 spots).\n\nFrontend is served from the ./public folder (httpStatic).",
         "env": []
     },
     {
         "id": "dxc0000000000002",
         "type": "comment",
         "z": "dxc0000000000001",
-        "name": "DX Cluster Connection & Spot Processing",
-        "info": "1. Connect to DX cluster (telnet) and login with callsign.\n2. Receive lines, filter 'DX de ...' spots.\n3. Parse spot -> {de, freq, call, comment, time}.\n4. Keep only spots where 'call' matches a monitored callsign.\n5. Geolocate the spotter (de) via hamdb.org (cached).\n6. Compute distance from home (haversine).\n7. Extract signal / mode from comment.\n8. Record to SQLite + broadcast to frontend.",
-        "x": 240,
+        "name": "dxwatch.com spot feed (HTTPS polling, no telnet)",
+        "info": "1. Every 30s GET dxwatch.com/dxsd1/s.php?s=<lastId>&r=200&d=1.\n2. Keep only spots whose DX call matches a monitored callsign.\n3. Spotter coordinates come from the response 'ci' object.\n4. Compute distance from home (haversine), parse mode/FT8 SNR from comment.\n5. Record to SQLite (dedup by spot_id) + broadcast to frontend.\n6. Newly added calls trigger a cdx=<call> history backfill (7 days).",
+        "x": 260,
         "y": 40,
         "wires": []
     },
@@ -29,6 +29,7 @@
         "path": "/ws",
         "wholemsg": "false"
     },
+
     {
         "id": "dxc0000000000024",
         "type": "inject",
@@ -51,7 +52,7 @@
         "type": "function",
         "z": "dxc0000000000001",
         "name": "Create spots table",
-        "func": "msg.topic = `CREATE TABLE IF NOT EXISTS spots (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    timestamp TEXT NOT NULL,\n    monitored_call TEXT NOT NULL,\n    de TEXT NOT NULL,\n    freq REAL,\n    spot_call TEXT NOT NULL,\n    comment TEXT,\n    spot_time TEXT,\n    mode TEXT,\n    signal TEXT,\n    snr REAL,\n    lat REAL,\n    lon REAL,\n    distance_km REAL,\n    distance_miles REAL\n);`;\nreturn msg;",
+        "func": "msg.topic = `CREATE TABLE IF NOT EXISTS spots (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    spot_id INTEGER UNIQUE,\n    timestamp TEXT NOT NULL,\n    monitored_call TEXT NOT NULL,\n    de TEXT NOT NULL,\n    freq REAL,\n    spot_call TEXT NOT NULL,\n    comment TEXT,\n    spot_time TEXT,\n    mode TEXT,\n    signal TEXT,\n    snr REAL,\n    lat REAL,\n    lon REAL,\n    distance_km REAL,\n    distance_miles REAL\n);`;\nreturn msg;",
         "outputs": 1,
         "noerr": 0,
         "initialize": "",
@@ -59,173 +60,170 @@
         "libs": [],
         "x": 340,
         "y": 100,
-        "wires": [["dxc0000000000026"]]
+        "wires": [["dxc0000000000030"]]
     },
     {
-        "id": "dxc0000000000026",
+        "id": "dxc0000000000030",
+        "type": "function",
+        "z": "dxc0000000000001",
+        "name": "Check spot_id column",
+        "func": "msg.topic = \"SELECT COUNT(*) AS c FROM pragma_table_info('spots') WHERE name='spot_id'\";\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 560,
+        "y": 100,
+        "wires": [["dxc0000000000031"]]
+    },
+    {
+        "id": "dxc0000000000031",
         "type": "sqlite",
         "z": "dxc0000000000001",
         "mydb": "dxc0000000000027",
         "sqlquery": "msg.topic",
         "sql": "",
-        "name": "Init DB",
-        "x": 560,
+        "name": "Check schema",
+        "x": 760,
+        "y": 100,
+        "wires": [["dxc0000000000032"]]
+    },
+    {
+        "id": "dxc0000000000032",
+        "type": "function",
+        "z": "dxc0000000000001",
+        "name": "Migrate legacy DB",
+        "func": "// Old databases created before the dxwatch switch lack spot_id.\n// Add it once; on newer schemas run a harmless no-op instead.\nconst rows = msg.payload;\nconst has = Array.isArray(rows) && rows.length > 0 && Number(rows[0].c) > 0;\nmsg.topic = has ? 'SELECT 1' : 'ALTER TABLE spots ADD COLUMN spot_id INTEGER';\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 960,
+        "y": 100,
+        "wires": [["dxc0000000000033"]]
+    },
+    {
+        "id": "dxc0000000000033",
+        "type": "sqlite",
+        "z": "dxc0000000000001",
+        "mydb": "dxc0000000000027",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "Apply migration",
+        "x": 1180,
+        "y": 100,
+        "wires": [["dxc0000000000034"]]
+    },
+    {
+        "id": "dxc0000000000034",
+        "type": "function",
+        "z": "dxc0000000000001",
+        "name": "Unique index SQL",
+        "func": "msg.topic = 'CREATE UNIQUE INDEX IF NOT EXISTS idx_spots_spotid ON spots(spot_id);';\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1400,
+        "y": 100,
+        "wires": [["dxc0000000000035"]]
+    },
+    {
+        "id": "dxc0000000000035",
+        "type": "sqlite",
+        "z": "dxc0000000000001",
+        "mydb": "dxc0000000000027",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "Create index",
+        "x": 1600,
         "y": 100,
         "wires": [[]]
     },
+
     {
-        "id": "dxc0000000000003",
+        "id": "dxc0000000000036",
         "type": "inject",
         "z": "dxc0000000000001",
-        "name": "Connect on startup",
+        "name": "Poll dxwatch every 30s",
         "props": [{"p": "payload"}],
-        "repeat": "",
+        "repeat": "30",
         "crontab": "",
         "once": true,
-        "onceDelay": "1",
+        "onceDelay": "2",
         "topic": "",
         "payload": "",
         "payloadType": "date",
         "x": 130,
-        "y": 180,
-        "wires": [["dxc0000000000004"]]
+        "y": 220,
+        "wires": [["dxc0000000000037"]]
     },
     {
-        "id": "dxc0000000000004",
+        "id": "dxc0000000000037",
         "type": "function",
         "z": "dxc0000000000001",
-        "name": "Send callsign login",
-        "func": "msg.host = global.get('clusterServer') || 'dxc.ve7cc.net';\nmsg.port = parseInt(global.get('clusterPort')) || 23;\nmsg.payload = (global.get('skimmerCall') || 'DX-COMPASS') + '\\r\\n';\nreturn msg;",
+        "name": "Build live poll request",
+        "func": "const lastId = flow.get('lastSpotId') || 0;\nmsg.url = 'https://dxwatch.com/dxsd1/s.php?s=' + lastId + '&r=200&d=1';\nmsg.headers = {\n    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36',\n    'Accept': 'application/json, text/javascript, */*; q=0.01',\n    'Referer': 'https://dxwatch.com/',\n    'X-Requested-With': 'XMLHttpRequest'\n};\nreturn msg;",
         "outputs": 1,
         "noerr": 0,
         "initialize": "",
         "finalize": "",
         "libs": [],
-        "x": 350,
-        "y": 180,
-        "wires": [["dxc0000000000005"]]
+        "x": 360,
+        "y": 220,
+        "wires": [["dxc0000000000038"]]
     },
     {
-        "id": "dxc0000000000005",
-        "type": "tcp request",
-        "z": "dxc0000000000001",
-        "name": "DX Cluster",
-        "server": "",
-        "port": "",
-        "out": "sit",
-        "ret": "utf8",
-        "splitc": "\n",
-        "x": 580,
-        "y": 180,
-        "wires": [["dxc0000000000006"]]
-    },
-    {
-        "id": "dxc0000000000022",
-        "type": "inject",
-        "z": "dxc0000000000001",
-        "name": "Keepalive every 4 min",
-        "props": [{"p": "payload"}],
-        "repeat": "240",
-        "crontab": "",
-        "once": false,
-        "onceDelay": 0.1,
-        "topic": "",
-        "payload": "",
-        "payloadType": "date",
-        "x": 140,
-        "y": 240,
-        "wires": [["dxc0000000000023"]]
-    },
-    {
-        "id": "dxc0000000000023",
+        "id": "dxc000000000003a",
         "type": "function",
         "z": "dxc0000000000001",
-        "name": "Send keepalive",
-        "func": "msg.host = global.get('clusterServer') || 'dxc.ve7cc.net';\nmsg.port = parseInt(global.get('clusterPort')) || 23;\nmsg.payload = '\\r\\n';\nreturn msg;",
+        "name": "Build backfill request",
+        "func": "const call = encodeURIComponent(String(msg.payload.call || '').toUpperCase());\nmsg.backfillCall = String(msg.payload.call || '').toUpperCase();\nmsg.payload = '';\nmsg.url = 'https://dxwatch.com/dxsd1/s.php?s=0&r=200&d=1&cdx=' + call;\nmsg.headers = {\n    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36',\n    'Accept': 'application/json, text/javascript, */*; q=0.01',\n    'Referer': 'https://dxwatch.com/',\n    'X-Requested-With': 'XMLHttpRequest'\n};\nreturn msg;",
         "outputs": 1,
         "noerr": 0,
         "initialize": "",
         "finalize": "",
         "libs": [],
-        "x": 350,
-        "y": 240,
-        "wires": [["dxc0000000000005"]]
+        "x": 360,
+        "y": 460,
+        "wires": [["dxc0000000000038"]]
     },
     {
-        "id": "dxc0000000000006",
+        "id": "dxc0000000000038",
+        "type": "http request",
+        "z": "dxc0000000000001",
+        "name": "Fetch dxwatch spots",
+        "method": "GET",
+        "ret": "txt",
+        "paytoqs": "ignore",
+        "url": "",
+        "tls": "",
+        "persist": false,
+        "proxy": "",
+        "insecureHTTP": false,
+        "authType": "",
+        "senderr": false,
+        "headers": [],
+        "x": 620,
+        "y": 220,
+        "wires": [["dxc0000000000039"]]
+    },
+    {
+        "id": "dxc0000000000039",
         "type": "function",
         "z": "dxc0000000000001",
-        "name": "Clean line",
-        "func": "let line = msg.payload;\nif (typeof line !== 'string') line = String(line);\nline = line.replace(/\\r/g, '').trim();\nif (!line) return null;\nmsg.payload = line;\nreturn msg;",
+        "name": "Process dxwatch spots",
+        "func": "let json = msg.payload;\nif (typeof json === 'string') {\n    try { json = JSON.parse(json); }\n    catch (e) { node.warn('dxwatch: response is not valid JSON'); return null; }\n}\nif (!json || !json.s) return null;\n\nconst monitored = (global.get('monitoredCalls') || []).map(c => String(c).toUpperCase());\nconst homeLat = parseFloat(global.get('homelat'));\nconst homeLon = parseFloat(global.get('homelon'));\nconst homeOk = !isNaN(homeLat) && !isNaN(homeLon);\nconst isBackfill = !!msg.backfillCall;\nconst nowSec = Date.now() / 1000;\n\nfunction hav(la1, lo1, la2, lo2) {\n    const R = 6371;\n    const r = d => d * Math.PI / 180;\n    const dLa = r(la2 - la1), dLo = r(lo2 - lo1);\n    const a = Math.sin(dLa/2)*Math.sin(dLa/2) +\n              Math.cos(r(la1))*Math.cos(r(la2))*Math.sin(dLo/2)*Math.sin(dLo/2);\n    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));\n}\nfunction unesc(s) {\n    return String(s)\n        .replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'\"')\n        .replace(/&#39;|&apos;/g,\"'\").replace(/&amp;/g,'&');\n}\nfunction modeOf(c0) {\n    const c = String(c0).toUpperCase();\n    if (/\\bCW\\b/.test(c)) return 'CW';\n    if (/FT8|FT4|RTTY|PSK|JT65|JT9|JS8|MFSK|OLIVIA|CONTESTIA|DOMINO|HELL|THOR|THROB/.test(c)) return 'DIGI';\n    if (/\\b(SSB|USB|LSB|AM|FM|PHONE)\\b/.test(c)) return 'PHONE';\n    return null;\n}\n\nconst seen = flow.get('seenIds') || {};\nlet lastId = flow.get('lastSpotId') || 0;\nconst records = [];\nlet added = 0;\n\nfor (const idStr of Object.keys(json.s)) {\n    const id = parseInt(idStr, 10);\n    if (!id || seen[id]) continue;\n    const row = json.s[idStr];\n    if (!Array.isArray(row)) continue;\n\n    const de = String(row[0] || '').trim().toUpperCase();\n    const freq = parseFloat(row[1]);\n    const target = String(row[2] || '').trim().toUpperCase();\n    const comment = unesc(row[3] == null ? '' : row[3]);\n    const spotTime = String(row[4] || '');\n    const ageSec = parseInt(row[5], 10);\n\n    if (!de || !target || isNaN(ageSec) || ageSec < 0) continue;\n    if (!monitored.includes(target)) continue;\n\n    // Backfill: keep at most 7 days / 150 spots\n    if (isBackfill && (ageSec / 86400 > 7 || added >= 150)) continue;\n\n    // Spotter (DE) coordinates from the inline ci object - no external lookup\n    const ci = json.ci || {};\n    const deInfo = ci[de] || [];\n    let lat = parseFloat(deInfo[6]); if (isNaN(lat)) lat = null;\n    let lon = parseFloat(deInfo[7]); if (isNaN(lon)) lon = null;\n\n    let distKm = null;\n    if (lat !== null && lon !== null && homeOk) distKm = hav(homeLat, homeLon, lat, lon);\n\n    // FT8-style reports: prefer 'Rcvd: -15' (target as heard by spotter), else '-8 dB'\n    let snr = null;\n    const rcvd = comment.match(/Rcvd:\\s*([+-]?\\d+)/i);\n    const dbm  = comment.match(/([+-]?\\d+)\\s*dB/i);\n    const sm = rcvd || dbm;\n    if (sm) snr = parseInt(sm[1], 10);\n\n    let signal = null;\n    const rst = comment.match(/\\b([1-5][1-9]{2})\\b/);\n    if (rst) signal = rst[1];\n\n    records.push({\n        spot_id: id,\n        timestamp: new Date((nowSec - ageSec) * 1000).toISOString(),\n        monitored_call: target,\n        de: de,\n        freq: isNaN(freq) ? null : freq,\n        spot_call: target,\n        comment: comment,\n        spot_time: spotTime,\n        mode: modeOf(comment),\n        signal: signal,\n        snr: snr,\n        lat: lat,\n        lon: lon,\n        distance_km: distKm === null ? null : Math.round(distKm),\n        distance_miles: distKm === null ? null : Math.round(distKm * 0.62137)\n    });\n    seen[id] = 1;\n    added++;\n    if (!isBackfill && id > lastId) lastId = id;\n}\n\n// Keep the in-memory dedup map bounded\nconst idList = Object.keys(seen).map(Number);\nif (idList.length > 2000) {\n    idList.sort((a, b) => a - b);\n    const keep = new Set(idList.slice(-2000));\n    idList.forEach(k => { if (!keep.has(k)) delete seen[k]; });\n}\nflow.set('seenIds', seen);\nif (!isBackfill) flow.set('lastSpotId', lastId);\n\nif (!records.length) return null;\nreturn records.map(r => ({payload: r}));",
         "outputs": 1,
         "noerr": 0,
         "initialize": "",
         "finalize": "",
         "libs": [],
-        "x": 780,
-        "y": 180,
-        "wires": [["dxc0000000000007"]]
-    },
-    {
-        "id": "dxc0000000000007",
-        "type": "switch",
-        "z": "dxc0000000000001",
-        "name": "DX de filter",
-        "property": "payload",
-        "propertyType": "msg",
-        "rules": [
-            {"t": "regex", "v": "^DX de ", "vt": "str", "case": false}
-        ],
-        "checkall": "false",
-        "repair": false,
-        "outputs": 1,
-        "x": 960,
-        "y": 180,
-        "wires": [["dxc0000000000008"]]
-    },
-    {
-        "id": "dxc0000000000008",
-        "type": "function",
-        "z": "dxc0000000000001",
-        "name": "Parse spot",
-        "func": "const line = msg.payload;\n// DX de <spotter>:  <freq>  <call>  <comment>  <HHMM>Z\nconst regex = /^DX de\\s+([^:]+):\\s+([\\d.]+)\\s+(\\S+)\\s+(.*?)\\s+(\\d{4})Z\\s*$/;\nconst m = line.match(regex);\nif (!m) return null;\nreturn {\n    payload: {\n        de: m[1].trim(),\n        freq: parseFloat(m[2]),\n        call: m[3].trim(),\n        comment: m[4].trim(),\n        time: m[5]\n    }\n};",
-        "outputs": 1,
-        "noerr": 0,
-        "initialize": "",
-        "finalize": "",
-        "libs": [],
-        "x": 1160,
-        "y": 180,
-        "wires": [["dxc0000000000009"]]
-    },
-    {
-        "id": "dxc0000000000009",
-        "type": "function",
-        "z": "dxc0000000000001",
-        "name": "Filter monitored calls",
-        "func": "const monitored = global.get('monitoredCalls') || [];\nconst call = msg.payload.call;\nif (!call) return null;\nconst upper = call.toUpperCase();\nconst list = monitored.map(c => String(c).toUpperCase());\nif (!list.includes(upper)) return null;\nmsg.payload.monitored_call = upper;\nreturn msg;",
-        "outputs": 1,
-        "noerr": 0,
-        "initialize": "",
-        "finalize": "",
-        "libs": [],
-        "x": 1380,
-        "y": 180,
-        "wires": [["dxc000000000000a"]]
-    },
-    {
-        "id": "dxc000000000000a",
-        "type": "function",
-        "z": "dxc0000000000001",
-        "name": "Geolocate + distance + signal",
-        "func": "const spot = msg.payload;\nconst de = spot.de;\nconst cache = global.get('callsignCache') || {};\n\nlet lat, lon;\nif (cache[de] && cache[de].lat !== undefined) {\n    lat = cache[de].lat;\n    lon = cache[de].lon;\n} else {\n    try {\n        const res = await httpRequest({url: 'https://api.hamdb.org/' + encodeURIComponent(de) + '/json/nodered'});\n        if (res && res.hamdb && res.hamdb.callsign) {\n            lat = parseFloat(res.hamdb.callsign.lat);\n            lon = parseFloat(res.hamdb.callsign.lon);\n            if (!isNaN(lat) && !isNaN(lon)) {\n                cache[de] = {lat: lat, lon: lon, ts: Date.now()};\n                global.set('callsignCache', cache);\n            } else {\n                lat = undefined; lon = undefined;\n            }\n        }\n    } catch (e) {\n        node.warn('hamdb lookup failed for ' + de + ': ' + e.message);\n    }\n}\n\nif (lat === undefined || lon === undefined || isNaN(lat) || isNaN(lon)) return null;\n\n// Distance (haversine) from home\nconst homelat = parseFloat(global.get('homelat')) || 0;\nconst homelon = parseFloat(global.get('homelon')) || 0;\nfunction deg2rad(d) { return d * Math.PI / 180; }\nconst R = 6371;\nconst dLat = deg2rad(lat - homelat);\nconst dLon = deg2rad(lon - homelon);\nconst a = Math.sin(dLat/2) * Math.sin(dLat/2) +\n          Math.cos(deg2rad(homelat)) * Math.cos(deg2rad(lat)) *\n          Math.sin(dLon/2) * Math.sin(dLon/2);\nconst c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));\nconst distKm = R * c;\n\n// Signal / mode extraction from comment\nconst comment = spot.comment || '';\nlet snr = null, signal = null, mode = null;\nconst snrMatch = comment.match(/(-?\\d+)\\s*dB/i);\nif (snrMatch) snr = parseInt(snrMatch[1]);\nconst sigMatch = comment.match(/\\b([1-5][1-9][1-9]?)\\b/);\nif (sigMatch) signal = sigMatch[1];\nif (/\\bCW\\b/i.test(comment)) mode = 'CW';\nelse if (/\\b(FT8|FT4|RTTY|PSK|JT65|JT9|JS8)\\b/i.test(comment)) mode = 'DIGI';\nelse if (/\\b(SSB|USB|LSB|AM|FM)\\b/i.test(comment)) mode = 'PHONE';\n\nspot.lat = lat;\nspot.lon = lon;\nspot.distance_km = Math.round(distKm);\nspot.distance_miles = Math.round(distKm * 0.62137);\nspot.snr = snr;\nspot.signal = signal;\nspot.mode = mode;\nspot.timestamp = new Date().toISOString();\n\nreturn {payload: spot};",
-        "outputs": 1,
-        "noerr": 0,
-        "initialize": "",
-        "finalize": "",
-        "libs": [],
-        "x": 1640,
-        "y": 180,
+        "x": 880,
+        "y": 220,
         "wires": [["dxc000000000000b", "dxc000000000000d"]]
     },
     {
@@ -233,14 +231,14 @@
         "type": "function",
         "z": "dxc0000000000001",
         "name": "Build INSERT SQL",
-        "func": "const s = msg.payload;\nconst esc = (v) => v === null || v === undefined ? 'NULL' : (\"'\" + String(v).replace(/'/g, \"''\") + \"'\");\nconst num = (v) => v === null || v === undefined || isNaN(v) ? 'NULL' : v;\nmsg.topic = `INSERT INTO spots (timestamp, monitored_call, de, freq, spot_call, comment, spot_time, mode, signal, snr, lat, lon, distance_km, distance_miles) VALUES (${esc(s.timestamp)}, ${esc(s.monitored_call)}, ${esc(s.de)}, ${num(s.freq)}, ${esc(s.call)}, ${esc(s.comment)}, ${esc(s.time)}, ${esc(s.mode)}, ${esc(s.signal)}, ${num(s.snr)}, ${num(s.lat)}, ${num(s.lon)}, ${num(s.distance_km)}, ${num(s.distance_miles)});`;\nreturn msg;",
+        "func": "const s = msg.payload;\nconst esc = (v) => v === null || v === undefined ? 'NULL' : (\"'\" + String(v).replace(/'/g, \"''\") + \"'\");\nconst num = (v) => v === null || v === undefined || isNaN(v) ? 'NULL' : v;\nmsg.topic = `INSERT OR IGNORE INTO spots (spot_id, timestamp, monitored_call, de, freq, spot_call, comment, spot_time, mode, signal, snr, lat, lon, distance_km, distance_miles) VALUES (${num(s.spot_id)}, ${esc(s.timestamp)}, ${esc(s.monitored_call)}, ${esc(s.de)}, ${num(s.freq)}, ${esc(s.spot_call)}, ${esc(s.comment)}, ${esc(s.spot_time)}, ${esc(s.mode)}, ${esc(s.signal)}, ${num(s.snr)}, ${num(s.lat)}, ${num(s.lon)}, ${num(s.distance_km)}, ${num(s.distance_miles)});`;\nreturn msg;",
         "outputs": 1,
         "noerr": 0,
         "initialize": "",
         "finalize": "",
         "libs": [],
-        "x": 1920,
-        "y": 140,
+        "x": 1160,
+        "y": 180,
         "wires": [["dxc000000000000c"]]
     },
     {
@@ -251,8 +249,8 @@
         "sqlquery": "msg.topic",
         "sql": "",
         "name": "Record spot",
-        "x": 2140,
-        "y": 140,
+        "x": 1380,
+        "y": 180,
         "wires": [[]]
     },
     {
@@ -260,14 +258,14 @@
         "type": "function",
         "z": "dxc0000000000001",
         "name": "Format for WS",
-        "func": "// Pass the enriched spot object to the websocket out node.\n// The websocket-listener broadcasts msg.payload to all clients.\nreturn msg;",
+        "func": "// The enriched spot object in msg.payload is JSON-encoded by the websocket out node.\nreturn msg;",
         "outputs": 1,
         "noerr": 0,
         "initialize": "",
         "finalize": "",
         "libs": [],
-        "x": 1920,
-        "y": 220,
+        "x": 1160,
+        "y": 260,
         "wires": [["dxc000000000000e"]]
     },
     {
@@ -276,10 +274,12 @@
         "z": "dxc0000000000001",
         "name": "Broadcast spots",
         "server": "dxc0000000000028",
-        "x": 2140,
-        "y": 220,
+        "client": "",
+        "x": 1380,
+        "y": 260,
         "wires": []
     },
+
     {
         "id": "dxc000000000000f",
         "type": "http in",
@@ -290,7 +290,7 @@
         "upload": false,
         "swaggerDoc": "",
         "x": 120,
-        "y": 360,
+        "y": 560,
         "wires": [["dxc0000000000010"]]
     },
     {
@@ -305,7 +305,7 @@
         "finalize": "",
         "libs": [],
         "x": 350,
-        "y": 360,
+        "y": 560,
         "wires": [["dxc0000000000011"]]
     },
     {
@@ -316,7 +316,7 @@
         "statusCode": "",
         "headers": {},
         "x": 580,
-        "y": 360,
+        "y": 560,
         "wires": []
     },
     {
@@ -329,23 +329,23 @@
         "upload": false,
         "swaggerDoc": "",
         "x": 120,
-        "y": 420,
+        "y": 620,
         "wires": [["dxc0000000000013"]]
     },
     {
         "id": "dxc0000000000013",
         "type": "function",
         "z": "dxc0000000000001",
-        "name": "Save monitored calls",
-        "func": "let calls = msg.payload;\nif (typeof calls === 'string') {\n    try { calls = JSON.parse(calls); } catch (e) { calls = calls.split(',').map(c => c.trim()).filter(Boolean); }\n}\nif (!Array.isArray(calls)) calls = [];\ncalls = calls.map(c => String(c).toUpperCase()).filter(Boolean).slice(0, 9);\nglobal.set('monitoredCalls', calls);\nmsg.headers = {'Content-Type': 'application/json'};\nmsg.payload = {success: true, calls: calls};\nreturn msg;",
-        "outputs": 1,
+        "name": "Save calls + queue backfill",
+        "func": "let calls = msg.payload;\nif (typeof calls === 'string') {\n    try { calls = JSON.parse(calls); } catch (e) { calls = calls.split(',').map(c => c.trim()).filter(Boolean); }\n}\nif (!Array.isArray(calls)) calls = [];\ncalls = calls.map(c => String(c).toUpperCase().trim()).filter(Boolean).slice(0, 9);\n\nconst prev = (global.get('monitoredCalls') || []).map(c => String(c).toUpperCase());\nconst fresh = calls.filter(c => !prev.includes(c));\nglobal.set('monitoredCalls', calls);\n\n// output 1: HTTP reply; output 2: one backfill request per newly added call\nmsg.headers = {'Content-Type': 'application/json'};\nmsg.payload = {success: true, calls: calls, backfill: fresh};\nconst backfillMsgs = fresh.map(c => ({payload: {call: c}}));\nreturn [msg, backfillMsgs];",
+        "outputs": 2,
         "noerr": 0,
         "initialize": "",
         "finalize": "",
         "libs": [],
-        "x": 350,
-        "y": 420,
-        "wires": [["dxc0000000000014"]]
+        "x": 380,
+        "y": 620,
+        "wires": [["dxc0000000000014"], ["dxc000000000003a"]]
     },
     {
         "id": "dxc0000000000014",
@@ -354,10 +354,11 @@
         "name": "",
         "statusCode": "",
         "headers": {},
-        "x": 580,
-        "y": 420,
+        "x": 640,
+        "y": 580,
         "wires": []
     },
+
     {
         "id": "dxc0000000000015",
         "type": "http in",
@@ -368,7 +369,7 @@
         "upload": false,
         "swaggerDoc": "",
         "x": 120,
-        "y": 480,
+        "y": 700,
         "wires": [["dxc0000000000016"]]
     },
     {
@@ -383,7 +384,7 @@
         "finalize": "",
         "libs": [],
         "x": 340,
-        "y": 480,
+        "y": 700,
         "wires": [["dxc0000000000017"]]
     },
     {
@@ -395,7 +396,7 @@
         "sql": "",
         "name": "Query spots",
         "x": 560,
-        "y": 480,
+        "y": 700,
         "wires": [["dxc0000000000018"]]
     },
     {
@@ -406,9 +407,10 @@
         "statusCode": "",
         "headers": {},
         "x": 780,
-        "y": 480,
+        "y": 700,
         "wires": []
     },
+
     {
         "id": "dxc0000000000019",
         "type": "http in",
@@ -419,7 +421,7 @@
         "upload": false,
         "swaggerDoc": "",
         "x": 120,
-        "y": 540,
+        "y": 780,
         "wires": [["dxc000000000001a"]]
     },
     {
@@ -427,14 +429,14 @@
         "type": "function",
         "z": "dxc0000000000001",
         "name": "Read config",
-        "func": "msg.headers = {'Content-Type': 'application/json'};\nmsg.payload = {\n    homelat: global.get('homelat') || '',\n    homelon: global.get('homelon') || '',\n    clusterServer: global.get('clusterServer') || 'dxc.ve7cc.net',\n    clusterPort: global.get('clusterPort') || '23',\n    skimmerCall: global.get('skimmerCall') || ''\n};\nreturn msg;",
+        "func": "msg.headers = {'Content-Type': 'application/json'};\nmsg.payload = {\n    homelat: global.get('homelat') || '',\n    homelon: global.get('homelon') || ''\n};\nreturn msg;",
         "outputs": 1,
         "noerr": 0,
         "initialize": "",
         "finalize": "",
         "libs": [],
         "x": 320,
-        "y": 540,
+        "y": 780,
         "wires": [["dxc000000000001b"]]
     },
     {
@@ -445,7 +447,7 @@
         "statusCode": "",
         "headers": {},
         "x": 560,
-        "y": 540,
+        "y": 780,
         "wires": []
     },
     {
@@ -458,7 +460,7 @@
         "upload": false,
         "swaggerDoc": "",
         "x": 120,
-        "y": 600,
+        "y": 840,
         "wires": [["dxc000000000001d"]]
     },
     {
@@ -466,14 +468,14 @@
         "type": "function",
         "z": "dxc0000000000001",
         "name": "Save config",
-        "func": "const cfg = msg.payload || {};\nif (cfg.homelat !== undefined) global.set('homelat', cfg.homelat);\nif (cfg.homelon !== undefined) global.set('homelon', cfg.homelon);\nif (cfg.clusterServer !== undefined) global.set('clusterServer', cfg.clusterServer);\nif (cfg.clusterPort !== undefined) global.set('clusterPort', cfg.clusterPort);\nif (cfg.skimmerCall !== undefined) global.set('skimmerCall', cfg.skimmerCall);\nmsg.headers = {'Content-Type': 'application/json'};\nmsg.payload = {success: true};\nreturn msg;",
+        "func": "const cfg = msg.payload || {};\nif (cfg.homelat !== undefined) global.set('homelat', String(cfg.homelat).trim());\nif (cfg.homelon !== undefined) global.set('homelon', String(cfg.homelon).trim());\nmsg.headers = {'Content-Type': 'application/json'};\nmsg.payload = {success: true};\nreturn msg;",
         "outputs": 1,
         "noerr": 0,
         "initialize": "",
         "finalize": "",
         "libs": [],
         "x": 320,
-        "y": 600,
+        "y": 840,
         "wires": [["dxc000000000001e"]]
     },
     {
@@ -484,46 +486,7 @@
         "statusCode": "",
         "headers": {},
         "x": 560,
-        "y": 600,
-        "wires": []
-    },
-    {
-        "id": "dxc000000000001f",
-        "type": "http in",
-        "z": "dxc0000000000001",
-        "name": "POST /api/connect",
-        "url": "/api/connect",
-        "method": "post",
-        "upload": false,
-        "swaggerDoc": "",
-        "x": 120,
-        "y": 660,
-        "wires": [["dxc0000000000020"]]
-    },
-    {
-        "id": "dxc0000000000020",
-        "type": "function",
-        "z": "dxc0000000000001",
-        "name": "Trigger reconnect",
-        "func": "msg.host = global.get('clusterServer') || 'dxc.ve7cc.net';\nmsg.port = parseInt(global.get('clusterPort')) || 23;\nmsg.payload = (global.get('skimmerCall') || 'DX-COMPASS') + '\\r\\n';\nmsg.headers = {'Content-Type': 'application/json'};\nreturn msg;",
-        "outputs": 1,
-        "noerr": 0,
-        "initialize": "",
-        "finalize": "",
-        "libs": [],
-        "x": 340,
-        "y": 660,
-        "wires": [["dxc0000000000005", "dxc0000000000021"]]
-    },
-    {
-        "id": "dxc0000000000021",
-        "type": "http response",
-        "z": "dxc0000000000001",
-        "name": "",
-        "statusCode": "",
-        "headers": {},
-        "x": 560,
-        "y": 660,
+        "y": 840,
         "wires": []
     }
 ]

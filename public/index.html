@@ -23,7 +23,7 @@
         </div>
 
         <div class="status-group">
-            <span class="conn-dot" id="connDot" title="Cluster connection"></span>
+            <span class="conn-dot" id="connDot" title="Live data link"></span>
             <span class="conn-text" id="connText">disconnected</span>
             <span class="sep">|</span>
             <span class="stat" id="spotCount">0 spots</span>
@@ -32,7 +32,6 @@
         </div>
 
         <div class="action-group">
-            <button class="action-btn" id="btnConnect" title="Connect to DX cluster">Connect</button>
             <button class="action-btn" id="btnRecords" title="View recorded spots">Records</button>
             <button class="action-btn" id="btnConfig" title="Settings">Config</button>
         </div>
@@ -86,18 +85,6 @@
             <div class="panel-body">
                 <form id="configForm" class="config-form">
                     <div class="form-row">
-                        <label>Your callsign (login)</label>
-                        <input type="text" id="cfgSkimmerCall" placeholder="e.g. BG7TV">
-                    </div>
-                    <div class="form-row">
-                        <label>DX cluster server</label>
-                        <input type="text" id="cfgClusterServer" placeholder="dxc.ve7cc.net">
-                    </div>
-                    <div class="form-row">
-                        <label>DX cluster port</label>
-                        <input type="text" id="cfgClusterPort" placeholder="23">
-                    </div>
-                    <div class="form-row">
                         <label>Home latitude</label>
                         <input type="text" id="cfgHomeLat" placeholder="e.g. 23.0">
                     </div>
@@ -107,9 +94,9 @@
                     </div>
                     <div class="form-row">
                         <button type="submit" class="primary-btn">Save</button>
-                        <button type="button" class="mini-btn" id="btnTestConnect">Connect Now</button>
                     </div>
-                    <p class="hint">Home coordinates are used to compute the distance to each spotting station.</p>
+                    <p class="hint">Home coordinates are used to compute the distance to each spotting station.<br>
+                    Spots are provided automatically by dxwatch.com (polled every 30s) - no cluster login or connection setup is needed.</p>
                 </form>
             </div>
         </div>

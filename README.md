@@ -1,6 +1,6 @@
 # DX-Compass
 
-基于 Node-RED 的多呼号 DX Spot 实时监测大屏。连接 DX Cluster（DXSpider），同时监测最多 **9 个呼号**收到的 spot，在地图上实时打点显示，支持硬盘录像机（DVR）风格的多分屏切换，并将所有 spot 记录到数据库用于赛后分析。
+基于 Node-RED 的多呼号 DX Spot 实时监测大屏。通过 **dxwatch.com** 公开数据流（HTTPS 轮询，无需登录 DX Cluster、无需 telnet）同时监测最多 **9 个呼号**收到的 spot，在地图上实时打点显示，支持硬盘录像机（DVR）风格的多分屏切换，并将所有 spot 记录到数据库用于赛后分析。
 
 ## 一键安装（复制即用）
 
@@ -28,23 +28,26 @@ wget -qO- https://raw.githubusercontent.com/BG7TVF/dx-compass/main/bootstrap.sh 
 ## 功能特性
 
 - **多分屏布局**：`1×1` / `1×2` / `2×2` / `3×3` 自由切换，一个呼号对应一张地图，最多同时监测 9 个呼号
-- **实时打点**：通过 Telnet 接收 DX Cluster 的 spot，解析报告人（DE）位置后在地图上标点
+- **实时打点**：每 30 秒从 dxwatch.com 拉取全球聚合 spot，解析报告人（DE）位置后在地图上标点，数据自动流入，无需任何连接配置
+- **历史回溯**：新添加被监测呼号时，自动回溯该呼号最近 7 天（最多 150 条）的 spot
 - **标点存活 1 小时**：每个标记 1 小时后自动消失，颜色按信号强度区分（绿 / 黄 / 红）
-- **完整记录**：每条 spot 记录时间、频率、报告人、模式（CW/DIGI）、信号强度、SNR、距离等，存入 SQLite
+- **完整记录**：每条 spot 记录时间、频率、报告人、模式（CW/DIGI/PHONE）、FT8 信号 SNR、距离等，存入 SQLite
 - **赛后分析**：记录面板支持按呼号筛选、一键导出 CSV
-- **距离计算**：基于 HamDB 呼号坐标 + Haversine 公式，计算报告人相对本台的距离（公里/英里）
+- **距离计算**：直接使用 dxwatch 附带的呼号经纬度 + Haversine 公式，计算报告人相对本台的距离（公里/英里），不依赖第三方定位接口
 - **独立共存**：可与服务器上已有的 Node-RED / Node-Red-Contesting-Dashboard 实例完全独立运行
 
 ## 技术架构
 
 ```
-DX Cluster (telnet) ──► Node-RED 流程 ──► 解析/过滤
-                                   ├──► HamDB 地理定位 + 距离计算
-                                   ├──► SQLite 持久化记录
+dxwatch.com (HTTPS/JSON, 30s 轮询) ──► Node-RED 流程 ──► 按监测呼号过滤
+                                   ├──► 内置经纬度 + Haversine 距离计算
+                                   ├──► FT8 信号 / 模式解析
+                                   ├──► SQLite 持久化记录（spot_id 去重）
                                    └──► WebSocket 实时推送 ──► 前端多地图大屏
 ```
 
-- **后端**：Node-RED（Telnet 接入、HTTP REST API、WebSocket、SQLite）
+- **后端**：Node-RED（HTTPS 轮询、HTTP REST API、WebSocket、SQLite）
+- **数据源**：dxwatch.com 的公开 spot 接口 `/dxsd1/s.php`（聚合全球 DX Cluster；非官方公开接口，请保持 30 秒的轻量轮询）
 - **前端**：原生 HTML/CSS/JS + Leaflet + OpenStreetMap，由 Node-RED 静态托管
 - **数据库**：SQLite（`dxcompass.db`，运行时自动创建）
 
@@ -70,7 +73,7 @@ dx-compass/
 - **操作系统**：Ubuntu 22.04 / 24.04（Debian 系）
 - **Node.js**：>= 18（安装脚本会自动检测并安装 Node.js 20 LTS）
 - **内存**：建议 512MB 以上
-- **网络**：服务器需能访问 DX Cluster（默认 `dxc.ve7cc.net:23`）和 `api.hamdb.org`
+- **网络**：服务器需能访问 `https://dxwatch.com`（出站 HTTPS 443）；无需 telnet、无需集群账号
 - **端口**：对外放行 **5758**（TCP）
 
 ## 一键部署（推荐）
@@ -132,14 +135,13 @@ sudo bash install.sh
 ## 首次使用配置
 
 1. 浏览器打开监测大屏 `http://<服务器IP>:5758/`
-2. 点击右上角 **Config**：
-   - **Your callsign (login)**：登录 DX Cluster 用的你的呼号
-   - **DX cluster server / port**：集群地址，默认 `dxc.ve7cc.net` / `23`
-   - **Home latitude / longitude**：本台经纬度（用于计算距离）
-3. 保存后点击 **Connect** 连接集群
-4. 在每个分屏的呼号输入框中填入要监测的呼号，即开始在对应地图上打点
+2. 点击右上角 **Config**，填入 **Home latitude / longitude**（本台经纬度，用于计算到各报告台的距离），点 **Save**
+3. 在每个分屏的呼号输入框中填入要监测的呼号，回车确认：
+   - 系统立即开始接收实时 spot（每 30 秒刷新）
+   - 同时自动回溯该呼号最近 7 天的历史 spot，地图和 Records 面板很快就会有数据
+4. 无需任何集群地址、登录呼号或 Connect 操作——数据源开箱即用
 
-常用备用集群：`w3lpl.net:7373`、`dxc.nc7j.com:23`。
+> 数据来自 dxwatch.com 的公开聚合接口，延迟约 30 秒。FT8/FT4 的 SNR 信号报告会显示；普通 CW/SSB spot 本身不携带信号强度，对应列为空属正常。
 
 ## 服务管理
 
@@ -155,13 +157,12 @@ journalctl -u dx-compass -f            # 实时查看日志
 
 ## 数据与导出
 
-- 所有匹配的 spot 写入 SQLite `spots` 表，字段含：`timestamp`（时间）、`monitored_call`（被监测呼号）、`de`（报告人）、`freq`（频率）、`spot_call`、`mode`（CW/DIGI/PHONE）、`signal`（信号报告）、`snr`（dB）、`lat`/`lon`、`distance_km`/`distance_miles`、`comment`
+- 所有匹配的 spot 写入 SQLite `spots` 表，字段含：`spot_id`（数据源唯一 ID，用于去重）、`timestamp`（时间）、`monitored_call`（被监测呼号）、`de`（报告人）、`freq`（频率）、`spot_call`、`mode`（CW/DIGI/PHONE）、`signal`（RST）、`snr`（FT8 dB）、`lat`/`lon`、`distance_km`/`distance_miles`、`comment`
 - 大屏右上角 **Records** 面板可按呼号查询并一键 **Export CSV**，用于赛后分析
 - REST API：
-  - `GET  /api/config` / `POST /api/config`：读取 / 保存配置
-  - `GET  /api/callsigns` / `POST /api/callsigns`：读取 / 保存监测呼号列表
+  - `GET  /api/config` / `POST /api/config`：读取 / 保存配置（本台经纬度）
+  - `GET  /api/callsigns` / `POST /api/callsigns`：读取 / 保存监测呼号列表（POST 新呼号会自动触发历史回溯）
   - `GET  /api/spots?call=呼号&limit=数量`：查询记录
-  - `POST /api/connect`：触发重新连接集群
 
 ## 常见问题
 
@@ -178,10 +179,10 @@ sudo https_proxy=http://127.0.0.1:7890 http_proxy=http://127.0.0.1:7890 bash /tm
 
 **1. 大屏打开正常但收不到 spot？**
 
-- 在 Node-RED 编辑器（`/red`）查看 `DX Cluster` 节点状态，确认 telnet 已连接
-- 确认 Config 中登录呼号已填写、集群地址端口正确，点击 **Connect**
-- 确认服务器能访问集群端口（`telnet dxc.ve7cc.net 23`）
-- 被监测呼号必须有真实 spot 上报后才会打点
+- 数据源是服务器端轮询，先确认服务器能访问数据源：`curl -I https://dxwatch.com/dxsd1/s.php?s=0&r=1`
+- 等待最多 30 秒（轮询周期）；可在 Node-RED 编辑器（`/red`）查看 `Fetch dxwatch spots` 节点状态与日志
+- 被监测呼号必须近期（活跃时段约几分钟内）有真实 spot 上报才会打点；输入呼号时会自动回溯最近 7 天记录，可先打开 **Records** 面板确认历史数据
+- 极少数冷门呼号可能长时间无人点到，属正常现象
 
 **2. 5758 端口无法访问？**
 
