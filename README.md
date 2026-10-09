@@ -1,6 +1,6 @@
 # DX-Compass
 
-基于 Node-RED 的多呼号 DX Spot 实时监测大屏。通过 **dxwatch.com** 公开数据流（HTTPS 轮询，无需登录 DX Cluster、无需 telnet）同时监测最多 **9 个呼号**收到的 spot，在地图上实时打点显示，支持硬盘录像机（DVR）风格的多分屏切换，并将所有 spot 记录到数据库用于赛后分析。
+基于 Node-RED 的多呼号 DX Spot 实时监测大屏。通过 **dxwatch.com**（FT8/SSB/DIGI 等）与 **reversebeacon.net RBN**（CW，含 dB 信号强度）公开数据流（HTTPS 轮询，无需登录 DX Cluster、无需 telnet）同时监测最多 **9 个呼号**收到的 spot，在地图上实时打点显示，支持硬盘录像机（DVR）风格的多分屏切换，并将所有 spot 记录到数据库用于赛后分析。
 
 ## 一键安装（复制即用）
 
@@ -28,26 +28,30 @@ wget -qO- https://raw.githubusercontent.com/BG7TVF/dx-compass/main/bootstrap.sh 
 ## 功能特性
 
 - **多分屏布局**：`1×1` / `1×2` / `2×2` / `3×3` 自由切换，一个呼号对应一张地图，最多同时监测 9 个呼号
-- **实时打点**：每 30 秒从 dxwatch.com 拉取全球聚合 spot，解析报告人（DE）位置后在地图上标点，数据自动流入，无需任何连接配置
+- **实时打点**：每 30 秒从 dxwatch.com 拉取全球聚合 spot（FT8/SSB/DIGI 等），每 10 秒从 reversebeacon.net RBN 拉取 CW skimmer spot（含真实 SNR dB），解析报告人（DE）位置后在地图上标点，数据自动流入，无需任何连接配置
 - **历史回溯**：新添加被监测呼号时，自动回溯该呼号最近 7 天（最多 150 条）的 spot
 - **标点存活 1 小时**：每个标记 1 小时后自动消失，颜色按信号强度区分（绿 / 黄 / 红）
-- **完整记录**：每条 spot 记录时间、频率、报告人、模式（CW/DIGI/PHONE）、FT8 信号 SNR、距离等，存入 SQLite
+- **完整记录**：每条 spot 记录时间、频率、报告人、模式（CW/DIGI/PHONE）、信号强度（CW 的 SNR dB 来自 RBN；FT8 的 SNR 来自 dxwatch）、距离等，存入 SQLite
 - **赛后分析**：记录面板支持按呼号筛选、一键导出 CSV
-- **距离计算**：直接使用 dxwatch 附带的呼号经纬度 + Haversine 公式，计算报告人相对本台的距离（公里/英里），不依赖第三方定位接口
+- **距离计算**：直接使用数据源附带的呼号经纬度 + Haversine 公式，计算报告人相对本台的距离（公里/英里），不依赖第三方定位接口
 - **独立共存**：可与服务器上已有的 Node-RED / Node-Red-Contesting-Dashboard 实例完全独立运行
 
 ## 技术架构
 
 ```
-dxwatch.com (HTTPS/JSON, 30s 轮询) ──► Node-RED 流程 ──► 按监测呼号过滤
-                                   ├──► 内置经纬度 + Haversine 距离计算
-                                   ├──► FT8 信号 / 模式解析
-                                   ├──► SQLite 持久化记录（spot_id 去重）
-                                   └──► WebSocket 实时推送 ──► 前端多地图大屏
+dxwatch.com   (HTTPS/JSON, 30s 轮询, FT8/SSB/DIGI 等) ──┐
+                                                       ├──► Node-RED 流程 ──► 按监测呼号过滤
+reversebeacon.net (HTTPS/JSON, 10s 轮询, CW 含 dB) ────┘        ├──► 内置经纬度 + Haversine 距离计算
+                                                                ├──► 模式 / 信号强度解析（跨源去重）
+                                                                ├──► SQLite 持久化记录（spot_id 去重）
+                                                                └──► WebSocket 实时推送 ──► 前端多地图大屏
 ```
 
 - **后端**：Node-RED（HTTPS 轮询、HTTP REST API、WebSocket、SQLite）
-- **数据源**：dxwatch.com 的公开 spot 接口 `/dxsd1/s.php`（聚合全球 DX Cluster；非官方公开接口，请保持 30 秒的轻量轮询）
+- **数据源**：
+  - dxwatch.com 公开 spot 接口 `/dxsd1/s.php`（聚合全球 DX Cluster，30 秒轮询）
+  - reversebeacon.net RBN 接口 `/spots.php`（全球 CW skimmer 网络，10 秒轮询，每条含 SNR dB 与 WPM；启动时自动从 `main.php` 提取版本参数，失效自动重取）
+  - 两者均为非官方公开接口，请保持内置的轻量轮询节奏；同一条 CW spot 若同时出现在两个源中会被自动去重
 - **前端**：原生 HTML/CSS/JS + Leaflet + OpenStreetMap，由 Node-RED 静态托管
 - **数据库**：SQLite（`dxcompass.db`，运行时自动创建）
 
@@ -73,7 +77,7 @@ dx-compass/
 - **操作系统**：Ubuntu 22.04 / 24.04（Debian 系）
 - **Node.js**：>= 18（安装脚本会自动检测并安装 Node.js 20 LTS）
 - **内存**：建议 512MB 以上
-- **网络**：服务器需能访问 `https://dxwatch.com`（出站 HTTPS 443）；无需 telnet、无需集群账号
+- **网络**：服务器需能访问 `https://dxwatch.com` 与 `https://www.reversebeacon.net`（出站 HTTPS 443）；无需 telnet、无需集群账号
 - **端口**：对外放行 **5758**（TCP）
 
 ## 一键部署（推荐）
@@ -137,11 +141,11 @@ sudo bash install.sh
 1. 浏览器打开监测大屏 `http://<服务器IP>:5758/`
 2. 点击右上角 **Config**，填入 **Home latitude / longitude**（本台经纬度，用于计算到各报告台的距离），点 **Save**
 3. 在每个分屏的呼号输入框中填入要监测的呼号，回车确认：
-   - 系统立即开始接收实时 spot（每 30 秒刷新）
-   - 同时自动回溯该呼号最近 7 天的历史 spot，地图和 Records 面板很快就会有数据
+   - 系统立即开始接收实时 spot（CW 每 10 秒、其它模式每 30 秒刷新）
+   - 同时自动从 dxwatch 回溯该呼号最近 7 天的历史 spot，地图和 Records 面板很快就会有数据
 4. 无需任何集群地址、登录呼号或 Connect 操作——数据源开箱即用
 
-> 数据来自 dxwatch.com 的公开聚合接口，延迟约 30 秒。FT8/FT4 的 SNR 信号报告会显示；普通 CW/SSB spot 本身不携带信号强度，对应列为空属正常。
+> 数据来自 dxwatch.com 与 reversebeacon.net 的公开接口。CW spot 由 RBN skimmer 网络提供，带真实 SNR（dB）与发报速度（WPM）；FT8/FT4 的 SNR 来自 dxwatch；普通 SSB spot 本身不携带信号强度，对应列为空属正常。
 
 ## 服务管理
 
@@ -157,7 +161,7 @@ journalctl -u dx-compass -f            # 实时查看日志
 
 ## 数据与导出
 
-- 所有匹配的 spot 写入 SQLite `spots` 表，字段含：`spot_id`（数据源唯一 ID，用于去重）、`timestamp`（时间）、`monitored_call`（被监测呼号）、`de`（报告人）、`freq`（频率）、`spot_call`、`mode`（CW/DIGI/PHONE）、`signal`（RST）、`snr`（FT8 dB）、`lat`/`lon`、`distance_km`/`distance_miles`、`comment`
+- 所有匹配的 spot 写入 SQLite `spots` 表，字段含：`spot_id`（数据源唯一 ID，用于去重；RBN 记录为负数）、`timestamp`（时间）、`monitored_call`（被监测呼号）、`de`（报告人）、`freq`（频率）、`spot_call`、`mode`（CW/DIGI/PHONE）、`signal`（RST）、`snr`（CW/FT8 的 dB）、`lat`/`lon`、`distance_km`/`distance_miles`、`comment`
 - 大屏右上角 **Records** 面板可按呼号查询并一键 **Export CSV**，用于赛后分析
 - REST API：
   - `GET  /api/config` / `POST /api/config`：读取 / 保存配置（本台经纬度）
@@ -179,8 +183,8 @@ sudo https_proxy=http://127.0.0.1:7890 http_proxy=http://127.0.0.1:7890 bash /tm
 
 **1. 大屏打开正常但收不到 spot？**
 
-- 数据源是服务器端轮询，先确认服务器能访问数据源：`curl -I https://dxwatch.com/dxsd1/s.php?s=0&r=1`
-- 等待最多 30 秒（轮询周期）；可在 Node-RED 编辑器（`/red`）查看 `Fetch dxwatch spots` 节点状态与日志
+- 数据源是服务器端轮询，先确认服务器能访问数据源：`curl -I https://dxwatch.com/dxsd1/s.php?s=0&r=1` 与 `curl -I https://www.reversebeacon.net/main.php`
+- 等待最多 30 秒（轮询周期）；可在 Node-RED 编辑器（`/red`）查看 `Fetch dxwatch spots` / `Fetch RBN spots` 节点状态与日志
 - 被监测呼号必须近期（活跃时段约几分钟内）有真实 spot 上报才会打点；输入呼号时会自动回溯最近 7 天记录，可先打开 **Records** 面板确认历史数据
 - 极少数冷门呼号可能长时间无人点到，属正常现象
 
