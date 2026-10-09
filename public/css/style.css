@@ -30,6 +30,7 @@ html, body {
 
 /* ---------- Toolbar ---------- */
 .toolbar {
+    position: relative;
     display: flex;
     align-items: center;
     gap: 18px;
@@ -138,6 +139,8 @@ html, body {
 
 .cell {
     position: relative;
+    z-index: 0; /* create a stacking context so Leaflet panes (z-index 200-1000)
+                   cannot escape and cover side panels/toasts */
     background: var(--bg-2);
     border: 1px solid var(--border);
     display: flex;
@@ -219,7 +222,7 @@ html, body {
     box-shadow: -4px 0 20px rgba(0,0,0,.5);
     display: flex;
     flex-direction: column;
-    z-index: 50;
+    z-index: 1000;
     animation: slideIn .2s ease;
 }
 @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
@@ -325,7 +328,7 @@ tbody tr:nth-child(even) { background: #141a20; }
     border-radius: 4px;
     font-size: 13px;
     box-shadow: var(--shadow);
-    z-index: 200;
+    z-index: 2000;
     opacity: 0;
     transition: all .3s;
     pointer-events: none;
