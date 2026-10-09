@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DX-Compass</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="toolbar">
+        <div class="brand">
+            <span class="logo">✦</span>
+            <span class="title">DX-Compass</span>
+            <span class="subtitle">Multi-Call Spot Monitor</span>
+        </div>
+
+        <div class="layout-group" id="layoutGroup">
+            <button class="layout-btn active" data-layout="1x1">1 × 1</button>
+            <button class="layout-btn" data-layout="1x2">1 × 2</button>
+            <button class="layout-btn" data-layout="2x2">2 × 2</button>
+            <button class="layout-btn" data-layout="3x3">3 × 3</button>
+        </div>
+
+        <div class="status-group">
+            <span class="conn-dot" id="connDot" title="Cluster connection"></span>
+            <span class="conn-text" id="connText">disconnected</span>
+            <span class="sep">|</span>
+            <span class="stat" id="spotCount">0 spots</span>
+            <span class="sep">|</span>
+            <span class="stat" id="utcClock">--:--:--</span>
+        </div>
+
+        <div class="action-group">
+            <button class="action-btn" id="btnConnect" title="Connect to DX cluster">Connect</button>
+            <button class="action-btn" id="btnRecords" title="View recorded spots">Records</button>
+            <button class="action-btn" id="btnConfig" title="Settings">Config</button>
+        </div>
+    </div>
+
+    <div class="main">
+        <div id="grid" class="grid layout-1x1"></div>
+
+        <!-- Records Panel -->
+        <div id="recordsPanel" class="side-panel hidden">
+            <div class="panel-header">
+                <span class="panel-title">Spot Records</span>
+                <button class="panel-close" data-close="recordsPanel">&times;</button>
+            </div>
+            <div class="panel-body">
+                <div class="panel-controls">
+                    <select id="recordCallSelect">
+                        <option value="">-- All monitored calls --</option>
+                    </select>
+                    <button class="mini-btn" id="btnRefreshRecords">Refresh</button>
+                    <button class="mini-btn" id="btnExportCsv">Export CSV</button>
+                </div>
+                <div class="table-wrap">
+                    <table id="recordsTable">
+                        <thead>
+                            <tr>
+                                <th>Time (UTC)</th>
+                                <th>Monitored</th>
+                                <th>Spotter (DE)</th>
+                                <th>Freq</th>
+                                <th>Mode</th>
+                                <th>Signal</th>
+                                <th>SNR</th>
+                                <th>Dist (km)</th>
+                                <th>Comment</th>
+                            </tr>
+                        </thead>
+                        <tbody id="recordsBody"></tbody>
+                    </table>
+                </div>
+                <div class="panel-footer" id="recordsFooter">0 records</div>
+            </div>
+        </div>
+
+        <!-- Config Panel -->
+        <div id="configPanel" class="side-panel hidden">
+            <div class="panel-header">
+                <span class="panel-title">Configuration</span>
+                <button class="panel-close" data-close="configPanel">&times;</button>
+            </div>
+            <div class="panel-body">
+                <form id="configForm" class="config-form">
+                    <div class="form-row">
+                        <label>Your callsign (login)</label>
+                        <input type="text" id="cfgSkimmerCall" placeholder="e.g. BG7TV">
+                    </div>
+                    <div class="form-row">
+                        <label>DX cluster server</label>
+                        <input type="text" id="cfgClusterServer" placeholder="dxc.ve7cc.net">
+                    </div>
+                    <div class="form-row">
+                        <label>DX cluster port</label>
+                        <input type="text" id="cfgClusterPort" placeholder="23">
+                    </div>
+                    <div class="form-row">
+                        <label>Home latitude</label>
+                        <input type="text" id="cfgHomeLat" placeholder="e.g. 23.0">
+                    </div>
+                    <div class="form-row">
+                        <label>Home longitude</label>
+                        <input type="text" id="cfgHomeLon" placeholder="e.g. 111.0">
+                    </div>
+                    <div class="form-row">
+                        <button type="submit" class="primary-btn">Save</button>
+                        <button type="button" class="mini-btn" id="btnTestConnect">Connect Now</button>
+                    </div>
+                    <p class="hint">Home coordinates are used to compute the distance to each spotting station.</p>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>

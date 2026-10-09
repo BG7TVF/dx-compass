@@ -1,0 +1,19 @@
+{
+    "name": "dx-compass",
+    "description": "DX-Compass - Multi-callsign DX Spot monitor with DVR-style map grid",
+    "version": "1.0.0",
+    "dependencies": {
+        "node-red": "^3.1.0",
+        "node-red-node-sqlite": "^1.1.0"
+    },
+    "node-red": {
+        "settings": {
+            "flowFile": "flow.json",
+            "credentialsFile": "flow_cred.json"
+        }
+    },
+    "scripts": {
+        "start": "node-red -s settings.js",
+        "dev": "node-red -s settings.js"
+    }
+}

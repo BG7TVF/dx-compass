@@ -1,0 +1,17 @@
+*.backup
+*.bak
+uibuilder/node_modules
+package-lock.json
+node_modules
+
+# DX-Compass runtime (SQLite + Node-RED userDir artifacts)
+dxcompass.db
+dxcompass.db-journal
+.context/
+context/
+lib/
+flows_*.json
+*.log
+
+# Backup of the original upstream git history (not part of this project)
+.git-old-backup/
