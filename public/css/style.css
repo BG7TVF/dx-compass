@@ -211,28 +211,39 @@ html, body {
 }
 .cell-empty-hint .hint-icon { font-size: 32px; display: block; margin-bottom: 6px; opacity: .4; }
 
-/* Cell info bar: band / freq / mode / signal of the latest spot, RBN style */
+/* Cell info bar: one chip per band, RBN style */
 .cell-info {
     position: absolute;
     top: 34px; left: 0; right: 0;
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: center;
-    gap: 12px;
-    padding: 3px 8px;
-    background: linear-gradient(180deg, rgba(10,13,16,.75), rgba(10,13,16,0));
-    font-size: 12px;
-    font-weight: 600;
-    letter-spacing: .5px;
+    gap: 6px;
+    padding: 3px 6px;
     pointer-events: none;
     z-index: 1100; /* above Leaflet panes (max 1000) inside the cell stacking context */
-    min-height: 20px;
 }
 .cell-info:empty { display: none; }
-.cell-info .ci-band { font-size: 13px; }
-.cell-info .ci-freq { color: var(--text); }
+.cell-info .ci-chip {
+    display: flex;
+    align-items: baseline;
+    gap: 7px;
+    padding: 4px 10px;
+    background: rgba(10,13,16,.85);
+    border: 2px solid var(--border);
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: .5px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.6);
+    white-space: nowrap;
+}
+.cell-info .ci-band { font-size: 16px; font-weight: 800; }
+.cell-info .ci-freq { color: #fff; }
 .cell-info .ci-mode { color: var(--accent); }
-.cell-info .ci-sig { color: var(--text-dim); }
+.cell-info .ci-sig { color: var(--text); }
+.cell-info .ci-age { color: var(--text-dim); font-size: 12px; font-weight: 500; }
 
 /* ---------- Side Panels ---------- */
 .side-panel {

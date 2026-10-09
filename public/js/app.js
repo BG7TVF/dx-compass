@@ -35,6 +35,36 @@ function setConnState(state) {
                        state === 'connecting' ? 'connecting...' : 'disconnected';
 }
 
+function renderCellInfo(cell) {
+    const chips = [];
+    for (const band of Object.keys(cell.bandInfo)) {
+        const s = cell.bandInfo[band];
+        const bandColor = BAND_COLORS[band] || '#00e5ff';
+        const sig = s.snr !== null && s.snr !== undefined ? s.snr + ' dB' :
+                    (s.signal || '');
+        chips.push(`<div class="ci-chip" style="border-color:${bandColor}">
+            <span class="ci-band" style="color:${bandColor}">${band}</span>
+            <span class="ci-freq">${s.freq ? s.freq + ' kHz' : ''}</span>
+            <span class="ci-mode">${s.mode || ''}</span>
+            <span class="ci-sig">${sig}</span>
+            <span class="ci-age">${timeAgo(new Date(s.timestamp))}</span>
+        </div>`);
+    }
+    cell.info.innerHTML = chips.join('');
+}
+
+function timeAgo(dt) {
+    const sec = Math.floor((Date.now() - dt.getTime()) / 1000);
+    if (sec < 30) return '现在';
+    if (sec < 90) return '1分钟前';
+    if (sec < 180) return '2分钟前';
+    if (sec < 300) return '5分钟前';
+    if (sec < 600) return '10分钟前';
+    if (sec < 1800) return '30分钟前';
+    if (sec < 3600) return '1小时前';
+    return Math.floor(sec / 3600) + '小时前';
+}
+
 function modeBadge(mode) {
     if (!mode) return '';
     const cls = mode === 'CW' ? 'mode-cw' : mode === 'DIGI' ? 'mode-digi' : 'mode-phone';
@@ -112,6 +142,7 @@ function createCell(index, call) {
 
     const cell = {
         index, call: call || '', map, markers: [], count: 0,
+        bandInfo: {},   // band -> latest spot
         el, input, countEl, clearBtn, hint, info
     };
 
@@ -160,6 +191,7 @@ function clearCell(cell, resetInput = true) {
     cell.countEl.textContent = '0';
     cell.countEl.classList.remove('has-spots');
     cell.info.innerHTML = '';
+    cell.bandInfo = {};
     if (resetInput) {
         cell.call = '';
         cell.input.value = '';
@@ -241,15 +273,9 @@ function addMarkerToCell(cell, spot) {
     cell.countEl.textContent = cell.count;
     cell.countEl.classList.add('has-spots');
 
-    // Info bar: band / freq / mode / signal of the latest spot
-    const sig = spot.snr !== null && spot.snr !== undefined ? spot.snr + ' dB' :
-                (spot.signal || '');
-    cell.info.innerHTML = [
-        spot.band ? `<span class="ci-band" style="color:${bandColor}">${spot.band}</span>` : '',
-        spot.freq ? `<span class="ci-freq">${spot.freq} kHz</span>` : '',
-        spot.mode ? `<span class="ci-mode">${spot.mode}</span>` : '',
-        sig ? `<span class="ci-sig">${sig}</span>` : ''
-    ].filter(Boolean).join('');
+    // Info bar: one chip per band, refreshed with the latest spot of that band
+    cell.bandInfo[spot.band || '?'] = spot;
+    renderCellInfo(cell);
 
     // Remove old groups beyond a reasonable limit
     if (cell.markers.length > 500) {
@@ -473,6 +499,11 @@ function init() {
         const d = new Date();
         $('#utcClock').textContent = d.toISOString().substring(11, 19) + 'Z';
     }, 1000);
+
+    // Refresh relative-time labels in the cell info bars
+    setInterval(() => state.cells.forEach(c => {
+        if (Object.keys(c.bandInfo).length) renderCellInfo(c);
+    }), 30000);
 }
 
 document.addEventListener('DOMContentLoaded', init);
