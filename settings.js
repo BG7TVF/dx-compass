@@ -14,8 +14,12 @@ module.exports = {
     // Credentials
     credentialSecret: false,
 
-    // Serve the custom DX-Compass frontend
+    // Serve the custom DX-Compass frontend at "/" (httpStatic takes root
+    // once the admin editor is moved away from its default root path)
     httpStatic: "public",
+
+    // Node-RED admin editor lives at "/red" (root "/" must stay free for the dashboard)
+    httpAdminRoot: "/red",
 
     // Root for HTTP-in nodes (REST API)
     httpNodeRoot: "/",
