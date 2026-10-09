@@ -138,7 +138,7 @@ function createCell(index) {
         maxZoom: 18
     }).addTo(map);
 
-    addGraticule(map);
+    addTerminator(map);
 
     const cell = {
         index, call: '', map, markers: [], count: 0,
@@ -153,15 +153,46 @@ function createCell(index) {
     return cell;
 }
 
-/* Gray lat/lon graticule, like the RBN map */
-function addGraticule(map) {
-    const style = {color: '#888', weight: 1, opacity: 0.35, interactive: false};
-    for (let lat = -80; lat <= 80; lat += 20) {
-        L.polyline([[lat, -180], [lat, 180]], style).addTo(map);
+/* Day/night gray line (terminator) + night shading, like the RBN map */
+function addTerminator(map) {
+    function compute() {
+        const now = new Date();
+        const start = Date.UTC(now.getUTCFullYear(), 0, 0);
+        const doy = (now - start) / 86400000;
+        // Solar declination (good approximation, degrees -> rad)
+        const dec = -23.44 * Math.cos(2 * Math.PI * (doy + 10) / 365.25) * Math.PI / 180;
+        // Subsolar longitude from UTC hour
+        const utcH = now.getUTCHours() + now.getUTCMinutes() / 60 + now.getUTCSeconds() / 3600;
+        const lonSun = 180 - utcH * 15;
+        const pts = [];
+        if (Math.abs(dec) < 0.5 * Math.PI / 180) {
+            // Near equinox: terminator follows two meridians
+            const m1 = ((lonSun + 90 + 540) % 360) - 180;
+            const m2 = ((lonSun - 90 + 540) % 360) - 180;
+            for (let lat = -85; lat <= 85; lat += 2) pts.push([lat, m1], [lat, m2]);
+        } else {
+            for (let lon = -180; lon <= 180; lon += 2) {
+                const H = (lon - lonSun) * Math.PI / 180;
+                const lat = Math.atan(-Math.cos(H) / Math.tan(dec)) * 180 / Math.PI;
+                pts.push([lat, lon]);
+            }
+        }
+        // Night-side shading polygon: terminator + the pole away from the sun
+        const nightPole = dec > 0 ? -85 : 85;
+        const shade = pts.concat([[nightPole, 180], [nightPole, -180]]);
+        return {pts, shade};
     }
-    for (let lon = -180; lon <= 180; lon += 20) {
-        L.polyline([[-85, lon], [85, lon]], style).addTo(map);
+    function draw() {
+        if (map._termLayers) map._termLayers.forEach(l => map.removeLayer(l));
+        const {pts, shade} = compute();
+        map._termLayers = [
+            L.polyline(pts, {color: '#aaa', weight: 1.5, opacity: 0.8, interactive: false}).addTo(map),
+            L.polygon(shade, {color: 'transparent', fillColor: '#000',
+                              fillOpacity: 0.28, interactive: false}).addTo(map)
+        ];
     }
+    draw();
+    map._termTimer = setInterval(draw, 60000);
 }
 
 function applyCallsigns(calls) {
