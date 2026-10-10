@@ -172,12 +172,16 @@ function addTerminator(map) {
         const utcH = now.getUTCHours() + now.getUTCMinutes() / 60 + now.getUTCSeconds() / 3600;
         const lonSun = 180 - utcH * 15;
         const base = [];
-        // Single smooth great circle; atan2 stays well-defined at equinox
-        // (declination 0) where the terminator runs through both poles.
+        // Terminator: tan(lat) = -cos(H)/tan(declination). Plain atan is
+        // required (output stays within +/-90 deg); atan2 would emit
+        // latitudes beyond the poles and corrupt the Mercator projection.
+        let prevLat = 0;
         for (let lon = -180; lon <= 180; lon += 1) {
             const H = (lon - lonSun) * Math.PI / 180;
-            const lat = Math.atan2(-Math.cos(H), Math.tan(dec)) * 180 / Math.PI;
-            base.push([isNaN(lat) ? 0 : lat, lon]);
+            let lat = Math.atan(-Math.cos(H) / Math.tan(dec)) * 180 / Math.PI;
+            if (!isFinite(lat)) lat = prevLat; // singular only at exact equinox, H=+/-90
+            base.push([lat, lon]);
+            prevLat = lat;
         }
         // Night-side shading: terminator + the pole away from the sun
         const nightPole = dec > 0 ? -89.9 : 89.9;
