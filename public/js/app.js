@@ -4,7 +4,7 @@
  * ============================================================ */
 
 const MARKER_TTL_MS = 60 * 60 * 1000; // 1 hour marker / info-chip survival
-const NO_RUNNING_MS = 10 * 60 * 1000; // no spot for 10 min -> NO RUNING
+const NO_RUNING_MS = 10 * 60 * 1000; // no spot for 10 min -> NO RUNING
 const QRT_MS = 30 * 60 * 1000;        // no spot for 30 min -> QRT
 const MAX_CELLS = 9;
 
