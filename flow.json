@@ -4,7 +4,7 @@
         "type": "tab",
         "label": "DX-Compass",
         "disabled": false,
-        "info": "# DX-Compass\n\nMulti-callsign DX Spot monitor with DVR-style map grid.\n\nData sources (no DX cluster telnet required):\n- dxwatch.com public spot feed (polled every 30s over HTTPS) - FT8/SSB/DIGI etc.\n- reversebeacon.net RBN feed (polled every 10s over HTTPS) - CW with SNR in dB.\nEvery spot already carries spotter/DX coordinates (ci / call_info object),\nso distance is computed without any external geolocation lookup.\n\nSpots matching a monitored callsign are recorded to SQLite and broadcast\nto the frontend over WebSocket. CW duplicates arriving from both sources\nare dropped via a shared in-memory dedup cache. Adding a new callsign\ntriggers a one-shot dxwatch historical backfill (up to 7 days / 150 spots).\n\nFrontend is served from the ./public folder (httpStatic).",
+        "info": "# DX-Compass\n\nMulti-callsign DX Spot monitor with DVR-style map grid.\n\nData sources (no DX cluster telnet required):\n- PSKReporter MQTT v2 live feed (mqtt.pskreporter.info:1883, the GridTracker2 source) - CW/DIGI spots with real mode and SNR; subscriptions auto-follow the monitored calls.\n- dxwatch.com public spot feed (polled every 30s over HTTPS) - FT8/SSB/DIGI etc.\n- reversebeacon.net RBN feed (polled every 10s over HTTPS) - CW with SNR in dB.\nEvery spot already carries spotter/DX coordinates (Maidenhead grids or the ci / call_info object),\nso distance is computed without any external geolocation lookup.\n\nSpots matching a monitored callsign are recorded to SQLite and broadcast\nto the frontend over WebSocket. Duplicates arriving from all three sources\nare dropped via a shared in-memory dedup cache. Adding a new callsign\ntriggers a one-shot dxwatch historical backfill (up to 7 days / 150 spots)\nand a new PSKReporter MQTT subscription.\n\nSpots older than 1 hour are persisted to the database but are not sent\nto the map.\n\nFrontend is served from the ./public folder (httpStatic).",
         "env": []
     },
     {
@@ -29,13 +29,16 @@
         "path": "/ws",
         "wholemsg": "false"
     },
-
     {
         "id": "dxc0000000000024",
         "type": "inject",
         "z": "dxc0000000000001",
         "name": "Init DB on startup",
-        "props": [{"p": "payload"}],
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
         "repeat": "",
         "crontab": "",
         "once": true,
@@ -45,7 +48,11 @@
         "payloadType": "date",
         "x": 130,
         "y": 100,
-        "wires": [["dxc0000000000025"]]
+        "wires": [
+            [
+                "dxc0000000000025"
+            ]
+        ]
     },
     {
         "id": "dxc0000000000025",
@@ -60,7 +67,11 @@
         "libs": [],
         "x": 340,
         "y": 100,
-        "wires": [["dxc0000000000030"]]
+        "wires": [
+            [
+                "dxc0000000000030"
+            ]
+        ]
     },
     {
         "id": "dxc0000000000030",
@@ -75,7 +86,11 @@
         "libs": [],
         "x": 560,
         "y": 100,
-        "wires": [["dxc0000000000031"]]
+        "wires": [
+            [
+                "dxc0000000000031"
+            ]
+        ]
     },
     {
         "id": "dxc0000000000031",
@@ -87,7 +102,11 @@
         "name": "Check schema",
         "x": 760,
         "y": 100,
-        "wires": [["dxc0000000000032"]]
+        "wires": [
+            [
+                "dxc0000000000032"
+            ]
+        ]
     },
     {
         "id": "dxc0000000000032",
@@ -102,7 +121,11 @@
         "libs": [],
         "x": 960,
         "y": 100,
-        "wires": [["dxc0000000000033"]]
+        "wires": [
+            [
+                "dxc0000000000033"
+            ]
+        ]
     },
     {
         "id": "dxc0000000000033",
@@ -114,7 +137,11 @@
         "name": "Apply migration",
         "x": 1180,
         "y": 100,
-        "wires": [["dxc0000000000034"]]
+        "wires": [
+            [
+                "dxc0000000000034"
+            ]
+        ]
     },
     {
         "id": "dxc0000000000034",
@@ -129,7 +156,11 @@
         "libs": [],
         "x": 1400,
         "y": 100,
-        "wires": [["dxc0000000000035"]]
+        "wires": [
+            [
+                "dxc0000000000035"
+            ]
+        ]
     },
     {
         "id": "dxc0000000000035",
@@ -141,7 +172,11 @@
         "name": "Create index",
         "x": 1600,
         "y": 100,
-        "wires": [["dxc0000000000050"]]
+        "wires": [
+            [
+                "dxc0000000000050"
+            ]
+        ]
     },
     {
         "id": "dxc0000000000050",
@@ -156,7 +191,11 @@
         "libs": [],
         "x": 1800,
         "y": 100,
-        "wires": [["dxc0000000000051"]]
+        "wires": [
+            [
+                "dxc0000000000051"
+            ]
+        ]
     },
     {
         "id": "dxc0000000000051",
@@ -168,7 +207,11 @@
         "name": "Read column list",
         "x": 2000,
         "y": 100,
-        "wires": [["dxc0000000000052"]]
+        "wires": [
+            [
+                "dxc0000000000052"
+            ]
+        ]
     },
     {
         "id": "dxc0000000000052",
@@ -183,7 +226,11 @@
         "libs": [],
         "x": 2200,
         "y": 100,
-        "wires": [["dxc0000000000053"]]
+        "wires": [
+            [
+                "dxc0000000000053"
+            ]
+        ]
     },
     {
         "id": "dxc0000000000053",
@@ -195,15 +242,20 @@
         "name": "Apply column migrations",
         "x": 2420,
         "y": 100,
-        "wires": [[]]
+        "wires": [
+            []
+        ]
     },
-
     {
         "id": "dxc0000000000036",
         "type": "inject",
         "z": "dxc0000000000001",
         "name": "Poll dxwatch every 30s",
-        "props": [{"p": "payload"}],
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
         "repeat": "30",
         "crontab": "",
         "once": true,
@@ -213,7 +265,11 @@
         "payloadType": "date",
         "x": 130,
         "y": 220,
-        "wires": [["dxc0000000000037"]]
+        "wires": [
+            [
+                "dxc0000000000037"
+            ]
+        ]
     },
     {
         "id": "dxc0000000000037",
@@ -228,7 +284,11 @@
         "libs": [],
         "x": 360,
         "y": 220,
-        "wires": [["dxc0000000000038"]]
+        "wires": [
+            [
+                "dxc0000000000038"
+            ]
+        ]
     },
     {
         "id": "dxc000000000003a",
@@ -243,7 +303,11 @@
         "libs": [],
         "x": 360,
         "y": 460,
-        "wires": [["dxc0000000000038"]]
+        "wires": [
+            [
+                "dxc0000000000038"
+            ]
+        ]
     },
     {
         "id": "dxc0000000000038",
@@ -263,7 +327,11 @@
         "headers": [],
         "x": 620,
         "y": 220,
-        "wires": [["dxc0000000000039"]]
+        "wires": [
+            [
+                "dxc0000000000039"
+            ]
+        ]
     },
     {
         "id": "dxc0000000000039",
@@ -278,7 +346,14 @@
         "libs": [],
         "x": 880,
         "y": 220,
-        "wires": [["dxc000000000000b"], ["dxc000000000000d"]]
+        "wires": [
+            [
+                "dxc000000000000b"
+            ],
+            [
+                "dxc000000000000d"
+            ]
+        ]
     },
     {
         "id": "dxc000000000000b",
@@ -293,7 +368,11 @@
         "libs": [],
         "x": 1160,
         "y": 180,
-        "wires": [["dxc000000000000c"]]
+        "wires": [
+            [
+                "dxc000000000000c"
+            ]
+        ]
     },
     {
         "id": "dxc000000000000c",
@@ -305,7 +384,9 @@
         "name": "Record spot",
         "x": 1380,
         "y": 180,
-        "wires": [[]]
+        "wires": [
+            []
+        ]
     },
     {
         "id": "dxc000000000000d",
@@ -320,7 +401,11 @@
         "libs": [],
         "x": 1160,
         "y": 260,
-        "wires": [["dxc000000000000e"]]
+        "wires": [
+            [
+                "dxc000000000000e"
+            ]
+        ]
     },
     {
         "id": "dxc000000000000e",
@@ -333,7 +418,6 @@
         "y": 260,
         "wires": []
     },
-
     {
         "id": "dxc000000000000f",
         "type": "http in",
@@ -345,7 +429,11 @@
         "swaggerDoc": "",
         "x": 120,
         "y": 560,
-        "wires": [["dxc0000000000010"]]
+        "wires": [
+            [
+                "dxc0000000000010"
+            ]
+        ]
     },
     {
         "id": "dxc0000000000010",
@@ -360,7 +448,11 @@
         "libs": [],
         "x": 350,
         "y": 560,
-        "wires": [["dxc0000000000011"]]
+        "wires": [
+            [
+                "dxc0000000000011"
+            ]
+        ]
     },
     {
         "id": "dxc0000000000011",
@@ -384,7 +476,11 @@
         "swaggerDoc": "",
         "x": 120,
         "y": 620,
-        "wires": [["dxc0000000000013"]]
+        "wires": [
+            [
+                "dxc0000000000013"
+            ]
+        ]
     },
     {
         "id": "dxc0000000000013",
@@ -399,7 +495,15 @@
         "libs": [],
         "x": 380,
         "y": 620,
-        "wires": [["dxc0000000000014"], ["dxc000000000003a"]]
+        "wires": [
+            [
+                "dxc0000000000014",
+                "dxc0000000000063"
+            ],
+            [
+                "dxc000000000003a"
+            ]
+        ]
     },
     {
         "id": "dxc0000000000014",
@@ -412,7 +516,6 @@
         "y": 580,
         "wires": []
     },
-
     {
         "id": "dxc0000000000015",
         "type": "http in",
@@ -424,7 +527,11 @@
         "swaggerDoc": "",
         "x": 120,
         "y": 700,
-        "wires": [["dxc0000000000016"]]
+        "wires": [
+            [
+                "dxc0000000000016"
+            ]
+        ]
     },
     {
         "id": "dxc0000000000016",
@@ -439,7 +546,11 @@
         "libs": [],
         "x": 340,
         "y": 700,
-        "wires": [["dxc0000000000017"]]
+        "wires": [
+            [
+                "dxc0000000000017"
+            ]
+        ]
     },
     {
         "id": "dxc0000000000017",
@@ -451,7 +562,11 @@
         "name": "Query spots",
         "x": 560,
         "y": 700,
-        "wires": [["dxc0000000000018"]]
+        "wires": [
+            [
+                "dxc0000000000018"
+            ]
+        ]
     },
     {
         "id": "dxc0000000000018",
@@ -464,7 +579,6 @@
         "y": 700,
         "wires": []
     },
-
     {
         "id": "dxc0000000000019",
         "type": "http in",
@@ -476,7 +590,11 @@
         "swaggerDoc": "",
         "x": 120,
         "y": 780,
-        "wires": [["dxc000000000001a"]]
+        "wires": [
+            [
+                "dxc000000000001a"
+            ]
+        ]
     },
     {
         "id": "dxc000000000001a",
@@ -491,7 +609,11 @@
         "libs": [],
         "x": 320,
         "y": 780,
-        "wires": [["dxc000000000001b"]]
+        "wires": [
+            [
+                "dxc000000000001b"
+            ]
+        ]
     },
     {
         "id": "dxc000000000001b",
@@ -515,7 +637,11 @@
         "swaggerDoc": "",
         "x": 120,
         "y": 840,
-        "wires": [["dxc000000000001d"]]
+        "wires": [
+            [
+                "dxc000000000001d"
+            ]
+        ]
     },
     {
         "id": "dxc000000000001d",
@@ -530,7 +656,11 @@
         "libs": [],
         "x": 320,
         "y": 840,
-        "wires": [["dxc000000000001e"]]
+        "wires": [
+            [
+                "dxc000000000001e"
+            ]
+        ]
     },
     {
         "id": "dxc000000000001e",
@@ -543,13 +673,16 @@
         "y": 840,
         "wires": []
     },
-
     {
         "id": "dxc0000000000040",
         "type": "inject",
         "z": "dxc0000000000001",
         "name": "Get RBN version hash",
-        "props": [{"p": "payload"}],
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
         "repeat": "",
         "crontab": "",
         "once": true,
@@ -559,7 +692,11 @@
         "payloadType": "date",
         "x": 140,
         "y": 320,
-        "wires": [["dxc0000000000041"]]
+        "wires": [
+            [
+                "dxc0000000000041"
+            ]
+        ]
     },
     {
         "id": "dxc0000000000041",
@@ -574,7 +711,11 @@
         "libs": [],
         "x": 380,
         "y": 320,
-        "wires": [["dxc0000000000042"]]
+        "wires": [
+            [
+                "dxc0000000000042"
+            ]
+        ]
     },
     {
         "id": "dxc0000000000042",
@@ -594,7 +735,11 @@
         "headers": [],
         "x": 650,
         "y": 320,
-        "wires": [["dxc0000000000047"]]
+        "wires": [
+            [
+                "dxc0000000000047"
+            ]
+        ]
     },
     {
         "id": "dxc0000000000047",
@@ -609,15 +754,20 @@
         "libs": [],
         "x": 910,
         "y": 320,
-        "wires": [[]]
+        "wires": [
+            []
+        ]
     },
-
     {
         "id": "dxc0000000000043",
         "type": "inject",
         "z": "dxc0000000000001",
         "name": "Poll RBN every 10s",
-        "props": [{"p": "payload"}],
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
         "repeat": "10",
         "crontab": "",
         "once": true,
@@ -627,7 +777,11 @@
         "payloadType": "date",
         "x": 130,
         "y": 400,
-        "wires": [["dxc0000000000044"]]
+        "wires": [
+            [
+                "dxc0000000000044"
+            ]
+        ]
     },
     {
         "id": "dxc0000000000044",
@@ -642,7 +796,11 @@
         "libs": [],
         "x": 360,
         "y": 400,
-        "wires": [["dxc0000000000045"]]
+        "wires": [
+            [
+                "dxc0000000000045"
+            ]
+        ]
     },
     {
         "id": "dxc0000000000045",
@@ -662,7 +820,11 @@
         "headers": [],
         "x": 620,
         "y": 400,
-        "wires": [["dxc0000000000046"]]
+        "wires": [
+            [
+                "dxc0000000000046"
+            ]
+        ]
     },
     {
         "id": "dxc0000000000046",
@@ -677,6 +839,131 @@
         "libs": [],
         "x": 880,
         "y": 400,
-        "wires": [["dxc000000000000b"], ["dxc000000000000d"], ["dxc0000000000041"]]
+        "wires": [
+            [
+                "dxc000000000000b"
+            ],
+            [
+                "dxc000000000000d"
+            ],
+            [
+                "dxc0000000000041"
+            ]
+        ]
+    },
+    {
+        "id": "dxc0000000000060",
+        "type": "mqtt-broker",
+        "name": "PSKReporter (mqtt.pskreporter.info)",
+        "broker": "mqtt.pskreporter.info",
+        "port": "1883",
+        "clientid": "DXCompassPSKR",
+        "autoConnect": true,
+        "usetls": false,
+        "protocolVersion": "4",
+        "keepalive": "60",
+        "cleansession": false,
+        "birthTopic": "",
+        "birthQos": "0",
+        "birthRetain": "false",
+        "birthMsg": {},
+        "closeTopic": "",
+        "closeQos": "0",
+        "closeRetain": "false",
+        "closeMsg": {},
+        "willTopic": "",
+        "willQos": "0",
+        "willRetain": "false",
+        "willMsg": {},
+        "userProps": "",
+        "sessionExpiry": "",
+        "credentials": {}
+    },
+    {
+        "id": "dxc0000000000061",
+        "type": "mqtt in",
+        "z": "dxc0000000000001",
+        "name": "PSKR live spots",
+        "topic": "",
+        "qos": "0",
+        "datatype": "auto",
+        "broker": "dxc0000000000060",
+        "nl": false,
+        "rap": true,
+        "rh": 0,
+        "inputs": 1,
+        "x": 760,
+        "y": 940,
+        "wires": [
+            [
+                "dxc0000000000062"
+            ]
+        ]
+    },
+    {
+        "id": "dxc0000000000062",
+        "type": "function",
+        "z": "dxc0000000000001",
+        "name": "Parse PSKR spot",
+        "func": "// PSKReporter MQTT v2 live spot (GridTracker2's CW/DIGI data source).\n// Topic: pskr/filter/v2/<band>/<mode>/<sender>/<receiver>/<sGrid>/<rGrid>/<sDxcc>/<rDxcc>/...\n// Payload: {sq,f,md,rp,t,sc,sl,sa,rc,rl,ra,b} where sc/sl = monitored DX\n// station (sender) and rc/rl = spotter (receiver). Emitted in the same\n// record shape as the dxwatch/RBN chains.\nlet json = msg.payload;\nif (typeof json === 'string') {\n    try { json = JSON.parse(json); }\n    catch (e) { return [null, null]; }\n}\nif (!json || typeof json !== 'object') return [null, null];\n\nconst monitored = (global.get('monitoredCalls') || []).map(c => String(c).toUpperCase());\nif (!monitored.length) return [null, null];\nconst homeLat = parseFloat(global.get('homelat'));\nconst homeLon = parseFloat(global.get('homelon'));\nconst homeOk = !isNaN(homeLat) && !isNaN(homeLon);\n\nfunction hav(la1, lo1, la2, lo2) {\n    const R = 6371;\n    const r = d => d * Math.PI / 180;\n    const dLa = r(la2 - la1), dLo = r(lo2 - lo1);\n    const a = Math.sin(dLa/2)*Math.sin(dLa/2) +\n              Math.cos(r(la1))*Math.cos(r(la2))*Math.sin(dLo/2)*Math.sin(dLo/2);\n    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));\n}\nfunction gridToLatLng(g) {\n    const s = String(g || '').toUpperCase().replace(/[^A-Z0-9]/g, '');\n    if (s.length < 4) return null;\n    const a = s.charCodeAt(0) - 65, b = s.charCodeAt(1) - 65;\n    if (a < 0 || a > 17 || b < 0 || b > 17) return null;\n    let lon = -180 + a * 20, lat = -90 + b * 10, lonSpan = 20, latSpan = 10;\n    if (/[0-9]{2}/.test(s.slice(2, 4))) {\n        lon += Number(s[2]) * 2; lat += Number(s[3]); lonSpan = 2; latSpan = 1;\n    } else return [lat + latSpan / 2, lon + lonSpan / 2];\n    if (s.length >= 6 && /^[A-Z]{2}$/.test(s.slice(4, 6))) {\n        lon += (s.charCodeAt(4) - 65) * (2 / 24); lat += (s.charCodeAt(5) - 65) * (1 / 24);\n        lonSpan = 2 / 24; latSpan = 1 / 24;\n    }\n    return [lat + latSpan / 2, lon + lonSpan / 2];\n}\nfunction bandOf(f) {\n    if (isNaN(f)) return null;\n    const bands = [[1800,2000,'160m'],[3500,4000,'80m'],[5330,5410,'60m'],[7000,7300,'40m'],[10100,10150,'30m'],[14000,14350,'20m'],[18068,18168,'17m'],[21000,21450,'15m'],[24890,24990,'12m'],[28000,29700,'10m'],[50000,54000,'6m'],[144000,148000,'2m'],[420000,450000,'70cm']];\n    for (const b of bands) { if (f >= b[0] && f <= b[1]) return b[2]; }\n    return null;\n}\nfunction modeOf(m) {\n    const s = String(m || '').toUpperCase();\n    if (s === 'CW') return 'CW';\n    if (/^(SSB|USB|LSB|AM|FM|PHONE)/.test(s)) return 'PHONE';\n    return 'DIGI';\n}\n\nconst unslash = s => String(s || '').trim().toUpperCase().replace(/\\./g, '/');\nconst target = unslash(json.sc);   // sender = monitored DX call\nconst de = unslash(json.rc);       // receiver = spotter call\nif (!target || !de) return [null, null];\nif (!monitored.includes(target)) return [null, null];\n\nconst nowSec = Date.now() / 1000;\nconst epoch = parseInt(json.t, 10) || Math.floor(nowSec);\nif (nowSec - epoch < -120) return [null, null]; // bogus future timestamp\nconst tooOld = nowSec - epoch > 3600;\n\nconst freqHz = parseFloat(json.f);\nconst freq = isFinite(freqHz) && freqHz > 0 ? Math.round(freqHz / 10) / 100 : null; // Hz -> kHz\nconst snr = parseInt(json.rp, 10);\nconst sq = parseInt(json.sq, 10);\nif (!sq) return [null, null];\n\nconst dedup = flow.get('dedupKeys') || {};\nconst dKey = target + '|' + de.replace(/-\\d+$/, '') + '|' + Math.round(isNaN(freq) ? 0 : freq) + '|' + Math.floor(epoch / 180);\nif (dedup[dKey]) return [null, null];\ndedup[dKey] = nowSec;\nfor (const k of Object.keys(dedup)) { if (nowSec - dedup[k] > 900) delete dedup[k]; }\nflow.set('dedupKeys', dedup);\n\nconst dePos = gridToLatLng(json.rl);   // spotter (red dot)\nconst dxPos = gridToLatLng(json.sl);   // monitored DX (green dot)\nlet distKm = null;\nif (dePos && homeOk) distKm = hav(homeLat, homeLon, dePos[0], dePos[1]);\n\nconst iso = new Date(epoch * 1000).toISOString();\nconst record = {\n    spot_id: -sq, // negative namespace keeps PSKR ids apart from dxwatch ids\n    timestamp: iso,\n    monitored_call: target,\n    de: de,\n    freq: freq,\n    spot_call: target,\n    comment: 'PSKR ' + String(json.md || '').toUpperCase() + (isNaN(snr) ? '' : ' ' + snr + ' dB'),\n    spot_time: iso.replace('T', ' ').substring(0, 19),\n    mode: modeOf(json.md),\n    signal: null,\n    snr: isNaN(snr) ? null : snr,\n    lat: dePos ? dePos[0] : null,\n    lon: dePos ? dePos[1] : null,\n    dx_lat: dxPos ? dxPos[0] : null,\n    dx_lon: dxPos ? dxPos[1] : null,\n    band: bandOf(freq),\n    distance_km: distKm === null ? null : Math.round(distKm),\n    distance_miles: distKm === null ? null : Math.round(distKm * 0.62137)\n};\n// output 1: every spot (SQLite); output 2: only spots younger than 1h (WS/map)\nreturn [{payload: record}, tooOld ? null : {payload: record}];",
+        "outputs": 2,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1020,
+        "y": 940,
+        "wires": [
+            [
+                "dxc000000000000b"
+            ],
+            [
+                "dxc000000000000d"
+            ]
+        ]
+    },
+    {
+        "id": "dxc0000000000063",
+        "type": "function",
+        "z": "dxc0000000000001",
+        "name": "Sync PSKR subscriptions",
+        "func": "// Keep PSKReporter MQTT subscriptions in sync with the monitored calls\n// list. Re-subscribes ALL wanted topics unconditionally on every run\n// (self-heals dropped subscriptions after a broker reconnect) and\n// unsubscribes removed calls. Runs 5s after startup, every 2 minutes,\n// and whenever the callsign list is saved.\nconst calls = (global.get('monitoredCalls') || [])\n    .map(c => String(c).trim().toUpperCase()).filter(Boolean);\nconst wanted = {};\nfor (const c of calls) {\n    wanted['pskr/filter/v2/+/+/' + c.replace(/\\//g, '.') + '/#'] = { qos: 0 };\n}\nconst prev = flow.get('pskrSubs') || {};\nfor (const topic of Object.keys(prev)) {\n    if (!wanted[topic]) node.send({action: 'unsubscribe', topic: topic});\n}\nfor (const topic of Object.keys(wanted)) {\n    node.send({action: 'subscribe', topic: topic, qos: 0});\n}\nif (JSON.stringify(prev) !== JSON.stringify(wanted)) {\n    flow.set('pskrSubs', wanted);\n    node.warn('PSKR subscriptions: ' + (Object.keys(wanted).join(' | ') || '(none)'));\n}\nreturn null;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 460,
+        "y": 940,
+        "wires": [
+            [
+                "dxc0000000000061"
+            ]
+        ]
+    },
+    {
+        "id": "dxc0000000000064",
+        "type": "inject",
+        "z": "dxc0000000000001",
+        "name": "PSKR sub sync timer",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "120",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "5",
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 180,
+        "y": 940,
+        "wires": [
+            [
+                "dxc0000000000063"
+            ]
+        ]
     }
 ]
