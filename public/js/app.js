@@ -3,9 +3,10 @@
  * DVR-style multi-map DX spot monitor
  * ============================================================ */
 
-const MARKER_TTL_MS = 60 * 60 * 1000; // 1 hour marker / info-chip survival
-const NO_RUNING_MS = 10 * 60 * 1000; // no spot for 10 min -> NO RUNING
+const MARKER_TTL_MS = 30 * 60 * 1000; // 30 min marker / info-chip / heat survival
+const NO_RUNING_MS = 10 * 60 * 1000;  // no spot for 10 min -> NO RUNING
 const QRT_MS = 30 * 60 * 1000;        // no spot for 30 min -> QRT
+const HISTORY_LIMIT = 500;            // rows fetched per call after a page reload
 const MAX_CELLS = 9;
 
 const state = {
@@ -14,7 +15,8 @@ const state = {
     ws: null,
     wsConnected: false,
     totalSpots: 0,
-    config: {}
+    config: {},
+    monitoring: localStorage.getItem('dxcompass-monitoring') === '1'
 };
 
 /* ---------- Utilities ---------- */
@@ -44,7 +46,11 @@ function renderCellInfo(cell) {
         const bandColor = BAND_COLORS[band] || '#00e5ff';
         const sig = s.snr !== null && s.snr !== undefined ? s.snr + ' dB' :
                     (s.signal || '');
-        chips.push(`<div class="ci-chip" style="border-color:${bandColor}">
+        const heatable = heatCounts(cell)[band] > 0;
+        const cls = 'ci-chip' +
+            (heatable ? ' heat-on' : '') +
+            (cell.activeBand === band && heatable ? ' active' : '');
+        chips.push(`<div class="${cls}" data-band="${band}" style="border-color:${bandColor}">
             <span class="ci-band" style="color:${bandColor}">${band}</span>
             <span class="ci-freq">${s.freq ? s.freq + ' kHz' : ''}</span>
             <span class="ci-mode">${s.mode || ''}</span>
@@ -147,13 +153,22 @@ function createCell(index) {
 
     const cell = {
         index, call: '', map, markers: [], count: 0,
-        bandInfo: {},   // band -> latest spot
-        lastSpotAt: null,   // last time a spot hit this cell
+        bandInfo: {},    // band -> {spot, addedAt}
+        heat: {},        // band -> L.heatLayer
+        activeBand: null,// band whose heat layer is visible
+        bandPinned: false, // user clicked a chip: keep its band selected
+        seen: new Set(), // dedup keys (live WS vs replayed history)
+        lastSpotAt: null,
         el, callLabel, countEl, clearBtn, hint, info,
         stale: el.querySelector('.stale-overlay')
     };
 
     clearBtn.addEventListener('click', () => clearCell(cell));
+    // Click a band chip to switch its heat layer (only CW/DIGI bands)
+    info.addEventListener('click', (e) => {
+        const chip = e.target.closest('.ci-chip');
+        if (chip) selectBand(cell, chip.dataset.band);
+    });
 
     return cell;
 }
@@ -227,6 +242,7 @@ function applyCallsigns(calls) {
         cell.lastSpotAt = null;
         updateStale(cell);
     }
+    if (typeof updateMonitorBtn === 'function') updateMonitorBtn();
 }
 
 function syncCallsigns() {
@@ -250,6 +266,11 @@ function clearCell(cell) {
     cell.countEl.classList.remove('has-spots');
     cell.info.innerHTML = '';
     cell.bandInfo = {};
+    Object.values(cell.heat).forEach(l => cell.map.removeLayer(l));
+    cell.heat = {};
+    cell.activeBand = null;
+    cell.bandPinned = false;
+    cell.seen.clear();
     cell.lastSpotAt = null;
     updateStale(cell);
 }
@@ -294,6 +315,96 @@ function updateStale(cell) {
     }
 }
 
+/* ---------- Heat maps (CW / DIGI only, weighted by SNR) ---------- */
+function spotHeatKey(s) {
+    return (s.spot_id !== null && s.spot_id !== undefined)
+        ? 'id' + s.spot_id
+        : [s.de, s.freq, s.timestamp].join('|');
+}
+
+function isHeatSpot(s) {
+    return (s.mode === 'CW' || s.mode === 'DIGI') &&
+           typeof s.snr === 'number' && isFinite(s.snr) &&
+           s.lat !== null && s.lat !== undefined &&
+           s.lon !== null && s.lon !== undefined;
+}
+
+/* band -> number of alive heat-eligible markers */
+function heatCounts(cell) {
+    const counts = {};
+    cell.markers.forEach(g => {
+        const s = g._spot;
+        if (isHeatSpot(s)) {
+            const band = s.band || '?';
+            counts[band] = (counts[band] || 0) + 1;
+        }
+    });
+    return counts;
+}
+
+/* SNR -> heat intensity: -25 dB -> ~0, +15 dB -> 1 */
+function heatWeight(snr) {
+    return Math.max(0.1, Math.min(1, (snr + 25) / 40));
+}
+
+function updateHeat(cell, band) {
+    const points = cell.markers
+        .map(g => g._spot)
+        .filter(s => (s.band || '?') === band && isHeatSpot(s))
+        .map(s => [s.lat, s.lon, heatWeight(s.snr)]);
+
+    let layer = cell.heat[band];
+    if (!points.length && !layer) return;
+    if (!layer) {
+        layer = L.heatLayer([], {
+            radius: 38, blur: 28, minOpacity: 0.3, maxZoom: 7,
+            // blue(cold/weak) -> green -> yellow -> red(hot/strong)
+            gradient: {0.2: '#2b4bff', 0.4: '#00e5ff', 0.6: '#2ecc71',
+                       0.75: '#f1c40f', 0.9: '#e67e22', 1.0: '#e74c3c'}
+        });
+        cell.heat[band] = layer;
+    }
+    layer.setLatLngs(points);
+
+    const show = cell.activeBand === band && points.length > 0;
+    const onMap = cell.map.hasLayer(layer);
+    if (show && !onMap) cell.map.addLayer(layer);
+    if (!show && onMap) cell.map.removeLayer(layer);
+}
+
+/* Pick / maintain the visible heat band.
+ * Default: the band with the most live heat spots. A chip click pins it. */
+function refreshActiveBand(cell) {
+    const counts = heatCounts(cell);
+    const bands = Object.keys(counts);
+
+    if (cell.activeBand && !counts[cell.activeBand]) {
+        // Pinned/default band expired -> release and re-choose
+        cell.activeBand = null;
+        cell.bandPinned = false;
+    }
+    if (!cell.activeBand && bands.length) {
+        cell.activeBand = bands.reduce(
+            (best, b) => counts[b] > counts[best] ? b : best, bands[0]);
+    } else if (!cell.bandPinned && cell.activeBand) {
+        // Auto mode: follow whichever band currently has the most reports
+        const best = bands.reduce(
+            (b2, b) => counts[b] > counts[b2] ? b : b2, cell.activeBand);
+        cell.activeBand = best;
+    }
+
+    new Set([...Object.keys(cell.heat), ...bands])
+        .forEach(b => updateHeat(cell, b));
+}
+
+function selectBand(cell, band) {
+    if (heatCounts(cell)[band] === undefined) return; // no heat for this band
+    cell.activeBand = band;
+    cell.bandPinned = true;
+    Object.keys(cell.heat).forEach(b => updateHeat(cell, b));
+    renderCellInfo(cell);
+}
+
 /* ---------- Markers ---------- */
 const BAND_COLORS = {
     '160m': '#b565d8', '80m': '#e67e22', '60m': '#fd79a8', '40m': '#f1c40f',
@@ -319,6 +430,11 @@ function addMarkerToCell(cell, spot, ttlMs = MARKER_TTL_MS) {
     const hasDx = spot.dx_lat !== null && spot.dx_lat !== undefined &&
                   spot.dx_lon !== null && spot.dx_lon !== undefined;
     if (!hasDe && !hasDx) return;
+
+    // Deduplicate: replayed history and live WS can carry the same spot
+    const key = spotHeatKey(spot);
+    if (cell.seen.has(key)) return;
+    cell.seen.add(key);
 
     const bandColor = BAND_COLORS[spot.band] || '#00e5ff';
     const layers = [];
@@ -366,11 +482,17 @@ function addMarkerToCell(cell, spot, ttlMs = MARKER_TTL_MS) {
     cell.count++;
     cell.countEl.textContent = cell.count;
     cell.countEl.classList.add('has-spots');
-    cell.lastSpotAt = Date.now();
+    // For replayed spots ttlMs < full TTL; effective time keeps NO RUNING
+    // timing and chip expiry aligned to the spot's real timestamp.
+    const effectiveNow = Date.now() - (MARKER_TTL_MS - ttlMs);
+    const spotTs = new Date(spot.timestamp).getTime();
+    cell.lastSpotAt = Math.max(cell.lastSpotAt || 0, isNaN(spotTs) ? effectiveNow : spotTs);
     updateStale(cell);
 
-    // Info bar: one chip per band with the same 1h TTL as markers
-    cell.bandInfo[spot.band || '?'] = {spot, addedAt: Date.now()};
+    // Info bar: one chip per band with the same TTL as markers
+    cell.bandInfo[spot.band || '?'] = {spot, addedAt: effectiveNow};
+    // Heat layers (CW/DIGI only); active band = most reports by default
+    refreshActiveBand(cell);
     renderCellInfo(cell);
 
     // Auto zoom to include the new marker: immediate on the first one,
@@ -383,6 +505,8 @@ function addMarkerToCell(cell, spot, ttlMs = MARKER_TTL_MS) {
         const old = cell.markers.shift();
         clearTimeout(old._ttl);
         old.layers.forEach(l => cell.map.removeLayer(l));
+        refreshActiveBand(cell);
+        renderCellInfo(cell);
     }
 }
 
@@ -390,6 +514,8 @@ function removeMarker(cell, group) {
     const i = cell.markers.indexOf(group);
     if (i >= 0) cell.markers.splice(i, 1);
     group.layers.forEach(l => cell.map.removeLayer(l));
+    refreshActiveBand(cell);
+    renderCellInfo(cell);
     scheduleFit(cell);
 }
 
@@ -421,6 +547,7 @@ function connectWS() {
 }
 
 function handleSpot(spot) {
+    if (!state.monitoring) return; // nothing is rendered until monitoring starts
     state.totalSpots++;
     $('#spotCount').textContent = state.totalSpots + ' spots';
     // Find the cell monitoring this call
@@ -433,6 +560,54 @@ function handleSpot(spot) {
             const sel = $('#recordCallSelect');
             if (sel.value === call || sel.value === '') refreshRecords();
         }
+    }
+}
+
+/* ---------- Monitoring start/stop + post-refresh recovery ---------- */
+function hasAnyCallsign() {
+    return state.cells.some(c => c.call);
+}
+
+function updateMonitorBtn() {
+    const btn = $('#btnMonitor');
+    btn.classList.toggle('running', state.monitoring);
+    btn.textContent = state.monitoring ? '■ 停止监控' : '▶ 开始监控';
+    btn.disabled = !state.monitoring && !hasAnyCallsign();
+    btn.title = hasAnyCallsign() || state.monitoring ? '' :
+        'Set at least one callsign in Config first';
+}
+
+function setMonitoring(on) {
+    if (on && !hasAnyCallsign()) return;
+    state.monitoring = on;
+    localStorage.setItem('dxcompass-monitoring', on ? '1' : '0');
+    updateMonitorBtn();
+    if (on) {
+        replayHistory();
+    }
+    // On stop the current display is kept frozen; live spots are just ignored.
+}
+
+/* Reload spots from the last TTL window so a browser refresh does not
+ * wipe markers, band chips and heat layers. */
+async function replayHistory() {
+    const cutoff = Date.now() - MARKER_TTL_MS;
+    const calls = state.cells.map(c => c.call).filter(Boolean);
+    for (const call of calls) {
+        let rows = [];
+        try {
+            rows = await fetch(`/api/spots?call=${encodeURIComponent(call)}&limit=${HISTORY_LIMIT}`)
+                .then(r => r.json());
+        } catch (e) { continue; }
+        const cell = state.cells.find(c => c.call === call);
+        if (!cell || !state.monitoring) continue;
+        // API returns newest first; replay oldest first for sane fitBounds
+        rows.reverse().forEach(r => {
+            const t = new Date(r.timestamp).getTime();
+            if (isNaN(t) || t < cutoff) return;
+            addMarkerToCell(cell, r, MARKER_TTL_MS - (Date.now() - t));
+        });
+        fitToMarkers(cell);
     }
 }
 
@@ -542,6 +717,9 @@ function loadConfig() {
             // Fill the Config inputs
             const inputs = document.querySelectorAll('.cfg-call');
             inputs.forEach((inp, i) => { inp.value = calls[i] || ''; });
+            updateMonitorBtn();
+            // Was monitoring before the refresh? Restore markers/chips/heat
+            if (state.monitoring) replayHistory();
         }
     });
 }
@@ -569,6 +747,8 @@ function saveConfig(e) {
         body: JSON.stringify(calls)
     }).then(r => r.json()).then(() => {
         applyCallsigns(calls);
+        updateMonitorBtn();
+        if (state.monitoring) replayHistory(); // backfill newly added slots
         showToast('Configuration saved');
         closeConfig();
     }).catch(() => showToast('Failed to save callsigns'));
@@ -590,6 +770,7 @@ function init() {
 
     $('#btnRecords').addEventListener('click', openRecords);
     $('#btnConfig').addEventListener('click', openConfig);
+    $('#btnMonitor').addEventListener('click', () => setMonitoring(!state.monitoring));
     $('#btnRefreshRecords').addEventListener('click', refreshRecords);
     $('#btnExportCsv').addEventListener('click', exportCsv);
     $('#recordCallSelect').addEventListener('change', refreshRecords);
@@ -605,6 +786,7 @@ function init() {
 
     // Initial layout
     setLayout('1x1');
+    updateMonitorBtn();
 
     // Load config + callsigns
     loadConfig();
@@ -631,6 +813,7 @@ function init() {
         });
         if (Object.keys(c.bandInfo).length) renderCellInfo(c);
         else if (pruned) c.info.innerHTML = '';
+        if (pruned) refreshActiveBand(c);
         updateStale(c);
     }), 30000);
 }

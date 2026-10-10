@@ -118,6 +118,22 @@ html, body {
 .primary-btn:hover { background: var(--accent-2); }
 .mini-btn { padding: 4px 10px; font-size: 11px; }
 
+/* Start / stop monitoring */
+.monitor-btn {
+    background: #14361c;
+    color: #2ecc71;
+    border-color: #1f5e2c;
+    font-weight: 700;
+}
+.monitor-btn:hover:not(:disabled) { background: #1b4a26; border-color: #2ecc71; }
+.monitor-btn.running {
+    background: #3a1718;
+    color: #ff6b6b;
+    border-color: #6e2326;
+}
+.monitor-btn.running:hover { background: #4d1e20; border-color: #ff6b6b; }
+.monitor-btn:disabled { opacity: .45; cursor: not-allowed; }
+
 /* ---------- Main / Grid ---------- */
 .main {
     position: relative;
@@ -222,6 +238,7 @@ html, body {
 }
 .cell-info:empty { display: none; }
 .cell-info .ci-chip {
+    pointer-events: auto;
     display: flex;
     align-items: baseline;
     gap: 7px;
@@ -234,6 +251,13 @@ html, body {
     letter-spacing: .5px;
     box-shadow: 0 2px 8px rgba(0,0,0,.6);
     white-space: nowrap;
+}
+/* CW/DIGI band with SNR data: chip doubles as a heat-layer switch */
+.cell-info .ci-chip.heat-on { cursor: pointer; }
+.cell-info .ci-chip.heat-on:hover { background: rgba(20,28,36,.95); }
+.cell-info .ci-chip.heat-on.active {
+    box-shadow: 0 0 0 2px var(--accent), 0 2px 10px rgba(0,229,255,.55);
+    background: rgba(8,30,38,.95);
 }
 .cell-info .ci-band { font-size: 16px; font-weight: 800; }
 .cell-info .ci-freq { color: #fff; }
