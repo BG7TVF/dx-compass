@@ -258,6 +258,10 @@ html, body {
     text-shadow: 0 0 18px rgba(255,45,45,.8), 0 2px 4px #000;
 }
 .stale-overlay.show { display: flex; }
+.stale-overlay.qrt {
+    color: #ff8c1a;
+    text-shadow: 0 0 18px rgba(255,140,26,.8), 0 2px 4px #000;
+}
 
 /* ---------- Side Panels ---------- */
 .side-panel {

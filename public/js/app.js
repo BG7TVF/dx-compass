@@ -3,7 +3,9 @@
  * DVR-style multi-map DX spot monitor
  * ============================================================ */
 
-const MARKER_TTL_MS = 60 * 60 * 1000; // 1 hour marker survival
+const MARKER_TTL_MS = 60 * 60 * 1000; // 1 hour marker / info-chip survival
+const NO_RUNNING_MS = 10 * 60 * 1000; // no spot for 10 min -> NO RUNING
+const QRT_MS = 30 * 60 * 1000;        // no spot for 30 min -> QRT
 const MAX_CELLS = 9;
 
 const state = {
@@ -38,7 +40,7 @@ function setConnState(state) {
 function renderCellInfo(cell) {
     const chips = [];
     for (const band of Object.keys(cell.bandInfo)) {
-        const s = cell.bandInfo[band];
+        const s = cell.bandInfo[band].spot;
         const bandColor = BAND_COLORS[band] || '#00e5ff';
         const sig = s.snr !== null && s.snr !== undefined ? s.snr + ' dB' :
                     (s.signal || '');
@@ -96,7 +98,10 @@ function setLayout(layout) {
         c.el.style.display = i < count ? '' : 'none';
     });
     setTimeout(() => state.cells.forEach(c => {
-        if (c.el.style.display !== 'none' && c.map) c.map.invalidateSize();
+        if (c.el.style.display !== 'none' && c.map) {
+            c.map.invalidateSize();
+            fitToMarkers(c);   // re-fit to the new cell size
+        }
     }), 50);
     // Highlight active layout button
     $all('.layout-btn').forEach(b => {
@@ -208,7 +213,7 @@ function applyCallsigns(calls) {
         cell.callLabel.textContent = call || '\u2014';
         cell.hint.style.display = call ? 'none' : '';
         cell.lastSpotAt = null;
-        cell.stale.classList.remove('show');
+        updateStale(cell);
     }
 }
 
@@ -222,6 +227,7 @@ function syncCallsigns() {
 }
 
 function clearCell(cell) {
+    clearTimeout(cell._fitTimer);
     cell.markers.forEach(m => {
         clearTimeout(m._ttl);
         (m.layers || [m]).forEach(l => cell.map.removeLayer(l));
@@ -232,6 +238,45 @@ function clearCell(cell) {
     cell.countEl.classList.remove('has-spots');
     cell.info.innerHTML = '';
     cell.bandInfo = {};
+    cell.lastSpotAt = null;
+    updateStale(cell);
+}
+
+/* Auto zoom: fit every visible marker (DX green dots + DE red dots) */
+function fitToMarkers(cell) {
+    if (!cell.markers.length || cell.el.style.display === 'none') return;
+    const bounds = L.latLngBounds([]);
+    cell.markers.forEach(g => {
+        const s = g._spot;
+        if (s.lat !== null && s.lat !== undefined && s.lon !== null && s.lon !== undefined)
+            bounds.extend([s.lat, s.lon]);
+        if (s.dx_lat !== null && s.dx_lat !== undefined && s.dx_lon !== null && s.dx_lon !== undefined)
+            bounds.extend([s.dx_lat, s.dx_lon]);
+    });
+    if (!bounds.isValid()) return;
+    cell.map.fitBounds(bounds, {padding: [36, 36], maxZoom: 4, animate: true});
+}
+
+function scheduleFit(cell) {
+    clearTimeout(cell._fitTimer);
+    cell._fitTimer = setTimeout(() => fitToMarkers(cell), 400);
+}
+
+/* Status overlay: 10 min without a spot -> NO RUNING; 30 min -> QRT */
+function updateStale(cell) {
+    let status = null;
+    if (cell.call && cell.lastSpotAt) {
+        const age = Date.now() - cell.lastSpotAt;
+        if (age >= QRT_MS) status = 'QRT';
+        else if (age >= NO_RUNING_MS) status = 'NO RUNING';
+    }
+    if (!status) {
+        cell.stale.classList.remove('show', 'qrt');
+    } else {
+        cell.stale.textContent = status;
+        cell.stale.classList.toggle('qrt', status === 'QRT');
+        cell.stale.classList.add('show');
+    }
 }
 
 /* ---------- Markers ---------- */
@@ -307,11 +352,14 @@ function addMarkerToCell(cell, spot, ttlMs = MARKER_TTL_MS) {
     cell.countEl.textContent = cell.count;
     cell.countEl.classList.add('has-spots');
     cell.lastSpotAt = Date.now();
-    cell.stale.classList.remove('show');
+    updateStale(cell);
 
-    // Info bar: one chip per band, refreshed with the latest spot of that band
-    cell.bandInfo[spot.band || '?'] = spot;
+    // Info bar: one chip per band with the same 1h TTL as markers
+    cell.bandInfo[spot.band || '?'] = {spot, addedAt: Date.now()};
     renderCellInfo(cell);
+
+    // Auto zoom to include the new marker (debounced for spot bursts)
+    scheduleFit(cell);
 
     // Remove old groups beyond a reasonable limit
     if (cell.markers.length > 500) {
@@ -325,6 +373,7 @@ function removeMarker(cell, group) {
     const i = cell.markers.indexOf(group);
     if (i >= 0) cell.markers.splice(i, 1);
     group.layers.forEach(l => cell.map.removeLayer(l));
+    scheduleFit(cell);
 }
 
 /* ---------- WebSocket ---------- */
@@ -552,13 +601,20 @@ function init() {
         $('#utcClock').textContent = d.toISOString().substring(11, 19) + 'Z';
     }, 1000);
 
-    // Refresh relative-time labels in the cell info bars + stale check
+    // Every 30s: refresh chip ages, expire chips together with markers,
+    // and update the NO RUNING / QRT status overlays.
     setInterval(() => state.cells.forEach(c => {
+        const now = Date.now();
+        let pruned = false;
+        Object.keys(c.bandInfo).forEach(band => {
+            if (now - c.bandInfo[band].addedAt > MARKER_TTL_MS) {
+                delete c.bandInfo[band];
+                pruned = true;
+            }
+        });
         if (Object.keys(c.bandInfo).length) renderCellInfo(c);
-        // Show "NO RUNING" overlay when no spot has hit this cell for > 1 hour
-        const isStale = c.call && c.lastSpotAt &&
-                        (Date.now() - c.lastSpotAt) > MARKER_TTL_MS;
-        c.stale.classList.toggle('show', !!isStale);
+        else if (pruned) c.info.innerHTML = '';
+        updateStale(c);
     }), 30000);
 }
 
