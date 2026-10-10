@@ -242,9 +242,10 @@ function clearCell(cell) {
     updateStale(cell);
 }
 
-/* Auto zoom: fit every visible marker (DX green dots + DE red dots) */
+/* Auto zoom: zoom in to the HIGHEST level that still shows every marker */
 function fitToMarkers(cell) {
     if (!cell.markers.length || cell.el.style.display === 'none') return;
+    cell.map.invalidateSize();
     const bounds = L.latLngBounds([]);
     cell.markers.forEach(g => {
         const s = g._spot;
@@ -254,7 +255,9 @@ function fitToMarkers(cell) {
             bounds.extend([s.dx_lat, s.dx_lon]);
     });
     if (!bounds.isValid()) return;
-    cell.map.fitBounds(bounds, {padding: [36, 36], maxZoom: 4, animate: true});
+    // No low zoom cap: fitBounds picks the largest zoom that contains
+    // every marker. maxZoom only bounds the degenerate single-point case.
+    cell.map.fitBounds(bounds, {padding: [40, 40], maxZoom: 12, animate: true});
 }
 
 function scheduleFit(cell) {
@@ -358,8 +361,10 @@ function addMarkerToCell(cell, spot, ttlMs = MARKER_TTL_MS) {
     cell.bandInfo[spot.band || '?'] = {spot, addedAt: Date.now()};
     renderCellInfo(cell);
 
-    // Auto zoom to include the new marker (debounced for spot bursts)
-    scheduleFit(cell);
+    // Auto zoom to include the new marker: immediate on the first one,
+    // debounced afterwards to absorb spot bursts.
+    if (cell.markers.length === 1) fitToMarkers(cell);
+    else scheduleFit(cell);
 
     // Remove old groups beyond a reasonable limit
     if (cell.markers.length > 500) {
