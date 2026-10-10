@@ -158,7 +158,9 @@ function createCell(index) {
     return cell;
 }
 
-/* Day/night gray line (terminator) + night shading, like the RBN map */
+/* Day/night gray line (terminator) + night shading, like the RBN map.
+ * Drawn in 3 world copies so no seam is visible when a zoomed-out view
+ * (width > 360 deg) shows areas beyond +/-180 longitude. */
 function addTerminator(map) {
     function compute() {
         const now = new Date();
@@ -169,32 +171,38 @@ function addTerminator(map) {
         // Subsolar longitude from UTC hour
         const utcH = now.getUTCHours() + now.getUTCMinutes() / 60 + now.getUTCSeconds() / 3600;
         const lonSun = 180 - utcH * 15;
-        const pts = [];
-        if (Math.abs(dec) < 0.5 * Math.PI / 180) {
-            // Near equinox: terminator follows two meridians
-            const m1 = ((lonSun + 90 + 540) % 360) - 180;
-            const m2 = ((lonSun - 90 + 540) % 360) - 180;
-            for (let lat = -85; lat <= 85; lat += 2) pts.push([lat, m1], [lat, m2]);
-        } else {
-            for (let lon = -180; lon <= 180; lon += 2) {
-                const H = (lon - lonSun) * Math.PI / 180;
-                const lat = Math.atan(-Math.cos(H) / Math.tan(dec)) * 180 / Math.PI;
-                pts.push([lat, lon]);
-            }
+        const base = [];
+        // Single smooth great circle; atan2 stays well-defined at equinox
+        // (declination 0) where the terminator runs through both poles.
+        for (let lon = -180; lon <= 180; lon += 1) {
+            const H = (lon - lonSun) * Math.PI / 180;
+            const lat = Math.atan2(-Math.cos(H), Math.tan(dec)) * 180 / Math.PI;
+            base.push([isNaN(lat) ? 0 : lat, lon]);
         }
-        // Night-side shading polygon: terminator + the pole away from the sun
-        const nightPole = dec > 0 ? -85 : 85;
-        const shade = pts.concat([[nightPole, 180], [nightPole, -180]]);
-        return {pts, shade};
+        // Night-side shading: terminator + the pole away from the sun
+        const nightPole = dec > 0 ? -89.9 : 89.9;
+        return {base, nightPole};
     }
     function draw() {
         if (map._termLayers) map._termLayers.forEach(l => map.removeLayer(l));
-        const {pts, shade} = compute();
-        map._termLayers = [
-            L.polyline(pts, {color: '#aaa', weight: 1.5, opacity: 0.8, interactive: false}).addTo(map),
-            L.polygon(shade, {color: 'transparent', fillColor: '#000',
-                              fillOpacity: 0.28, interactive: false}).addTo(map)
-        ];
+        const {base, nightPole} = compute();
+        map._termLayers = [];
+        // One copy per world (-360 / 0 / +360 longitude shift)
+        for (const shift of [-360, 0, 360]) {
+            const line = base.map(p => [p[0], p[1] + shift]);
+            // Ordering must follow the curve, then close via the pole cap
+            const shade = line.concat([
+                [nightPole, 180 + shift],
+                [nightPole, -180 + shift]
+            ]);
+            map._termLayers.push(L.polygon(shade, {
+                stroke: false, fillColor: '#000', fillOpacity: 0.28,
+                interactive: false
+            }).addTo(map));
+            map._termLayers.push(L.polyline(line, {
+                color: '#aaa', weight: 1.5, opacity: 0.8, interactive: false
+            }).addTo(map));
+        }
     }
     draw();
     map._termTimer = setInterval(draw, 60000);
