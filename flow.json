@@ -21,7 +21,7 @@
         "id": "dxc0000000000027",
         "type": "sqlitedb",
         "db": "dxcompass",
-        "mode": "RW"
+        "mode": "RWC"
     },
     {
         "id": "dxc0000000000028",
