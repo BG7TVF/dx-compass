@@ -422,7 +422,7 @@ html, body {
 }
 .rec-sched.hidden { display: none; }
 .rec-sched input {
-    width: 92px;
+    width: 185px;
     background: #0d1116;
     border: 1px solid var(--border);
     color: var(--text);
@@ -430,6 +430,7 @@ html, body {
     border-radius: 3px;
     font-family: inherit;
     font-size: 11px;
+    color-scheme: dark;
 }
 .rec-arrow { color: var(--dim, #8b949e); }
 .rec-tz { font-size: 10px; color: var(--dim, #8b949e); }

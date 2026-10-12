@@ -714,7 +714,7 @@ async function replayHistory() {
 function openRecords() {
     $('#recordsPanel').classList.remove('hidden');
     populateCallSelect();
-    refreshRecStatus();
+    refreshRecStatus(true);
     refreshRecords();
 }
 
@@ -783,7 +783,20 @@ function refreshRecords() {
 }
 
 /* ---------- Recording (timed / manual capture into recording_spots) ---------- */
-function refreshRecStatus() {
+// datetime-local value ('YYYY-MM-DDTHH:mm') <-> backend schedule form ('M-D H:mm', UTC this year)
+function dtLocalToMdHm(v) {
+    const m = String(v || '').match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+    if (!m) return null;
+    return `${parseInt(m[2], 10)}-${parseInt(m[3], 10)} ${parseInt(m[4], 10)}:${m[5]}`;
+}
+function mdHmToDtLocal(s) {
+    const m = String(s || '').match(/^(\d{1,2})-(\d{1,2})\s+(\d{1,2}):(\d{1,2})$/);
+    if (!m) return '';
+    const pad = n => String(n).padStart(2, '0');
+    return `${new Date().getUTCFullYear()}-${pad(m[1])}-${pad(m[2])}T${pad(m[3])}:${pad(m[4])}`;
+}
+
+function refreshRecStatus(syncInputs) {
     fetch('/api/recording').then(r => r.json()).then(rec => {
         state.recStatus = rec;
         const dot = $('#recDot');
@@ -801,6 +814,13 @@ function refreshRecStatus() {
                 `Scheduled: ${rec.schedule.start} → ${rec.schedule.end} UTC` : 'Not recording';
             btn.innerHTML = '&#9679; Record';
             btn.classList.remove('recording');
+        }
+        // Fill the pickers from the stored schedule only when explicitly
+        // asked (panel open / after Set/Clear) so the 15s poll never
+        // clobbers a value the user is editing.
+        if (syncInputs && rec.schedule) {
+            $('#recStart').value = mdHmToDtLocal(rec.schedule.start);
+            $('#recEnd').value = mdHmToDtLocal(rec.schedule.end);
         }
     }).catch(() => {});
 }
@@ -827,11 +847,12 @@ function toggleRecording() {
 }
 
 function setRecSchedule() {
-    const start = $('#recStart').value.trim();
-    const end = $('#recEnd').value.trim();
+    const start = dtLocalToMdHm($('#recStart').value);
+    const end = dtLocalToMdHm($('#recEnd').value);
+    if (!start || !end) { showToast('Pick start and end date/time first'); return; }
     recAction({action: 'schedule', start, end}).then(() => {
         showToast('Recording scheduled');
-        refreshRecStatus();
+        refreshRecStatus(true);
     }).catch(e => showToast('Schedule: ' + e.message));
 }
 
@@ -840,7 +861,7 @@ function clearRecSchedule() {
         $('#recStart').value = '';
         $('#recEnd').value = '';
         showToast('Schedule cleared');
-        refreshRecStatus();
+        refreshRecStatus(true);
     }).catch(e => showToast('Schedule: ' + e.message));
 }
 
