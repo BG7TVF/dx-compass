@@ -900,6 +900,11 @@ function clearCell(cell) {
  * polar overflow is cropped instead of leaving letterboxed black edges.
  * Must be re-applied after every container resize (zoom depends on size). */
 function setWorldMinZoom(map) {
+    // getBoundsZoom() floors its result at the CURRENT minZoom, so the floor
+    // must be cleared first: otherwise the minimum zoom can only ever grow
+    // and stays stuck at a larger cell's value after switching to a denser
+    // layout (smaller cells), which breaks the marker auto-fit there.
+    map.setMinZoom(0);
     map.setMinZoom(map.getBoundsZoom(WORLD_BOUNDS, true));
     if (map.getZoom() !== undefined && map.getZoom() < map.getMinZoom()) {
         map.setZoom(map.getMinZoom());
