@@ -3,7 +3,131 @@
  * DVR-style multi-map DX spot monitor
  * ============================================================ */
 
-const MARKER_TTL_MS = 30 * 60 * 1000; // 30 min marker / info-chip / heat survival
+/* ---------- Global settings (persisted to localStorage) ---------- */
+const DEFAULT_BAND_COLORS = {
+    '160m': '#b565d8', '80m': '#e67e22', '60m': '#fd79a8', '40m': '#f1c40f',
+    '30m': '#1abc9c', '20m': '#00e5ff', '17m': '#3498db', '15m': '#9b59b6',
+    '12m': '#e84393', '10m': '#e17055', '6m': '#dfe6e9', '2m': '#55efc4'
+};
+const DEFAULT_TTL_MIN = { CW: 30, SSB: 30, DIGI: 30 };
+
+const settings = loadSettings();
+
+function loadSettings() {
+    const d = { lang: 'zh', ttl: {...DEFAULT_TTL_MIN}, bandColors: {...DEFAULT_BAND_COLORS} };
+    try {
+        const raw = JSON.parse(localStorage.getItem('dxcompass-settings') || '{}');
+        if (raw.lang === 'en' || raw.lang === 'zh') d.lang = raw.lang;
+        for (const m of Object.keys(d.ttl)) {
+            const v = parseInt(raw.ttl && raw.ttl[m], 10);
+            if (v >= 1 && v <= 180) d.ttl[m] = v;
+        }
+        if (raw.bandColors && typeof raw.bandColors === 'object') {
+            for (const b of Object.keys(d.bandColors)) {
+                if (/^#[0-9a-fA-F]{6}$/.test(raw.bandColors[b] || '')) d.bandColors[b] = raw.bandColors[b];
+            }
+        }
+    } catch (e) { /* keep defaults */ }
+    return d;
+}
+function saveSettings() {
+    localStorage.setItem('dxcompass-settings', JSON.stringify(settings));
+}
+
+/* Marker / info-chip / heat survival per mode (minutes, configurable in Settings) */
+function ttlForMode(mode) {
+    const m = (mode || '').toUpperCase();
+    const mins = settings.ttl[m] !== undefined ? settings.ttl[m] : settings.ttl.SSB;
+    return mins * 60 * 1000;
+}
+function bandColorOf(band) {
+    return settings.bandColors[band] || '#00e5ff';
+}
+
+/* ---------- i18n ---------- */
+const I18N = {
+    zh: {
+        subtitle: '多呼号 Spot 监视器',
+        settings: 'Settings',
+        startMon: '▶ 开始监控', stopMon: '■ 停止监控',
+        needCall: '请先在 Settings 中设置至少一个呼号',
+        startRot: '🔁 开始轮询', stopRot: '⏸ 停止轮询',
+        nextPage: '下一页', rotSecTitle: '轮询间隔（秒）',
+        connected: '已连接', connecting: '连接中...', disconnected: '未连接',
+        records: 'Spot Records',
+        allCalls: '-- 全部监听呼号 --',
+        refresh: '刷新', exportCsv: '导出 CSV', clearDb: '清空数据库',
+        record: '● 录制', stopRec: '■ 停止', schedule: '定时', download: '⬇ 下载',
+        set: '设定', clear: '清除', recTz: 'UTC，一次性',
+        tabAll: '全部 Spot', tabRec: '录制记录',
+        notRecording: '未在录制',
+        recManual: '录制中（手动）', recSched: '录制中（定时）',
+        scheduled: '已设定时', since: '始于',
+        cfgSection: '监听呼号', globalSection: '全局设置',
+        langLabel: '语言 / Language', ttlTitle: '标记点存活时间（分钟）', bandTitle: '频段颜色',
+        save: '保存',
+        cfgHint: '呼号按顺序分配到地图窗口，空槽位在仪表盘上保持空白。<br>距离为被监听台与监听台之间计算得出。<br>Spot 自动获取：CW 来自 reversebeacon.net RBN（10 秒），其他模式来自 dxwatch.com（30 秒）——无需集群登录或连接设置。',
+        cellHint: '在 Settings 中设置呼号',
+        askClearMarks: '是否清空全部标记？\n\n确定 = 清空所有地图的标记、连线、频段框和热力图\n取消 = 保留当前显示（冻结）',
+        askClearDb: '确定要清空数据库中的全部 Spot 记录吗？\n\n录制数据（recording_spots）会保留。\n此操作不可恢复！',
+        danger: '清空', ok: '确定', cancel: '取消', confirmTitle: '确认',
+        cleared: '数据库已清空', clearFail: '清空数据库失败',
+        csvOk: 'CSV 已导出',
+        saved: '设置已保存', saveFail: '保存呼号失败',
+        loadFail: '加载记录失败',
+        recStarted: '录制已开始', recStopped: '录制已停止',
+        schedOk: '定时录制已设定', schedCleared: '定时已清除',
+        pickDt: '请先选择起止日期时间',
+        now: '现在',
+        headAll: ['时间 (UTC)', '被监听', '监听站 (DE)', '频率', '模式', '信号', 'SNR', '距离 (km)', '备注'],
+        headRec: ['日期', '时间 (UTC)', '被监听', '监听站 (DE)', '频段', '频率', '模式', '详情', 'SNR', '距离 (km)', '备注'],
+        recordsN: n => n + ' 条记录',
+        spotsN: n => n + ' spots'
+    },
+    en: {
+        subtitle: 'Multi-Call Spot Monitor',
+        settings: 'Settings',
+        startMon: '▶ Start Monitor', stopMon: '■ Stop Monitor',
+        needCall: 'Set at least one callsign in Settings first',
+        startRot: '🔁 Rotate', stopRot: '⏸ Stop',
+        nextPage: 'Next page', rotSecTitle: 'Rotation interval (seconds)',
+        connected: 'connected', connecting: 'connecting...', disconnected: 'disconnected',
+        records: 'Spot Records',
+        allCalls: '-- All monitored calls --',
+        refresh: 'Refresh', exportCsv: 'Export CSV', clearDb: 'Clear DB',
+        record: '● Record', stopRec: '■ Stop', schedule: 'Schedule', download: '⬇ Download',
+        set: 'Set', clear: 'Clear', recTz: 'UTC, one-shot',
+        tabAll: 'All Spots', tabRec: 'Recorded',
+        notRecording: 'Not recording',
+        recManual: 'Recording (manual)', recSched: 'Recording (scheduled)',
+        scheduled: 'Scheduled', since: 'since',
+        cfgSection: 'Monitored Callsigns', globalSection: 'Global Settings',
+        langLabel: 'Language / 语言', ttlTitle: 'Marker lifetime (minutes)', bandTitle: 'Band colors',
+        save: 'Save',
+        cfgHint: 'Callsigns are assigned to map slots in order. Empty slots stay blank on the dashboard.<br>Distance is computed between the monitored station and the spotting station.<br>Spots are provided automatically: CW by reversebeacon.net RBN (10s), other modes by dxwatch.com (30s) - no cluster login or connection setup is needed.',
+        cellHint: 'Set callsigns in Settings',
+        askClearMarks: 'Clear all markers?\n\nOK = wipe markers, link lines, band chips and heat maps from every map\nCancel = keep the current display (frozen)',
+        askClearDb: 'Delete ALL spot records from the database?\n\nRecorded sessions (recording_spots) are kept.\nThis cannot be undone!',
+        danger: 'Delete', ok: 'OK', cancel: 'Cancel', confirmTitle: 'Confirm',
+        cleared: 'Database cleared', clearFail: 'Failed to clear database',
+        csvOk: 'CSV exported',
+        saved: 'Settings saved', saveFail: 'Failed to save callsigns',
+        loadFail: 'Failed to load records',
+        recStarted: 'Recording started', recStopped: 'Recording stopped',
+        schedOk: 'Recording scheduled', schedCleared: 'Schedule cleared',
+        pickDt: 'Pick start and end date/time first',
+        now: 'now',
+        headAll: ['Time (UTC)', 'Monitored', 'Spotter (DE)', 'Freq', 'Mode', 'Signal', 'SNR', 'Dist (km)', 'Comment'],
+        headRec: ['Date', 'Time (UTC)', 'Monitored', 'Spotter (DE)', 'Band', 'Freq', 'Mode', 'Detail', 'SNR', 'Dist (km)', 'Comment'],
+        recordsN: n => n + ' records',
+        spotsN: n => n + ' spots'
+    }
+};
+function t(key) {
+    const v = I18N[settings.lang][key];
+    return v !== undefined ? v : (I18N.en[key] !== undefined ? I18N.en[key] : key);
+}
+
 const NO_RUNING_MS = 10 * 60 * 1000;  // no spot for 10 min -> NO RUNING
 const QRT_MS = 30 * 60 * 1000;        // no spot for 30 min -> QRT
 const HISTORY_LIMIT = 500;            // rows fetched per call after a page reload
@@ -18,6 +142,7 @@ const state = {
     cells: [],          // array of {index, call, map, markers:[], count}
     ws: null,
     wsConnected: false,
+    connState: 'disconnected',
     totalSpots: 0,
     config: {},
     callsigns: [],      // configured callsign slots (source of truth)
@@ -37,26 +162,57 @@ function $(sel) { return document.querySelector(sel); }
 function $all(sel) { return document.querySelectorAll(sel); }
 
 function showToast(msg, ms = 2500) {
-    const t = $('#toast');
-    t.textContent = msg;
-    t.classList.add('show');
-    clearTimeout(t._timer);
-    t._timer = setTimeout(() => t.classList.remove('show'), ms);
+    const el = $('#toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    clearTimeout(el._timer);
+    el._timer = setTimeout(() => el.classList.remove('show'), ms);
 }
 
-function setConnState(state) {
+/* Custom dark-theme confirm modal; resolves true (OK) / false (Cancel). */
+function showConfirm(msg, opts = {}) {
+    return new Promise(resolve => {
+        const ov = $('#modalOverlay');
+        const okBtn = $('#modalOk');
+        const cancelBtn = $('#modalCancel');
+        $('#modalTitle').textContent = opts.title || t('confirmTitle');
+        $('#modalMsg').textContent = msg;
+        okBtn.textContent = opts.okText || t('ok');
+        cancelBtn.textContent = opts.cancelText || t('cancel');
+        okBtn.classList.toggle('danger', !!opts.danger);
+        ov.classList.remove('hidden');
+        const done = val => {
+            ov.classList.add('hidden');
+            okBtn.onclick = cancelBtn.onclick = ov.onclick = null;
+            document.removeEventListener('keydown', onKey);
+            resolve(val);
+        };
+        const onKey = e => {
+            if (e.key === 'Escape') done(false);
+            else if (e.key === 'Enter') done(true);
+        };
+        okBtn.onclick = () => done(true);
+        cancelBtn.onclick = () => done(false);
+        ov.onclick = e => { if (e.target === ov) done(false); };
+        document.addEventListener('keydown', onKey);
+        okBtn.focus();
+    });
+}
+
+function setConnState(cs) {
+    state.connState = cs;
     const dot = $('#connDot');
     const txt = $('#connText');
-    dot.className = 'conn-dot ' + state;
-    txt.textContent = state === 'connected' ? 'connected' :
-                       state === 'connecting' ? 'connecting...' : 'disconnected';
+    dot.className = 'conn-dot ' + cs;
+    txt.textContent = cs === 'connected' ? t('connected') :
+                      cs === 'connecting' ? t('connecting') : t('disconnected');
 }
 
 function renderCellInfo(cell) {
     const chips = [];
     for (const band of Object.keys(cell.bandInfo)) {
         const s = cell.bandInfo[band].spot;
-        const bandColor = BAND_COLORS[band] || '#00e5ff';
+        const bandColor = bandColorOf(band);
         const sig = s.snr !== null && s.snr !== undefined ? s.snr + ' dB' :
                     (s.signal || '');
         const heatable = heatCounts(cell)[band] > 0;
@@ -76,14 +232,17 @@ function renderCellInfo(cell) {
 
 function timeAgo(dt) {
     const sec = Math.floor((Date.now() - dt.getTime()) / 1000);
-    if (sec < 30) return '现在';
-    if (sec < 90) return '1分钟前';
-    if (sec < 180) return '2分钟前';
-    if (sec < 300) return '5分钟前';
-    if (sec < 600) return '10分钟前';
-    if (sec < 1800) return '30分钟前';
-    if (sec < 3600) return '1小时前';
-    return Math.floor(sec / 3600) + '小时前';
+    const zh = settings.lang === 'zh';
+    const m = v => zh ? v + '分钟前' : v + 'm ago';
+    if (sec < 30) return t('now');
+    if (sec < 90) return m(1);
+    if (sec < 180) return m(2);
+    if (sec < 300) return m(5);
+    if (sec < 600) return m(10);
+    if (sec < 1800) return m(30);
+    if (sec < 3600) return zh ? '1小时前' : '1h ago';
+    const h = Math.floor(sec / 3600);
+    return zh ? h + '小时前' : h + 'h ago';
 }
 
 function modeBadge(mode) {
@@ -148,7 +307,7 @@ function createCell(index) {
         <div class="cell-info"></div>
         <div class="map"></div>
         <div class="stale-overlay">NO RUNING</div>
-        <div class="cell-empty-hint"><span class="hint-icon">📡</span>Set callsigns in Config</div>
+        <div class="cell-empty-hint"><span class="hint-icon">📡</span>${t('cellHint')}</div>
     `;
     const mapEl = el.querySelector('.map');
     const callLabel = el.querySelector('.call-label');
@@ -340,7 +499,7 @@ function updateRotateUI() {
     btn.disabled = !need;
     $('#btnRotateNext').disabled = !need;
     btn.classList.toggle('running', state.rotation.running);
-    btn.textContent = state.rotation.running ? '⏸ 停止轮询' : '🔁 开始轮询';
+    btn.textContent = state.rotation.running ? t('stopRot') : t('startRot');
     $('#rotPage').textContent = need
         ? ((state.rotation.offset % pages) + 1) + '/' + pages
         : '';
@@ -352,7 +511,7 @@ function syncCallsigns() {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(calls.filter(Boolean))
-    }).catch(() => showToast('Failed to save callsigns'));
+    }).catch(() => showToast(t('saveFail')));
 }
 
 function clearCell(cell) {
@@ -375,21 +534,23 @@ function clearCell(cell) {
     updateStale(cell);
 }
 
-/* Minimum zoom = the level that shows exactly one whole world map.
+/* Minimum zoom = the level at which the world map COVERS the whole cell
+ * (getBoundsZoom with inside=true): the map always fills the window and
+ * polar overflow is cropped instead of leaving letterboxed black edges.
  * Must be re-applied after every container resize (zoom depends on size). */
 function setWorldMinZoom(map) {
-    map.setMinZoom(map.getBoundsZoom(WORLD_BOUNDS));
+    map.setMinZoom(map.getBoundsZoom(WORLD_BOUNDS, true));
     if (map.getZoom() !== undefined && map.getZoom() < map.getMinZoom()) {
         map.setZoom(map.getMinZoom());
     }
 }
 
-/* Every cell shows the SAME view: the complete world map, zoomed out to
- * the minimum that fits the cell exactly. No per-cell auto-zoom, so all
- * map windows on the main page always stay identical. */
+/* Every cell shows the SAME view: the complete world map covering the cell
+ * exactly (no black bars). No per-cell auto-zoom, so all map windows on the
+ * main page always stay identical. */
 function fitWorld(map) {
     setWorldMinZoom(map);
-    map.fitBounds(WORLD_BOUNDS, {animate: false});
+    map.setView([0, 0], map.getMinZoom(), {animate: false});
 }
 
 /* Status overlay: 10 min without a spot -> NO RUNING; 30 min -> QRT */
@@ -500,12 +661,6 @@ function selectBand(cell, band) {
 }
 
 /* ---------- Markers ---------- */
-const BAND_COLORS = {
-    '160m': '#b565d8', '80m': '#e67e22', '60m': '#fd79a8', '40m': '#f1c40f',
-    '30m': '#1abc9c', '20m': '#00e5ff', '17m': '#3498db', '15m': '#9b59b6',
-    '12m': '#e84393', '10m': '#e17055', '6m': '#dfe6e9', '2m': '#55efc4'
-};
-
 function dotIcon(color, size) {
     return L.divIcon({
         className: 'fresh-marker',
@@ -584,7 +739,7 @@ function greatCirclePaths(lat1, lon1, lat2, lon2, samples = 64) {
     return segments;
 }
 
-function addMarkerToCell(cell, spot, ttlMs = MARKER_TTL_MS) {
+function addMarkerToCell(cell, spot, ttlMs) {
     const hasDe = spot.lat !== null && spot.lat !== undefined &&
                   spot.lon !== null && spot.lon !== undefined;
     const hasDx = spot.dx_lat !== null && spot.dx_lat !== undefined &&
@@ -596,7 +751,9 @@ function addMarkerToCell(cell, spot, ttlMs = MARKER_TTL_MS) {
     if (cell.seen.has(key)) return;
     cell.seen.add(key);
 
-    const bandColor = BAND_COLORS[spot.band] || '#00e5ff';
+    const fullTtl = ttlForMode(spot.mode);
+    if (ttlMs === undefined) ttlMs = fullTtl;
+    const bandColor = bandColorOf(spot.band);
     const layers = [];
 
     // Green dot: monitored (DX) station
@@ -645,7 +802,7 @@ function addMarkerToCell(cell, spot, ttlMs = MARKER_TTL_MS) {
     cell.countEl.classList.add('has-spots');
     // For replayed spots ttlMs < full TTL; effective time keeps NO RUNING
     // timing and chip expiry aligned to the spot's real timestamp.
-    const effectiveNow = Date.now() - (MARKER_TTL_MS - ttlMs);
+    const effectiveNow = Date.now() - (fullTtl - ttlMs);
     const spotTs = new Date(spot.timestamp).getTime();
     cell.lastSpotAt = Math.max(cell.lastSpotAt || 0, isNaN(spotTs) ? effectiveNow : spotTs);
     updateStale(cell);
@@ -707,7 +864,7 @@ function connectWS() {
 function handleSpot(spot) {
     if (!state.monitoring) return; // nothing is rendered until monitoring starts
     state.totalSpots++;
-    $('#spotCount').textContent = state.totalSpots + ' spots';
+    $('#spotCount').textContent = t('spotsN')(state.totalSpots);
     // Find the cell monitoring this call
     const call = (spot.monitored_call || spot.call || '').toUpperCase();
     const cell = state.cells.find(c => c.call && c.call.toUpperCase() === call);
@@ -727,10 +884,9 @@ function hasAnyCallsign() {
 function updateMonitorBtn() {
     const btn = $('#btnMonitor');
     btn.classList.toggle('running', state.monitoring);
-    btn.textContent = state.monitoring ? '■ 停止监控' : '▶ 开始监控';
+    btn.textContent = state.monitoring ? t('stopMon') : t('startMon');
     btn.disabled = !state.monitoring && !hasAnyCallsign();
-    btn.title = hasAnyCallsign() || state.monitoring ? '' :
-        'Set at least one callsign in Config first';
+    btn.title = hasAnyCallsign() || state.monitoring ? '' : t('needCall');
 }
 
 /* Tell the backend whether to accept spots; the poll chains and the
@@ -743,12 +899,12 @@ function syncMonitoring() {
     }).catch(() => {});
 }
 
-function setMonitoring(on) {
+async function setMonitoring(on) {
     if (on && !hasAnyCallsign()) return;
     // Stopping: offer to wipe everything; Cancel keeps the frozen display.
-    if (!on && state.cells.some(c => c.markers.length) &&
-        confirm('是否清空全部标记？\n确定 = 清空所有地图的标记、连线、频段框和热力图\n取消 = 保留当前显示（冻结）')) {
-        state.cells.forEach(clearCell);
+    if (!on && state.cells.some(c => c.markers.length)) {
+        const ok = await showConfirm(t('askClearMarks'), {title: t('stopMon')});
+        if (ok) state.cells.forEach(clearCell);
     }
     state.monitoring = on;
     localStorage.setItem('dxcompass-monitoring', on ? '1' : '0');
@@ -771,12 +927,15 @@ async function replayCellHistory(cell) {
     } catch (e) { return; }
     // Rotated away or monitoring stopped while the fetch was in flight
     if (cell.call !== call || !state.monitoring) return;
-    const cutoff = Date.now() - MARKER_TTL_MS;
-    // API returns newest first; replay oldest first for a stable display
+    const now = Date.now();
+    // API returns newest first; replay oldest first for a stable display.
+    // Each spot uses the survival time configured for its own mode.
     rows.reverse().forEach(r => {
-        const t = new Date(r.timestamp).getTime();
-        if (isNaN(t) || t < cutoff) return;
-        addMarkerToCell(cell, r, MARKER_TTL_MS - (Date.now() - t));
+        const ts = new Date(r.timestamp).getTime();
+        if (isNaN(ts)) return;
+        const ttl = ttlForMode(r.mode);
+        if (ts < now - ttl) return;
+        addMarkerToCell(cell, r, ttl - (now - ts));
     });
 }
 
@@ -791,7 +950,7 @@ async function replayHistory() {
 function populateCallSelect() {
     const sel = $('#recordCallSelect');
     const current = sel.value;
-    sel.innerHTML = '<option value="">-- All monitored calls --</option>';
+    sel.innerHTML = '<option value="">' + t('allCalls') + '</option>';
     state.callsigns.filter(Boolean).forEach(call => {
         const opt = document.createElement('option');
         opt.value = call;
@@ -801,15 +960,16 @@ function populateCallSelect() {
     sel.value = current;
 }
 
-const REC_HEAD_ALL = `<th>Time (UTC)</th><th>Monitored</th><th>Spotter (DE)</th><th>Freq</th><th>Mode</th><th>Signal</th><th>SNR</th><th>Dist (km)</th><th>Comment</th>`;
-const REC_HEAD_REC = `<th>Date</th><th>Time (UTC)</th><th>Monitored</th><th>Spotter (DE)</th><th>Band</th><th>Freq</th><th>Mode</th><th>Detail</th><th>SNR</th><th>Dist (km)</th><th>Comment</th>`;
+function recHeadHtml(rec) {
+    return t(rec ? 'headRec' : 'headAll').map(h => `<th>${h}</th>`).join('');
+}
 
 function refreshRecords() {
     const call = $('#recordCallSelect').value;
     const rec = state.recView === 'rec';
     const base = rec ? '/api/recording/spots' : '/api/spots';
     const url = call ? `${base}?call=${encodeURIComponent(call)}` : base;
-    $('#recordsHead').innerHTML = rec ? REC_HEAD_REC : REC_HEAD_ALL;
+    $('#recordsHead').innerHTML = recHeadHtml(rec);
     fetch(url).then(r => r.json()).then(rows => {
         const body = $('#recordsBody');
         body.innerHTML = '';
@@ -844,8 +1004,8 @@ function refreshRecords() {
             }
             body.appendChild(tr);
         });
-        $('#recordsFooter').textContent = rows.length + ' records';
-    }).catch(() => showToast('Failed to load records'));
+        $('#recordsFooter').textContent = t('recordsN')(rows.length);
+    }).catch(() => showToast(t('loadFail')));
 }
 
 /* ---------- Recording (timed / manual capture into recording_spots) ---------- */
@@ -871,14 +1031,15 @@ function refreshRecStatus(syncInputs) {
         if (rec.active) {
             dot.className = 'rec-dot active';
             const since = rec.startedAt ? rec.startedAt.substring(5, 16).replace('T', ' ') + 'Z' : '';
-            txt.textContent = (rec.manual ? 'Recording (manual)' : 'Recording (scheduled)') + (since ? ' since ' + since : '');
-            btn.innerHTML = '&#9632; Stop';
+            txt.textContent = (rec.manual ? t('recManual') : t('recSched')) +
+                (since ? ' ' + t('since') + ' ' + since : '');
+            btn.textContent = t('stopRec');
             btn.classList.add('recording');
         } else {
             dot.className = rec.schedule ? 'rec-dot scheduled' : 'rec-dot idle';
             txt.textContent = rec.schedule ?
-                `Scheduled: ${rec.schedule.start} → ${rec.schedule.end} UTC` : 'Not recording';
-            btn.innerHTML = '&#9679; Record';
+                `${t('scheduled')}: ${rec.schedule.start} → ${rec.schedule.end} UTC` : t('notRecording');
+            btn.textContent = t('record');
             btn.classList.remove('recording');
         }
         // Fill the pickers from the stored schedule only when explicitly
@@ -906,7 +1067,7 @@ function recAction(body) {
 function toggleRecording() {
     const stopping = state.recStatus && state.recStatus.active;
     recAction({action: stopping ? 'stop' : 'start'}).then(() => {
-        showToast(stopping ? 'Recording stopped' : 'Recording started');
+        showToast(stopping ? t('recStopped') : t('recStarted'));
         refreshRecStatus();
         if (state.recView === 'rec') refreshRecords();
     }).catch(e => showToast('Recording: ' + e.message));
@@ -915,9 +1076,9 @@ function toggleRecording() {
 function setRecSchedule() {
     const start = dtLocalToMdHm($('#recStart').value);
     const end = dtLocalToMdHm($('#recEnd').value);
-    if (!start || !end) { showToast('Pick start and end date/time first'); return; }
+    if (!start || !end) { showToast(t('pickDt')); return; }
     recAction({action: 'schedule', start, end}).then(() => {
-        showToast('Recording scheduled');
+        showToast(t('schedOk'));
         refreshRecStatus(true);
     }).catch(e => showToast('Schedule: ' + e.message));
 }
@@ -926,7 +1087,7 @@ function clearRecSchedule() {
     recAction({action: 'unschedule'}).then(() => {
         $('#recStart').value = '';
         $('#recEnd').value = '';
-        showToast('Schedule cleared');
+        showToast(t('schedCleared'));
         refreshRecStatus(true);
     }).catch(e => showToast('Schedule: ' + e.message));
 }
@@ -945,9 +1106,11 @@ function snrClass(r) {
     return 'signal-weak';
 }
 
-function exportCsv() {
+/* Export CSV. forceRec=true always exports the recorded-session data
+ * (Download button); otherwise the export follows the current view. */
+function exportCsv(forceRec) {
     const call = $('#recordCallSelect').value;
-    const rec = state.recView === 'rec';
+    const rec = forceRec === true || (forceRec === undefined && state.recView === 'rec');
     const base = rec ? '/api/recording/spots' : '/api/spots';
     const url = call ? `${base}?call=${encodeURIComponent(call)}&limit=10000` : `${base}?limit=10000`;
     const headers = rec ?
@@ -967,7 +1130,87 @@ function exportCsv() {
         a.href = URL.createObjectURL(blob);
         a.download = `dxcompass-${rec ? 'recording' : 'spots'}-${call || 'all'}-${Date.now()}.csv`;
         a.click();
-        showToast('CSV exported');
+        showToast(t('csvOk'));
+    });
+}
+
+/* ---------- Global settings UI (language / TTL / band colors) ---------- */
+/* Push the current language into every static label and re-render the
+ * dynamic ones (buttons, table headers, statuses). */
+function applyLang() {
+    document.documentElement.lang = settings.lang === 'zh' ? 'zh-CN' : 'en';
+    $('.brand .subtitle').textContent = t('subtitle');
+    const bc = $('#btnConfig');
+    bc.textContent = t('settings');
+    bc.title = t('settings');
+    $('#recordsPanel .panel-title').textContent = t('records');
+    $('#btnRefreshRecords').textContent = t('refresh');
+    $('#btnExportCsv').textContent = t('exportCsv');
+    $('#btnClearDb').textContent = t('clearDb');
+    $('#btnRecSched').textContent = t('schedule');
+    $('#btnRecDownload').textContent = t('download');
+    $('#btnRecSchedSet').textContent = t('set');
+    $('#btnRecSchedClear').textContent = t('clear');
+    $('.rec-tz').textContent = t('recTz');
+    $('.rec-tab[data-view="all"]').textContent = t('tabAll');
+    $('.rec-tab[data-view="rec"]').textContent = t('tabRec');
+    $('#configPanel .panel-title').textContent = t('settings');
+    $('#cfgSectionTitle').textContent = t('cfgSection');
+    $('#globalSectionTitle').textContent = t('globalSection');
+    $('#langLabel').textContent = t('langLabel');
+    $('#ttlTitle').textContent = t('ttlTitle');
+    $('#bandTitle').textContent = t('bandTitle');
+    $('#btnSaveCfg').textContent = t('save');
+    $('#cfgHint').innerHTML = t('cfgHint');
+    $('#btnRotateNext').title = t('nextPage');
+    $('#rotSec').title = t('rotSecTitle');
+    state.cells.forEach(c => {
+        c.hint.innerHTML = '<span class="hint-icon">📡</span>' + t('cellHint');
+    });
+    setConnState(state.connState);
+    populateCallSelect();
+    updateMonitorBtn();
+    updateRotateUI();
+    refreshRecStatus();
+    refreshRecords();
+    state.cells.forEach(c => {
+        if (Object.keys(c.bandInfo).length) renderCellInfo(c);
+    });
+}
+
+/* Re-apply customized band colors to existing link lines and info chips. */
+function applyBandColors() {
+    state.cells.forEach(c => {
+        c.markers.forEach(g => {
+            const col = bandColorOf(g._spot.band);
+            g.layers.forEach(l => {
+                if (l instanceof L.Polyline) l.setStyle({color: col});
+            });
+        });
+        if (Object.keys(c.bandInfo).length) renderCellInfo(c);
+    });
+}
+
+function buildBandColorInputs() {
+    const wrap = $('#bandColors');
+    wrap.innerHTML = '';
+    Object.keys(DEFAULT_BAND_COLORS).forEach(band => {
+        const item = document.createElement('div');
+        item.className = 'bc-item';
+        const inp = document.createElement('input');
+        inp.type = 'color';
+        inp.value = settings.bandColors[band];
+        inp.title = band;
+        inp.addEventListener('input', () => {
+            settings.bandColors[band] = inp.value;
+            saveSettings();
+            applyBandColors();
+        });
+        const lbl = document.createElement('span');
+        lbl.textContent = band;
+        item.appendChild(inp);
+        item.appendChild(lbl);
+        wrap.appendChild(item);
     });
 }
 
@@ -1008,9 +1251,9 @@ function saveConfig(e) {
         populateCallSelect();
         updateMonitorBtn();
         if (state.monitoring) replayHistory(); // backfill newly added slots
-        showToast('Configuration saved');
+        showToast(t('saved'));
         closeConfig();
-    }).catch(() => showToast('Failed to save callsigns'));
+    }).catch(() => showToast(t('saveFail')));
 }
 
 /* ---------- Init ---------- */
@@ -1064,8 +1307,44 @@ function init() {
         }
     });
     $('#btnRefreshRecords').addEventListener('click', refreshRecords);
-    $('#btnExportCsv').addEventListener('click', exportCsv);
+    $('#btnExportCsv').addEventListener('click', () => exportCsv());
+    $('#btnRecDownload').addEventListener('click', () => exportCsv(true));
     $('#recordCallSelect').addEventListener('change', refreshRecords);
+    // Manual database clear (spots table only; recording_spots is kept)
+    $('#btnClearDb').addEventListener('click', async () => {
+        const ok = await showConfirm(t('askClearDb'), {
+            title: t('clearDb'), okText: t('danger'), danger: true
+        });
+        if (!ok) return;
+        try {
+            const r = await fetch('/api/spots/clear', {method: 'POST'});
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            showToast(t('cleared'));
+            refreshRecords();
+        } catch (e) {
+            showToast(t('clearFail'));
+        }
+    });
+    // Global settings: language / per-mode marker TTL / band colors
+    $('#setLang').value = settings.lang;
+    $('#setLang').addEventListener('change', () => {
+        settings.lang = $('#setLang').value;
+        saveSettings();
+        applyLang();
+    });
+    [['ttlCw', 'CW'], ['ttlSsb', 'SSB'], ['ttlDigi', 'DIGI']].forEach(([id, mode]) => {
+        const inp = $('#' + id);
+        inp.value = settings.ttl[mode];
+        inp.addEventListener('change', () => {
+            let v = parseInt(inp.value, 10);
+            if (isNaN(v) || v < 1) v = 1;
+            if (v > 180) v = 180;
+            inp.value = v;
+            settings.ttl[mode] = v;
+            saveSettings();
+        });
+    });
+    buildBandColorInputs();
     // Recording controls
     $('#btnRecToggle').addEventListener('click', toggleRecording);
     $('#btnRecSched').addEventListener('click', () => $('#recSchedForm').classList.toggle('hidden'));
@@ -1089,6 +1368,7 @@ function init() {
     // Initial layout
     setLayout('1x1');
     updateMonitorBtn();
+    applyLang();
 
     // Load config + callsigns
     loadConfig();
@@ -1097,12 +1377,12 @@ function init() {
     refreshRecStatus(true);
     refreshRecords();
 
-    // Keep the world-fit minimum zoom in sync with the window size
+    // Keep the world-cover view in sync with the window size
     window.addEventListener('resize', () => {
         visibleCells().forEach(c => {
             if (c.map) {
                 c.map.invalidateSize();
-                setWorldMinZoom(c.map);
+                fitWorld(c.map);
             }
         });
     });
@@ -1132,7 +1412,7 @@ function init() {
         const now = Date.now();
         let pruned = false;
         Object.keys(c.bandInfo).forEach(band => {
-            if (now - c.bandInfo[band].addedAt > MARKER_TTL_MS) {
+            if (now - c.bandInfo[band].addedAt > ttlForMode(c.bandInfo[band].spot.mode)) {
                 delete c.bandInfo[band];
                 pruned = true;
             }

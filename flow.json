@@ -1265,5 +1265,41 @@
                 "dxc0000000000017"
             ]
         ]
+    },
+    {
+        "id": "dxc0000000000080",
+        "type": "http in",
+        "z": "dxc0000000000001",
+        "name": "POST /api/spots/clear",
+        "url": "/api/spots/clear",
+        "method": "post",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 150,
+        "y": 940,
+        "wires": [
+            [
+                "dxc0000000000081"
+            ]
+        ]
+    },
+    {
+        "id": "dxc0000000000081",
+        "type": "function",
+        "z": "dxc0000000000001",
+        "name": "Clear spots table",
+        "func": "msg.topic = 'DELETE FROM spots;';\nmsg.payload = {ok: true};\nmsg.headers = {'Content-Type': 'application/json'};\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 380,
+        "y": 940,
+        "wires": [
+            [
+                "dxc0000000000017"
+            ]
+        ]
     }
 ]
