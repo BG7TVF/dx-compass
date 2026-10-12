@@ -27,14 +27,13 @@ wget -qO- https://raw.githubusercontent.com/BG7TVF/dx-compass/main/bootstrap.sh 
 
 ## 功能特性
 
-- **多分屏布局**：`1×1` / `1×2` / `2×2` / `3×3` 自由切换，一个呼号对应一张地图，最多同时监测 9 个呼号
+- **多分屏布局**：`1×1` / `2×2` / `3×3` 自由切换，一个呼号对应一张地图，最多同时监测 9 个呼号
 - **实时打点**：每 30 秒从 dxwatch.com 拉取全球聚合 spot（FT8/SSB/DIGI 等），每 10 秒从 reversebeacon.net RBN 拉取 CW skimmer spot（含真实 SNR dB），解析报告人（DE）位置后在地图上标点，数据自动流入，无需任何连接配置
 - **历史回溯**：新添加被监测呼号时，自动回溯该呼号最近 7 天（最多 150 条）的 spot
-- **标点存活 1 小时**：每个标记 1 小时后自动消失，颜色按信号强度区分（绿 / 黄 / 红）
+- **标点存活时间可配置**：标记按模式（CW / SSB / DIGI）分别设置存活时间（默认各 30 分钟），随存活时间线性淡出直至消失；标记颜色按频段区分，均可在 Settings 中自定义
 - **完整记录**：每条 spot 记录时间、频率、报告人、模式（CW/DIGI/PHONE）、信号强度（CW 的 SNR dB 来自 RBN；FT8 的 SNR 来自 dxwatch）、距离等，存入 SQLite
 - **赛后分析**：记录面板支持按呼号筛选、一键导出 CSV
 - **距离计算**：直接使用数据源附带的呼号经纬度 + Haversine 公式，计算报告人相对本台的距离（公里/英里），不依赖第三方定位接口
-- **独立共存**：可与服务器上已有的 Node-RED / Node-Red-Contesting-Dashboard 实例完全独立运行
 
 ## 技术架构
 
@@ -82,7 +81,7 @@ dx-compass/
 
 ## 一键部署（推荐）
 
-安装脚本已处理好环境检测、依赖安装、systemd 服务注册，并与服务器上已有的 Node-RED 实例**四重隔离、互不影响**。
+安装脚本已处理好环境检测、依赖安装与 systemd 服务注册。
 
 ### 方式一：一行命令（自动下载 + 安装）
 
@@ -115,7 +114,7 @@ sudo bash install.sh
 5. 注册并启动 systemd 服务 `dx-compass`（开机自启）
 6. 等待端口就绪并输出访问地址
 
-脚本可重复执行（幂等），日志会明确提示不会触碰已有的 `nodered` 服务与 `~/.node-red` 目录。
+脚本可重复执行（幂等）。
 
 ### 访问
 
@@ -125,21 +124,10 @@ sudo bash install.sh
 > 云服务器请在安全组 / 防火墙放行 TCP 5758 端口：
 > `sudo ufw allow 5758/tcp`
 
-## 与已有 Node-RED 共存说明
-
-本项目不使用全局的 `~/.node-red`，通过独立参数与现有实例隔离：
-
-| 隔离项 | 已有 Node-RED | DX-Compass |
-| --- | --- | --- |
-| systemd 服务 | `nodered`（不修改） | `dx-compass`（新建） |
-| 监听端口 | 1880（不修改） | **5758** |
-| userDir | `~/.node-red`（不修改） | 项目目录本身 |
-| 依赖 | 原有 node_modules | 项目内独立 `node_modules` |
-
 ## 首次使用配置
 
 1. 浏览器打开监测大屏 `http://<服务器IP>:5758/`
-2. 点击右上角 **Config**，填入 **Home latitude / longitude**（本台经纬度，用于计算到各报告台的距离），点 **Save**
+2. 点击右上角 **Settings**，填入 **Home latitude / longitude**（本台经纬度，用于计算到各报告台的距离），点 **Save**
 3. 在每个分屏的呼号输入框中填入要监测的呼号，回车确认：
    - 系统立即开始接收实时 spot（CW 每 10 秒、其它模式每 30 秒刷新）
    - 同时自动从 dxwatch 回溯该呼号最近 7 天的历史 spot，地图和 Records 面板很快就会有数据
