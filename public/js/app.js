@@ -12,10 +12,11 @@ const DEFAULT_BAND_COLORS = {
 const DEFAULT_TTL_MIN = { CW: 30, SSB: 30, DIGI: 30 };
 
 /* Supported UI languages and their native names (shown in the selector) */
-const LANGS = ['zh', 'en', 'de', 'fr', 'es', 'pt', 'ru', 'it', 'ar'];
+const LANGS = ['zh', 'en', 'de', 'fr', 'es', 'pt', 'ru', 'it', 'ar', 'ko', 'ja'];
 const LANG_NAMES = {
     zh: '中文', en: 'English', de: 'Deutsch', fr: 'Français', es: 'Español',
-    pt: 'Português', ru: 'Русский', it: 'Italiano', ar: 'العربية'
+    pt: 'Português', ru: 'Русский', it: 'Italiano', ar: 'العربية',
+    ko: '한국어', ja: '日本語'
 };
 
 const settings = loadSettings();
@@ -403,6 +404,84 @@ const I18N = {
         headRec: ['التاريخ', 'الوقت (UTC)', 'المراقَب', 'الراصد (DE)', 'النطاق', 'التردد', 'النمط', 'التفاصيل', 'SNR', 'المسافة (كم)', 'ملاحظة'],
         recordsN: n => n + ' سجل',
         spotsN: n => n + ' سبوت'
+    },
+    ko: {
+        subtitle: '다중 콜사인 스폿 모니터',
+        settings: '설정',
+        startMon: '▶ 모니터링 시작', stopMon: '■ 모니터링 중지',
+        needCall: '먼저 설정에서 콜사인을 하나 이상 입력하세요',
+        startRot: '🔁 순환 시작', stopRot: '⏸ 순환 중지',
+        nextPage: '다음 페이지', rotSecTitle: '순환 간격 (초)',
+        connected: '연결됨', connecting: '연결 중...', disconnected: '연결 끊김',
+        records: '스폿 기록',
+        allCalls: '-- 모든 모니터링 콜사인 --',
+        refresh: '새로고침', exportCsv: 'CSV 내보내기', clearDb: 'DB 비우기',
+        record: '● 녹화', stopRec: '■ 중지', schedule: '예약', download: '⬇ 다운로드',
+        set: '설정', clear: '지우기', recTz: 'UTC, 1회',
+        tabAll: '모든 스폿', tabRec: '녹화됨',
+        notRecording: '녹화 중 아님',
+        recManual: '녹화 중 (수동)', recSched: '녹화 중 (예약)',
+        scheduled: '예약됨', since: '시작',
+        cfgSection: '모니터링 콜사인', globalSection: '전역 설정',
+        langLabel: '언어 / Language', ttlTitle: '마커 유지 시간 (분)', bandTitle: '밴드 색상',
+        save: '저장',
+        cfgHint: '콜사인은 순서대로 지도 슬롯에 배정됩니다. 빈 슬롯은 대시보드에서 비워 둡니다.<br>거리는 모니터링 국과 스포팅 국 사이로 계산됩니다.<br>스폿은 자동으로 제공됩니다: CW는 reversebeacon.net RBN (10초), 다른 모드는 dxwatch.com (30초) - 클러스터 로그인이 필요 없습니다.',
+        cellHint: '설정에서 콜사인을 입력하세요',
+        askClearMarks: '모든 마커를 지우시겠습니까?\n\n확인 = 모든 지도에서 마커, 연결선, 밴드 칩, 히트맵 삭제\n취소 = 현재 표시 유지 (동결됨)',
+        askClearDb: '데이터베이스에서 모든 스폿 기록을 삭제하시겠습니까?\n\n녹화 기록(recording_spots)은 유지됩니다.\n이 작업은 되돌릴 수 없습니다!',
+        danger: '삭제', ok: '확인', cancel: '취소', confirmTitle: '확인',
+        cleared: '데이터베이스를 비웠습니다', clearFail: '데이터베이스 비우기 실패',
+        csvOk: 'CSV를 내보냈습니다',
+        saved: '설정이 저장되었습니다', saveFail: '콜사인 저장 실패',
+        loadFail: '기록 불러오기 실패',
+        recStarted: '녹화 시작', recStopped: '녹화 중지',
+        schedOk: '녹화가 예약되었습니다', schedCleared: '예약이 삭제되었습니다',
+        pickDt: '먼저 시작/종료 날짜와 시간을 선택하세요',
+        now: '지금',
+        mAgo: v => v + '분 전', h1: '1시간 전', hAgo: v => v + '시간 전',
+        headAll: ['시간 (UTC)', '모니터링', '스포터 (DE)', '주파수', '모드', '신호', 'SNR', '거리 (km)', '비고'],
+        headRec: ['날짜', '시간 (UTC)', '모니터링', '스포터 (DE)', '밴드', '주파수', '모드', '상세', 'SNR', '거리 (km)', '비고'],
+        recordsN: n => n + ' 건의 기록',
+        spotsN: n => n + ' 스폿'
+    },
+    ja: {
+        subtitle: 'マルチコール・スポットモニター',
+        settings: '設定',
+        startMon: '▶ 監視開始', stopMon: '■ 監視停止',
+        needCall: '先に設定でコールサインを1つ以上入力してください',
+        startRot: '🔁 ローテーション開始', stopRot: '⏸ ローテーション停止',
+        nextPage: '次のページ', rotSecTitle: 'ローテーション間隔 (秒)',
+        connected: '接続中', connecting: '接続しています...', disconnected: '切断',
+        records: 'スポット記録',
+        allCalls: '-- すべての監視コールサイン --',
+        refresh: '更新', exportCsv: 'CSVエクスポート', clearDb: 'DBをクリア',
+        record: '● 録画', stopRec: '■ 停止', schedule: '予約', download: '⬇ ダウンロード',
+        set: '設定', clear: 'クリア', recTz: 'UTC・1回のみ',
+        tabAll: 'すべてのスポット', tabRec: '録画済み',
+        notRecording: '録画していません',
+        recManual: '録画中 (手動)', recSched: '録画中 (予約)',
+        scheduled: '予約済み', since: '開始',
+        cfgSection: '監視コールサイン', globalSection: 'グローバル設定',
+        langLabel: '言語 / Language', ttlTitle: 'マーカー生存時間 (分)', bandTitle: 'バンドカラー',
+        save: '保存',
+        cfgHint: 'コールサインは順番にマップ枠へ割り当てられます。空き枠はダッシュボードで空白のままです。<br>距離は監視局とスポッター局の間で計算されます。<br>スポットは自動取得されます: CWはreversebeacon.net RBN (10秒)、その他のモードはdxwatch.com (30秒) - クラスターへのログインは不要です。',
+        cellHint: '設定でコールサインを入力してください',
+        askClearMarks: 'すべてのマーカーを消去しますか？\n\nOK = すべてのマップからマーカー、リンク線、バンドチップ、ヒートマップを消去\nキャンセル = 現在の表示を維持 (フリーズ)',
+        askClearDb: 'データベースからすべてのスポット記録を削除しますか？\n\n録画データ (recording_spots) は保持されます。\nこの操作は元に戻せません！',
+        danger: '削除', ok: 'OK', cancel: 'キャンセル', confirmTitle: '確認',
+        cleared: 'データベースをクリアしました', clearFail: 'データベースのクリアに失敗しました',
+        csvOk: 'CSVをエクスポートしました',
+        saved: '設定を保存しました', saveFail: 'コールサインの保存に失敗しました',
+        loadFail: '記録の読み込みに失敗しました',
+        recStarted: '録画を開始しました', recStopped: '録画を停止しました',
+        schedOk: '録画を予約しました', schedCleared: '予約をクリアしました',
+        pickDt: '先に開始・終了の日時を選択してください',
+        now: 'ただ今',
+        mAgo: v => v + '分前', h1: '1時間前', hAgo: v => v + '時間前',
+        headAll: ['時刻 (UTC)', '監視局', 'スポッター (DE)', '周波数', 'モード', '信号', 'SNR', '距離 (km)', 'コメント'],
+        headRec: ['日付', '時刻 (UTC)', '監視局', 'スポッター (DE)', 'バンド', '周波数', 'モード', '詳細', 'SNR', '距離 (km)', 'コメント'],
+        recordsN: n => n + ' 件の記録',
+        spotsN: n => n + ' スポット'
     }
 };
 function t(key) {
