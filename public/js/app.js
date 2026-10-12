@@ -11,13 +11,20 @@ const DEFAULT_BAND_COLORS = {
 };
 const DEFAULT_TTL_MIN = { CW: 30, SSB: 30, DIGI: 30 };
 
+/* Supported UI languages and their native names (shown in the selector) */
+const LANGS = ['zh', 'en', 'de', 'fr', 'es', 'pt', 'ru', 'it', 'ar'];
+const LANG_NAMES = {
+    zh: '中文', en: 'English', de: 'Deutsch', fr: 'Français', es: 'Español',
+    pt: 'Português', ru: 'Русский', it: 'Italiano', ar: 'العربية'
+};
+
 const settings = loadSettings();
 
 function loadSettings() {
     const d = { lang: 'zh', ttl: {...DEFAULT_TTL_MIN}, bandColors: {...DEFAULT_BAND_COLORS} };
     try {
         const raw = JSON.parse(localStorage.getItem('dxcompass-settings') || '{}');
-        if (raw.lang === 'en' || raw.lang === 'zh') d.lang = raw.lang;
+        if (LANGS.includes(raw.lang)) d.lang = raw.lang;
         for (const m of Object.keys(d.ttl)) {
             const v = parseInt(raw.ttl && raw.ttl[m], 10);
             if (v >= 1 && v <= 180) d.ttl[m] = v;
@@ -79,6 +86,7 @@ const I18N = {
         schedOk: '定时录制已设定', schedCleared: '定时已清除',
         pickDt: '请先选择起止日期时间',
         now: '现在',
+        mAgo: v => v + '分钟前', h1: '1小时前', hAgo: v => v + '小时前',
         headAll: ['时间 (UTC)', '被监听', '监听站 (DE)', '频率', '模式', '信号', 'SNR', '距离 (km)', '备注'],
         headRec: ['日期', '时间 (UTC)', '被监听', '监听站 (DE)', '频段', '频率', '模式', '详情', 'SNR', '距离 (km)', '备注'],
         recordsN: n => n + ' 条记录',
@@ -117,10 +125,284 @@ const I18N = {
         schedOk: 'Recording scheduled', schedCleared: 'Schedule cleared',
         pickDt: 'Pick start and end date/time first',
         now: 'now',
+        mAgo: v => v + 'm ago', h1: '1h ago', hAgo: v => v + 'h ago',
         headAll: ['Time (UTC)', 'Monitored', 'Spotter (DE)', 'Freq', 'Mode', 'Signal', 'SNR', 'Dist (km)', 'Comment'],
         headRec: ['Date', 'Time (UTC)', 'Monitored', 'Spotter (DE)', 'Band', 'Freq', 'Mode', 'Detail', 'SNR', 'Dist (km)', 'Comment'],
         recordsN: n => n + ' records',
         spotsN: n => n + ' spots'
+    },
+    de: {
+        subtitle: 'Multi-Rufzeichen Spot-Monitor',
+        settings: 'Einstellungen',
+        startMon: '▶ Überwachung starten', stopMon: '■ Überwachung stoppen',
+        needCall: 'Zuerst mindestens ein Rufzeichen in den Einstellungen setzen',
+        startRot: '🔁 Rotation starten', stopRot: '⏸ Rotation stoppen',
+        nextPage: 'Nächste Seite', rotSecTitle: 'Rotationsintervall (Sekunden)',
+        connected: 'verbunden', connecting: 'verbinde...', disconnected: 'getrennt',
+        records: 'Spot-Aufzeichnungen',
+        allCalls: '-- Alle überwachten Rufzeichen --',
+        refresh: 'Aktualisieren', exportCsv: 'CSV exportieren', clearDb: 'Datenbank leeren',
+        record: '● Aufnahme', stopRec: '■ Stopp', schedule: 'Zeitplan', download: '⬇ Download',
+        set: 'Setzen', clear: 'Löschen', recTz: 'UTC, einmalig',
+        tabAll: 'Alle Spots', tabRec: 'Aufgezeichnet',
+        notRecording: 'Keine Aufnahme',
+        recManual: 'Aufnahme (manuell)', recSched: 'Aufnahme (geplant)',
+        scheduled: 'Geplant', since: 'seit',
+        cfgSection: 'Überwachte Rufzeichen', globalSection: 'Globale Einstellungen',
+        langLabel: 'Sprache / Language', ttlTitle: 'Marker-Lebensdauer (Minuten)', bandTitle: 'Bandfarben',
+        save: 'Speichern',
+        cfgHint: 'Rufzeichen werden der Reihe nach den Kartenfenstern zugewiesen. Leere Plätze bleiben im Dashboard frei.<br>Die Entfernung wird zwischen überwachter und spotender Station berechnet.<br>Spots werden automatisch geliefert: CW von reversebeacon.net RBN (10 s), andere Modi von dxwatch.com (30 s) - kein Cluster-Login nötig.',
+        cellHint: 'Rufzeichen in den Einstellungen setzen',
+        askClearMarks: 'Alle Marker löschen?\n\nOK = Marker, Verbindungslinien, Band-Chips und Heatmaps von allen Karten entfernen\nAbbrechen = aktuelle Anzeige behalten (eingefroren)',
+        askClearDb: 'ALLE Spot-Datensätze aus der Datenbank löschen?\n\nAufzeichnungen (recording_spots) bleiben erhalten.\nDies kann nicht rückgängig gemacht werden!',
+        danger: 'Löschen', ok: 'OK', cancel: 'Abbrechen', confirmTitle: 'Bestätigen',
+        cleared: 'Datenbank geleert', clearFail: 'Leeren der Datenbank fehlgeschlagen',
+        csvOk: 'CSV exportiert',
+        saved: 'Einstellungen gespeichert', saveFail: 'Rufzeichen konnten nicht gespeichert werden',
+        loadFail: 'Datensätze konnten nicht geladen werden',
+        recStarted: 'Aufnahme gestartet', recStopped: 'Aufnahme gestoppt',
+        schedOk: 'Aufnahme geplant', schedCleared: 'Zeitplan gelöscht',
+        pickDt: 'Bitte Start- und Enddatum/-zeit wählen',
+        now: 'jetzt',
+        mAgo: v => 'vor ' + v + ' Min', h1: 'vor 1 Std.', hAgo: v => 'vor ' + v + ' Std.',
+        headAll: ['Zeit (UTC)', 'Überwacht', 'Spotter (DE)', 'Frequenz', 'Mode', 'Signal', 'SNR', 'Entf. (km)', 'Kommentar'],
+        headRec: ['Datum', 'Zeit (UTC)', 'Überwacht', 'Spotter (DE)', 'Band', 'Frequenz', 'Mode', 'Detail', 'SNR', 'Entf. (km)', 'Kommentar'],
+        recordsN: n => n + ' Datensätze',
+        spotsN: n => n + ' Spots'
+    },
+    fr: {
+        subtitle: 'Moniteur de spots multi-indicatifs',
+        settings: 'Paramètres',
+        startMon: '▶ Démarrer la surveillance', stopMon: '■ Arrêter la surveillance',
+        needCall: "Définissez d'abord au moins un indicatif dans les paramètres",
+        startRot: '🔁 Démarrer la rotation', stopRot: '⏸ Arrêter la rotation',
+        nextPage: 'Page suivante', rotSecTitle: 'Intervalle de rotation (secondes)',
+        connected: 'connecté', connecting: 'connexion...', disconnected: 'déconnecté',
+        records: 'Enregistrements de spots',
+        allCalls: '-- Tous les indicatifs surveillés --',
+        refresh: 'Actualiser', exportCsv: 'Exporter CSV', clearDb: 'Vider la base',
+        record: '● Enregistrer', stopRec: '■ Arrêter', schedule: 'Planifier', download: '⬇ Télécharger',
+        set: 'Définir', clear: 'Effacer', recTz: 'UTC, unique',
+        tabAll: 'Tous les spots', tabRec: 'Enregistrés',
+        notRecording: "Pas d'enregistrement",
+        recManual: 'Enregistrement (manuel)', recSched: 'Enregistrement (planifié)',
+        scheduled: 'Planifié', since: 'depuis',
+        cfgSection: 'Indicatifs surveillés', globalSection: 'Paramètres généraux',
+        langLabel: 'Langue / Language', ttlTitle: 'Durée de vie des marqueurs (minutes)', bandTitle: 'Couleurs des bandes',
+        save: 'Enregistrer',
+        cfgHint: "Les indicatifs sont attribués aux fenêtres de carte dans l'ordre. Les emplacements vides restent vides sur le tableau de bord.<br>La distance est calculée entre la station surveillée et la station spotteuse.<br>Les spots sont fournis automatiquement : CW via reversebeacon.net RBN (10 s), autres modes via dxwatch.com (30 s) - aucune connexion à un cluster n'est nécessaire.",
+        cellHint: 'Définir les indicatifs dans les paramètres',
+        askClearMarks: "Effacer tous les marqueurs ?\n\nOK = efface marqueurs, lignes, pastilles de bande et heatmaps de toutes les cartes\nAnnuler = conserver l'affichage actuel (figé)",
+        askClearDb: 'Supprimer TOUS les spots de la base de données ?\n\nLes enregistrements (recording_spots) sont conservés.\nCette action est irréversible !',
+        danger: 'Supprimer', ok: 'OK', cancel: 'Annuler', confirmTitle: 'Confirmer',
+        cleared: 'Base de données vidée', clearFail: 'Échec du vidage de la base',
+        csvOk: 'CSV exporté',
+        saved: 'Paramètres enregistrés', saveFail: "Échec de l'enregistrement des indicatifs",
+        loadFail: 'Échec du chargement des enregistrements',
+        recStarted: 'Enregistrement démarré', recStopped: 'Enregistrement arrêté',
+        schedOk: 'Enregistrement planifié', schedCleared: 'Planification effacée',
+        pickDt: "Choisissez d'abord la date/heure de début et de fin",
+        now: 'maintenant',
+        mAgo: v => 'il y a ' + v + ' min', h1: 'il y a 1 h', hAgo: v => 'il y a ' + v + ' h',
+        headAll: ['Heure (UTC)', 'Surveillé', 'Spotter (DE)', 'Fréq', 'Mode', 'Signal', 'SNR', 'Dist (km)', 'Commentaire'],
+        headRec: ['Date', 'Heure (UTC)', 'Surveillé', 'Spotter (DE)', 'Bande', 'Fréq', 'Mode', 'Détail', 'SNR', 'Dist (km)', 'Commentaire'],
+        recordsN: n => n + ' enregistrements',
+        spotsN: n => n + ' spots'
+    },
+    es: {
+        subtitle: 'Monitor de spots multiindicativo',
+        settings: 'Ajustes',
+        startMon: '▶ Iniciar monitorización', stopMon: '■ Detener monitorización',
+        needCall: 'Configure primero al menos un indicativo en Ajustes',
+        startRot: '🔁 Iniciar rotación', stopRot: '⏸ Detener rotación',
+        nextPage: 'Página siguiente', rotSecTitle: 'Intervalo de rotación (segundos)',
+        connected: 'conectado', connecting: 'conectando...', disconnected: 'desconectado',
+        records: 'Registros de spots',
+        allCalls: '-- Todos los indicativos monitorizados --',
+        refresh: 'Actualizar', exportCsv: 'Exportar CSV', clearDb: 'Vaciar base de datos',
+        record: '● Grabar', stopRec: '■ Detener', schedule: 'Programar', download: '⬇ Descargar',
+        set: 'Fijar', clear: 'Borrar', recTz: 'UTC, una sola vez',
+        tabAll: 'Todos los spots', tabRec: 'Grabados',
+        notRecording: 'Sin grabación',
+        recManual: 'Grabando (manual)', recSched: 'Grabando (programada)',
+        scheduled: 'Programada', since: 'desde',
+        cfgSection: 'Indicativos monitorizados', globalSection: 'Ajustes generales',
+        langLabel: 'Idioma / Language', ttlTitle: 'Vida útil de los marcadores (minutos)', bandTitle: 'Colores de banda',
+        save: 'Guardar',
+        cfgHint: 'Los indicativos se asignan a las ventanas de mapa en orden. Los espacios vacíos quedan en blanco en el panel.<br>La distancia se calcula entre la estación monitorizada y la estación spottera.<br>Los spots se obtienen automáticamente: CW por reversebeacon.net RBN (10 s), otros modos por dxwatch.com (30 s), sin necesidad de conexión a clúster.',
+        cellHint: 'Configure los indicativos en Ajustes',
+        askClearMarks: '¿Borrar todos los marcadores?\n\nAceptar = borra marcadores, líneas, etiquetas de banda y mapas de calor de todos los mapas\nCancelar = conservar la vista actual (congelada)',
+        askClearDb: '¿Eliminar TODOS los registros de spots de la base de datos?\n\nLas grabaciones (recording_spots) se conservan.\n¡Esta acción no se puede deshacer!',
+        danger: 'Eliminar', ok: 'Aceptar', cancel: 'Cancelar', confirmTitle: 'Confirmar',
+        cleared: 'Base de datos vaciada', clearFail: 'Error al vaciar la base de datos',
+        csvOk: 'CSV exportado',
+        saved: 'Ajustes guardados', saveFail: 'Error al guardar los indicativos',
+        loadFail: 'Error al cargar los registros',
+        recStarted: 'Grabación iniciada', recStopped: 'Grabación detenida',
+        schedOk: 'Grabación programada', schedCleared: 'Programación borrada',
+        pickDt: 'Elija primero la fecha/hora de inicio y fin',
+        now: 'ahora',
+        mAgo: v => 'hace ' + v + ' min', h1: 'hace 1 h', hAgo: v => 'hace ' + v + ' h',
+        headAll: ['Hora (UTC)', 'Monitorizado', 'Spotter (DE)', 'Frec', 'Modo', 'Señal', 'SNR', 'Dist (km)', 'Comentario'],
+        headRec: ['Fecha', 'Hora (UTC)', 'Monitorizado', 'Spotter (DE)', 'Banda', 'Frec', 'Modo', 'Detalle', 'SNR', 'Dist (km)', 'Comentario'],
+        recordsN: n => n + ' registros',
+        spotsN: n => n + ' spots'
+    },
+    pt: {
+        subtitle: 'Monitor de spots multichamada',
+        settings: 'Configurações',
+        startMon: '▶ Iniciar monitorização', stopMon: '■ Parar monitorização',
+        needCall: 'Defina primeiro pelo menos um indicativo nas Configurações',
+        startRot: '🔁 Iniciar rotação', stopRot: '⏸ Parar rotação',
+        nextPage: 'Próxima página', rotSecTitle: 'Intervalo de rotação (segundos)',
+        connected: 'conectado', connecting: 'conectando...', disconnected: 'desconectado',
+        records: 'Registos de spots',
+        allCalls: '-- Todos os indicativos monitorizados --',
+        refresh: 'Atualizar', exportCsv: 'Exportar CSV', clearDb: 'Limpar base de dados',
+        record: '● Gravar', stopRec: '■ Parar', schedule: 'Agendar', download: '⬇ Descarregar',
+        set: 'Definir', clear: 'Limpar', recTz: 'UTC, única vez',
+        tabAll: 'Todos os spots', tabRec: 'Gravados',
+        notRecording: 'Sem gravação',
+        recManual: 'A gravar (manual)', recSched: 'A gravar (agendada)',
+        scheduled: 'Agendada', since: 'desde',
+        cfgSection: 'Indicativos monitorizados', globalSection: 'Configurações gerais',
+        langLabel: 'Idioma / Language', ttlTitle: 'Vida útil dos marcadores (minutos)', bandTitle: 'Cores das bandas',
+        save: 'Guardar',
+        cfgHint: 'Os indicativos são atribuídos às janelas de mapa por ordem. Espaços vazios ficam em branco no painel.<br>A distância é calculada entre a estação monitorizada e a estação spotter.<br>Os spots são fornecidos automaticamente: CW pelo reversebeacon.net RBN (10 s), outros modos pelo dxwatch.com (30 s) - sem necessidade de ligação a cluster.',
+        cellHint: 'Defina os indicativos nas Configurações',
+        askClearMarks: 'Limpar todos os marcadores?\n\nOK = limpa marcadores, linhas, etiquetas de banda e mapas de calor de todos os mapas\nCancelar = manter a vista atual (congelada)',
+        askClearDb: 'Eliminar TODOS os registos de spots da base de dados?\n\nAs gravações (recording_spots) são mantidas.\nEsta ação é irreversível!',
+        danger: 'Eliminar', ok: 'OK', cancel: 'Cancelar', confirmTitle: 'Confirmar',
+        cleared: 'Base de dados limpa', clearFail: 'Falha ao limpar a base de dados',
+        csvOk: 'CSV exportado',
+        saved: 'Configurações guardadas', saveFail: 'Falha ao guardar os indicativos',
+        loadFail: 'Falha ao carregar os registos',
+        recStarted: 'Gravação iniciada', recStopped: 'Gravação parada',
+        schedOk: 'Gravação agendada', schedCleared: 'Agendamento limpo',
+        pickDt: 'Escolha primeiro a data/hora de início e fim',
+        now: 'agora',
+        mAgo: v => 'há ' + v + ' min', h1: 'há 1 h', hAgo: v => 'há ' + v + ' h',
+        headAll: ['Hora (UTC)', 'Monitorizado', 'Spotter (DE)', 'Freq', 'Modo', 'Sinal', 'SNR', 'Dist (km)', 'Comentário'],
+        headRec: ['Data', 'Hora (UTC)', 'Monitorizado', 'Spotter (DE)', 'Banda', 'Freq', 'Modo', 'Detalhe', 'SNR', 'Dist (km)', 'Comentário'],
+        recordsN: n => n + ' registos',
+        spotsN: n => n + ' spots'
+    },
+    ru: {
+        subtitle: 'Монитор спотов на несколько позывных',
+        settings: 'Настройки',
+        startMon: '▶ Начать мониторинг', stopMon: '■ Остановить мониторинг',
+        needCall: 'Сначала задайте хотя бы один позывной в Настройках',
+        startRot: '🔁 Начать ротацию', stopRot: '⏸ Остановить ротацию',
+        nextPage: 'Следующая страница', rotSecTitle: 'Интервал ротации (секунды)',
+        connected: 'подключено', connecting: 'подключение...', disconnected: 'отключено',
+        records: 'Записи спотов',
+        allCalls: '-- Все отслеживаемые позывные --',
+        refresh: 'Обновить', exportCsv: 'Экспорт CSV', clearDb: 'Очистить базу',
+        record: '● Запись', stopRec: '■ Стоп', schedule: 'Расписание', download: '⬇ Скачать',
+        set: 'Задать', clear: 'Очистить', recTz: 'UTC, однократно',
+        tabAll: 'Все споты', tabRec: 'Записанные',
+        notRecording: 'Запись не ведётся',
+        recManual: 'Запись (вручную)', recSched: 'Запись (по расписанию)',
+        scheduled: 'По расписанию', since: 'с',
+        cfgSection: 'Отслеживаемые позывные', globalSection: 'Общие настройки',
+        langLabel: 'Язык / Language', ttlTitle: 'Время жизни маркеров (минуты)', bandTitle: 'Цвета диапазонов',
+        save: 'Сохранить',
+        cfgHint: 'Позывные назначаются окнам карт по порядку. Пустые слоты остаются пустыми на панели.<br>Расстояние вычисляется между отслеживаемой и наблюдающей станциями.<br>Споты поступают автоматически: CW с reversebeacon.net RBN (10 с), другие моды с dxwatch.com (30 с) — подключение к кластеру не требуется.',
+        cellHint: 'Задайте позывные в Настройках',
+        askClearMarks: 'Очистить все маркеры?\n\nОК = удалить маркеры, линии, чипы диапазонов и тепловые карты со всех карт\nОтмена = оставить текущее отображение (заморожено)',
+        askClearDb: 'Удалить ВСЕ записи спотов из базы данных?\n\nЗаписи сессий (recording_spots) сохраняются.\nЭто действие необратимо!',
+        danger: 'Удалить', ok: 'ОК', cancel: 'Отмена', confirmTitle: 'Подтверждение',
+        cleared: 'База данных очищена', clearFail: 'Не удалось очистить базу данных',
+        csvOk: 'CSV экспортирован',
+        saved: 'Настройки сохранены', saveFail: 'Не удалось сохранить позывные',
+        loadFail: 'Не удалось загрузить записи',
+        recStarted: 'Запись начата', recStopped: 'Запись остановлена',
+        schedOk: 'Запись запланирована', schedCleared: 'Расписание очищено',
+        pickDt: 'Сначала выберите дату/время начала и конца',
+        now: 'сейчас',
+        mAgo: v => v + ' мин назад', h1: '1 ч назад', hAgo: v => v + ' ч назад',
+        headAll: ['Время (UTC)', 'Отслеживаемый', 'Споттер (DE)', 'Частота', 'Мода', 'Сигнал', 'SNR', 'Дист (км)', 'Комментарий'],
+        headRec: ['Дата', 'Время (UTC)', 'Отслеживаемый', 'Споттер (DE)', 'Диапазон', 'Частота', 'Мода', 'Детали', 'SNR', 'Дист (км)', 'Комментарий'],
+        recordsN: n => n + ' записей',
+        spotsN: n => n + ' спотов'
+    },
+    it: {
+        subtitle: 'Monitor di spot multi-nominativo',
+        settings: 'Impostazioni',
+        startMon: '▶ Avvia monitoraggio', stopMon: '■ Ferma monitoraggio',
+        needCall: 'Imposta prima almeno un nominativo nelle Impostazioni',
+        startRot: '🔁 Avvia rotazione', stopRot: '⏸ Ferma rotazione',
+        nextPage: 'Pagina successiva', rotSecTitle: 'Intervallo di rotazione (secondi)',
+        connected: 'connesso', connecting: 'connessione...', disconnected: 'disconnesso',
+        records: 'Record di spot',
+        allCalls: '-- Tutti i nominativi monitorati --',
+        refresh: 'Aggiorna', exportCsv: 'Esporta CSV', clearDb: 'Svuota database',
+        record: '● Registra', stopRec: '■ Ferma', schedule: 'Programma', download: '⬇ Scarica',
+        set: 'Imposta', clear: 'Cancella', recTz: 'UTC, una tantum',
+        tabAll: 'Tutti gli spot', tabRec: 'Registrati',
+        notRecording: 'Nessuna registrazione',
+        recManual: 'Registrazione (manuale)', recSched: 'Registrazione (programmata)',
+        scheduled: 'Programmata', since: 'da',
+        cfgSection: 'Nominativi monitorati', globalSection: 'Impostazioni generali',
+        langLabel: 'Lingua / Language', ttlTitle: 'Durata dei marker (minuti)', bandTitle: 'Colori delle bande',
+        save: 'Salva',
+        cfgHint: 'I nominativi sono assegnati alle finestre mappa in ordine. Gli slot vuoti restano vuoti nella dashboard.<br>La distanza è calcolata tra la stazione monitorata e quella spotter.<br>Gli spot sono forniti automaticamente: CW da reversebeacon.net RBN (10 s), altri modi da dxwatch.com (30 s) - nessuna connessione a cluster necessaria.',
+        cellHint: 'Imposta i nominativi nelle Impostazioni',
+        askClearMarks: 'Cancellare tutti i marker?\n\nOK = cancella marker, linee, chip di banda e heatmap da tutte le mappe\nAnnulla = mantieni la vista attuale (congelata)',
+        askClearDb: 'Eliminare TUTTI i record di spot dal database?\n\nLe registrazioni (recording_spots) vengono mantenute.\nQuesta azione è irreversibile!',
+        danger: 'Elimina', ok: 'OK', cancel: 'Annulla', confirmTitle: 'Conferma',
+        cleared: 'Database svuotato', clearFail: 'Errore nello svuotamento del database',
+        csvOk: 'CSV esportato',
+        saved: 'Impostazioni salvate', saveFail: 'Errore nel salvataggio dei nominativi',
+        loadFail: 'Errore nel caricamento dei record',
+        recStarted: 'Registrazione avviata', recStopped: 'Registrazione fermata',
+        schedOk: 'Registrazione programmata', schedCleared: 'Programmazione cancellata',
+        pickDt: 'Scegli prima data/ora di inizio e fine',
+        now: 'ora',
+        mAgo: v => v + ' min fa', h1: '1 h fa', hAgo: v => v + ' h fa',
+        headAll: ['Ora (UTC)', 'Monitorato', 'Spotter (DE)', 'Freq', 'Modo', 'Segnale', 'SNR', 'Dist (km)', 'Commento'],
+        headRec: ['Data', 'Ora (UTC)', 'Monitorato', 'Spotter (DE)', 'Banda', 'Freq', 'Modo', 'Dettaglio', 'SNR', 'Dist (km)', 'Commento'],
+        recordsN: n => n + ' record',
+        spotsN: n => n + ' spot'
+    },
+    ar: {
+        subtitle: 'مراقب سبوت متعدد النداءات',
+        settings: 'الإعدادات',
+        startMon: '▶ بدء المراقبة', stopMon: '■ إيقاف المراقبة',
+        needCall: 'حدد أولاً نداءً واحداً على الأقل في الإعدادات',
+        startRot: '🔁 بدء التدوير', stopRot: '⏸ إيقاف التدوير',
+        nextPage: 'الصفحة التالية', rotSecTitle: 'فترة التدوير (ثوانٍ)',
+        connected: 'متصل', connecting: 'جارٍ الاتصال...', disconnected: 'غير متصل',
+        records: 'سجلات السبوت',
+        allCalls: '-- كل النداءات المراقَبة --',
+        refresh: 'تحديث', exportCsv: 'تصدير CSV', clearDb: 'مسح قاعدة البيانات',
+        record: '● تسجيل', stopRec: '■ إيقاف', schedule: 'جدولة', download: '⬇ تنزيل',
+        set: 'تعيين', clear: 'مسح', recTz: 'UTC، مرة واحدة',
+        tabAll: 'كل السبوتات', tabRec: 'المسجَّلة',
+        notRecording: 'لا يوجد تسجيل',
+        recManual: 'جارٍ التسجيل (يدوي)', recSched: 'جارٍ التسجيل (مجدول)',
+        scheduled: 'مجدول', since: 'منذ',
+        cfgSection: 'النداءات المراقَبة', globalSection: 'الإعدادات العامة',
+        langLabel: 'اللغة / Language', ttlTitle: 'مدة بقاء العلامات (دقائق)', bandTitle: 'ألوان النطاقات',
+        save: 'حفظ',
+        cfgHint: 'تُسند النداءات إلى نوافذ الخريطة بالترتيب، وتبقى الفتحات الفارغة خالية في اللوحة.<br>تُحسب المسافة بين المحطة المراقَبة ومحطة الرصد.<br>تُجلب السبوتات تلقائياً: CW من reversebeacon.net RBN (كل 10 ثوانٍ)، والأنماط الأخرى من dxwatch.com (كل 30 ثانية) - لا حاجة لتسجيل الدخول إلى أي كلاستر.',
+        cellHint: 'حدد النداءات في الإعدادات',
+        askClearMarks: 'هل تريد مسح كل العلامات؟\n\nموافق = مسح العلامات والخطوط ورقائق النطاق وخرائط الحرارة من كل الخرائط\nإلغاء = الاحتفاظ بالعرض الحالي (مجمَّد)',
+        askClearDb: 'هل تريد حذف جميع سجلات السبوت من قاعدة البيانات؟\n\nتسجيلات الجلسات (recording_spots) تُحفظ.\nلا يمكن التراجع عن هذا الإجراء!',
+        danger: 'حذف', ok: 'موافق', cancel: 'إلغاء', confirmTitle: 'تأكيد',
+        cleared: 'تم مسح قاعدة البيانات', clearFail: 'فشل مسح قاعدة البيانات',
+        csvOk: 'تم تصدير CSV',
+        saved: 'تم حفظ الإعدادات', saveFail: 'فشل حفظ النداءات',
+        loadFail: 'فشل تحميل السجلات',
+        recStarted: 'بدأ التسجيل', recStopped: 'توقف التسجيل',
+        schedOk: 'تمت جدولة التسجيل', schedCleared: 'تم مسح الجدولة',
+        pickDt: 'اختر أولاً تاريخ/وقت البداية والنهاية',
+        now: 'الآن',
+        mAgo: v => 'منذ ' + v + ' دقيقة', h1: 'منذ ساعة', hAgo: v => 'منذ ' + v + ' ساعات',
+        headAll: ['الوقت (UTC)', 'المراقَب', 'الراصد (DE)', 'التردد', 'النمط', 'الإشارة', 'SNR', 'المسافة (كم)', 'ملاحظة'],
+        headRec: ['التاريخ', 'الوقت (UTC)', 'المراقَب', 'الراصد (DE)', 'النطاق', 'التردد', 'النمط', 'التفاصيل', 'SNR', 'المسافة (كم)', 'ملاحظة'],
+        recordsN: n => n + ' سجل',
+        spotsN: n => n + ' سبوت'
     }
 };
 function t(key) {
@@ -233,17 +515,14 @@ function renderCellInfo(cell) {
 
 function timeAgo(dt) {
     const sec = Math.floor((Date.now() - dt.getTime()) / 1000);
-    const zh = settings.lang === 'zh';
-    const m = v => zh ? v + '分钟前' : v + 'm ago';
     if (sec < 30) return t('now');
-    if (sec < 90) return m(1);
-    if (sec < 180) return m(2);
-    if (sec < 300) return m(5);
-    if (sec < 600) return m(10);
-    if (sec < 1800) return m(30);
-    if (sec < 3600) return zh ? '1小时前' : '1h ago';
-    const h = Math.floor(sec / 3600);
-    return zh ? h + '小时前' : h + 'h ago';
+    if (sec < 90) return t('mAgo')(1);
+    if (sec < 180) return t('mAgo')(2);
+    if (sec < 300) return t('mAgo')(5);
+    if (sec < 600) return t('mAgo')(10);
+    if (sec < 1800) return t('mAgo')(30);
+    if (sec < 3600) return t('h1');
+    return t('hAgo')(Math.floor(sec / 3600));
 }
 
 function modeBadge(mode) {
@@ -1194,8 +1473,8 @@ function exportCsv(forceRec) {
 /* Push the current language into every static label and re-render the
  * dynamic ones (buttons, table headers, statuses). */
 function applyLang() {
-    document.documentElement.lang = settings.lang === 'zh' ? 'zh-CN' : 'en';
-    $('.brand .subtitle').textContent = t('subtitle');
+    document.documentElement.lang = settings.lang;
+    document.documentElement.dir = settings.lang === 'ar' ? 'rtl' : 'ltr';
     const bc = $('#btnConfig');
     bc.textContent = t('settings');
     bc.title = t('settings');
@@ -1382,7 +1661,11 @@ function init() {
         }
     });
     // Global settings: language / per-mode marker TTL / band colors
-    $('#setLang').value = settings.lang;
+    // (language options are built from LANGS so new locales need no HTML edit)
+    const langSel = $('#setLang');
+    langSel.innerHTML = LANGS.map(l =>
+        `<option value="${l}">${LANG_NAMES[l]}</option>`).join('');
+    langSel.value = settings.lang;
     $('#setLang').addEventListener('change', () => {
         settings.lang = $('#setLang').value;
         saveSettings();
