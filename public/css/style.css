@@ -186,7 +186,6 @@ html, body {
     background: #000;
 }
 .grid.layout-1x1 { grid-template-columns: 1fr; grid-template-rows: 1fr; }
-.grid.layout-1x2 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr; }
 .grid.layout-2x2 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
 .grid.layout-3x3 { grid-template-columns: 1fr 1fr 1fr; grid-template-rows: 1fr 1fr 1fr; }
 
