@@ -119,9 +119,7 @@ function setLayout(layout) {
     setTimeout(() => state.cells.forEach(c => {
         if (c.el.style.display !== 'none' && c.map) {
             c.map.invalidateSize();
-            setWorldMinZoom(c.map);  // world-fit zoom depends on cell size
-            if (c.markers.length) fitToMarkers(c);   // re-fit to the new cell size
-            else c.map.fitBounds(WORLD_BOUNDS, {animate: false});
+            fitWorld(c.map);  // every cell keeps the same whole-world view
         }
     }), 50);
     // Highlight active layout button
@@ -285,9 +283,9 @@ function setCellCall(cell, call) {
     cell.hint.style.display = call ? 'none' : '';
     cell.lastSpotAt = null;
     updateStale(cell);
-    // Reset the view so the previous call's zoom/pan never lingers;
-    // replayCellHistory -> fitToMarkers will zoom to the new data if any.
-    cell.map.setView([20, 0], 2, {animate: false});
+    // Reset to the shared whole-world view so the previous call's
+    // manual zoom/pan never lingers on this cell.
+    fitWorld(cell.map);
     if (call && state.monitoring) replayCellHistory(cell);
 }
 
@@ -358,7 +356,6 @@ function syncCallsigns() {
 }
 
 function clearCell(cell) {
-    clearTimeout(cell._fitTimer);
     cell.markers.forEach(m => {
         clearTimeout(m._ttl);
         (m.layers || [m]).forEach(l => cell.map.removeLayer(l));
@@ -387,27 +384,12 @@ function setWorldMinZoom(map) {
     }
 }
 
-/* Auto zoom: zoom in to the HIGHEST level that still shows every marker */
-function fitToMarkers(cell) {
-    if (!cell.markers.length || cell.el.style.display === 'none') return;
-    cell.map.invalidateSize();
-    const bounds = L.latLngBounds([]);
-    cell.markers.forEach(g => {
-        const s = g._spot;
-        if (s.lat !== null && s.lat !== undefined && s.lon !== null && s.lon !== undefined)
-            bounds.extend([s.lat, s.lon]);
-        if (s.dx_lat !== null && s.dx_lat !== undefined && s.dx_lon !== null && s.dx_lon !== undefined)
-            bounds.extend([s.dx_lat, s.dx_lon]);
-    });
-    if (!bounds.isValid()) return;
-    // No low zoom cap: fitBounds picks the largest zoom that contains
-    // every marker. maxZoom only bounds the degenerate single-point case.
-    cell.map.fitBounds(bounds, {padding: [40, 40], maxZoom: 12, animate: true});
-}
-
-function scheduleFit(cell) {
-    clearTimeout(cell._fitTimer);
-    cell._fitTimer = setTimeout(() => fitToMarkers(cell), 400);
+/* Every cell shows the SAME view: the complete world map, zoomed out to
+ * the minimum that fits the cell exactly. No per-cell auto-zoom, so all
+ * map windows on the main page always stay identical. */
+function fitWorld(map) {
+    setWorldMinZoom(map);
+    map.fitBounds(WORLD_BOUNDS, {animate: false});
 }
 
 /* Status overlay: 10 min without a spot -> NO RUNING; 30 min -> QRT */
@@ -674,11 +656,6 @@ function addMarkerToCell(cell, spot, ttlMs = MARKER_TTL_MS) {
     refreshActiveBand(cell);
     renderCellInfo(cell);
 
-    // Auto zoom to include the new marker: immediate on the first one,
-    // debounced afterwards to absorb spot bursts.
-    if (cell.markers.length === 1) fitToMarkers(cell);
-    else scheduleFit(cell);
-
     // Remove old groups beyond a reasonable limit
     if (cell.markers.length > 500) {
         const old = cell.markers.shift();
@@ -695,7 +672,6 @@ function removeMarker(cell, group) {
     group.layers.forEach(l => cell.map.removeLayer(l));
     refreshActiveBand(cell);
     renderCellInfo(cell);
-    scheduleFit(cell);
 }
 
 /* ---------- WebSocket ---------- */
@@ -778,13 +754,12 @@ async function replayCellHistory(cell) {
     // Rotated away or monitoring stopped while the fetch was in flight
     if (cell.call !== call || !state.monitoring) return;
     const cutoff = Date.now() - MARKER_TTL_MS;
-    // API returns newest first; replay oldest first for sane fitBounds
+    // API returns newest first; replay oldest first for a stable display
     rows.reverse().forEach(r => {
         const t = new Date(r.timestamp).getTime();
         if (isNaN(t) || t < cutoff) return;
         addMarkerToCell(cell, r, MARKER_TTL_MS - (Date.now() - t));
     });
-    fitToMarkers(cell);
 }
 
 async function replayHistory() {
