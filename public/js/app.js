@@ -16,7 +16,14 @@ const state = {
     wsConnected: false,
     totalSpots: 0,
     config: {},
-    monitoring: localStorage.getItem('dxcompass-monitoring') === '1'
+    callsigns: [],      // configured callsign slots (source of truth)
+    monitoring: localStorage.getItem('dxcompass-monitoring') === '1',
+    rotation: {
+        offset: 0,      // paging offset into the callsign list
+        timer: null,
+        running: false,
+        intervalSec: parseInt(localStorage.getItem('dxcompass-rot-sec'), 10) || 15
+    }
 };
 
 /* ---------- Utilities ---------- */
@@ -113,6 +120,13 @@ function setLayout(layout) {
     $all('.layout-btn').forEach(b => {
         b.classList.toggle('active', b.dataset.layout === layout);
     });
+    // Cell count changed -> re-deal the callsigns across visible cells
+    if (!rotationNeeded()) {
+        state.rotation.offset = 0;
+        stopRotation();
+    }
+    assignCalls();
+    updateRotateUI();
 }
 
 function createCell(index) {
@@ -228,21 +242,95 @@ function addTerminator(map) {
 }
 
 function applyCallsigns(calls) {
-    // Slot i of the Config list owns cell i. A changed/removed call
-    // clears that cell's markers; maps and other cells are untouched.
-    for (let i = 0; i < MAX_CELLS; i++) {
-        const cell = state.cells[i];
-        if (!cell) continue;
-        const call = (calls[i] || '').toUpperCase();
-        if (call === cell.call) continue;
-        if (cell.call) clearCell(cell);          // old call's spots no longer wanted
-        cell.call = call;
-        cell.callLabel.textContent = call || '\u2014';
-        cell.hint.style.display = call ? 'none' : '';
-        cell.lastSpotAt = null;
-        updateStale(cell);
+    // The Config list is the source of truth; cells only display a
+    // rotating window of it when there are more calls than visible cells.
+    const next = (calls || []).map(c => (c || '').toUpperCase());
+    const changed = next.length !== state.callsigns.length ||
+                    next.some((c, i) => c !== state.callsigns[i]);
+    state.callsigns = next;
+    if (changed) {
+        // Config actually changed: restart paging from page 1
+        state.rotation.offset = 0;
+        if (!rotationNeeded()) stopRotation();
+        assignCalls();
     }
+    updateRotateUI();
     if (typeof updateMonitorBtn === 'function') updateMonitorBtn();
+}
+
+/* ---------- Callsign rotation ----------
+ * When more callsigns are monitored than the current layout can show,
+ * the visible cells page through the call list (auto and/or manually). */
+function visibleCells() {
+    return state.cells.filter(c => c.el.style.display !== 'none');
+}
+
+function setCellCall(cell, call) {
+    if (cell.call === call) return;
+    if (cell.call) clearCell(cell);          // old call's spots no longer wanted
+    cell.call = call;
+    cell.callLabel.textContent = call || '\u2014';
+    cell.hint.style.display = call ? 'none' : '';
+    cell.lastSpotAt = null;
+    updateStale(cell);
+    if (call && state.monitoring) replayCellHistory(cell);
+}
+
+/* Assign configured calls to the currently visible cells, shifted by the
+ * rotation offset. Hidden cells always show nothing. */
+function assignCalls() {
+    const calls = state.callsigns.filter(Boolean);
+    const n = calls.length;
+    visibleCells().forEach((cell, k) => {
+        // Fewer calls than cells: leave the extra cells blank (no wraparound)
+        setCellCall(cell, k < n ? calls[(k + state.rotation.offset) % n] : '');
+    });
+    state.cells.forEach(c => {
+        if (c.el.style.display === 'none') setCellCall(c, '');
+    });
+}
+
+function rotationPages() {
+    const calls = state.callsigns.filter(Boolean).length;
+    const vis = visibleCells().length || 1;
+    return Math.max(1, Math.ceil(calls / vis));
+}
+
+function rotationNeeded() { return rotationPages() > 1; }
+
+function rotateStep() {
+    if (!rotationNeeded()) return;
+    state.rotation.offset++;
+    assignCalls();
+    updateRotateUI();
+}
+
+function startRotation() {
+    if (!rotationNeeded() || state.rotation.running) return;
+    state.rotation.running = true;
+    state.rotation.timer = setInterval(rotateStep,
+        Math.max(3, state.rotation.intervalSec) * 1000);
+    updateRotateUI();
+}
+
+function stopRotation() {
+    state.rotation.running = false;
+    clearInterval(state.rotation.timer);
+    state.rotation.timer = null;
+}
+
+function updateRotateUI() {
+    const btn = $('#btnRotate');
+    if (!btn) return;
+    const pages = rotationPages();
+    const need = pages > 1;
+    btn.disabled = !need;
+    $('#btnRotateNext').disabled = !need;
+    btn.classList.toggle('running', state.rotation.running);
+    btn.textContent = state.rotation.running ? '⏸ 停止轮询' : '🔁 开始轮询';
+    $('#rotPage').textContent = need
+        ? ((state.rotation.offset % pages) + 1) + '/' + pages
+        : '';
 }
 
 function syncCallsigns() {
@@ -565,7 +653,7 @@ function handleSpot(spot) {
 
 /* ---------- Monitoring start/stop + post-refresh recovery ---------- */
 function hasAnyCallsign() {
-    return state.cells.some(c => c.call);
+    return state.callsigns.some(Boolean);
 }
 
 function updateMonitorBtn() {
@@ -588,26 +676,32 @@ function setMonitoring(on) {
     // On stop the current display is kept frozen; live spots are just ignored.
 }
 
-/* Reload spots from the last TTL window so a browser refresh does not
- * wipe markers, band chips and heat layers. */
-async function replayHistory() {
+/* Reload spots from the last TTL window so a browser refresh (or a
+ * rotation page flip) does not wipe markers, band chips and heat layers. */
+async function replayCellHistory(cell) {
+    const call = cell.call;
+    if (!call) return;
+    let rows = [];
+    try {
+        rows = await fetch(`/api/spots?call=${encodeURIComponent(call)}&limit=${HISTORY_LIMIT}`)
+            .then(r => r.json());
+    } catch (e) { return; }
+    // Rotated away or monitoring stopped while the fetch was in flight
+    if (cell.call !== call || !state.monitoring) return;
     const cutoff = Date.now() - MARKER_TTL_MS;
-    const calls = state.cells.map(c => c.call).filter(Boolean);
-    for (const call of calls) {
-        let rows = [];
-        try {
-            rows = await fetch(`/api/spots?call=${encodeURIComponent(call)}&limit=${HISTORY_LIMIT}`)
-                .then(r => r.json());
-        } catch (e) { continue; }
-        const cell = state.cells.find(c => c.call === call);
-        if (!cell || !state.monitoring) continue;
-        // API returns newest first; replay oldest first for sane fitBounds
-        rows.reverse().forEach(r => {
-            const t = new Date(r.timestamp).getTime();
-            if (isNaN(t) || t < cutoff) return;
-            addMarkerToCell(cell, r, MARKER_TTL_MS - (Date.now() - t));
-        });
-        fitToMarkers(cell);
+    // API returns newest first; replay oldest first for sane fitBounds
+    rows.reverse().forEach(r => {
+        const t = new Date(r.timestamp).getTime();
+        if (isNaN(t) || t < cutoff) return;
+        addMarkerToCell(cell, r, MARKER_TTL_MS - (Date.now() - t));
+    });
+    fitToMarkers(cell);
+}
+
+async function replayHistory() {
+    for (const cell of visibleCells()) {
+        if (!cell.call || !state.monitoring) continue;
+        await replayCellHistory(cell);
     }
 }
 
@@ -626,13 +720,11 @@ function populateCallSelect() {
     const sel = $('#recordCallSelect');
     const current = sel.value;
     sel.innerHTML = '<option value="">-- All monitored calls --</option>';
-    state.cells.forEach(c => {
-        if (c.call) {
-            const opt = document.createElement('option');
-            opt.value = c.call;
-            opt.textContent = c.call;
-            sel.appendChild(opt);
-        }
+    state.callsigns.filter(Boolean).forEach(call => {
+        const opt = document.createElement('option');
+        opt.value = call;
+        opt.textContent = call;
+        sel.appendChild(opt);
     });
     sel.value = current;
 }
@@ -771,6 +863,40 @@ function init() {
     $('#btnRecords').addEventListener('click', openRecords);
     $('#btnConfig').addEventListener('click', openConfig);
     $('#btnMonitor').addEventListener('click', () => setMonitoring(!state.monitoring));
+
+    // Callsign rotation controls
+    $('#btnRotate').addEventListener('click', () => {
+        if (state.rotation.running) {
+            stopRotation();
+            updateRotateUI();
+        } else {
+            startRotation();
+        }
+    });
+    // Manual page flip; also resets the auto timer so a scheduled flip
+    // does not fire right after the manual one.
+    $('#btnRotateNext').addEventListener('click', () => {
+        rotateStep();
+        if (state.rotation.running) {
+            clearInterval(state.rotation.timer);
+            state.rotation.timer = setInterval(rotateStep,
+                Math.max(3, state.rotation.intervalSec) * 1000);
+        }
+    });
+    const rotSecInput = $('#rotSec');
+    rotSecInput.value = state.rotation.intervalSec;
+    rotSecInput.addEventListener('change', () => {
+        let v = parseInt(rotSecInput.value, 10);
+        if (isNaN(v) || v < 3) v = 3;
+        if (v > 600) v = 600;
+        state.rotation.intervalSec = v;
+        rotSecInput.value = v;
+        localStorage.setItem('dxcompass-rot-sec', String(v));
+        if (state.rotation.running) {
+            clearInterval(state.rotation.timer);
+            state.rotation.timer = setInterval(rotateStep, v * 1000);
+        }
+    });
     $('#btnRefreshRecords').addEventListener('click', refreshRecords);
     $('#btnExportCsv').addEventListener('click', exportCsv);
     $('#recordCallSelect').addEventListener('change', refreshRecords);

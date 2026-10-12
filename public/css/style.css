@@ -134,6 +134,43 @@ html, body {
 .monitor-btn.running:hover { background: #4d1e20; border-color: #ff6b6b; }
 .monitor-btn:disabled { opacity: .45; cursor: not-allowed; }
 
+/* Callsign rotation controls */
+.rotate-group { display: flex; align-items: center; gap: 6px; }
+.rotate-btn {
+    background: #14303a;
+    color: var(--accent);
+    border-color: #1f4e5e;
+    font-weight: 600;
+}
+.rotate-btn:hover:not(:disabled) { background: #1b404e; border-color: var(--accent); }
+.rotate-btn.running {
+    background: #3a2f17;
+    color: var(--yellow);
+    border-color: #6e5a23;
+}
+.rotate-btn.running:hover { background: #4d3e1e; border-color: var(--yellow); }
+.rotate-btn:disabled, #btnRotateNext:disabled { opacity: .45; cursor: not-allowed; }
+.rot-sec {
+    width: 54px;
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border-2);
+    border-radius: 4px;
+    padding: 6px 4px;
+    font-size: 12px;
+    font-family: inherit;
+    text-align: center;
+}
+.rot-sec:focus { outline: none; border-color: var(--accent); }
+.rot-unit { color: var(--text-dim); font-size: 12px; }
+.rot-page {
+    min-width: 32px;
+    color: var(--accent);
+    font-size: 12px;
+    font-weight: 600;
+    text-align: center;
+}
+
 /* ---------- Main / Grid ---------- */
 .main {
     position: relative;
