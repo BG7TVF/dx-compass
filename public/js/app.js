@@ -801,11 +801,6 @@ function openConfig() {
 function closeConfig() { $('#configPanel').classList.add('hidden'); }
 
 function loadConfig() {
-    fetch('/api/config').then(r => r.json()).then(cfg => {
-        state.config = cfg;
-        $('#cfgHomeLat').value = cfg.homelat || '';
-        $('#cfgHomeLon').value = cfg.homelon || '';
-    });
     fetch('/api/callsigns').then(r => r.json()).then(calls => {
         if (Array.isArray(calls)) {
             applyCallsigns(calls);
@@ -821,19 +816,8 @@ function loadConfig() {
 
 function saveConfig(e) {
     e.preventDefault();
-    const cfg = {
-        homelat: $('#cfgHomeLat').value.trim(),
-        homelon: $('#cfgHomeLon').value.trim()
-    };
     const calls = Array.from(document.querySelectorAll('.cfg-call'))
         .map(inp => inp.value.trim().toUpperCase());
-
-    // Save coordinates
-    fetch('/api/config', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(cfg)
-    }).then(r => r.json()).catch(() => showToast('Failed to save config'));
 
     // Save callsigns (slot order matters)
     fetch('/api/callsigns', {
