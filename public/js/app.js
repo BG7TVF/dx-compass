@@ -136,6 +136,7 @@ const MAX_CELLS = 9;
 /* Single-world bounds: tiles and panning are confined to one world map;
  * the minimum zoom is computed so exactly one whole world is visible. */
 const WORLD_BOUNDS = [[-85.06, -180], [85.06, 180]];
+const AUTO_FIT_MAX_ZOOM = 7; // cap for marker auto-fit (single tight cluster)
 
 const state = {
     layout: '1x1',
@@ -278,7 +279,7 @@ function setLayout(layout) {
     setTimeout(() => state.cells.forEach(c => {
         if (c.el.style.display !== 'none' && c.map) {
             c.map.invalidateSize();
-            fitWorld(c.map);  // every cell keeps the same whole-world view
+            fitCellView(c);  // re-fit markers (or world view when empty)
         }
     }), 50);
     // Highlight active layout button
@@ -531,6 +532,8 @@ function clearCell(cell) {
     cell.bandPinned = false;
     cell.seen.clear();
     cell.lastSpotAt = null;
+    clearTimeout(cell._fitTimer);
+    if (cell.map) fitWorld(cell.map);  // back to the world-cover view
     updateStale(cell);
 }
 
@@ -545,12 +548,42 @@ function setWorldMinZoom(map) {
     }
 }
 
-/* Every cell shows the SAME view: the complete world map covering the cell
- * exactly (no black bars). No per-cell auto-zoom, so all map windows on the
- * main page always stay identical. */
+/* World-cover view: the complete world map filling the cell exactly
+ * (no black bars). Used for empty cells and as the auto-fit floor. */
 function fitWorld(map) {
     setWorldMinZoom(map);
     map.setView([0, 0], map.getMinZoom(), {animate: false});
+}
+
+/* Auto-fit: zoom in as far as possible while every marker of the cell is
+ * still visible. The zoom never drops below the world-cover minimum, so the
+ * map always fills the window and black bars can never appear. */
+function fitCellView(cell) {
+    const map = cell.map;
+    if (!map) return;
+    setWorldMinZoom(map);
+    const pts = [];
+    cell.markers.forEach(g => {
+        const s = g._spot;
+        if (s.lat !== null && s.lat !== undefined &&
+            s.lon !== null && s.lon !== undefined) pts.push([s.lat, s.lon]);
+        if (s.dx_lat !== null && s.dx_lat !== undefined &&
+            s.dx_lon !== null && s.dx_lon !== undefined) pts.push([s.dx_lat, s.dx_lon]);
+    });
+    if (!pts.length) {
+        map.setView([0, 0], map.getMinZoom(), {animate: false});
+        return;
+    }
+    const zb = L.latLngBounds(pts).pad(0.08);
+    const z = Math.min(Math.max(map.getBoundsZoom(zb), map.getMinZoom()),
+        AUTO_FIT_MAX_ZOOM);
+    map.setView(zb.getCenter(), z, {animate: false});
+}
+
+/* Debounced re-fit (marker add/remove bursts, e.g. history replay). */
+function scheduleFit(cell) {
+    clearTimeout(cell._fitTimer);
+    cell._fitTimer = setTimeout(() => fitCellView(cell), 150);
 }
 
 /* Status overlay: 10 min without a spot -> NO RUNING; 30 min -> QRT */
@@ -812,6 +845,7 @@ function addMarkerToCell(cell, spot, ttlMs) {
     // Heat layers (CW/DIGI only); active band = most reports by default
     refreshActiveBand(cell);
     renderCellInfo(cell);
+    scheduleFit(cell);   // keep every marker inside the view, max zoom
 
     // Remove old groups beyond a reasonable limit
     if (cell.markers.length > 500) {
@@ -829,6 +863,7 @@ function removeMarker(cell, group) {
     group.layers.forEach(l => cell.map.removeLayer(l));
     refreshActiveBand(cell);
     renderCellInfo(cell);
+    scheduleFit(cell);   // remaining markers may allow a tighter view
 }
 
 /* ---------- WebSocket ---------- */
@@ -1377,12 +1412,12 @@ function init() {
     refreshRecStatus(true);
     refreshRecords();
 
-    // Keep the world-cover view in sync with the window size
+    // Keep the marker auto-fit in sync with the window size
     window.addEventListener('resize', () => {
         visibleCells().forEach(c => {
             if (c.map) {
                 c.map.invalidateSize();
-                fitWorld(c.map);
+                fitCellView(c);
             }
         });
     });
