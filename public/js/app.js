@@ -519,8 +519,7 @@ function dotIcon(color, size) {
 
 /* Great-circle path between two points, sampled into [lat, lon] pairs.
  * Longitudes are unwrapped so consecutive samples never jump across the
- * antimeridian; Leaflet renders the overflowing part on the adjacent
- * world copy, keeping the path continuous at every zoom level. */
+ * antimeridian. */
 function greatCirclePoints(lat1, lon1, lat2, lon2, samples = 64) {
     const r = d => d * Math.PI / 180;
     const deg = x => x * 180 / Math.PI;
@@ -548,6 +547,40 @@ function greatCirclePoints(lat1, lon1, lat2, lon2, samples = 64) {
         pts.push([lat, lon]);
     }
     return pts;
+}
+
+/* Great-circle path as drawable segments in canonical longitudes.
+ * The unwrapped path is cut wherever it crosses the antimeridian and
+ * each piece is shifted back into [-180, 180], so a path crossing the
+ * date line exits one map edge and re-enters from the opposite edge.
+ * Both endpoints therefore always sit on the same world copy as their
+ * markers (which are placed at canonical longitudes). */
+function greatCirclePaths(lat1, lon1, lat2, lon2, samples = 64) {
+    const pts = greatCirclePoints(lat1, lon1, lat2, lon2, samples);
+    const worldOf = lon => Math.floor((lon + 180) / 360);
+    const segments = [];
+    let copy = worldOf(pts[0][1]);
+    let seg = [[pts[0][0], pts[0][1] - 360 * copy]];
+    for (let i = 1; i < pts.length; i++) {
+        const c = worldOf(pts[i][1]);
+        if (c === copy) {
+            seg.push([pts[i][0], pts[i][1] - 360 * copy]);
+            continue;
+        }
+        // Crossing the boundary between the old and new world copy:
+        // interpolate the crossing latitude and split the segment there.
+        const [la, lo] = pts[i - 1];
+        const [lb, ln] = pts[i];
+        const boundary = c > copy ? 180 + 360 * copy : -180 + 360 * copy;
+        const crossLat = la + (lb - la) * ((boundary - lo) / (ln - lo));
+        seg.push([crossLat, boundary - 360 * copy]);   // close at the edge
+        segments.push(seg);
+        seg = [[crossLat, boundary - 360 * c]];        // re-enter from the other edge
+        seg.push([pts[i][0], pts[i][1] - 360 * c]);
+        copy = c;
+    }
+    segments.push(seg);
+    return segments;
 }
 
 function addMarkerToCell(cell, spot, ttlMs = MARKER_TTL_MS) {
@@ -595,10 +628,11 @@ function addMarkerToCell(cell, spot, ttlMs = MARKER_TTL_MS) {
 
     // Link line: great-circle path between monitored station and spotter
     if (hasDe && hasDx) {
-        layers.push(L.polyline(
-            greatCirclePoints(spot.dx_lat, spot.dx_lon, spot.lat, spot.lon),
-            {color: bandColor, weight: 2, opacity: 0.85}
-        ).addTo(cell.map));
+        for (const seg of greatCirclePaths(spot.dx_lat, spot.dx_lon, spot.lat, spot.lon)) {
+            layers.push(L.polyline(seg,
+                {color: bandColor, weight: 2, opacity: 0.85}
+            ).addTo(cell.map));
+        }
     }
 
     const group = {layers, _spot: spot, _addedAt: Date.now()};
