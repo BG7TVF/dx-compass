@@ -273,6 +273,9 @@ function setCellCall(cell, call) {
     cell.hint.style.display = call ? 'none' : '';
     cell.lastSpotAt = null;
     updateStale(cell);
+    // Reset the view so the previous call's zoom/pan never lingers;
+    // replayCellHistory -> fitToMarkers will zoom to the new data if any.
+    cell.map.setView([20, 0], 2, {animate: false});
     if (call && state.monitoring) replayCellHistory(cell);
 }
 
