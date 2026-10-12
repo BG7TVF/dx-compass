@@ -732,13 +732,17 @@ function updateMonitorBtn() {
 
 function setMonitoring(on) {
     if (on && !hasAnyCallsign()) return;
+    // Stopping: offer to wipe everything; Cancel keeps the frozen display.
+    if (!on && state.cells.some(c => c.markers.length) &&
+        confirm('是否清空全部标记？\n确定 = 清空所有地图的标记、连线、频段框和热力图\n取消 = 保留当前显示（冻结）')) {
+        state.cells.forEach(clearCell);
+    }
     state.monitoring = on;
     localStorage.setItem('dxcompass-monitoring', on ? '1' : '0');
     updateMonitorBtn();
     if (on) {
         replayHistory();
     }
-    // On stop the current display is kept frozen; live spots are just ignored.
 }
 
 /* Reload spots from the last TTL window so a browser refresh (or a
