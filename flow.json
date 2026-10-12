@@ -69,6 +69,22 @@
         "y": 100,
         "wires": [
             [
+                "dxc0000000000065"
+            ]
+        ]
+    },
+    {
+        "id": "dxc0000000000065",
+        "type": "sqlite",
+        "z": "dxc0000000000001",
+        "mydb": "dxc0000000000027",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "Create table",
+        "x": 560,
+        "y": 60,
+        "wires": [
+            [
                 "dxc0000000000030"
             ]
         ]
