@@ -686,7 +686,10 @@ function connectWS() {
         return;
     }
 
-    state.ws.onopen = () => { setConnState('connected'); };
+    state.ws.onopen = () => {
+        setConnState('connected');
+        syncMonitoring();   // re-sync after a server restart / reconnect
+    };
     state.ws.onclose = () => {
         setConnState('disconnected');
         setTimeout(connectWS, 3000);
@@ -730,6 +733,16 @@ function updateMonitorBtn() {
         'Set at least one callsign in Config first';
 }
 
+/* Tell the backend whether to accept spots; the poll chains and the
+ * PSKR feed are gated on this flag (recording sessions keep it open). */
+function syncMonitoring() {
+    fetch('/api/monitoring', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({on: state.monitoring})
+    }).catch(() => {});
+}
+
 function setMonitoring(on) {
     if (on && !hasAnyCallsign()) return;
     // Stopping: offer to wipe everything; Cancel keeps the frozen display.
@@ -739,6 +752,7 @@ function setMonitoring(on) {
     }
     state.monitoring = on;
     localStorage.setItem('dxcompass-monitoring', on ? '1' : '0');
+    syncMonitoring();   // backend starts/stops accepting spots too
     updateMonitorBtn();
     if (on) {
         replayHistory();
