@@ -828,6 +828,11 @@ function addMarkerToCell(cell, spot, ttlMs) {
 
     const group = {layers, _spot: spot, _addedAt: Date.now()};
     group._ttl = setTimeout(() => removeMarker(cell, group), ttlMs);
+    // Effective lifespan (replayed spots are born already aged) — the fade
+    // runs linearly from birth to death, regardless of when it was drawn.
+    group._dieAt = Date.now() + ttlMs;
+    group._bornAt = group._dieAt - fullTtl;
+    applyMarkerFade(group, Date.now());
 
     cell.markers.push(group);
     cell.count++;
@@ -864,6 +869,22 @@ function removeMarker(cell, group) {
     refreshActiveBand(cell);
     renderCellInfo(cell);
     scheduleFit(cell);   // remaining markers may allow a tighter view
+}
+
+/* Fade a marker group with age: opacity 1 at birth, 0 at TTL expiry.
+ * Dots fade via the icon element, link lines via their stroke opacity. */
+function applyMarkerFade(group, now) {
+    const total = group._dieAt - group._bornAt;
+    if (total <= 0) return;
+    const op = Math.max(0, Math.min(1, (group._dieAt - now) / total));
+    group.layers.forEach(l => {
+        if (l instanceof L.Polyline) {
+            l.setStyle({opacity: 0.85 * op});
+        } else {
+            const el = l.getElement && l.getElement();
+            if (el) el.style.opacity = op;
+        }
+    });
 }
 
 /* ---------- WebSocket ---------- */
@@ -1440,6 +1461,12 @@ function init() {
             refreshRecords();
         }
     }, 15000);
+
+    // Every 10s: fade markers toward transparent as they approach expiry
+    setInterval(() => {
+        const now = Date.now();
+        state.cells.forEach(c => c.markers.forEach(g => applyMarkerFade(g, now)));
+    }, 10000);
 
     // Every 30s: refresh chip ages, expire chips together with markers,
     // and update the NO RUNING / QRT status overlays.
