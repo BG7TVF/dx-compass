@@ -517,6 +517,39 @@ function dotIcon(color, size) {
     });
 }
 
+/* Great-circle path between two points, sampled into [lat, lon] pairs.
+ * Longitudes are unwrapped so consecutive samples never jump across the
+ * antimeridian; Leaflet renders the overflowing part on the adjacent
+ * world copy, keeping the path continuous at every zoom level. */
+function greatCirclePoints(lat1, lon1, lat2, lon2, samples = 64) {
+    const r = d => d * Math.PI / 180;
+    const deg = x => x * 180 / Math.PI;
+    const f1 = r(lat1), l1 = r(lon1), f2 = r(lat2), l2 = r(lon2);
+    const dist = 2 * Math.asin(Math.sqrt(
+        Math.sin((f2 - f1) / 2) ** 2 +
+        Math.cos(f1) * Math.cos(f2) * Math.sin((l2 - l1) / 2) ** 2
+    ));
+    if (dist < 1e-9) return [[lat1, lon1]];
+    const sinD = Math.sin(dist);
+    const pts = [];
+    for (let i = 0; i <= samples; i++) {
+        const f = i / samples;
+        const A = Math.sin((1 - f) * dist) / sinD;
+        const B = Math.sin(f * dist) / sinD;
+        const x = A * Math.cos(f1) * Math.cos(l1) + B * Math.cos(f2) * Math.cos(l2);
+        const y = A * Math.cos(f1) * Math.sin(l1) + B * Math.cos(f2) * Math.sin(l2);
+        const z = A * Math.sin(f1) + B * Math.sin(f2);
+        const lat = deg(Math.atan2(z, Math.sqrt(x * x + y * y)));
+        let lon = deg(Math.atan2(y, x));
+        if (pts.length) {
+            const prev = pts[pts.length - 1][1];
+            lon = prev + ((lon - prev + 540) % 360) - 180;
+        }
+        pts.push([lat, lon]);
+    }
+    return pts;
+}
+
 function addMarkerToCell(cell, spot, ttlMs = MARKER_TTL_MS) {
     const hasDe = spot.lat !== null && spot.lat !== undefined &&
                   spot.lon !== null && spot.lon !== undefined;
@@ -560,10 +593,10 @@ function addMarkerToCell(cell, spot, ttlMs = MARKER_TTL_MS) {
         layers.push(deMarker);
     }
 
-    // Link line between monitored station and spotter (band colored, RBN style)
+    // Link line: great-circle path between monitored station and spotter
     if (hasDe && hasDx) {
         layers.push(L.polyline(
-            [[spot.dx_lat, spot.dx_lon], [spot.lat, spot.lon]],
+            greatCirclePoints(spot.dx_lat, spot.dx_lon, spot.lat, spot.lon),
             {color: bandColor, weight: 2, opacity: 0.85}
         ).addTo(cell.map));
     }
