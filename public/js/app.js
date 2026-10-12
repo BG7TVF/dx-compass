@@ -993,11 +993,17 @@ function heatWeight(snr) {
     return Math.max(0.1, Math.min(1, (snr + 25) / 40));
 }
 
-function updateHeat(cell, band) {
-    const points = cell.markers
-        .map(g => g._spot)
-        .filter(s => (s.band || '?') === band && isHeatSpot(s))
-        .map(s => [s.lat, s.lon, heatWeight(s.snr)]);
+function updateHeat(cell, band, now = Date.now()) {
+    // Heat intensity follows the marker fade: a spot's contribution weakens
+    // linearly with its remaining lifetime, just like its dots/link lines.
+    const points = [];
+    cell.markers.forEach(g => {
+        const s = g._spot;
+        if ((s.band || '?') !== band || !isHeatSpot(s)) return;
+        const total = g._dieAt - g._bornAt;
+        const op = total > 0 ? Math.max(0, Math.min(1, (g._dieAt - now) / total)) : 1;
+        points.push([s.lat, s.lon, heatWeight(s.snr) * op]);
+    });
 
     let layer = cell.heat[band];
     if (!points.length && !layer) return;
@@ -1824,10 +1830,14 @@ function init() {
         }
     }, 15000);
 
-    // Every 10s: fade markers toward transparent as they approach expiry
+    // Every 10s: fade markers toward transparent as they approach expiry,
+    // and weaken their heat contributions along with the dots
     setInterval(() => {
         const now = Date.now();
-        state.cells.forEach(c => c.markers.forEach(g => applyMarkerFade(g, now)));
+        state.cells.forEach(c => {
+            c.markers.forEach(g => applyMarkerFade(g, now));
+            Object.keys(c.heat).forEach(b => updateHeat(c, b, now));
+        });
     }, 10000);
 
     // Every 30s: refresh chip ages, expire chips together with markers,
