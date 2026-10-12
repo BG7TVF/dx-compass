@@ -50,7 +50,8 @@
         "y": 100,
         "wires": [
             [
-                "dxc0000000000025"
+                "dxc0000000000025",
+                "dxc0000000000070"
             ]
         ]
     },
@@ -386,7 +387,8 @@
         "y": 180,
         "wires": [
             [
-                "dxc000000000000c"
+                "dxc000000000000c",
+                "dxc0000000000071"
             ]
         ]
     },
@@ -979,6 +981,252 @@
         "wires": [
             [
                 "dxc0000000000063"
+            ]
+        ]
+    },
+    {
+        "id": "dxc0000000000070",
+        "type": "function",
+        "z": "dxc0000000000001",
+        "name": "Create recording table",
+        "func": "msg.topic = `CREATE TABLE IF NOT EXISTS recording_spots (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    date TEXT,\n    time TEXT,\n    call TEXT,\n    de TEXT,\n    band TEXT,\n    freq REAL,\n    mode TEXT,\n    detail TEXT,\n    snr INTEGER,\n    signal TEXT,\n    distance_km INTEGER,\n    comment TEXT\n);`;\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 350,
+        "y": 160,
+        "wires": [
+            [
+                "dxc0000000000065"
+            ]
+        ]
+    },
+    {
+        "id": "dxc0000000000071",
+        "type": "function",
+        "z": "dxc0000000000001",
+        "name": "Record into session",
+        "func": "// Recording gate: only spots arriving while a recording session is\n// active are written to recording_spots. Date/time are stored split,\n// CW carries its speed (WPM) and DIGI its concrete submode (FT8, RTTY,\n// ...) in the detail column.\nconst rec = global.get('recording');\nif (!rec || !rec.active) return null;\nconst s = msg.payload;\nif (!s || !s.timestamp) return null;\nconst iso = new Date(s.timestamp).toISOString();\nconst date = iso.substring(0, 10);\nconst time = iso.substring(11, 19);\nlet detail = null;\nconst comment = String(s.comment || '');\nif (s.mode === 'CW') {\n    const m = comment.match(/(\\d+)\\s*WPM/i);\n    if (m) detail = m[1] + ' WPM';\n} else if (s.mode === 'DIGI') {\n    const m = comment.toUpperCase().match(/CONTESTIA|DOMINO|OLIVIA|THROB|MFSK\\d*|FT8|FT4|RTTY|PSK\\d+|JT65|JT9|JS8|HELL|THOR/);\n    if (m) detail = m[0];\n}\nconst esc = (v) => v === null || v === undefined ? 'NULL' : (\"'\" + String(v).replace(/'/g, \"''\") + \"'\");\nconst num = (v) => v === null || v === undefined || isNaN(v) ? 'NULL' : v;\nmsg.topic = `INSERT INTO recording_spots (date, time, call, de, band, freq, mode, detail, snr, signal, distance_km, comment) VALUES (${esc(date)}, ${esc(time)}, ${esc(s.monitored_call)}, ${esc(s.de)}, ${esc(s.band)}, ${num(s.freq)}, ${esc(s.mode)}, ${esc(detail)}, ${num(s.snr)}, ${esc(s.signal)}, ${num(s.distance_km)}, ${esc(s.comment)});`;\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1170,
+        "y": 120,
+        "wires": [
+            [
+                "dxc000000000000c"
+            ]
+        ]
+    },
+    {
+        "id": "dxc0000000000072",
+        "type": "inject",
+        "z": "dxc0000000000001",
+        "name": "Recording tick",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "30",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "10",
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 140,
+        "y": 1040,
+        "wires": [
+            [
+                "dxc0000000000073"
+            ]
+        ]
+    },
+    {
+        "id": "dxc0000000000073",
+        "type": "function",
+        "z": "dxc0000000000001",
+        "name": "Recording scheduler",
+        "func": "// One-shot scheduled recording: at 'start' (MM-DD HH:mm, UTC) the\n// session begins, at 'end' it stops and the schedule is discarded.\n// A manual session (manual=true) is never auto-stopped. State lives in\n// the persistent global context so it survives restarts.\nconst rec = global.get('recording') || {active: false, manual: false, startedAt: null, schedule: null};\nif (!rec.schedule) return null;\nconst now = new Date();\nconst parse = (s) => {\n    const m = String(s).match(/^(\\d{1,2})-(\\d{1,2})\\s+(\\d{1,2}):(\\d{1,2})$/);\n    if (!m) return null;\n    return new Date(Date.UTC(now.getUTCFullYear(), +m[1] - 1, +m[2], +m[3], +m[4]));\n};\nlet start = parse(rec.schedule.start), end = parse(rec.schedule.end);\nif (!start || !end) { rec.schedule = null; global.set('recording', rec); return null; }\nif (end <= start) end = new Date(end.getTime() + 365 * 86400000); // crosses year end\nif (!rec.active && now >= start && now < end) {\n    rec.active = true; rec.manual = false; rec.startedAt = now.toISOString();\n    node.warn('Recording started (scheduled)');\n} else if (rec.active && !rec.manual && now >= end) {\n    rec.active = false; rec.schedule = null;\n    node.warn('Recording stopped (scheduled end)');\n} else if (!rec.active && now >= end) {\n    rec.schedule = null; // window expired while inactive (e.g. service down)\n}\nglobal.set('recording', rec);\nreturn null;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 380,
+        "y": 1040,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "dxc0000000000074",
+        "type": "inject",
+        "z": "dxc0000000000001",
+        "name": "Purge old recordings",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "3600",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "60",
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 170,
+        "y": 1100,
+        "wires": [
+            [
+                "dxc0000000000075"
+            ]
+        ]
+    },
+    {
+        "id": "dxc0000000000075",
+        "type": "function",
+        "z": "dxc0000000000001",
+        "name": "Build purge SQL",
+        "func": "// Recordings are kept for at most two months.\nmsg.topic = \"DELETE FROM recording_spots WHERE date < date('now', '-2 months');\";\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 410,
+        "y": 1100,
+        "wires": [
+            [
+                "dxc0000000000076"
+            ]
+        ]
+    },
+    {
+        "id": "dxc0000000000076",
+        "type": "sqlite",
+        "z": "dxc0000000000001",
+        "mydb": "dxc0000000000027",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "Recording maintenance",
+        "x": 680,
+        "y": 1100,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "dxc0000000000077",
+        "type": "http in",
+        "z": "dxc0000000000001",
+        "name": "GET /api/recording",
+        "url": "/api/recording",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 140,
+        "y": 780,
+        "wires": [
+            [
+                "dxc0000000000078"
+            ]
+        ]
+    },
+    {
+        "id": "dxc0000000000078",
+        "type": "function",
+        "z": "dxc0000000000001",
+        "name": "Recording status",
+        "func": "msg.headers = {'Content-Type': 'application/json'};\nmsg.payload = global.get('recording') || {active: false, manual: false, startedAt: null, schedule: null};\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 370,
+        "y": 780,
+        "wires": [
+            [
+                "dxc0000000000018"
+            ]
+        ]
+    },
+    {
+        "id": "dxc000000000007a",
+        "type": "http in",
+        "z": "dxc0000000000001",
+        "name": "POST /api/recording",
+        "url": "/api/recording",
+        "method": "post",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 140,
+        "y": 830,
+        "wires": [
+            [
+                "dxc000000000007b"
+            ]
+        ]
+    },
+    {
+        "id": "dxc000000000007b",
+        "type": "function",
+        "z": "dxc0000000000001",
+        "name": "Recording control",
+        "func": "// Manual start/stop and one-shot schedule management.\n// Body: {action:'start'|'stop'|'schedule'|'unschedule', start?, end?}\n// Schedule times are UTC in 'MM-DD HH:mm' form.\nconst body = msg.payload || {};\nconst rec = global.get('recording') || {active: false, manual: false, startedAt: null, schedule: null};\nconst fmt = (s) => /^\\d{1,2}-\\d{1,2}\\s+\\d{1,2}:\\d{1,2}$/.test(String(s || '').trim());\nmsg.headers = {'Content-Type': 'application/json'};\nif (body.action === 'start') {\n    rec.active = true; rec.manual = true; rec.startedAt = new Date().toISOString();\n} else if (body.action === 'stop') {\n    rec.active = false; rec.manual = false; rec.schedule = null;\n} else if (body.action === 'schedule') {\n    if (!fmt(body.start) || !fmt(body.end)) {\n        msg.statusCode = 400;\n        msg.payload = {success: false, error: 'start/end must be \"MM-DD HH:mm\" (UTC)'};\n        return msg;\n    }\n    rec.schedule = {start: String(body.start).trim(), end: String(body.end).trim()};\n} else if (body.action === 'unschedule') {\n    rec.schedule = null;\n} else {\n    msg.statusCode = 400;\n    msg.payload = {success: false, error: 'unknown action'};\n    return msg;\n}\nglobal.set('recording', rec);\nmsg.payload = {success: true, recording: rec};\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 370,
+        "y": 830,
+        "wires": [
+            [
+                "dxc0000000000018"
+            ]
+        ]
+    },
+    {
+        "id": "dxc000000000007c",
+        "type": "http in",
+        "z": "dxc0000000000001",
+        "name": "GET /api/recording/spots",
+        "url": "/api/recording/spots",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 130,
+        "y": 880,
+        "wires": [
+            [
+                "dxc000000000007d"
+            ]
+        ]
+    },
+    {
+        "id": "dxc000000000007d",
+        "type": "function",
+        "z": "dxc0000000000001",
+        "name": "Build recording query",
+        "func": "const call = msg.req.query.call;\nconst limit = parseInt(msg.req.query.limit) || 1000;\nconst esc = (v) => \"'\" + String(v).replace(/'/g, \"''\") + \"'\";\nlet sql = 'SELECT * FROM recording_spots';\nif (call) sql += ' WHERE call = ' + esc(call.toUpperCase());\nsql += ' ORDER BY id DESC LIMIT ' + limit;\nmsg.topic = sql;\nmsg.headers = {'Content-Type': 'application/json'};\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 360,
+        "y": 880,
+        "wires": [
+            [
+                "dxc0000000000017"
             ]
         ]
     }

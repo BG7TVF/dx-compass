@@ -18,6 +18,8 @@ const state = {
     config: {},
     callsigns: [],      // configured callsign slots (source of truth)
     monitoring: localStorage.getItem('dxcompass-monitoring') === '1',
+    recView: 'all',     // records panel view: 'all' spots | 'rec' recorded session spots
+    recStatus: null,    // last known recording state from the backend
     rotation: {
         offset: 0,      // paging offset into the callsign list
         timer: null,
@@ -712,6 +714,7 @@ async function replayHistory() {
 function openRecords() {
     $('#recordsPanel').classList.remove('hidden');
     populateCallSelect();
+    refreshRecStatus();
     refreshRecords();
 }
 
@@ -732,29 +735,113 @@ function populateCallSelect() {
     sel.value = current;
 }
 
+const REC_HEAD_ALL = `<th>Time (UTC)</th><th>Monitored</th><th>Spotter (DE)</th><th>Freq</th><th>Mode</th><th>Signal</th><th>SNR</th><th>Dist (km)</th><th>Comment</th>`;
+const REC_HEAD_REC = `<th>Date</th><th>Time (UTC)</th><th>Monitored</th><th>Spotter (DE)</th><th>Band</th><th>Freq</th><th>Mode</th><th>Detail</th><th>SNR</th><th>Dist (km)</th><th>Comment</th>`;
+
 function refreshRecords() {
     const call = $('#recordCallSelect').value;
-    const url = call ? `/api/spots?call=${encodeURIComponent(call)}` : '/api/spots';
+    const rec = state.recView === 'rec';
+    const base = rec ? '/api/recording/spots' : '/api/spots';
+    const url = call ? `${base}?call=${encodeURIComponent(call)}` : base;
+    $('#recordsHead').innerHTML = rec ? REC_HEAD_REC : REC_HEAD_ALL;
     fetch(url).then(r => r.json()).then(rows => {
         const body = $('#recordsBody');
         body.innerHTML = '';
         rows.forEach(r => {
             const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td>${formatTime(r.timestamp)}</td>
-                <td>${r.monitored_call}</td>
-                <td>${r.de}</td>
-                <td>${r.freq || ''}</td>
-                <td>${modeBadge(r.mode)}</td>
-                <td class="${signalClass(r)}">${r.signal || ''}</td>
-                <td class="${snrClass(r)}">${r.snr !== null && r.snr !== undefined ? r.snr : ''}</td>
-                <td>${r.distance_km || ''}</td>
-                <td title="${r.comment || ''}">${(r.comment || '').substring(0, 30)}</td>
-            `;
+            if (rec) {
+                tr.innerHTML = `
+                    <td>${r.date || ''}</td>
+                    <td>${r.time || ''}</td>
+                    <td>${r.call || ''}</td>
+                    <td>${r.de}</td>
+                    <td>${r.band || ''}</td>
+                    <td>${r.freq || ''}</td>
+                    <td>${modeBadge(r.mode)}</td>
+                    <td>${r.detail || ''}</td>
+                    <td class="${snrClass(r)}">${r.snr !== null && r.snr !== undefined ? r.snr : ''}</td>
+                    <td>${r.distance_km || ''}</td>
+                    <td title="${r.comment || ''}">${(r.comment || '').substring(0, 30)}</td>
+                `;
+            } else {
+                tr.innerHTML = `
+                    <td>${formatTime(r.timestamp)}</td>
+                    <td>${r.monitored_call}</td>
+                    <td>${r.de}</td>
+                    <td>${r.freq || ''}</td>
+                    <td>${modeBadge(r.mode)}</td>
+                    <td class="${signalClass(r)}">${r.signal || ''}</td>
+                    <td class="${snrClass(r)}">${r.snr !== null && r.snr !== undefined ? r.snr : ''}</td>
+                    <td>${r.distance_km || ''}</td>
+                    <td title="${r.comment || ''}">${(r.comment || '').substring(0, 30)}</td>
+                `;
+            }
             body.appendChild(tr);
         });
         $('#recordsFooter').textContent = rows.length + ' records';
     }).catch(() => showToast('Failed to load records'));
+}
+
+/* ---------- Recording (timed / manual capture into recording_spots) ---------- */
+function refreshRecStatus() {
+    fetch('/api/recording').then(r => r.json()).then(rec => {
+        state.recStatus = rec;
+        const dot = $('#recDot');
+        const txt = $('#recStatus');
+        const btn = $('#btnRecToggle');
+        if (rec.active) {
+            dot.className = 'rec-dot active';
+            const since = rec.startedAt ? rec.startedAt.substring(5, 16).replace('T', ' ') + 'Z' : '';
+            txt.textContent = (rec.manual ? 'Recording (manual)' : 'Recording (scheduled)') + (since ? ' since ' + since : '');
+            btn.innerHTML = '&#9632; Stop';
+            btn.classList.add('recording');
+        } else {
+            dot.className = rec.schedule ? 'rec-dot scheduled' : 'rec-dot idle';
+            txt.textContent = rec.schedule ?
+                `Scheduled: ${rec.schedule.start} → ${rec.schedule.end} UTC` : 'Not recording';
+            btn.innerHTML = '&#9679; Record';
+            btn.classList.remove('recording');
+        }
+    }).catch(() => {});
+}
+
+function recAction(body) {
+    return fetch('/api/recording', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body)
+    }).then(async r => {
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(j.error || 'request failed');
+        return j;
+    });
+}
+
+function toggleRecording() {
+    const stopping = state.recStatus && state.recStatus.active;
+    recAction({action: stopping ? 'stop' : 'start'}).then(() => {
+        showToast(stopping ? 'Recording stopped' : 'Recording started');
+        refreshRecStatus();
+        if (state.recView === 'rec') refreshRecords();
+    }).catch(e => showToast('Recording: ' + e.message));
+}
+
+function setRecSchedule() {
+    const start = $('#recStart').value.trim();
+    const end = $('#recEnd').value.trim();
+    recAction({action: 'schedule', start, end}).then(() => {
+        showToast('Recording scheduled');
+        refreshRecStatus();
+    }).catch(e => showToast('Schedule: ' + e.message));
+}
+
+function clearRecSchedule() {
+    recAction({action: 'unschedule'}).then(() => {
+        $('#recStart').value = '';
+        $('#recEnd').value = '';
+        showToast('Schedule cleared');
+        refreshRecStatus();
+    }).catch(e => showToast('Schedule: ' + e.message));
 }
 
 function signalClass(r) {
@@ -773,9 +860,13 @@ function snrClass(r) {
 
 function exportCsv() {
     const call = $('#recordCallSelect').value;
-    const url = call ? `/api/spots?call=${encodeURIComponent(call)}&limit=10000` : '/api/spots?limit=10000';
+    const rec = state.recView === 'rec';
+    const base = rec ? '/api/recording/spots' : '/api/spots';
+    const url = call ? `${base}?call=${encodeURIComponent(call)}&limit=10000` : `${base}?limit=10000`;
+    const headers = rec ?
+        ['date','time','call','de','band','freq','mode','detail','snr','signal','distance_km','comment'] :
+        ['timestamp','monitored_call','de','freq','spot_call','mode','signal','snr','distance_km','distance_miles','comment'];
     fetch(url).then(r => r.json()).then(rows => {
-        const headers = ['timestamp','monitored_call','de','freq','spot_call','mode','signal','snr','distance_km','distance_miles','comment'];
         const csv = [headers.join(',')].concat(rows.map(r =>
             headers.map(h => {
                 let v = r[h];
@@ -787,7 +878,7 @@ function exportCsv() {
         const blob = new Blob([csv], {type: 'text/csv'});
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
-        a.download = `dxcompass-spots-${call || 'all'}-${Date.now()}.csv`;
+        a.download = `dxcompass-${rec ? 'recording' : 'spots'}-${call || 'all'}-${Date.now()}.csv`;
         a.click();
         showToast('CSV exported');
     });
@@ -887,6 +978,16 @@ function init() {
     $('#btnRefreshRecords').addEventListener('click', refreshRecords);
     $('#btnExportCsv').addEventListener('click', exportCsv);
     $('#recordCallSelect').addEventListener('change', refreshRecords);
+    // Recording controls
+    $('#btnRecToggle').addEventListener('click', toggleRecording);
+    $('#btnRecSched').addEventListener('click', () => $('#recSchedForm').classList.toggle('hidden'));
+    $('#btnRecSchedSet').addEventListener('click', setRecSchedule);
+    $('#btnRecSchedClear').addEventListener('click', clearRecSchedule);
+    $all('.rec-tab').forEach(t => t.addEventListener('click', () => {
+        state.recView = t.dataset.view;
+        $all('.rec-tab').forEach(x => x.classList.toggle('active', x === t));
+        refreshRecords();
+    }));
     $('#configForm').addEventListener('submit', saveConfig);
 
     // Create all 9 cells once (never rebuilt; layout only toggles visibility)
@@ -912,6 +1013,16 @@ function init() {
         const d = new Date();
         $('#utcClock').textContent = d.toISOString().substring(11, 19) + 'Z';
     }, 1000);
+
+    // Recording status: keep the panel indicator fresh, auto-refresh
+    // the Recorded view while a session is active.
+    setInterval(() => {
+        refreshRecStatus();
+        if (state.recStatus && state.recStatus.active &&
+            state.recView === 'rec' && !$('#recordsPanel').classList.contains('hidden')) {
+            refreshRecords();
+        }
+    }, 15000);
 
     // Every 30s: refresh chip ages, expire chips together with markers,
     // and update the NO RUNING / QRT status overlays.

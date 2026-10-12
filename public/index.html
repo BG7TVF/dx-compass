@@ -63,10 +63,28 @@
                     <button class="mini-btn" id="btnRefreshRecords">Refresh</button>
                     <button class="mini-btn" id="btnExportCsv">Export CSV</button>
                 </div>
+                <div class="rec-bar">
+                    <span class="rec-dot idle" id="recDot"></span>
+                    <span class="rec-status" id="recStatus">Not recording</span>
+                    <button class="mini-btn rec-toggle" id="btnRecToggle">&#9679; Record</button>
+                    <button class="mini-btn" id="btnRecSched">Schedule</button>
+                </div>
+                <div class="rec-sched hidden" id="recSchedForm">
+                    <input type="text" id="recStart" placeholder="MM-DD HH:mm">
+                    <span class="rec-arrow">&rarr;</span>
+                    <input type="text" id="recEnd" placeholder="MM-DD HH:mm">
+                    <button class="mini-btn" id="btnRecSchedSet">Set</button>
+                    <button class="mini-btn" id="btnRecSchedClear">Clear</button>
+                    <span class="rec-tz">UTC, one-shot</span>
+                </div>
+                <div class="rec-tabs">
+                    <button class="rec-tab active" data-view="all">All Spots</button>
+                    <button class="rec-tab" data-view="rec">Recorded</button>
+                </div>
                 <div class="table-wrap">
                     <table id="recordsTable">
                         <thead>
-                            <tr>
+                            <tr id="recordsHead">
                                 <th>Time (UTC)</th>
                                 <th>Monitored</th>
                                 <th>Spotter (DE)</th>

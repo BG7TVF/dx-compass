@@ -378,6 +378,86 @@ html, body {
     font-size: 12px;
 }
 
+/* Recording controls (Spot Records panel) */
+.rec-bar {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 8px;
+}
+.rec-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex: none;
+    background: #555;
+}
+.rec-dot.active {
+    background: #ff3b30;
+    animation: recPulse 1.2s ease-in-out infinite;
+}
+.rec-dot.scheduled { background: #ffc107; }
+@keyframes recPulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.5); }
+    50% { opacity: 0.55; box-shadow: 0 0 0 5px rgba(255, 59, 48, 0); }
+}
+.rec-status {
+    flex: 1;
+    font-size: 11px;
+    color: var(--dim, #8b949e);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.rec-toggle.recording {
+    border-color: #ff3b30;
+    color: #ff3b30;
+}
+.rec-sched {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+}
+.rec-sched.hidden { display: none; }
+.rec-sched input {
+    width: 92px;
+    background: #0d1116;
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 4px 6px;
+    border-radius: 3px;
+    font-family: inherit;
+    font-size: 11px;
+}
+.rec-arrow { color: var(--dim, #8b949e); }
+.rec-tz { font-size: 10px; color: var(--dim, #8b949e); }
+.rec-tabs {
+    display: flex;
+    gap: 0;
+    margin-bottom: 8px;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    overflow: hidden;
+}
+.rec-tab {
+    flex: 1;
+    background: #0d1116;
+    border: none;
+    color: var(--dim, #8b949e);
+    padding: 5px 0;
+    font-size: 11px;
+    font-family: inherit;
+    cursor: pointer;
+}
+.rec-tab.active {
+    background: #1c2733;
+    color: var(--accent);
+    font-weight: 600;
+}
+.rec-tab:hover:not(.active) { color: var(--text); }
+
 .table-wrap { overflow: auto; max-height: calc(100vh - 200px); border: 1px solid var(--border); border-radius: 3px; }
 table { width: 100%; border-collapse: collapse; font-size: 12px; }
 thead th {
