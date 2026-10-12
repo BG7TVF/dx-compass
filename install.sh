@@ -209,6 +209,75 @@ fi
 ok "npm dependencies installed"
 
 # --------------------------------------------------------------------------- #
+# 5b. SQLite database preflight (defense in depth against the two historical
+#     DB failure modes:
+#       - sqlitedb mode lacking CREATE -> permanent 'failed to open' when the
+#         db file was missing (flow.json must keep mode RWC)
+#       - init-flow msg.topic clobbering -> CREATE TABLE never executed, so a
+#         freshly rebuilt db had no 'spots' table and every query failed
+#     Creating the file and both table schemas here makes both harmless.)
+# --------------------------------------------------------------------------- #
+if ! grep -q '"mode"[[:space:]]*:[[:space:]]*"RWC"' "${FLOW_FILE}"; then
+    warn "flow.json sqlitedb mode is not RWC - a missing db file would permanently break the database. Restore \"mode\": \"RWC\" in the sqlitedb config node."
+fi
+
+info "Pre-initializing SQLite database schema (spots, recording_spots) ..."
+# Runs as the service user so the db file is created with correct ownership.
+# require('sqlite3') resolves to the local node_modules installed above.
+run_as_user "${NODE_BIN}" <<'DBEOF'
+const sqlite3 = require('sqlite3');
+const run = (db, sql) => new Promise((res, rej) => db.run(sql, e => e ? rej(e) : res()));
+const all = (db, sql) => new Promise((res, rej) => db.all(sql, (e, r) => e ? rej(e) : res(r)));
+(async () => {
+    const db = new sqlite3.Database('dxcompass.db');
+    await run(db, `CREATE TABLE IF NOT EXISTS spots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    spot_id INTEGER UNIQUE,
+    timestamp TEXT NOT NULL,
+    monitored_call TEXT NOT NULL,
+    de TEXT NOT NULL,
+    freq REAL,
+    spot_call TEXT NOT NULL,
+    comment TEXT,
+    spot_time TEXT,
+    mode TEXT,
+    signal TEXT,
+    snr REAL,
+    lat REAL,
+    lon REAL,
+    distance_km REAL,
+    distance_miles REAL,
+    band TEXT,
+    dx_lat REAL,
+    dx_lon REAL
+)`);
+    await run(db, `CREATE TABLE IF NOT EXISTS recording_spots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    date TEXT,
+    time TEXT,
+    call TEXT,
+    de TEXT,
+    band TEXT,
+    freq REAL,
+    mode TEXT,
+    detail TEXT,
+    snr INTEGER,
+    signal TEXT,
+    distance_km INTEGER,
+    comment TEXT
+)`);
+    // Databases created by very old versions may lack the spot_id column.
+    const rows = await all(db, "SELECT COUNT(*) AS c FROM pragma_table_info('spots') WHERE name='spot_id'");
+    if (rows[0].c === 0) {
+        await run(db, "ALTER TABLE spots ADD COLUMN spot_id INTEGER");
+    }
+    await new Promise((res, rej) => db.close(e => e ? rej(e) : res()));
+})().catch(e => { console.error(e && e.message || e); process.exit(1); });
+DBEOF
+[[ -f "${APP_DIR}/dxcompass.db" ]] || die "Database preflight failed: ${APP_DIR}/dxcompass.db was not created."
+ok "Database schema ready (dxcompass.db)"
+
+# --------------------------------------------------------------------------- #
 # 6. systemd service (fully isolated from any other Node-RED instance)
 # --------------------------------------------------------------------------- #
 UNIT_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
@@ -271,6 +340,23 @@ if command -v ss >/dev/null 2>&1 && ss -ltn 2>/dev/null | awk '{print $4}' | gre
     ok "Listening on port ${APP_PORT}"
 else
     warn "Port ${APP_PORT} not detected yet - give it a few more seconds."
+fi
+
+# Database health check: /api/spots used to HANG when the db file/table was
+# broken, while the port and live websocket kept working - probe it directly.
+info "Verifying the database API (/api/spots) responds ..."
+api_ok=0
+for i in $(seq 1 6); do
+    if curl -fsS --max-time 8 "http://127.0.0.1:${APP_PORT}/api/spots?limit=1" >/dev/null 2>&1; then
+        api_ok=1
+        break
+    fi
+    sleep 3
+done
+if [[ ${api_ok} -eq 1 ]]; then
+    ok "Database API responding"
+else
+    warn "/api/spots did not respond - the database layer may be broken. Check: journalctl -u ${SERVICE_NAME} -f"
 fi
 
 echo
