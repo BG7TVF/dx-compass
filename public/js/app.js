@@ -48,9 +48,9 @@ function bandColorOf(band) {
 const I18N = {
     zh: {
         subtitle: '多呼号 Spot 监视器',
-        settings: 'Settings',
+        settings: '设置',
         startMon: '▶ 开始监控', stopMon: '■ 停止监控',
-        needCall: '请先在 Settings 中设置至少一个呼号',
+        needCall: '请先在设置中配置至少一个呼号',
         startRot: '🔁 开始轮询', stopRot: '⏸ 停止轮询',
         nextPage: '下一页', rotSecTitle: '轮询间隔（秒）',
         connected: '已连接', connecting: '连接中...', disconnected: '未连接',
@@ -67,7 +67,7 @@ const I18N = {
         langLabel: '语言 / Language', ttlTitle: '标记点存活时间（分钟）', bandTitle: '频段颜色',
         save: '保存',
         cfgHint: '呼号按顺序分配到地图窗口，空槽位在仪表盘上保持空白。<br>距离为被监听台与监听台之间计算得出。<br>Spot 自动获取：CW 来自 reversebeacon.net RBN（10 秒），其他模式来自 dxwatch.com（30 秒）——无需集群登录或连接设置。',
-        cellHint: '在 Settings 中设置呼号',
+        cellHint: '在设置中配置呼号',
         askClearMarks: '是否清空全部标记？\n\n确定 = 清空所有地图的标记、连线、频段框和热力图\n取消 = 保留当前显示（冻结）',
         askClearDb: '确定要清空数据库中的全部 Spot 记录吗？\n\n录制数据（recording_spots）会保留。\n此操作不可恢复！',
         danger: '清空', ok: '确定', cancel: '取消', confirmTitle: '确认',
