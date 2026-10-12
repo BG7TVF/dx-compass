@@ -9,6 +9,10 @@ const QRT_MS = 30 * 60 * 1000;        // no spot for 30 min -> QRT
 const HISTORY_LIMIT = 500;            // rows fetched per call after a page reload
 const MAX_CELLS = 9;
 
+/* Single-world bounds: tiles and panning are confined to one world map;
+ * the minimum zoom is computed so exactly one whole world is visible. */
+const WORLD_BOUNDS = [[-85.06, -180], [85.06, 180]];
+
 const state = {
     layout: '1x1',
     cells: [],          // array of {index, call, map, markers:[], count}
@@ -115,7 +119,9 @@ function setLayout(layout) {
     setTimeout(() => state.cells.forEach(c => {
         if (c.el.style.display !== 'none' && c.map) {
             c.map.invalidateSize();
-            fitToMarkers(c);   // re-fit to the new cell size
+            setWorldMinZoom(c.map);  // world-fit zoom depends on cell size
+            if (c.markers.length) fitToMarkers(c);   // re-fit to the new cell size
+            else c.map.fitBounds(WORLD_BOUNDS, {animate: false});
         }
     }), 50);
     // Highlight active layout button
@@ -153,16 +159,22 @@ function createCell(index) {
     const hint = el.querySelector('.cell-empty-hint');
     const info = el.querySelector('.cell-info');
 
+    // Single world: tiles never repeat, panning is clamped to +/-180 and
+    // zoomSnap 0 lets "fit whole world" land on an exact fractional zoom.
     const map = L.map(mapEl, {
         zoomControl: false,      // buttons removed; scroll-wheel zoom stays on
         scrollWheelZoom: true,
         attributionControl: true,
-        worldCopyJump: true
-    }).setView([20, 0], 2);
+        zoomSnap: 0,
+        maxBounds: [[-90, -180], [90, 180]],
+        maxBoundsViscosity: 1.0
+    });
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; OpenStreetMap',
-        maxZoom: 18
+        maxZoom: 18,
+        noWrap: true,
+        bounds: WORLD_BOUNDS
     }).addTo(map);
 
     addTerminator(map);
@@ -190,8 +202,7 @@ function createCell(index) {
 }
 
 /* Day/night gray line (terminator) + night shading, like the RBN map.
- * Drawn in 3 world copies so no seam is visible when a zoomed-out view
- * (width > 360 deg) shows areas beyond +/-180 longitude. */
+ * Single world copy: the map is confined to +/-180 longitude. */
 function addTerminator(map) {
     function compute() {
         const now = new Date();
@@ -222,8 +233,7 @@ function addTerminator(map) {
         if (map._termLayers) map._termLayers.forEach(l => map.removeLayer(l));
         const {base, nightPole} = compute();
         map._termLayers = [];
-        // One copy per world (-360 / 0 / +360 longitude shift)
-        for (const shift of [-360, 0, 360]) {
+        for (const shift of [0]) {
             const line = base.map(p => [p[0], p[1] + shift]);
             // Ordering must follow the curve, then close via the pole cap
             const shade = line.concat([
@@ -366,6 +376,15 @@ function clearCell(cell) {
     cell.seen.clear();
     cell.lastSpotAt = null;
     updateStale(cell);
+}
+
+/* Minimum zoom = the level that shows exactly one whole world map.
+ * Must be re-applied after every container resize (zoom depends on size). */
+function setWorldMinZoom(map) {
+    map.setMinZoom(map.getBoundsZoom(WORLD_BOUNDS));
+    if (map.getZoom() !== undefined && map.getZoom() < map.getMinZoom()) {
+        map.setZoom(map.getMinZoom());
+    }
 }
 
 /* Auto zoom: zoom in to the HIGHEST level that still shows every marker */
@@ -715,11 +734,9 @@ function handleSpot(spot) {
     const cell = state.cells.find(c => c.call && c.call.toUpperCase() === call);
     if (cell) {
         addMarkerToCell(cell, spot);
-        // If records panel is open for this call, refresh
-        if (!$('#recordsPanel').classList.contains('hidden')) {
-            const sel = $('#recordCallSelect');
-            if (sel.value === call || sel.value === '') refreshRecords();
-        }
+        // Records panel is docked and always visible: refresh it live
+        const sel = $('#recordCallSelect');
+        if (sel.value === call || sel.value === '') refreshRecords();
     }
 }
 
@@ -778,17 +795,6 @@ async function replayHistory() {
 }
 
 /* ---------- Records ---------- */
-function openRecords() {
-    $('#recordsPanel').classList.remove('hidden');
-    populateCallSelect();
-    refreshRecStatus(true);
-    refreshRecords();
-}
-
-function closeRecords() {
-    $('#recordsPanel').classList.add('hidden');
-}
-
 function populateCallSelect() {
     const sel = $('#recordCallSelect');
     const current = sel.value;
@@ -983,6 +989,7 @@ function loadConfig() {
     fetch('/api/callsigns').then(r => r.json()).then(calls => {
         if (Array.isArray(calls)) {
             applyCallsigns(calls);
+            populateCallSelect();
             // Fill the Config inputs
             const inputs = document.querySelectorAll('.cfg-call');
             inputs.forEach((inp, i) => { inp.value = calls[i] || ''; });
@@ -1005,6 +1012,7 @@ function saveConfig(e) {
         body: JSON.stringify(calls)
     }).then(r => r.json()).then(() => {
         applyCallsigns(calls);
+        populateCallSelect();
         updateMonitorBtn();
         if (state.monitoring) replayHistory(); // backfill newly added slots
         showToast('Configuration saved');
@@ -1026,7 +1034,6 @@ function init() {
         });
     });
 
-    $('#btnRecords').addEventListener('click', openRecords);
     $('#btnConfig').addEventListener('click', openConfig);
     $('#btnMonitor').addEventListener('click', () => setMonitoring(!state.monitoring));
 
@@ -1093,6 +1100,20 @@ function init() {
     // Load config + callsigns
     loadConfig();
 
+    // Docked records panel: initial data + recording status
+    refreshRecStatus(true);
+    refreshRecords();
+
+    // Keep the world-fit minimum zoom in sync with the window size
+    window.addEventListener('resize', () => {
+        visibleCells().forEach(c => {
+            if (c.map) {
+                c.map.invalidateSize();
+                setWorldMinZoom(c.map);
+            }
+        });
+    });
+
     // WebSocket
     connectWS();
 
@@ -1107,7 +1128,7 @@ function init() {
     setInterval(() => {
         refreshRecStatus();
         if (state.recStatus && state.recStatus.active &&
-            state.recView === 'rec' && !$('#recordsPanel').classList.contains('hidden')) {
+            state.recView === 'rec') {
             refreshRecords();
         }
     }, 15000);

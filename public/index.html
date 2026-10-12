@@ -41,7 +41,6 @@
 
         <div class="action-group">
             <button class="action-btn monitor-btn" id="btnMonitor" disabled>▶ 开始监控</button>
-            <button class="action-btn" id="btnRecords" title="View recorded spots">Records</button>
             <button class="action-btn" id="btnConfig" title="Settings">Config</button>
         </div>
     </div>
@@ -49,11 +48,10 @@
     <div class="main">
         <div id="grid" class="grid layout-1x1"></div>
 
-        <!-- Records Panel -->
-        <div id="recordsPanel" class="side-panel hidden">
+        <!-- Records Panel: docked on the right, always visible -->
+        <div id="recordsPanel" class="dock-panel">
             <div class="panel-header">
                 <span class="panel-title">Spot Records</span>
-                <button class="panel-close" data-close="recordsPanel">&times;</button>
             </div>
             <div class="panel-body">
                 <div class="panel-controls">

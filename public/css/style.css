@@ -341,6 +341,18 @@ html, body {
 @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
 .hidden { display: none !important; }
 
+/* Docked Records panel: permanently visible on the right of the maps,
+ * not an overlay menu. The grid takes the space it leaves. */
+.dock-panel {
+    width: 560px;
+    flex-shrink: 0;
+    background: var(--panel);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
 .panel-header {
     display: flex;
     align-items: center;
