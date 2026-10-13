@@ -110,7 +110,7 @@ sudo bash install.sh
 1. 校验系统与必要文件，检查 **5758** 端口是否被占用
 2. 安装系统编译工具（SQLite 原生模块需要 `build-essential`）
 3. 检测 / 安装 Node.js（已有 ≥18 直接使用，否则通过 NodeSource 安装 20 LTS）
-4. 在项目目录内本地安装 npm 依赖（默认源失败自动切换国内 npmmirror 镜像）
+4. 在项目目录内本地安装 npm 依赖（默认源失败自动切换国内 npmmirror 镜像，含 node-gyp 头文件与 sqlite3 预编译二进制镜像，并校验原生模块可加载）
 5. 预初始化 SQLite 数据库结构（spots / recording_spots 建表兜底）
 6. 注册并启动 systemd 服务 `dx-compass`（开机自启）
 7. 等待端口就绪、校验数据库 API 可用，并输出访问地址

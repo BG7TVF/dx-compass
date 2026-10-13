@@ -203,9 +203,29 @@ info "Installing npm dependencies locally (this can take a few minutes)..."
 NPM_ARGS=(install --omit=dev --no-audit --no-fund)
 if ! run_as_user npm "${NPM_ARGS[@]}" ; then
     warn "Default npm registry failed, retrying with mirror ${NPM_MIRROR} ..."
-    run_as_user npm "${NPM_ARGS[@]}" --registry="${NPM_MIRROR}"
+    # The npmmirror registry only mirrors npm packages. Native module
+    # downloads need their own mirrors or the sqlite3 build keeps failing
+    # on slow international links:
+    #   - node-gyp header tarball  -> dist-url (npmmirror node mirror)
+    #   - prebuilt native binaries -> <pkg>_binary_host_mirror
+    # Newer Node versions are unknown to sqlite3's bundled prebuild-install
+    # ("N-API version undefined"), so the source build with mirrored headers
+    # is the path that actually has to work.
+    run_as_user env \
+        npm_config_dist_url="https://npmmirror.com/mirrors/node" \
+        npm_config_disturl="https://npmmirror.com/mirrors/node" \
+        npm_config_sqlite3_binary_host_mirror="https://npmmirror.com/mirrors/sqlite3/" \
+        npm_config_fetch_retries=5 \
+        npm_config_fetch_retry_maxtimeout=120000 \
+        npm "${NPM_ARGS[@]}" --registry="${NPM_MIRROR}"
 fi
 [[ -f "${RED_JS}" ]] || die "node-red binary not found after npm install (${RED_JS})."
+
+# The sqlite3 native module is the only compile-at-install dependency and the
+# historical failure point - make sure it really loads before continuing.
+info "Verifying the sqlite3 native module loads ..."
+run_as_user "${NODE_BIN}" -e "require('sqlite3');" \
+    || die "sqlite3 native module failed to load. Check that python3/make/g++ are installed and review the npm output above."
 ok "npm dependencies installed"
 
 # --------------------------------------------------------------------------- #
