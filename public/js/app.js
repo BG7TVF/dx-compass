@@ -19,13 +19,32 @@ const LANG_NAMES = {
     ko: '한국어', ja: '日本語'
 };
 
+/* Base map tile providers. 'amap' (AutoNavi/高德) stays reachable from
+ * mainland China where tile.openstreetmap.org is blocked. Note: AMap raster
+ * tiles use the GCJ-02 datum, so WGS-84 spot coordinates can shift by up to
+ * a few hundred meters - invisible at this app's zoom range (auto-fit caps
+ * at zoom 7, where one pixel is ~1.2 km). */
+const TILE_PROVIDERS = {
+    osm: {
+        name: 'OpenStreetMap',
+        url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+        options: { attribution: '&copy; OpenStreetMap', maxZoom: 18 }
+    },
+    amap: {
+        name: '高德地图 (AMap)',
+        url: 'https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
+        options: { attribution: '&copy; AutoNavi 高德地图', maxZoom: 18, subdomains: ['1', '2', '3', '4'] }
+    }
+};
+
 const settings = loadSettings();
 
 function loadSettings() {
-    const d = { lang: 'zh', ttl: {...DEFAULT_TTL_MIN}, bandColors: {...DEFAULT_BAND_COLORS} };
+    const d = { lang: 'zh', tiles: 'osm', ttl: {...DEFAULT_TTL_MIN}, bandColors: {...DEFAULT_BAND_COLORS} };
     try {
         const raw = JSON.parse(localStorage.getItem('dxcompass-settings') || '{}');
         if (LANGS.includes(raw.lang)) d.lang = raw.lang;
+        if (TILE_PROVIDERS[raw.tiles]) d.tiles = raw.tiles;
         for (const m of Object.keys(d.ttl)) {
             const v = parseInt(raw.ttl && raw.ttl[m], 10);
             if (v >= 1 && v <= 180) d.ttl[m] = v;
@@ -52,6 +71,25 @@ function bandColorOf(band) {
     return settings.bandColors[band] || '#00e5ff';
 }
 
+/* Base map tiles are built per map so the provider can be swapped live.
+ * noWrap + WORLD_BOUNDS keep the single-world convention on every provider. */
+function makeTileLayer() {
+    const p = TILE_PROVIDERS[settings.tiles] || TILE_PROVIDERS.osm;
+    return L.tileLayer(p.url, { ...p.options, noWrap: true, bounds: WORLD_BOUNDS });
+}
+/* Swap the base map on every cell. Markers/links/heat/terminator live in
+ * separate panes and view/minZoom/maxBounds are map options, so all map
+ * display conventions survive the switch untouched. */
+function setTileProvider(key) {
+    if (!TILE_PROVIDERS[key] || settings.tiles === key) return;
+    settings.tiles = key;
+    saveSettings();
+    cells.forEach(c => {
+        if (c.tile) c.map.removeLayer(c.tile);
+        c.tile = makeTileLayer().addTo(c.map);
+    });
+}
+
 /* ---------- i18n ---------- */
 const I18N = {
     zh: {
@@ -72,7 +110,7 @@ const I18N = {
         recManual: '录制中（手动）', recSched: '录制中（定时）',
         scheduled: '已设定时', since: '始于',
         cfgSection: '监听呼号', globalSection: '全局设置',
-        langLabel: '语言 / Language', ttlTitle: '标记点存活时间（分钟）', bandTitle: '频段颜色',
+        langLabel: '语言 / Language', mapTiles: '地图源', ttlTitle: '标记点存活时间（分钟）', bandTitle: '频段颜色',
         save: '保存',
         cfgHint: '呼号按顺序分配到地图窗口，空槽位在仪表盘上保持空白。<br>距离为被监听台与监听台之间计算得出。<br>Spot 自动获取：CW 来自 reversebeacon.net RBN（10 秒），其他模式来自 dxwatch.com（30 秒）——无需集群登录或连接设置。',
         cellHint: '在设置中配置呼号',
@@ -111,7 +149,7 @@ const I18N = {
         recManual: 'Recording (manual)', recSched: 'Recording (scheduled)',
         scheduled: 'Scheduled', since: 'since',
         cfgSection: 'Monitored Callsigns', globalSection: 'Global Settings',
-        langLabel: 'Language / 语言', ttlTitle: 'Marker lifetime (minutes)', bandTitle: 'Band colors',
+        langLabel: 'Language / 语言', mapTiles: 'Base map', ttlTitle: 'Marker lifetime (minutes)', bandTitle: 'Band colors',
         save: 'Save',
         cfgHint: 'Callsigns are assigned to map slots in order. Empty slots stay blank on the dashboard.<br>Distance is computed between the monitored station and the spotting station.<br>Spots are provided automatically: CW by reversebeacon.net RBN (10s), other modes by dxwatch.com (30s) - no cluster login or connection setup is needed.',
         cellHint: 'Set callsigns in Settings',
@@ -150,7 +188,7 @@ const I18N = {
         recManual: 'Aufnahme (manuell)', recSched: 'Aufnahme (geplant)',
         scheduled: 'Geplant', since: 'seit',
         cfgSection: 'Überwachte Rufzeichen', globalSection: 'Globale Einstellungen',
-        langLabel: 'Sprache / Language', ttlTitle: 'Marker-Lebensdauer (Minuten)', bandTitle: 'Bandfarben',
+        langLabel: 'Sprache / Language', mapTiles: 'Basiskarte', ttlTitle: 'Marker-Lebensdauer (Minuten)', bandTitle: 'Bandfarben',
         save: 'Speichern',
         cfgHint: 'Rufzeichen werden der Reihe nach den Kartenfenstern zugewiesen. Leere Plätze bleiben im Dashboard frei.<br>Die Entfernung wird zwischen überwachter und spotender Station berechnet.<br>Spots werden automatisch geliefert: CW von reversebeacon.net RBN (10 s), andere Modi von dxwatch.com (30 s) - kein Cluster-Login nötig.',
         cellHint: 'Rufzeichen in den Einstellungen setzen',
@@ -189,7 +227,7 @@ const I18N = {
         recManual: 'Enregistrement (manuel)', recSched: 'Enregistrement (planifié)',
         scheduled: 'Planifié', since: 'depuis',
         cfgSection: 'Indicatifs surveillés', globalSection: 'Paramètres généraux',
-        langLabel: 'Langue / Language', ttlTitle: 'Durée de vie des marqueurs (minutes)', bandTitle: 'Couleurs des bandes',
+        langLabel: 'Langue / Language', mapTiles: 'Fond de carte', ttlTitle: 'Durée de vie des marqueurs (minutes)', bandTitle: 'Couleurs des bandes',
         save: 'Enregistrer',
         cfgHint: "Les indicatifs sont attribués aux fenêtres de carte dans l'ordre. Les emplacements vides restent vides sur le tableau de bord.<br>La distance est calculée entre la station surveillée et la station spotteuse.<br>Les spots sont fournis automatiquement : CW via reversebeacon.net RBN (10 s), autres modes via dxwatch.com (30 s) - aucune connexion à un cluster n'est nécessaire.",
         cellHint: 'Définir les indicatifs dans les paramètres',
@@ -228,7 +266,7 @@ const I18N = {
         recManual: 'Grabando (manual)', recSched: 'Grabando (programada)',
         scheduled: 'Programada', since: 'desde',
         cfgSection: 'Indicativos monitorizados', globalSection: 'Ajustes generales',
-        langLabel: 'Idioma / Language', ttlTitle: 'Vida útil de los marcadores (minutos)', bandTitle: 'Colores de banda',
+        langLabel: 'Idioma / Language', mapTiles: 'Mapa base', ttlTitle: 'Vida útil de los marcadores (minutos)', bandTitle: 'Colores de banda',
         save: 'Guardar',
         cfgHint: 'Los indicativos se asignan a las ventanas de mapa en orden. Los espacios vacíos quedan en blanco en el panel.<br>La distancia se calcula entre la estación monitorizada y la estación spottera.<br>Los spots se obtienen automáticamente: CW por reversebeacon.net RBN (10 s), otros modos por dxwatch.com (30 s), sin necesidad de conexión a clúster.',
         cellHint: 'Configure los indicativos en Ajustes',
@@ -267,7 +305,7 @@ const I18N = {
         recManual: 'A gravar (manual)', recSched: 'A gravar (agendada)',
         scheduled: 'Agendada', since: 'desde',
         cfgSection: 'Indicativos monitorizados', globalSection: 'Configurações gerais',
-        langLabel: 'Idioma / Language', ttlTitle: 'Vida útil dos marcadores (minutos)', bandTitle: 'Cores das bandas',
+        langLabel: 'Idioma / Language', mapTiles: 'Mapa base', ttlTitle: 'Vida útil dos marcadores (minutos)', bandTitle: 'Cores das bandas',
         save: 'Guardar',
         cfgHint: 'Os indicativos são atribuídos às janelas de mapa por ordem. Espaços vazios ficam em branco no painel.<br>A distância é calculada entre a estação monitorizada e a estação spotter.<br>Os spots são fornecidos automaticamente: CW pelo reversebeacon.net RBN (10 s), outros modos pelo dxwatch.com (30 s) - sem necessidade de ligação a cluster.',
         cellHint: 'Defina os indicativos nas Configurações',
@@ -306,7 +344,7 @@ const I18N = {
         recManual: 'Запись (вручную)', recSched: 'Запись (по расписанию)',
         scheduled: 'По расписанию', since: 'с',
         cfgSection: 'Отслеживаемые позывные', globalSection: 'Общие настройки',
-        langLabel: 'Язык / Language', ttlTitle: 'Время жизни маркеров (минуты)', bandTitle: 'Цвета диапазонов',
+        langLabel: 'Язык / Language', mapTiles: 'Базовая карта', ttlTitle: 'Время жизни маркеров (минуты)', bandTitle: 'Цвета диапазонов',
         save: 'Сохранить',
         cfgHint: 'Позывные назначаются окнам карт по порядку. Пустые слоты остаются пустыми на панели.<br>Расстояние вычисляется между отслеживаемой и наблюдающей станциями.<br>Споты поступают автоматически: CW с reversebeacon.net RBN (10 с), другие моды с dxwatch.com (30 с) — подключение к кластеру не требуется.',
         cellHint: 'Задайте позывные в Настройках',
@@ -345,7 +383,7 @@ const I18N = {
         recManual: 'Registrazione (manuale)', recSched: 'Registrazione (programmata)',
         scheduled: 'Programmata', since: 'da',
         cfgSection: 'Nominativi monitorati', globalSection: 'Impostazioni generali',
-        langLabel: 'Lingua / Language', ttlTitle: 'Durata dei marker (minuti)', bandTitle: 'Colori delle bande',
+        langLabel: 'Lingua / Language', mapTiles: 'Mappa base', ttlTitle: 'Durata dei marker (minuti)', bandTitle: 'Colori delle bande',
         save: 'Salva',
         cfgHint: 'I nominativi sono assegnati alle finestre mappa in ordine. Gli slot vuoti restano vuoti nella dashboard.<br>La distanza è calcolata tra la stazione monitorata e quella spotter.<br>Gli spot sono forniti automaticamente: CW da reversebeacon.net RBN (10 s), altri modi da dxwatch.com (30 s) - nessuna connessione a cluster necessaria.',
         cellHint: 'Imposta i nominativi nelle Impostazioni',
@@ -384,7 +422,7 @@ const I18N = {
         recManual: 'جارٍ التسجيل (يدوي)', recSched: 'جارٍ التسجيل (مجدول)',
         scheduled: 'مجدول', since: 'منذ',
         cfgSection: 'النداءات المراقَبة', globalSection: 'الإعدادات العامة',
-        langLabel: 'اللغة / Language', ttlTitle: 'مدة بقاء العلامات (دقائق)', bandTitle: 'ألوان النطاقات',
+        langLabel: 'اللغة / Language', mapTiles: 'خريطة الأساس', ttlTitle: 'مدة بقاء العلامات (دقائق)', bandTitle: 'ألوان النطاقات',
         save: 'حفظ',
         cfgHint: 'تُسند النداءات إلى نوافذ الخريطة بالترتيب، وتبقى الفتحات الفارغة خالية في اللوحة.<br>تُحسب المسافة بين المحطة المراقَبة ومحطة الرصد.<br>تُجلب السبوتات تلقائياً: CW من reversebeacon.net RBN (كل 10 ثوانٍ)، والأنماط الأخرى من dxwatch.com (كل 30 ثانية) - لا حاجة لتسجيل الدخول إلى أي كلاستر.',
         cellHint: 'حدد النداءات في الإعدادات',
@@ -423,7 +461,7 @@ const I18N = {
         recManual: '녹화 중 (수동)', recSched: '녹화 중 (예약)',
         scheduled: '예약됨', since: '시작',
         cfgSection: '모니터링 콜사인', globalSection: '전역 설정',
-        langLabel: '언어 / Language', ttlTitle: '마커 유지 시간 (분)', bandTitle: '밴드 색상',
+        langLabel: '언어 / Language', mapTiles: '기본 지도', ttlTitle: '마커 유지 시간 (분)', bandTitle: '밴드 색상',
         save: '저장',
         cfgHint: '콜사인은 순서대로 지도 슬롯에 배정됩니다. 빈 슬롯은 대시보드에서 비워 둡니다.<br>거리는 모니터링 국과 스포팅 국 사이로 계산됩니다.<br>스폿은 자동으로 제공됩니다: CW는 reversebeacon.net RBN (10초), 다른 모드는 dxwatch.com (30초) - 클러스터 로그인이 필요 없습니다.',
         cellHint: '설정에서 콜사인을 입력하세요',
@@ -462,7 +500,7 @@ const I18N = {
         recManual: '録画中 (手動)', recSched: '録画中 (予約)',
         scheduled: '予約済み', since: '開始',
         cfgSection: '監視コールサイン', globalSection: 'グローバル設定',
-        langLabel: '言語 / Language', ttlTitle: 'マーカー生存時間 (分)', bandTitle: 'バンドカラー',
+        langLabel: '言語 / Language', mapTiles: 'ベースマップ', ttlTitle: 'マーカー生存時間 (分)', bandTitle: 'バンドカラー',
         save: '保存',
         cfgHint: 'コールサインは順番にマップ枠へ割り当てられます。空き枠はダッシュボードで空白のままです。<br>距離は監視局とスポッター局の間で計算されます。<br>スポットは自動取得されます: CWはreversebeacon.net RBN (10秒)、その他のモードはdxwatch.com (30秒) - クラスターへのログインは不要です。',
         cellHint: '設定でコールサインを入力してください',
@@ -686,12 +724,8 @@ function createCell(index) {
         maxBoundsViscosity: 1.0
     });
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; OpenStreetMap',
-        maxZoom: 18,
-        noWrap: true,
-        bounds: WORLD_BOUNDS
-    }).addTo(map);
+    const tile = makeTileLayer();
+    tile.addTo(map);
 
     addTerminator(map);
 
@@ -703,6 +737,7 @@ function createCell(index) {
         bandPinned: false, // user clicked a chip: keep its band selected
         seen: new Set(), // dedup keys (live WS vs replayed history)
         lastSpotAt: null,
+        tile,
         el, callLabel, countEl, clearBtn, hint, info,
         stale: el.querySelector('.stale-overlay')
     };
@@ -1583,6 +1618,7 @@ function applyLang() {
     $('#cfgSectionTitle').textContent = t('cfgSection');
     $('#globalSectionTitle').textContent = t('globalSection');
     $('#langLabel').textContent = t('langLabel');
+    $('#tilesLabel').textContent = t('mapTiles');
     $('#ttlTitle').textContent = t('ttlTitle');
     $('#bandTitle').textContent = t('bandTitle');
     $('#btnSaveCfg').textContent = t('save');
@@ -1761,6 +1797,12 @@ function init() {
         saveSettings();
         applyLang();
     });
+    // Base map provider (options built from TILE_PROVIDERS, like the language selector)
+    const tilesSel = $('#setTiles');
+    tilesSel.innerHTML = Object.keys(TILE_PROVIDERS).map(k =>
+        `<option value="${k}">${TILE_PROVIDERS[k].name}</option>`).join('');
+    tilesSel.value = settings.tiles;
+    tilesSel.addEventListener('change', () => setTileProvider(tilesSel.value));
     [['ttlCw', 'CW'], ['ttlSsb', 'SSB'], ['ttlDigi', 'DIGI']].forEach(([id, mode]) => {
         const inp = $('#' + id);
         inp.value = settings.ttl[mode];
