@@ -527,8 +527,6 @@ function t(key) {
     return v !== undefined ? v : (I18N.en[key] !== undefined ? I18N.en[key] : key);
 }
 
-const NO_RUNING_MS = 10 * 60 * 1000;  // no spot for 10 min -> NO RUNING
-const QRT_MS = 30 * 60 * 1000;        // no spot for 30 min -> QRT
 const HISTORY_LIMIT = 500;            // rows fetched per call after a page reload
 const MAX_CELLS = 9;
 
@@ -703,7 +701,6 @@ function createCell(index) {
         </div>
         <div class="cell-info"></div>
         <div class="map"></div>
-        <div class="stale-overlay">NO RUNING</div>
         <div class="cell-empty-hint"><span class="hint-icon">📡</span>${t('cellHint')}</div>
     `;
     const mapEl = el.querySelector('.map');
@@ -736,10 +733,8 @@ function createCell(index) {
         activeBand: null,// band whose heat layer is visible
         bandPinned: false, // user clicked a chip: keep its band selected
         seen: new Set(), // dedup keys (live WS vs replayed history)
-        lastSpotAt: null,
         tile,
-        el, callLabel, countEl, clearBtn, hint, info,
-        stale: el.querySelector('.stale-overlay')
+        el, callLabel, countEl, clearBtn, hint, info
     };
 
     clearBtn.addEventListener('click', () => clearCell(cell));
@@ -834,8 +829,6 @@ function setCellCall(cell, call) {
     cell.call = call;
     cell.callLabel.textContent = call || '\u2014';
     cell.hint.style.display = call ? 'none' : '';
-    cell.lastSpotAt = null;
-    updateStale(cell);
     // Reset to the shared whole-world view so the previous call's
     // manual zoom/pan never lingers on this cell.
     fitWorld(cell.map);
@@ -924,10 +917,8 @@ function clearCell(cell) {
     cell.activeBand = null;
     cell.bandPinned = false;
     cell.seen.clear();
-    cell.lastSpotAt = null;
     clearTimeout(cell._fitTimer);
     if (cell.map) fitWorld(cell.map);  // back to the world-cover view
-    updateStale(cell);
 }
 
 /* Minimum zoom = the level at which the world map COVERS the whole cell
@@ -982,23 +973,6 @@ function fitCellView(cell) {
 function scheduleFit(cell) {
     clearTimeout(cell._fitTimer);
     cell._fitTimer = setTimeout(() => fitCellView(cell), 150);
-}
-
-/* Status overlay: 10 min without a spot -> NO RUNING; 30 min -> QRT */
-function updateStale(cell) {
-    let status = null;
-    if (cell.call && cell.lastSpotAt) {
-        const age = Date.now() - cell.lastSpotAt;
-        if (age >= QRT_MS) status = 'QRT';
-        else if (age >= NO_RUNING_MS) status = 'NO RUNING';
-    }
-    if (!status) {
-        cell.stale.classList.remove('show', 'qrt');
-    } else {
-        cell.stale.textContent = status;
-        cell.stale.classList.toggle('qrt', status === 'QRT');
-        cell.stale.classList.add('show');
-    }
 }
 
 /* ---------- Heat maps (CW / DIGI only, weighted by SNR) ---------- */
@@ -1242,12 +1216,9 @@ function addMarkerToCell(cell, spot, ttlMs) {
     cell.count++;
     cell.countEl.textContent = cell.count;
     cell.countEl.classList.add('has-spots');
-    // For replayed spots ttlMs < full TTL; effective time keeps NO RUNING
-    // timing and chip expiry aligned to the spot's real timestamp.
+    // For replayed spots ttlMs < full TTL; effective time keeps chip
+    // expiry aligned to the spot's real timestamp.
     const effectiveNow = Date.now() - (fullTtl - ttlMs);
-    const spotTs = new Date(spot.timestamp).getTime();
-    cell.lastSpotAt = Math.max(cell.lastSpotAt || 0, isNaN(spotTs) ? effectiveNow : spotTs);
-    updateStale(cell);
 
     // Info bar: one chip per band with the same TTL as markers
     cell.bandInfo[spot.band || '?'] = {spot, addedAt: effectiveNow};
@@ -1887,8 +1858,7 @@ function init() {
         });
     }, 10000);
 
-    // Every 30s: refresh chip ages, expire chips together with markers,
-    // and update the NO RUNING / QRT status overlays.
+    // Every 30s: expire chips together with their markers.
     setInterval(() => state.cells.forEach(c => {
         const now = Date.now();
         let pruned = false;
@@ -1901,7 +1871,6 @@ function init() {
         if (Object.keys(c.bandInfo).length) renderCellInfo(c);
         else if (pruned) c.info.innerHTML = '';
         if (pruned) refreshActiveBand(c);
-        updateStale(c);
     }), 30000);
 }
 
