@@ -51,7 +51,8 @@
         "wires": [
             [
                 "dxc0000000000025",
-                "dxc0000000000070"
+                "dxc0000000000070",
+                "dxc00000000000b2"
             ]
         ]
     },
@@ -1301,5 +1302,534 @@
                 "dxc0000000000017"
             ]
         ]
+    },
+    {
+        "id": "dxc0000000000090",
+        "type": "tab",
+        "label": "N1MM Station",
+        "disabled": false,
+        "info": "Local station integration: N1MM+ UDP broadcasts (RadioInfo 12060, Contacts 12061, Score 12062) -> qsos table + /ws push + /api/qsos + /api/station/state.",
+        "env": []
+    },
+    {
+        "id": "dxc00000000000b2",
+        "type": "function",
+        "z": "dxc0000000000090",
+        "name": "Create qsos table",
+        "func": "msg.topic = \"CREATE TABLE IF NOT EXISTS qsos(\\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\\n  n1mm_id TEXT UNIQUE,\\n  timestamp TEXT,\\n  mycall TEXT,\\n  operator TEXT,\\n  call TEXT,\\n  band TEXT,\\n  freq_khz REAL,\\n  mode TEXT,\\n  rst_snt TEXT,\\n  rst_rcv TEXT,\\n  exchange TEXT,\\n  gridsquare TEXT,\\n  countryprefix TEXT,\\n  continent TEXT,\\n  zone TEXT,\\n  points INTEGER,\\n  is_mult INTEGER,\\n  contestname TEXT,\\n  radionr TEXT,\\n  stationname TEXT,\\n  lat REAL,\\n  lon REAL\\n);\";\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 170,
+        "y": 60,
+        "wires": [
+            [
+                "dxc0000000000065"
+            ]
+        ]
+    },
+    {
+        "id": "dxc0000000000091",
+        "type": "udp in",
+        "z": "dxc0000000000090",
+        "name": "N1MM RadioInfo",
+        "iface": "",
+        "port": "12060",
+        "ipv": "udp4",
+        "multicast": "false",
+        "group": "",
+        "datatype": "buffer",
+        "x": 150,
+        "y": 140,
+        "wires": [
+            [
+                "dxc0000000000092"
+            ]
+        ]
+    },
+    {
+        "id": "dxc0000000000092",
+        "type": "function",
+        "z": "dxc0000000000090",
+        "name": "UTF8",
+        "func": "msg.payload = msg.payload.toString('utf8');\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 330,
+        "y": 140,
+        "wires": [
+            [
+                "dxc0000000000093"
+            ]
+        ]
+    },
+    {
+        "id": "dxc0000000000093",
+        "type": "xml",
+        "z": "dxc0000000000090",
+        "name": "",
+        "attr": "$",
+        "chr": "_",
+        "x": 470,
+        "y": 140,
+        "wires": [
+            [
+                "dxc0000000000094"
+            ]
+        ]
+    },
+    {
+        "id": "dxc0000000000094",
+        "type": "switch",
+        "z": "dxc0000000000090",
+        "name": "RadioInfo?",
+        "property": "payload.RadioInfo",
+        "propertyType": "msg",
+        "rules": [
+            {
+                "t": "nnull"
+            }
+        ],
+        "checkall": "true",
+        "repair": false,
+        "outputs": 1,
+        "x": 610,
+        "y": 140,
+        "wires": [
+            [
+                "dxc0000000000095"
+            ]
+        ]
+    },
+    {
+        "id": "dxc0000000000095",
+        "type": "function",
+        "z": "dxc0000000000090",
+        "name": "Parse RadioInfo",
+        "func": "// N1MM RadioInfo broadcast: current radio frequency / mode / TX state.\n// N1MM freq unit is 10 Hz (1407400 = 14074.00 kHz).\nconst ri = msg.payload.RadioInfo;\nif (!ri) return null;\nconst g = (k) => {\n    const v = ri[k];\n    if (v === undefined || v === null) return '';\n    return String(Array.isArray(v) ? v[0] : v);\n};\nconst n10 = (s) => {\n    const n = parseFloat(s);\n    return isNaN(n) ? null : n / 100;\n};\nconst radio = {\n    type: 'radio',\n    ts: new Date().toISOString(),\n    radioNr: g('RadioNr'),\n    freqKhz: n10(g('Freq')),\n    txFreqKhz: n10(g('TXFreq')),\n    mode: g('Mode'),\n    opCall: g('OpCall'),\n    isRunning: g('IsRunning') === 'True',\n    isTransmitting: g('IsTransmitting') === 'True',\n    isSplit: g('IsSplit') === 'True',\n    activeRadioNr: g('ActiveRadioNr'),\n    radioName: g('RadioName'),\n    stationName: g('StationName')\n};\nflow.set('radioState', radio);\nmsg.payload = radio;\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 800,
+        "y": 140,
+        "wires": [
+            [
+                "dxc000000000000e"
+            ]
+        ]
+    },
+    {
+        "id": "dxc0000000000096",
+        "type": "udp in",
+        "z": "dxc0000000000090",
+        "name": "N1MM Contacts",
+        "iface": "",
+        "port": "12061",
+        "ipv": "udp4",
+        "multicast": "false",
+        "group": "",
+        "datatype": "buffer",
+        "x": 150,
+        "y": 280,
+        "wires": [
+            [
+                "dxc0000000000097"
+            ]
+        ]
+    },
+    {
+        "id": "dxc0000000000097",
+        "type": "function",
+        "z": "dxc0000000000090",
+        "name": "UTF8",
+        "func": "msg.payload = msg.payload.toString('utf8');\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 330,
+        "y": 280,
+        "wires": [
+            [
+                "dxc0000000000098"
+            ]
+        ]
+    },
+    {
+        "id": "dxc0000000000098",
+        "type": "xml",
+        "z": "dxc0000000000090",
+        "name": "",
+        "attr": "$",
+        "chr": "_",
+        "x": 470,
+        "y": 280,
+        "wires": [
+            [
+                "dxc0000000000099"
+            ]
+        ]
+    },
+    {
+        "id": "dxc0000000000099",
+        "type": "function",
+        "z": "dxc0000000000090",
+        "name": "Route contact msg",
+        "func": "// contactinfo = new QSO, contactreplace = edited QSO, contactdelete = removed QSO\nconst p = msg.payload || {};\nif (p.contactinfo) return [msg, null, null];\nif (p.contactreplace) return [null, msg, null];\nif (p.contactdelete) return [null, null, msg];\nreturn null;",
+        "outputs": 3,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 640,
+        "y": 280,
+        "wires": [
+            [
+                "dxc00000000000a0"
+            ],
+            [
+                "dxc00000000000a0"
+            ],
+            [
+                "dxc00000000000a2"
+            ]
+        ]
+    },
+    {
+        "id": "dxc00000000000a0",
+        "type": "function",
+        "z": "dxc0000000000090",
+        "name": "Parse QSO",
+        "func": "// Normalize an N1MM contactinfo/contactreplace into the qsos record shape.\nconst ci = msg.payload.contactinfo || msg.payload.contactreplace;\nif (!ci) return null;\nconst g = (k) => {\n    const v = ci[k];\n    if (v === undefined || v === null) return '';\n    return String(Array.isArray(v) ? v[0] : v);\n};\n// Maidenhead 4/6-char locator -> grid center lat/lon\nfunction gridToLatLon(gr) {\n    gr = gr.trim().toUpperCase();\n    if (!/^[A-R]{2}[0-9]{2}([A-X]{2})?$/.test(gr)) return null;\n    let lon = (gr.charCodeAt(0) - 65) * 20 - 180 + 10;\n    let lat = (gr.charCodeAt(1) - 65) * 10 - 90 + 5;\n    lon += parseInt(gr[2], 10) * 2 + 1;\n    lat += parseInt(gr[3], 10);\n    if (gr.length >= 6) {\n        lon += (gr.charCodeAt(4) - 65) * (5 / 60) + (2.5 / 60);\n        lat += (gr.charCodeAt(5) - 65) * (2.5 / 60) + (1.25 / 60);\n    }\n    return { lat: lat, lon: lon };\n}\nconst n10 = (s) => {\n    const n = parseFloat(s);\n    return isNaN(n) ? null : n / 100;\n};\nconst grid = g('gridsquare');\nconst ll = grid ? gridToLatLon(grid) : null;\nconst m = (parseInt(g('ismultiplier1'), 10) || 0) + (parseInt(g('ismultiplier2'), 10) || 0) + (parseInt(g('ismultiplier3'), 10) || 0);\nconst rawTs = g('timestamp');\nconst d = new Date(rawTs.replace(' ', 'T') + 'Z');\nconst qso = {\n    type: 'qso',\n    n1mmId: g('ID'),\n    ts: isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString(),\n    mycall: g('mycall'),\n    operator: g('operator'),\n    call: g('call').toUpperCase(),\n    band: g('band'),\n    freqKhz: n10(g('rxfreq')),\n    mode: g('mode'),\n    rstSnt: g('snt'),\n    rstRcv: g('rcv'),\n    exchange: g('exchange1') || g('section') || g('zone') || g('rcvnr'),\n    grid: grid,\n    country: g('countryprefix'),\n    continent: g('continent'),\n    zone: g('zone'),\n    points: parseInt(g('points'), 10) || 0,\n    isMult: m > 0,\n    contest: g('contestname'),\n    radioNr: g('radionr'),\n    stationName: g('StationName'),\n    lat: ll ? ll.lat : null,\n    lon: ll ? ll.lon : null\n};\nif (!qso.call) return null;\nmsg.qso = qso;\nconst esc = (v) => v === null || v === undefined ? 'NULL' : (\"'\" + String(v).replace(/'/g, \"''\") + \"'\");\nconst num = (v) => v === null || v === undefined || isNaN(v) ? 'NULL' : v;\nmsg.topic = 'INSERT OR REPLACE INTO qsos (n1mm_id, timestamp, mycall, operator, call, band, freq_khz, mode, rst_snt, rst_rcv, exchange, gridsquare, countryprefix, continent, zone, points, is_mult, contestname, radionr, stationname, lat, lon) VALUES (' +\n    esc(qso.n1mmId) + ', ' + esc(qso.ts) + ', ' + esc(qso.mycall) + ', ' + esc(qso.operator) + ', ' + esc(qso.call) + ', ' + esc(qso.band) + ', ' + num(qso.freqKhz) + ', ' + esc(qso.mode) + ', ' + esc(qso.rstSnt) + ', ' + esc(qso.rstRcv) + ', ' + esc(qso.exchange) + ', ' + esc(qso.grid) + ', ' + esc(qso.country) + ', ' + esc(qso.continent) + ', ' + esc(qso.zone) + ', ' + num(qso.points) + ', ' + (qso.isMult ? 1 : 0) + ', ' + esc(qso.contest) + ', ' + esc(qso.radioNr) + ', ' + esc(qso.stationName) + ', ' + num(qso.lat) + ', ' + num(qso.lon) + ');';\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 830,
+        "y": 280,
+        "wires": [
+            [
+                "dxc00000000000a1"
+            ]
+        ]
+    },
+    {
+        "id": "dxc00000000000a1",
+        "type": "sqlite",
+        "z": "dxc0000000000090",
+        "mydb": "dxc0000000000027",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "Write QSO",
+        "x": 1010,
+        "y": 280,
+        "wires": [
+            [
+                "dxc00000000000a3"
+            ]
+        ]
+    },
+    {
+        "id": "dxc00000000000a3",
+        "type": "function",
+        "z": "dxc0000000000090",
+        "name": "Lookup QSO coords",
+        "func": "// After the insert: QSOs without a grid-derived location fall back to the\n// spots table (DX station coords collected from RBN / PSKReporter).\nconst q = msg.qso;\nif (!q) return null;\nif (q.type === 'qsoDelete') {\n    msg.payload = q;\n    return [null, msg];\n}\nif (q.lat !== null && q.lat !== undefined) {\n    msg.payload = q;\n    return [null, msg];\n}\nconst c = String(q.call).replace(/'/g, \"''\");\nmsg.topic = \"SELECT dx_lat, dx_lon FROM spots WHERE spot_call = '\" + c + \"' AND dx_lat IS NOT NULL ORDER BY id DESC LIMIT 1;\";\nreturn [msg, null];",
+        "outputs": 2,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1190,
+        "y": 280,
+        "wires": [
+            [
+                "dxc00000000000a4"
+            ],
+            [
+                "dxc00000000000a5"
+            ]
+        ]
+    },
+    {
+        "id": "dxc00000000000a4",
+        "type": "sqlite",
+        "z": "dxc0000000000090",
+        "mydb": "dxc0000000000027",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "QSO coord lookup",
+        "x": 1380,
+        "y": 280,
+        "wires": [
+            [
+                "dxc00000000000a5"
+            ]
+        ]
+    },
+    {
+        "id": "dxc00000000000a5",
+        "type": "function",
+        "z": "dxc0000000000090",
+        "name": "Broadcast QSO",
+        "func": "const q = msg.qso;\nif (!q) return null;\nconst rows = Array.isArray(msg.payload) ? msg.payload : [];\nif (rows.length && rows[0].dx_lat !== null && rows[0].dx_lat !== undefined) {\n    q.lat = rows[0].dx_lat;\n    q.lon = rows[0].dx_lon;\n}\nmsg.payload = q;\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1580,
+        "y": 280,
+        "wires": [
+            [
+                "dxc000000000000e"
+            ]
+        ]
+    },
+    {
+        "id": "dxc00000000000a2",
+        "type": "function",
+        "z": "dxc0000000000090",
+        "name": "Delete QSO",
+        "func": "const cd = msg.payload.contactdelete;\nif (!cd) return null;\nconst g = (k) => {\n    const v = cd[k];\n    if (v === undefined || v === null) return '';\n    return String(Array.isArray(v) ? v[0] : v);\n};\nconst id = g('ID');\nconst call = g('call').toUpperCase().replace(/'/g, \"''\");\nif (id) {\n    msg.topic = \"DELETE FROM qsos WHERE n1mm_id = '\" + id.replace(/'/g, \"''\") + \"';\";\n} else if (call) {\n    msg.topic = \"DELETE FROM qsos WHERE call = '\" + call + \"' AND timestamp = '\" + g('timestamp') + \"';\";\n} else {\n    return null;\n}\nmsg.qso = { type: 'qsoDelete', n1mmId: id, call: call };\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 830,
+        "y": 340,
+        "wires": [
+            [
+                "dxc00000000000a1"
+            ]
+        ]
+    },
+    {
+        "id": "dxc00000000000a6",
+        "type": "udp in",
+        "z": "dxc0000000000090",
+        "name": "N1MM Score",
+        "iface": "",
+        "port": "12062",
+        "ipv": "udp4",
+        "multicast": "false",
+        "group": "",
+        "datatype": "buffer",
+        "x": 140,
+        "y": 440,
+        "wires": [
+            [
+                "dxc00000000000a7"
+            ]
+        ]
+    },
+    {
+        "id": "dxc00000000000a7",
+        "type": "function",
+        "z": "dxc0000000000090",
+        "name": "UTF8",
+        "func": "msg.payload = msg.payload.toString('utf8');\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 330,
+        "y": 440,
+        "wires": [
+            [
+                "dxc00000000000a8"
+            ]
+        ]
+    },
+    {
+        "id": "dxc00000000000a8",
+        "type": "xml",
+        "z": "dxc0000000000090",
+        "name": "",
+        "attr": "$",
+        "chr": "_",
+        "x": 470,
+        "y": 440,
+        "wires": [
+            [
+                "dxc00000000000a9"
+            ]
+        ]
+    },
+    {
+        "id": "dxc00000000000a9",
+        "type": "switch",
+        "z": "dxc0000000000090",
+        "name": "dynamicresults?",
+        "property": "payload.dynamicresults",
+        "propertyType": "msg",
+        "rules": [
+            {
+                "t": "nnull"
+            }
+        ],
+        "checkall": "true",
+        "repair": false,
+        "outputs": 1,
+        "x": 630,
+        "y": 440,
+        "wires": [
+            [
+                "dxc00000000000aa"
+            ]
+        ]
+    },
+    {
+        "id": "dxc00000000000aa",
+        "type": "function",
+        "z": "dxc0000000000090",
+        "name": "Parse Score",
+        "func": "// N1MM dynamicresults broadcast: totals by band/mode; the 'total'/'ALL'\n// entries carry the contest-wide QSO / mult / points counts.\nconst dr = msg.payload.dynamicresults;\nif (!dr) return null;\nconst first = (v) => Array.isArray(v) ? v[0] : v;\nconst arr = (v) => Array.isArray(v) ? v : (v ? [v] : []);\nconst bd = first(dr.breakdown) || {};\nconst totalOf = (list) => {\n    for (const e of arr(list)) {\n        if (e && e.$ && e.$.band === 'total' && String(e.$.mode).toUpperCase() === 'ALL') {\n            return parseInt(e._, 10) || 0;\n        }\n    }\n    return 0;\n};\nconst score = {\n    type: 'score',\n    ts: new Date().toISOString(),\n    contest: String(first(dr.contest) || ''),\n    qsos: totalOf(bd.qso),\n    mults: totalOf(bd.mult),\n    points: totalOf(bd.points),\n    score: parseFloat(first(dr.score)) || 0\n};\nflow.set('scoreState', score);\nmsg.payload = score;\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 810,
+        "y": 440,
+        "wires": [
+            [
+                "dxc000000000000e"
+            ]
+        ]
+    },
+    {
+        "id": "dxc00000000000ab",
+        "type": "http in",
+        "z": "dxc0000000000090",
+        "name": "GET /api/qsos",
+        "url": "/api/qsos",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 130,
+        "y": 560,
+        "wires": [
+            [
+                "dxc00000000000ac"
+            ]
+        ]
+    },
+    {
+        "id": "dxc00000000000ac",
+        "type": "function",
+        "z": "dxc0000000000090",
+        "name": "Build QSO query",
+        "func": "const limit = parseInt(msg.req.query.limit, 10) || 200;\nmsg.topic = 'SELECT * FROM qsos ORDER BY id DESC LIMIT ' + limit + ';';\nmsg.headers = { 'Content-Type': 'application/json' };\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 330,
+        "y": 560,
+        "wires": [
+            [
+                "dxc00000000000ad"
+            ]
+        ]
+    },
+    {
+        "id": "dxc00000000000ad",
+        "type": "sqlite",
+        "z": "dxc0000000000090",
+        "mydb": "dxc0000000000027",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "Query qsos",
+        "x": 530,
+        "y": 560,
+        "wires": [
+            [
+                "dxc00000000000ae"
+            ]
+        ]
+    },
+    {
+        "id": "dxc00000000000ae",
+        "type": "http response",
+        "z": "dxc0000000000090",
+        "name": "",
+        "statusCode": "",
+        "headers": {},
+        "x": 730,
+        "y": 560,
+        "wires": []
+    },
+    {
+        "id": "dxc00000000000af",
+        "type": "http in",
+        "z": "dxc0000000000090",
+        "name": "GET /api/station/state",
+        "url": "/api/station/state",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 160,
+        "y": 620,
+        "wires": [
+            [
+                "dxc00000000000b0"
+            ]
+        ]
+    },
+    {
+        "id": "dxc00000000000b0",
+        "type": "function",
+        "z": "dxc0000000000090",
+        "name": "Station state",
+        "func": "msg.payload = {\n    radio: flow.get('radioState') || null,\n    score: flow.get('scoreState') || null\n};\nmsg.headers = { 'Content-Type': 'application/json' };\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 390,
+        "y": 620,
+        "wires": [
+            [
+                "dxc00000000000b1"
+            ]
+        ]
+    },
+    {
+        "id": "dxc00000000000b1",
+        "type": "http response",
+        "z": "dxc0000000000090",
+        "name": "",
+        "statusCode": "",
+        "headers": {},
+        "x": 590,
+        "y": 620,
+        "wires": []
     }
 ]

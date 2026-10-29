@@ -40,11 +40,12 @@ const TILE_PROVIDERS = {
 const settings = loadSettings();
 
 function loadSettings() {
-    const d = { lang: 'zh', tiles: 'osm', ttl: {...DEFAULT_TTL_MIN}, bandColors: {...DEFAULT_BAND_COLORS} };
+    const d = { lang: 'zh', tiles: 'osm', grid: '', ttl: {...DEFAULT_TTL_MIN}, bandColors: {...DEFAULT_BAND_COLORS} };
     try {
         const raw = JSON.parse(localStorage.getItem('dxcompass-settings') || '{}');
         if (LANGS.includes(raw.lang)) d.lang = raw.lang;
         if (TILE_PROVIDERS[raw.tiles]) d.tiles = raw.tiles;
+        if (/^[A-Ra-r]{2}[0-9]{2}([A-Xa-x]{2})?$/.test(raw.grid || '')) d.grid = raw.grid.toUpperCase();
         for (const m of Object.keys(d.ttl)) {
             const v = parseInt(raw.ttl && raw.ttl[m], 10);
             if (v >= 1 && v <= 180) d.ttl[m] = v;
@@ -88,6 +89,10 @@ function setTileProvider(key) {
         if (c.tile) c.map.removeLayer(c.tile);
         c.tile = makeTileLayer().addTo(c.map);
     });
+    if (qsoState.tile) {
+        qsoState.map.removeLayer(qsoState.tile);
+        qsoState.tile = makeTileLayer().addTo(qsoState.map);
+    }
 }
 
 /* ---------- i18n ---------- */
@@ -111,6 +116,8 @@ const I18N = {
         scheduled: '已设定时', since: '始于',
         cfgSection: '监听呼号', globalSection: '全局设置',
         langLabel: '语言 / Language', mapTiles: '地图源', ttlTitle: '标记点存活时间（分钟）', bandTitle: '频段颜色',
+        qsoView: 'QSO 地图', spotView: 'Spot 网格', stWaiting: '等待 N1MM+ 数据…', stLastQso: '上一 QSO',
+        stMults: '乘数', stPoints: '点数', stTx: '发射中', myGrid: '本台网格 (梅登海德)',
         save: '保存',
         cfgHint: '呼号按顺序分配到地图窗口，空槽位在仪表盘上保持空白。<br>距离为被监听台与监听台之间计算得出。<br>Spot 自动获取：CW 来自 reversebeacon.net RBN（10 秒），其他模式来自 dxwatch.com（30 秒）——无需集群登录或连接设置。',
         cellHint: '在设置中配置呼号',
@@ -150,6 +157,8 @@ const I18N = {
         scheduled: 'Scheduled', since: 'since',
         cfgSection: 'Monitored Callsigns', globalSection: 'Global Settings',
         langLabel: 'Language / 语言', mapTiles: 'Base map', ttlTitle: 'Marker lifetime (minutes)', bandTitle: 'Band colors',
+        qsoView: 'QSO Map', spotView: 'Spot Grid', stWaiting: 'Waiting for N1MM+ data…', stLastQso: 'Last QSO',
+        stMults: 'Mults', stPoints: 'Points', stTx: 'TX', myGrid: 'My grid (Maidenhead)',
         save: 'Save',
         cfgHint: 'Callsigns are assigned to map slots in order. Empty slots stay blank on the dashboard.<br>Distance is computed between the monitored station and the spotting station.<br>Spots are provided automatically: CW by reversebeacon.net RBN (10s), other modes by dxwatch.com (30s) - no cluster login or connection setup is needed.',
         cellHint: 'Set callsigns in Settings',
@@ -189,6 +198,8 @@ const I18N = {
         scheduled: 'Geplant', since: 'seit',
         cfgSection: 'Überwachte Rufzeichen', globalSection: 'Globale Einstellungen',
         langLabel: 'Sprache / Language', mapTiles: 'Basiskarte', ttlTitle: 'Marker-Lebensdauer (Minuten)', bandTitle: 'Bandfarben',
+        qsoView: 'QSO-Karte', spotView: 'Spot-Raster', stWaiting: 'Warte auf N1MM+-Daten…', stLastQso: 'Letztes QSO',
+        stMults: 'Multis', stPoints: 'Punkte', stTx: 'TX', myGrid: 'Mein Grid (Maidenhead)',
         save: 'Speichern',
         cfgHint: 'Rufzeichen werden der Reihe nach den Kartenfenstern zugewiesen. Leere Plätze bleiben im Dashboard frei.<br>Die Entfernung wird zwischen überwachter und spotender Station berechnet.<br>Spots werden automatisch geliefert: CW von reversebeacon.net RBN (10 s), andere Modi von dxwatch.com (30 s) - kein Cluster-Login nötig.',
         cellHint: 'Rufzeichen in den Einstellungen setzen',
@@ -228,6 +239,8 @@ const I18N = {
         scheduled: 'Planifié', since: 'depuis',
         cfgSection: 'Indicatifs surveillés', globalSection: 'Paramètres généraux',
         langLabel: 'Langue / Language', mapTiles: 'Fond de carte', ttlTitle: 'Durée de vie des marqueurs (minutes)', bandTitle: 'Couleurs des bandes',
+        qsoView: 'Carte QSO', spotView: 'Grille Spots', stWaiting: 'En attente des données N1MM+…', stLastQso: 'Dernier QSO',
+        stMults: 'Mults', stPoints: 'Points', stTx: 'TX', myGrid: 'Ma grille (Maidenhead)',
         save: 'Enregistrer',
         cfgHint: "Les indicatifs sont attribués aux fenêtres de carte dans l'ordre. Les emplacements vides restent vides sur le tableau de bord.<br>La distance est calculée entre la station surveillée et la station spotteuse.<br>Les spots sont fournis automatiquement : CW via reversebeacon.net RBN (10 s), autres modes via dxwatch.com (30 s) - aucune connexion à un cluster n'est nécessaire.",
         cellHint: 'Définir les indicatifs dans les paramètres',
@@ -267,6 +280,8 @@ const I18N = {
         scheduled: 'Programada', since: 'desde',
         cfgSection: 'Indicativos monitorizados', globalSection: 'Ajustes generales',
         langLabel: 'Idioma / Language', mapTiles: 'Mapa base', ttlTitle: 'Vida útil de los marcadores (minutos)', bandTitle: 'Colores de banda',
+        qsoView: 'Mapa QSO', spotView: 'Rejilla Spots', stWaiting: 'Esperando datos de N1MM+…', stLastQso: 'Último QSO',
+        stMults: 'Mults', stPoints: 'Puntos', stTx: 'TX', myGrid: 'Mi grid (Maidenhead)',
         save: 'Guardar',
         cfgHint: 'Los indicativos se asignan a las ventanas de mapa en orden. Los espacios vacíos quedan en blanco en el panel.<br>La distancia se calcula entre la estación monitorizada y la estación spottera.<br>Los spots se obtienen automáticamente: CW por reversebeacon.net RBN (10 s), otros modos por dxwatch.com (30 s), sin necesidad de conexión a clúster.',
         cellHint: 'Configure los indicativos en Ajustes',
@@ -306,6 +321,8 @@ const I18N = {
         scheduled: 'Agendada', since: 'desde',
         cfgSection: 'Indicativos monitorizados', globalSection: 'Configurações gerais',
         langLabel: 'Idioma / Language', mapTiles: 'Mapa base', ttlTitle: 'Vida útil dos marcadores (minutos)', bandTitle: 'Cores das bandas',
+        qsoView: 'Mapa QSO', spotView: 'Grade Spots', stWaiting: 'Aguardando dados do N1MM+…', stLastQso: 'Último QSO',
+        stMults: 'Mults', stPoints: 'Pontos', stTx: 'TX', myGrid: 'Meu grid (Maidenhead)',
         save: 'Guardar',
         cfgHint: 'Os indicativos são atribuídos às janelas de mapa por ordem. Espaços vazios ficam em branco no painel.<br>A distância é calculada entre a estação monitorizada e a estação spotter.<br>Os spots são fornecidos automaticamente: CW pelo reversebeacon.net RBN (10 s), outros modos pelo dxwatch.com (30 s) - sem necessidade de ligação a cluster.',
         cellHint: 'Defina os indicativos nas Configurações',
@@ -345,6 +362,8 @@ const I18N = {
         scheduled: 'По расписанию', since: 'с',
         cfgSection: 'Отслеживаемые позывные', globalSection: 'Общие настройки',
         langLabel: 'Язык / Language', mapTiles: 'Базовая карта', ttlTitle: 'Время жизни маркеров (минуты)', bandTitle: 'Цвета диапазонов',
+        qsoView: 'Карта QSO', spotView: 'Сетка спотов', stWaiting: 'Ожидание данных N1MM+…', stLastQso: 'Последний QSO',
+        stMults: 'Мульты', stPoints: 'Очки', stTx: 'TX', myGrid: 'Мой квадрат (Maidenhead)',
         save: 'Сохранить',
         cfgHint: 'Позывные назначаются окнам карт по порядку. Пустые слоты остаются пустыми на панели.<br>Расстояние вычисляется между отслеживаемой и наблюдающей станциями.<br>Споты поступают автоматически: CW с reversebeacon.net RBN (10 с), другие моды с dxwatch.com (30 с) — подключение к кластеру не требуется.',
         cellHint: 'Задайте позывные в Настройках',
@@ -384,6 +403,8 @@ const I18N = {
         scheduled: 'Programmata', since: 'da',
         cfgSection: 'Nominativi monitorati', globalSection: 'Impostazioni generali',
         langLabel: 'Lingua / Language', mapTiles: 'Mappa base', ttlTitle: 'Durata dei marker (minuti)', bandTitle: 'Colori delle bande',
+        qsoView: 'Mappa QSO', spotView: 'Griglia Spot', stWaiting: 'In attesa dei dati N1MM+…', stLastQso: 'Ultimo QSO',
+        stMults: 'Molt.', stPoints: 'Punti', stTx: 'TX', myGrid: 'Mio grid (Maidenhead)',
         save: 'Salva',
         cfgHint: 'I nominativi sono assegnati alle finestre mappa in ordine. Gli slot vuoti restano vuoti nella dashboard.<br>La distanza è calcolata tra la stazione monitorata e quella spotter.<br>Gli spot sono forniti automaticamente: CW da reversebeacon.net RBN (10 s), altri modi da dxwatch.com (30 s) - nessuna connessione a cluster necessaria.',
         cellHint: 'Imposta i nominativi nelle Impostazioni',
@@ -423,6 +444,8 @@ const I18N = {
         scheduled: 'مجدول', since: 'منذ',
         cfgSection: 'النداءات المراقَبة', globalSection: 'الإعدادات العامة',
         langLabel: 'اللغة / Language', mapTiles: 'خريطة الأساس', ttlTitle: 'مدة بقاء العلامات (دقائق)', bandTitle: 'ألوان النطاقات',
+        qsoView: 'خريطة QSO', spotView: 'شبكة السبوت', stWaiting: 'في انتظار بيانات N1MM+…', stLastQso: 'آخر QSO',
+        stMults: 'المضاعفات', stPoints: 'النقاط', stTx: 'إرسال', myGrid: 'شبكتي (Maidenhead)',
         save: 'حفظ',
         cfgHint: 'تُسند النداءات إلى نوافذ الخريطة بالترتيب، وتبقى الفتحات الفارغة خالية في اللوحة.<br>تُحسب المسافة بين المحطة المراقَبة ومحطة الرصد.<br>تُجلب السبوتات تلقائياً: CW من reversebeacon.net RBN (كل 10 ثوانٍ)، والأنماط الأخرى من dxwatch.com (كل 30 ثانية) - لا حاجة لتسجيل الدخول إلى أي كلاستر.',
         cellHint: 'حدد النداءات في الإعدادات',
@@ -462,6 +485,8 @@ const I18N = {
         scheduled: '예약됨', since: '시작',
         cfgSection: '모니터링 콜사인', globalSection: '전역 설정',
         langLabel: '언어 / Language', mapTiles: '기본 지도', ttlTitle: '마커 유지 시간 (분)', bandTitle: '밴드 색상',
+        qsoView: 'QSO 지도', spotView: '스팟 그리드', stWaiting: 'N1MM+ 데이터 대기 중…', stLastQso: '마지막 QSO',
+        stMults: '멀티', stPoints: '포인트', stTx: '송신', myGrid: '내 그리드 (Maidenhead)',
         save: '저장',
         cfgHint: '콜사인은 순서대로 지도 슬롯에 배정됩니다. 빈 슬롯은 대시보드에서 비워 둡니다.<br>거리는 모니터링 국과 스포팅 국 사이로 계산됩니다.<br>스폿은 자동으로 제공됩니다: CW는 reversebeacon.net RBN (10초), 다른 모드는 dxwatch.com (30초) - 클러스터 로그인이 필요 없습니다.',
         cellHint: '설정에서 콜사인을 입력하세요',
@@ -501,6 +526,8 @@ const I18N = {
         scheduled: '予約済み', since: '開始',
         cfgSection: '監視コールサイン', globalSection: 'グローバル設定',
         langLabel: '言語 / Language', mapTiles: 'ベースマップ', ttlTitle: 'マーカー生存時間 (分)', bandTitle: 'バンドカラー',
+        qsoView: 'QSOマップ', spotView: 'スポットグリッド', stWaiting: 'N1MM+ データを待っています…', stLastQso: '直近の QSO',
+        stMults: 'マルチ', stPoints: 'ポイント', stTx: '送信', myGrid: '自局グリッド (Maidenhead)',
         save: '保存',
         cfgHint: 'コールサインは順番にマップ枠へ割り当てられます。空き枠はダッシュボードで空白のままです。<br>距離は監視局とスポッター局の間で計算されます。<br>スポットは自動取得されます: CWはreversebeacon.net RBN (10秒)、その他のモードはdxwatch.com (30秒) - クラスターへのログインは不要です。',
         cellHint: '設定でコールサインを入力してください',
@@ -1285,10 +1312,17 @@ function connectWS() {
     state.ws.onerror = () => { /* close will fire */ };
 
     state.ws.onmessage = (evt) => {
-        let spot;
-        try { spot = JSON.parse(evt.data); }
+        let msg;
+        try { msg = JSON.parse(evt.data); }
         catch (e) { return; }
-        handleSpot(spot);
+        // N1MM station messages carry a type; spot messages do not.
+        switch (msg.type) {
+            case 'radio': updateStationRadio(msg); break;
+            case 'score': updateStationScore(msg); break;
+            case 'qso': handleQso(msg); break;
+            case 'qsoDelete': handleQsoDelete(msg); break;
+            default: handleSpot(msg);
+        }
     };
 }
 
@@ -1592,6 +1626,14 @@ function applyLang() {
     $('#tilesLabel').textContent = t('mapTiles');
     $('#ttlTitle').textContent = t('ttlTitle');
     $('#bandTitle').textContent = t('bandTitle');
+    $('#gridLabel').textContent = t('myGrid');
+    $('#stLMults').textContent = t('stMults');
+    $('#stLPoints').textContent = t('stPoints');
+    $('#stLLast').textContent = t('stLastQso');
+    $('#stTx').textContent = t('stTx');
+    $('#stWaiting').textContent = t('stWaiting');
+    $('#btnQsoView').textContent = qsoState.view === 'qso' ? t('spotView') : t('qsoView');
+    renderLastQso();
     $('#btnSaveCfg').textContent = t('save');
     $('#cfgHint').innerHTML = t('cfgHint');
     $('#btnRotateNext').title = t('nextPage');
@@ -1644,6 +1686,242 @@ function buildBandColorInputs() {
         item.appendChild(lbl);
         wrap.appendChild(item);
     });
+}
+
+/* ---------- Own station (N1MM+ UDP broadcasts) ---------- */
+/* QSO map: permanent markers (no fade/TTL), home grid from Settings,
+ * one band-colored dot per QSO with a great-circle link back home. */
+const QSO_MAX_MARKERS = 1500;
+const qsoState = {
+    view: 'spots',        // 'spots' | 'qso'
+    map: null, tile: null, homeLayer: null,
+    qsos: [],             // rendered QSO objects, oldest first
+    byId: new Map(),      // n1mmId -> {layers:[...]} (contactreplace/contactdelete)
+    radio: null, score: null, lastQso: null
+};
+
+/* Maidenhead 4/6-char grid -> center [lat, lon]. Null when empty/invalid. */
+function gridToLatLon(grid) {
+    const g = (grid || '').toUpperCase();
+    if (!/^[A-R]{2}[0-9]{2}([A-X]{2})?$/.test(g)) return null;
+    // 4-char: field 20°x10° + square 2°x1°, centered (+1° lon, +0.5° lat)
+    let lon = (g.charCodeAt(0) - 65) * 20 - 180 + parseInt(g[2], 10) * 2 + 1;
+    let lat = (g.charCodeAt(1) - 65) * 10 - 90 + parseInt(g[3], 10) + 0.5;
+    if (g.length === 6) {
+        // re-center from square center to subsquare (5'x2.5') center
+        lon += (g.charCodeAt(4) - 65) * (2 / 24) - 1 + (1 / 24);
+        lat += (g.charCodeAt(5) - 65) * (1 / 24) - 0.5 + (1 / 48);
+    }
+    return [lat, lon];
+}
+
+function initQsoMap() {
+    const el = document.createElement('div');
+    el.className = 'qso-map';
+    $('#qsoView').appendChild(el);
+    const map = L.map(el, {
+        zoomControl: false, scrollWheelZoom: true, attributionControl: true,
+        zoomSnap: 0, maxBounds: [[-90, -180], [90, 180]], maxBoundsViscosity: 1.0
+    });
+    qsoState.map = map;
+    qsoState.tile = makeTileLayer().addTo(map);
+    addTerminator(map);
+    fitWorld(map);
+    rebuildHome();
+}
+
+/* Home station marker from the configured Maidenhead grid. */
+function rebuildHome() {
+    if (!qsoState.map) return;
+    if (qsoState.homeLayer) { qsoState.map.removeLayer(qsoState.homeLayer); qsoState.homeLayer = null; }
+    const home = gridToLatLon(settings.grid);
+    if (home) {
+        qsoState.homeLayer = L.marker(home, {
+            interactive: false,
+            icon: L.divIcon({
+                className: 'qso-home',
+                html: '<span style="color:#00e5ff;font-size:16px;text-shadow:0 0 6px #00e5ff">✦</span>',
+                iconSize: [16, 16], iconAnchor: [8, 8]
+            })
+        }).addTo(qsoState.map);
+    }
+}
+
+/* Full-screen switch between the spot grid and the QSO map. */
+function setViewMode(mode) {
+    if (qsoState.view === mode) return;
+    qsoState.view = mode;
+    const isQso = mode === 'qso';
+    $('#grid').classList.toggle('hidden', isQso);
+    $('#qsoView').classList.toggle('hidden', !isQso);
+    const btn = $('#btnQsoView');
+    btn.classList.toggle('active', isQso);
+    btn.textContent = isQso ? t('spotView') : t('qsoView');
+    if (isQso) {
+        qsoState.map.invalidateSize();
+        fitQsoMap();
+    } else {
+        visibleCells().forEach(c => { c.map.invalidateSize(); fitCellView(c); });
+    }
+}
+
+/* QSO map auto-fit: same convention as cells - zoom in as far as all
+ * markers (plus home) stay visible, never below the world-cover floor. */
+function fitQsoMap() {
+    const map = qsoState.map;
+    if (!map) return;
+    setWorldMinZoom(map);
+    const pts = [];
+    qsoState.qsos.forEach(q => {
+        if (q.lat !== null && q.lat !== undefined &&
+            q.lon !== null && q.lon !== undefined) pts.push([q.lat, q.lon]);
+    });
+    const home = gridToLatLon(settings.grid);
+    if (home) pts.push(home);
+    if (!pts.length) {
+        map.setView([0, 0], map.getMinZoom(), {animate: false});
+        return;
+    }
+    const zb = L.latLngBounds(pts).pad(0.08);
+    const z = Math.min(Math.max(map.getBoundsZoom(zb), map.getMinZoom()),
+        AUTO_FIT_MAX_ZOOM);
+    map.setView(zb.getCenter(), z, {animate: false});
+}
+function scheduleQsoFit() {
+    if (qsoState.view !== 'qso') return;
+    clearTimeout(qsoState._fitTimer);
+    qsoState._fitTimer = setTimeout(fitQsoMap, 150);
+}
+
+function qsoTooltip(q) {
+    const ts = new Date(q.ts);
+    return [q.call, [q.band, q.mode].filter(Boolean).join(' '),
+        isNaN(ts) ? '' : timeAgo(ts),
+        q.isMult ? 'MULT' : ''].filter(Boolean).join(' · ');
+}
+
+function removeQsoMarker(n1mmId) {
+    const e = qsoState.byId.get(n1mmId);
+    if (!e || !qsoState.map) return;
+    e.layers.forEach(l => qsoState.map.removeLayer(l));
+    qsoState.byId.delete(n1mmId);
+}
+
+function addQsoMarker(q) {
+    if (!qsoState.map) return;
+    if (q.lat === null || q.lat === undefined ||
+        q.lon === null || q.lon === undefined) return;
+    removeQsoMarker(q.n1mmId); // contactreplace carries the same id
+    const col = bandColorOf(q.band);
+    const layers = [];
+    const home = gridToLatLon(settings.grid);
+    if (home) {
+        greatCirclePaths(home[0], home[1], q.lat, q.lon).forEach(seg => {
+            layers.push(L.polyline(seg, {
+                color: col, weight: 1.5, opacity: 0.55, interactive: false
+            }).addTo(qsoState.map));
+        });
+    }
+    const m = L.marker([q.lat, q.lon], {
+        icon: L.divIcon({
+            className: 'qso-dot-wrap',
+            html: `<div class="qso-dot" style="background:${col}">` +
+                (q.isMult ? '<span class="qso-mult-badge">M</span>' : '') + '</div>',
+            iconSize: [12, 12], iconAnchor: [6, 6]
+        })
+    }).addTo(qsoState.map);
+    m.bindTooltip(qsoTooltip(q), {direction: 'top'});
+    layers.push(m);
+    qsoState.byId.set(q.n1mmId, {layers});
+    qsoState.qsos.push(q);
+    while (qsoState.qsos.length > QSO_MAX_MARKERS) {
+        removeQsoMarker(qsoState.qsos.shift().n1mmId);
+    }
+    scheduleQsoFit();
+}
+
+/* Grid changed: home moved, so every link line must be redrawn. */
+function rebuildQsoMap() {
+    if (!qsoState.map) return;
+    const qsos = qsoState.qsos.slice();
+    qsoState.byId.forEach((_, id) => removeQsoMarker(id));
+    qsoState.qsos = [];
+    qsos.forEach(addQsoMarker);
+    rebuildHome();
+    fitQsoMap();
+}
+
+function handleQso(q) {
+    qsoState.lastQso = q;
+    $('#stationBar').classList.add('has-data');
+    renderLastQso();
+    addQsoMarker(q);
+}
+
+function handleQsoDelete(d) {
+    removeQsoMarker(d.n1mmId);
+    const i = qsoState.qsos.findIndex(q => q.n1mmId === d.n1mmId);
+    if (i >= 0) qsoState.qsos.splice(i, 1);
+}
+
+function renderLastQso() {
+    const q = qsoState.lastQso;
+    if (!q) return;
+    $('#stLastCall').textContent = q.call || '—';
+    const ts = new Date(q.ts);
+    $('#stLastInfo').textContent = [q.band, q.mode, isNaN(ts) ? '' : timeAgo(ts)]
+        .filter(Boolean).join(' · ');
+}
+
+function updateStationRadio(r) {
+    qsoState.radio = r;
+    $('#stationBar').classList.add('has-data');
+    if (typeof r.freqKhz === 'number' && isFinite(r.freqKhz)) {
+        $('#stFreq').textContent = r.freqKhz.toLocaleString('en-US',
+            {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    }
+    if (r.mode) $('#stMode').textContent = r.mode;
+    $('#stTx').classList.toggle('hidden', !r.isTransmitting);
+}
+
+function updateStationScore(s) {
+    qsoState.score = s;
+    $('#stationBar').classList.add('has-data');
+    $('#stQsos').textContent = s.qsos || 0;
+    $('#stMults').textContent = s.mults || 0;
+    $('#stPoints').textContent = s.points || 0;
+    $('#stScore').textContent = s.score || 0;
+}
+
+/* DB row (qsos table) -> the qso object shape used by live WS messages. */
+function dbRowToQso(r) {
+    return {
+        type: 'qso', n1mmId: r.n1mm_id, ts: r.timestamp, mycall: r.mycall,
+        call: r.call, band: r.band, freqKhz: r.freq_khz, mode: r.mode,
+        points: r.points, isMult: !!r.is_mult, lat: r.lat, lon: r.lon
+    };
+}
+
+/* Backfill on load: last radio/score state + recent QSOs from the DB,
+ * so a browser refresh does not wipe the QSO map or the station bar. */
+async function loadStation() {
+    try {
+        const st = await fetch('/api/station/state').then(r => r.json());
+        if (st.radio) updateStationRadio(st.radio);
+        if (st.score) updateStationScore(st.score);
+    } catch (e) { /* no station data yet */ }
+    try {
+        const rows = await fetch('/api/qsos?limit=500').then(r => r.json());
+        if (Array.isArray(rows) && rows.length) {
+            rows.slice().reverse().forEach(r => {
+                const q = dbRowToQso(r);
+                if (q.lat !== null && q.lat !== undefined) addQsoMarker(q);
+            });
+            qsoState.lastQso = dbRowToQso(rows[0]);
+            renderLastQso();
+            $('#stationBar').classList.add('has-data');
+        }
+    } catch (e) { /* keep the waiting hint */ }
 }
 
 /* ---------- Config ---------- */
@@ -1774,6 +2052,25 @@ function init() {
         `<option value="${k}">${TILE_PROVIDERS[k].name}</option>`).join('');
     tilesSel.value = settings.tiles;
     tilesSel.addEventListener('change', () => setTileProvider(tilesSel.value));
+    // Own-station Maidenhead grid (QSO map home marker + link lines)
+    const gridInp = $('#setGrid');
+    gridInp.value = settings.grid;
+    gridInp.addEventListener('change', () => {
+        const v = gridInp.value.trim().toUpperCase();
+        if (v && !/^[A-R]{2}[0-9]{2}([A-X]{2})?$/.test(v)) {
+            gridInp.value = settings.grid; // invalid: revert
+            return;
+        }
+        gridInp.value = v;
+        if (v !== settings.grid) {
+            settings.grid = v;
+            saveSettings();
+            rebuildQsoMap();
+        }
+    });
+    // Spot grid <-> QSO map view switch
+    $('#btnQsoView').addEventListener('click', () =>
+        setViewMode(qsoState.view === 'qso' ? 'spots' : 'qso'));
     [['ttlCw', 'CW'], ['ttlSsb', 'SSB'], ['ttlDigi', 'DIGI']].forEach(([id, mode]) => {
         const inp = $('#' + id);
         inp.value = settings.ttl[mode];
@@ -1809,11 +2106,15 @@ function init() {
 
     // Initial layout
     setLayout('1x1');
+    initQsoMap();
     updateMonitorBtn();
     applyLang();
 
     // Load config + callsigns
     loadConfig();
+
+    // Own station: last radio/score state + QSO map backfill
+    loadStation();
 
     // Docked records panel: initial data + recording status
     refreshRecStatus(true);
@@ -1827,6 +2128,10 @@ function init() {
                 fitCellView(c);
             }
         });
+        if (qsoState.view === 'qso' && qsoState.map) {
+            qsoState.map.invalidateSize();
+            fitQsoMap();
+        }
     });
 
     // WebSocket
@@ -1856,6 +2161,7 @@ function init() {
             c.markers.forEach(g => applyMarkerFade(g, now));
             Object.keys(c.heat).forEach(b => updateHeat(c, b, now));
         });
+        if (qsoState.lastQso) renderLastQso(); // keep the age text fresh
     }, 10000);
 
     // Every 30s: expire chips together with their markers.

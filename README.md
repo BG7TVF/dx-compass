@@ -34,6 +34,7 @@ wget -qO- https://raw.githubusercontent.com/BG7TVF/dx-compass/main/bootstrap.sh 
 - **完整记录**：每条 spot 记录时间、频率、报告人、模式（CW/DIGI/PHONE）、信号强度（CW 的 SNR dB 来自 RBN；FT8 的 SNR 来自 dxwatch）、距离等，存入 SQLite
 - **赛后分析**：记录面板支持按呼号筛选、一键导出 CSV
 - **距离计算**：直接使用数据源附带的呼号经纬度 + Haversine 公式，计算报告人相对本台的距离（公里/英里），不依赖第三方定位接口
+- **N1MM+ 本台集成**（可选）：接收 N1MM+ UDP 广播后，大屏顶部状态栏实时显示当前电台频率/模式/TX、当前总分（QSO/乘数/点数/Score）与上一个 QSO；一键切换全屏 **QSO 地图**，每个 QSO 按频段着色并从本台位置画大圆线，新乘数带 M 徽章，全部持久化到 `qsos` 表
 
 ## 技术架构
 
@@ -136,6 +137,24 @@ sudo bash install.sh
 
 > 数据来自 dxwatch.com 与 reversebeacon.net 的公开接口。CW spot 由 RBN skimmer 网络提供，带真实 SNR（dB）与发报速度（WPM）；FT8/FT4 的 SNR 来自 dxwatch；普通 SSB spot 本身不携带信号强度，对应列为空属正常。
 
+## N1MM+ 本台集成（比赛实时状态）
+
+在 N1MM+ 竞赛日志软件中开启 UDP 广播后，大屏顶部出现本台状态栏，并可切换到全屏 QSO 地图：
+
+- **状态栏**：当前电台频率 / 模式 / 发射指示（TX）、当前总分（QSO 数 / 乘数 / 点数 / Score）、上一个 QSO
+- **QSO 地图**：每个 QSO 一个按频段着色的永久标记，从本台位置画大圆线连接；新乘数（Multiplier）带黄色 M 徽章；QSO 持久化在 SQLite `qsos` 表，浏览器刷新与服务重启后自动恢复
+- QSO 坐标优先取 N1MM 通联中的 gridsquare 字段，缺失时回退查询已积累的 spot 坐标库
+
+配置方法：
+
+1. 大屏 **Settings → My grid (Maidenhead)** 填入本台梅登海德网格（4 或 6 位，如 `OM89VX`），用于 QSO 地图的本台标记与连线
+2. N1MM+：**Options → Configure ports, mode controls, Winkey… → Broadcast Data** 选项卡，勾选并填写（`<服务器IP>` 为运行 DX-Compass 的机器）：
+   - **Contacts** → `<服务器IP>`，端口 `12061`（QSO 增删改）
+   - **Radio** → `<服务器IP>`，端口 `12060`（频率/模式/TX 状态）
+   - **Score** → `<服务器IP>`，端口 `12062`（竞赛记分）
+3. 服务器防火墙放行 UDP：`sudo ufw allow 12060:12062/udp`
+4. N1MM+ 产生 QSO、频率变化或记分更新时大屏实时刷新
+
 ## 服务管理
 
 ```bash
@@ -156,6 +175,8 @@ journalctl -u dx-compass -f            # 实时查看日志
   - `GET  /api/config` / `POST /api/config`：读取 / 保存配置（本台经纬度）
   - `GET  /api/callsigns` / `POST /api/callsigns`：读取 / 保存监测呼号列表（POST 新呼号会自动触发历史回溯）
   - `GET  /api/spots?call=呼号&limit=数量`：查询记录
+  - `GET  /api/qsos?limit=数量`：查询本台 QSO 记录（N1MM+ 集成）
+  - `GET  /api/station/state`：最近一次电台状态与竞赛记分（N1MM+ 集成）
 
 ## 常见问题
 

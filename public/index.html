@@ -39,13 +39,37 @@
         </div>
 
         <div class="action-group">
+            <button class="action-btn" id="btnQsoView" title="QSO map">QSO Map</button>
             <button class="action-btn monitor-btn" id="btnMonitor" disabled>▶ 开始监控</button>
             <button class="action-btn" id="btnConfig" title="Settings">Settings</button>
         </div>
     </div>
 
+    <!-- Station bar: own-station status from N1MM+ broadcasts -->
+    <div class="station-bar" id="stationBar">
+        <div class="st-block st-radio">
+            <span class="st-freq" id="stFreq">--.--</span>
+            <span class="st-unit">kHz</span>
+            <span class="st-mode" id="stMode">---</span>
+            <span class="st-tx hidden" id="stTx">TX</span>
+        </div>
+        <div class="st-block st-score">
+            <span class="st-item"><label id="stLQsos">QSO</label><b id="stQsos">0</b></span>
+            <span class="st-item"><label id="stLMults">Mults</label><b id="stMults">0</b></span>
+            <span class="st-item"><label id="stLPoints">Points</label><b id="stPoints">0</b></span>
+            <span class="st-item st-total"><label id="stLScore">Score</label><b id="stScore">0</b></span>
+        </div>
+        <div class="st-block st-last">
+            <label id="stLLast">Last QSO</label>
+            <span class="st-last-call" id="stLastCall">—</span>
+            <span class="st-last-info" id="stLastInfo"></span>
+        </div>
+        <div class="st-waiting" id="stWaiting">Waiting for N1MM+ data…</div>
+    </div>
+
     <div class="main">
         <div id="grid" class="grid layout-1x1"></div>
+        <div id="qsoView" class="qso-view hidden"></div>
 
         <!-- Records Panel: docked on the right, always visible -->
         <div id="recordsPanel" class="dock-panel">
@@ -133,6 +157,10 @@
                         <div class="form-row">
                             <label id="tilesLabel" for="setTiles">Base map</label>
                             <select id="setTiles" class="set-input"></select>
+                        </div>
+                        <div class="form-row">
+                            <label id="gridLabel" for="setGrid">My grid (Maidenhead)</label>
+                            <input type="text" id="setGrid" class="set-input" maxlength="6" placeholder="e.g. OM89vx" style="text-transform:uppercase">
                         </div>
                         <div class="form-row">
                             <label id="ttlTitle">Marker lifetime (minutes)</label>
