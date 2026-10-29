@@ -152,7 +152,7 @@ sudo bash install.sh
 
 - **状态栏**：当前电台频率 / 模式 / 发射指示（TX）、当前总分（QSO 数 / 乘数 / 点数 / Score）、上一个 QSO
 - **QSO 地图**：每个 QSO 一个按频段着色的永久标记，从本台位置画大圆线连接；新乘数（Multiplier）带黄色 M 徽章；QSO 持久化在 SQLite `qsos` 表，浏览器刷新与服务重启后自动恢复
-- QSO 坐标优先取 N1MM 通联中的 gridsquare 字段，缺失时回退查询已积累的 spot 坐标库
+- QSO 坐标**优先从 QRZ.com 查询**（与原 n1mm_dashboard 项目一致，需在 Settings 中配置 QRZ 用户名/密码，需 QRZ XML 订阅）；未配置或查询失败时依次回退到通联中的 gridsquare 字段、已积累的 spot 坐标库
 
 配置方法：
 
@@ -162,7 +162,8 @@ sudo bash install.sh
    - **Radio** → `<服务器IP>`，端口 `12060`（频率/模式/TX 状态）
    - **Score** → `<服务器IP>`，端口 `12062`（竞赛记分）
 3. 服务器防火墙放行 UDP：`sudo ufw allow 12060:12062/udp`
-4. N1MM+ 产生 QSO、频率变化或记分更新时大屏实时刷新
+4. （可选）大屏 **Settings** 填入 **QRZ.com 用户名 / 密码**（需 QRZ XML Data 订阅），QSO 坐标将优先从 QRZ.com 查询；凭据保存在服务器端 Node-RED 上下文中，密码不会回显
+5. N1MM+ 产生 QSO、频率变化或记分更新时大屏实时刷新
 
 ## 服务管理
 

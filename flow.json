@@ -1549,8 +1549,8 @@
         "type": "function",
         "z": "dxc0000000000090",
         "name": "Lookup QSO coords",
-        "func": "// After the insert: QSOs without a grid-derived location fall back to the\n// spots table (DX station coords collected from RBN / PSKReporter).\nconst q = msg.qso;\nif (!q) return null;\nif (q.type === 'qsoDelete') {\n    msg.payload = q;\n    return [null, msg];\n}\nif (q.lat !== null && q.lat !== undefined) {\n    msg.payload = q;\n    return [null, msg];\n}\nconst c = String(q.call).replace(/'/g, \"''\");\nmsg.topic = \"SELECT dx_lat, dx_lon FROM spots WHERE spot_call = '\" + c + \"' AND dx_lat IS NOT NULL ORDER BY id DESC LIMIT 1;\";\nreturn [msg, null];",
-        "outputs": 2,
+        "func": "// Coordinate priority, same as the original n1mm_dashboard project:\n// 1) QRZ.com XML lookup (when a session key is configured)\n// 2) gridsquare already parsed from the contact broadcast\n// 3) spots table (DX coords collected from RBN / PSKReporter)\nconst q = msg.qso;\nif (!q) return null;\nif (q.type === 'qsoDelete') {\n    msg.payload = q;\n    return [null, null, msg];\n}\nif (flow.get('qrzkey')) {\n    return [msg, null, null]; // QRZ first, even when a grid is present\n}\nif (q.lat !== null && q.lat !== undefined) {\n    msg.payload = q;\n    return [null, null, msg];\n}\nconst c = String(q.call).replace(/'/g, \"''\");\nmsg.topic = \"SELECT dx_lat, dx_lon FROM spots WHERE spot_call = '\" + c + \"' AND dx_lat IS NOT NULL ORDER BY id DESC LIMIT 1;\";\nreturn [null, msg, null];",
+        "outputs": 3,
         "timeout": "",
         "noerr": 0,
         "initialize": "",
@@ -1559,6 +1559,9 @@
         "x": 1190,
         "y": 280,
         "wires": [
+            [
+                "dxc00000000000c1"
+            ],
             [
                 "dxc00000000000a4"
             ],
@@ -1830,6 +1833,329 @@
         "headers": {},
         "x": 590,
         "y": 620,
+        "wires": []
+    },
+    {
+        "id": "dxc00000000000c1",
+        "type": "function",
+        "z": "dxc0000000000090",
+        "name": "QRZ callsign query",
+        "func": "// Build the QRZ.com XML API lookup URL with the stored session key.\nconst q = msg.qso;\nconst key = flow.get('qrzkey');\nif (!q || !key) return null;\nmsg.url = 'https://xmldata.qrz.com/xml/current/?s=' + encodeURIComponent(key) +\n    ';callsign=' + encodeURIComponent(q.call);\nmsg.headers = { 'User-Agent': 'dx-compass/1.0' };\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1190,
+        "y": 220,
+        "wires": [
+            [
+                "dxc00000000000c2"
+            ]
+        ]
+    },
+    {
+        "id": "dxc00000000000c2",
+        "type": "http request",
+        "z": "dxc0000000000090",
+        "name": "QRZ DB Lookup",
+        "method": "GET",
+        "ret": "txt",
+        "paytoqs": "ignore",
+        "url": "",
+        "tls": "",
+        "persist": false,
+        "proxy": "",
+        "insecureHTTPParser": false,
+        "authType": "",
+        "senderr": false,
+        "headers": [],
+        "x": 1390,
+        "y": 220,
+        "wires": [
+            [
+                "dxc00000000000c3"
+            ]
+        ]
+    },
+    {
+        "id": "dxc00000000000c3",
+        "type": "xml",
+        "z": "dxc0000000000090",
+        "name": "",
+        "attr": "$",
+        "chr": "_",
+        "x": 1570,
+        "y": 220,
+        "wires": [
+            [
+                "dxc00000000000c4"
+            ]
+        ]
+    },
+    {
+        "id": "dxc00000000000c4",
+        "type": "function",
+        "z": "dxc0000000000090",
+        "name": "QRZ result",
+        "func": "function txt(v) {\n    if (v === null || v === undefined) return '';\n    return (typeof v === 'object') ? (v._ || '') : String(v);\n}\nconst q = msg.qso;\nif (!q) return null;\nconst db = msg.payload && msg.payload.QRZDatabase;\nconst cs = db && db.Callsign && db.Callsign[0];\nconst sess = db && db.Session && db.Session[0];\nif (cs) {\n    const lat = parseFloat(txt(cs.lat && cs.lat[0]));\n    const lon = parseFloat(txt(cs.lon && cs.lon[0]));\n    if (isFinite(lat) && isFinite(lon)) {\n        q.lat = lat;\n        q.lon = lon;\n        const id = String(q.n1mmId).replace(/'/g, \"''\");\n        msg.topic = \"UPDATE qsos SET lat=\" + lat + \", lon=\" + lon +\n            \" WHERE n1mm_id='\" + id + \"';\";\n        msg.payload = q;\n        return [msg, null, null];\n    }\n}\n// Lookup failed. Session errors: drop the key and re-login in the\n// background; the QSO itself falls back to grid / spots-table coords.\nconst err = sess ? txt(sess.Error && sess.Error[0]) : '';\nif (/session|timeout|invalid/i.test(err)) {\n    flow.set('qrzkey', null);\n    node.status({ fill: 'red', shape: 'ring', text: err });\n    return [null, msg, msg];\n}\nreturn [null, msg, null];",
+        "outputs": 3,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1730,
+        "y": 220,
+        "wires": [
+            [
+                "dxc00000000000c5"
+            ],
+            [
+                "dxc00000000000c6"
+            ],
+            [
+                "dxc00000000000c9"
+            ]
+        ]
+    },
+    {
+        "id": "dxc00000000000c5",
+        "type": "sqlite",
+        "z": "dxc0000000000090",
+        "mydb": "dxc0000000000027",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "Update QSO coords",
+        "x": 1940,
+        "y": 160,
+        "wires": [
+            [
+                "dxc00000000000a5"
+            ]
+        ]
+    },
+    {
+        "id": "dxc00000000000c6",
+        "type": "function",
+        "z": "dxc0000000000090",
+        "name": "Fallback coords",
+        "func": "// QRZ has no answer: use the gridsquare parsed from the contact, or\n// fall back to the spots table like the no-QRZ path does.\nconst q = msg.qso;\nif (!q) return null;\nif (q.lat !== null && q.lat !== undefined) {\n    msg.payload = q;\n    return [null, msg];\n}\nconst c = String(q.call).replace(/'/g, \"''\");\nmsg.topic = \"SELECT dx_lat, dx_lon FROM spots WHERE spot_call = '\" + c + \"' AND dx_lat IS NOT NULL ORDER BY id DESC LIMIT 1;\";\nreturn [msg, null];",
+        "outputs": 2,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1940,
+        "y": 220,
+        "wires": [
+            [
+                "dxc00000000000a4"
+            ],
+            [
+                "dxc00000000000a5"
+            ]
+        ]
+    },
+    {
+        "id": "dxc00000000000c7",
+        "type": "http in",
+        "z": "dxc0000000000090",
+        "name": "POST /api/qrz/config",
+        "url": "/api/qrz/config",
+        "method": "post",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 200,
+        "y": 720,
+        "wires": [
+            [
+                "dxc00000000000c8"
+            ]
+        ]
+    },
+    {
+        "id": "dxc00000000000c8",
+        "type": "function",
+        "z": "dxc0000000000090",
+        "name": "Save QRZ creds",
+        "func": "// Store QRZ.com credentials in flow context (persisted) and kick a\n// login on the second output; the HTTP response just reports status.\nconst b = msg.payload || {};\nconst user = String(b.username || '').trim();\nconst pass = String(b.password || '').trim();\nif (!user || !pass) {\n    msg.statusCode = 400;\n    msg.payload = { ok: false, error: 'username and password required' };\n    return [msg, null];\n}\nflow.set('qrzuser', user);\nflow.set('qrzpass', pass);\nflow.set('qrzkey', null); // force a fresh session\nconst login = {};\nmsg.headers = { 'Content-Type': 'application/json' };\nmsg.payload = { ok: true, configured: true };\nreturn [msg, login];",
+        "outputs": 2,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 400,
+        "y": 720,
+        "wires": [
+            [
+                "dxc00000000000cb"
+            ],
+            [
+                "dxc00000000000c9"
+            ]
+        ]
+    },
+    {
+        "id": "dxc00000000000c9",
+        "type": "function",
+        "z": "dxc0000000000090",
+        "name": "QRZ login",
+        "func": "// Login to the QRZ.com XML API with the stored credentials.\nconst u = flow.get('qrzuser');\nconst p = flow.get('qrzpass');\nif (!u || !p) return null;\nmsg.url = 'https://xmldata.qrz.com/xml/current/?username=' +\n    encodeURIComponent(u) + ';password=' + encodeURIComponent(p) +\n    ';agent=dxcompass10';\nmsg.headers = { 'User-Agent': 'dx-compass/1.0' };\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 600,
+        "y": 780,
+        "wires": [
+            [
+                "dxc00000000000ca"
+            ]
+        ]
+    },
+    {
+        "id": "dxc00000000000ca",
+        "type": "http request",
+        "z": "dxc0000000000090",
+        "name": "Get QRZ XML Key",
+        "method": "GET",
+        "ret": "txt",
+        "paytoqs": "ignore",
+        "url": "",
+        "tls": "",
+        "persist": false,
+        "proxy": "",
+        "insecureHTTPParser": false,
+        "authType": "",
+        "senderr": false,
+        "headers": [],
+        "x": 790,
+        "y": 780,
+        "wires": [
+            [
+                "dxc00000000000cc"
+            ]
+        ]
+    },
+    {
+        "id": "dxc00000000000cc",
+        "type": "xml",
+        "z": "dxc0000000000090",
+        "name": "",
+        "attr": "$",
+        "chr": "_",
+        "x": 970,
+        "y": 780,
+        "wires": [
+            [
+                "dxc00000000000cd"
+            ]
+        ]
+    },
+    {
+        "id": "dxc00000000000cd",
+        "type": "function",
+        "z": "dxc0000000000090",
+        "name": "QRZ key",
+        "func": "function txt(v) {\n    if (v === null || v === undefined) return '';\n    return (typeof v === 'object') ? (v._ || '') : String(v);\n}\nconst db = msg.payload && msg.payload.QRZDatabase;\nconst sess = db && db.Session && db.Session[0];\nif (sess) {\n    const key = txt(sess.Key && sess.Key[0]);\n    const err = txt(sess.Error && sess.Error[0]);\n    if (key) {\n        flow.set('qrzkey', key);\n        flow.set('qrzkeyexpire', txt(sess.SubExp && sess.SubExp[0]));\n        node.status({ fill: 'green', shape: 'dot', text: 'QRZ session ok' });\n        return null;\n    }\n    node.status({ fill: 'red', shape: 'ring', text: err || 'login failed' });\n}\nflow.set('qrzkey', null);\nreturn null;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1100,
+        "y": 780,
+        "wires": []
+    },
+    {
+        "id": "dxc00000000000ce",
+        "type": "inject",
+        "z": "dxc0000000000090",
+        "name": "QRZ relogin on start",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": true,
+        "onceDelay": 5,
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 190,
+        "y": 780,
+        "wires": [
+            [
+                "dxc00000000000c9"
+            ]
+        ]
+    },
+    {
+        "id": "dxc00000000000cb",
+        "type": "http response",
+        "z": "dxc0000000000090",
+        "name": "",
+        "statusCode": "",
+        "headers": {},
+        "x": 630,
+        "y": 720,
+        "wires": []
+    },
+    {
+        "id": "dxc00000000000cf",
+        "type": "http in",
+        "z": "dxc0000000000090",
+        "name": "GET /api/qrz/config",
+        "url": "/api/qrz/config",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 200,
+        "y": 840,
+        "wires": [
+            [
+                "dxc00000000000d0"
+            ]
+        ]
+    },
+    {
+        "id": "dxc00000000000d0",
+        "type": "function",
+        "z": "dxc0000000000090",
+        "name": "QRZ config state",
+        "func": "// Never expose the password; the UI only needs to know whether\n// credentials exist and which username is stored.\nmsg.payload = {\n    configured: !!flow.get('qrzuser'),\n    username: flow.get('qrzuser') || '',\n    session: !!flow.get('qrzkey')\n};\nmsg.headers = { 'Content-Type': 'application/json' };\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 400,
+        "y": 840,
+        "wires": [
+            [
+                "dxc00000000000d1"
+            ]
+        ]
+    },
+    {
+        "id": "dxc00000000000d1",
+        "type": "http response",
+        "z": "dxc0000000000090",
+        "name": "",
+        "statusCode": "",
+        "headers": {},
+        "x": 590,
+        "y": 840,
         "wires": []
     }
 ]

@@ -163,6 +163,14 @@
                             <input type="text" id="setGrid" class="set-input" maxlength="6" placeholder="e.g. OM89vx" style="text-transform:uppercase">
                         </div>
                         <div class="form-row">
+                            <label id="qrzUserLabel" for="setQrzUser">QRZ.com username</label>
+                            <input type="text" id="setQrzUser" class="set-input" maxlength="32" autocomplete="username">
+                        </div>
+                        <div class="form-row">
+                            <label id="qrzPassLabel" for="setQrzPass">QRZ.com password</label>
+                            <input type="password" id="setQrzPass" class="set-input" maxlength="64" autocomplete="new-password">
+                        </div>
+                        <div class="form-row">
                             <label id="ttlTitle">Marker lifetime (minutes)</label>
                             <div class="ttl-grid">
                                 <span>CW</span><input type="number" id="ttlCw" min="1" max="180" step="1">

@@ -118,6 +118,7 @@ const I18N = {
         langLabel: '语言 / Language', mapTiles: '地图源', ttlTitle: '标记点存活时间（分钟）', bandTitle: '频段颜色',
         qsoView: 'QSO 地图', spotView: 'Spot 网格', stWaiting: '等待 N1MM+ 数据…', stLastQso: '上一 QSO',
         stMults: '乘数', stPoints: '点数', stTx: '发射中', myGrid: '本台网格 (梅登海德)',
+        qrzUser: 'QRZ.com 用户名', qrzPass: 'QRZ.com 密码',
         save: '保存',
         cfgHint: '呼号按顺序分配到地图窗口，空槽位在仪表盘上保持空白。<br>距离为被监听台与监听台之间计算得出。<br>Spot 自动获取：CW 来自 reversebeacon.net RBN（10 秒），其他模式来自 dxwatch.com（30 秒）——无需集群登录或连接设置。',
         cellHint: '在设置中配置呼号',
@@ -159,6 +160,7 @@ const I18N = {
         langLabel: 'Language / 语言', mapTiles: 'Base map', ttlTitle: 'Marker lifetime (minutes)', bandTitle: 'Band colors',
         qsoView: 'QSO Map', spotView: 'Spot Grid', stWaiting: 'Waiting for N1MM+ data…', stLastQso: 'Last QSO',
         stMults: 'Mults', stPoints: 'Points', stTx: 'TX', myGrid: 'My grid (Maidenhead)',
+        qrzUser: 'QRZ.com username', qrzPass: 'QRZ.com password',
         save: 'Save',
         cfgHint: 'Callsigns are assigned to map slots in order. Empty slots stay blank on the dashboard.<br>Distance is computed between the monitored station and the spotting station.<br>Spots are provided automatically: CW by reversebeacon.net RBN (10s), other modes by dxwatch.com (30s) - no cluster login or connection setup is needed.',
         cellHint: 'Set callsigns in Settings',
@@ -200,6 +202,7 @@ const I18N = {
         langLabel: 'Sprache / Language', mapTiles: 'Basiskarte', ttlTitle: 'Marker-Lebensdauer (Minuten)', bandTitle: 'Bandfarben',
         qsoView: 'QSO-Karte', spotView: 'Spot-Raster', stWaiting: 'Warte auf N1MM+-Daten…', stLastQso: 'Letztes QSO',
         stMults: 'Multis', stPoints: 'Punkte', stTx: 'TX', myGrid: 'Mein Grid (Maidenhead)',
+        qrzUser: 'QRZ.com Benutzername', qrzPass: 'QRZ.com Passwort',
         save: 'Speichern',
         cfgHint: 'Rufzeichen werden der Reihe nach den Kartenfenstern zugewiesen. Leere Plätze bleiben im Dashboard frei.<br>Die Entfernung wird zwischen überwachter und spotender Station berechnet.<br>Spots werden automatisch geliefert: CW von reversebeacon.net RBN (10 s), andere Modi von dxwatch.com (30 s) - kein Cluster-Login nötig.',
         cellHint: 'Rufzeichen in den Einstellungen setzen',
@@ -241,6 +244,7 @@ const I18N = {
         langLabel: 'Langue / Language', mapTiles: 'Fond de carte', ttlTitle: 'Durée de vie des marqueurs (minutes)', bandTitle: 'Couleurs des bandes',
         qsoView: 'Carte QSO', spotView: 'Grille Spots', stWaiting: 'En attente des données N1MM+…', stLastQso: 'Dernier QSO',
         stMults: 'Mults', stPoints: 'Points', stTx: 'TX', myGrid: 'Ma grille (Maidenhead)',
+        qrzUser: "Nom d'utilisateur QRZ.com", qrzPass: 'Mot de passe QRZ.com',
         save: 'Enregistrer',
         cfgHint: "Les indicatifs sont attribués aux fenêtres de carte dans l'ordre. Les emplacements vides restent vides sur le tableau de bord.<br>La distance est calculée entre la station surveillée et la station spotteuse.<br>Les spots sont fournis automatiquement : CW via reversebeacon.net RBN (10 s), autres modes via dxwatch.com (30 s) - aucune connexion à un cluster n'est nécessaire.",
         cellHint: 'Définir les indicatifs dans les paramètres',
@@ -282,6 +286,7 @@ const I18N = {
         langLabel: 'Idioma / Language', mapTiles: 'Mapa base', ttlTitle: 'Vida útil de los marcadores (minutos)', bandTitle: 'Colores de banda',
         qsoView: 'Mapa QSO', spotView: 'Rejilla Spots', stWaiting: 'Esperando datos de N1MM+…', stLastQso: 'Último QSO',
         stMults: 'Mults', stPoints: 'Puntos', stTx: 'TX', myGrid: 'Mi grid (Maidenhead)',
+        qrzUser: 'Usuario QRZ.com', qrzPass: 'Contraseña QRZ.com',
         save: 'Guardar',
         cfgHint: 'Los indicativos se asignan a las ventanas de mapa en orden. Los espacios vacíos quedan en blanco en el panel.<br>La distancia se calcula entre la estación monitorizada y la estación spottera.<br>Los spots se obtienen automáticamente: CW por reversebeacon.net RBN (10 s), otros modos por dxwatch.com (30 s), sin necesidad de conexión a clúster.',
         cellHint: 'Configure los indicativos en Ajustes',
@@ -323,6 +328,7 @@ const I18N = {
         langLabel: 'Idioma / Language', mapTiles: 'Mapa base', ttlTitle: 'Vida útil dos marcadores (minutos)', bandTitle: 'Cores das bandas',
         qsoView: 'Mapa QSO', spotView: 'Grade Spots', stWaiting: 'Aguardando dados do N1MM+…', stLastQso: 'Último QSO',
         stMults: 'Mults', stPoints: 'Pontos', stTx: 'TX', myGrid: 'Meu grid (Maidenhead)',
+        qrzUser: 'Utilizador QRZ.com', qrzPass: 'Palavra-passe QRZ.com',
         save: 'Guardar',
         cfgHint: 'Os indicativos são atribuídos às janelas de mapa por ordem. Espaços vazios ficam em branco no painel.<br>A distância é calculada entre a estação monitorizada e a estação spotter.<br>Os spots são fornecidos automaticamente: CW pelo reversebeacon.net RBN (10 s), outros modos pelo dxwatch.com (30 s) - sem necessidade de ligação a cluster.',
         cellHint: 'Defina os indicativos nas Configurações',
@@ -364,6 +370,7 @@ const I18N = {
         langLabel: 'Язык / Language', mapTiles: 'Базовая карта', ttlTitle: 'Время жизни маркеров (минуты)', bandTitle: 'Цвета диапазонов',
         qsoView: 'Карта QSO', spotView: 'Сетка спотов', stWaiting: 'Ожидание данных N1MM+…', stLastQso: 'Последний QSO',
         stMults: 'Мульты', stPoints: 'Очки', stTx: 'TX', myGrid: 'Мой квадрат (Maidenhead)',
+        qrzUser: 'Имя пользователя QRZ.com', qrzPass: 'Пароль QRZ.com',
         save: 'Сохранить',
         cfgHint: 'Позывные назначаются окнам карт по порядку. Пустые слоты остаются пустыми на панели.<br>Расстояние вычисляется между отслеживаемой и наблюдающей станциями.<br>Споты поступают автоматически: CW с reversebeacon.net RBN (10 с), другие моды с dxwatch.com (30 с) — подключение к кластеру не требуется.',
         cellHint: 'Задайте позывные в Настройках',
@@ -405,6 +412,7 @@ const I18N = {
         langLabel: 'Lingua / Language', mapTiles: 'Mappa base', ttlTitle: 'Durata dei marker (minuti)', bandTitle: 'Colori delle bande',
         qsoView: 'Mappa QSO', spotView: 'Griglia Spot', stWaiting: 'In attesa dei dati N1MM+…', stLastQso: 'Ultimo QSO',
         stMults: 'Molt.', stPoints: 'Punti', stTx: 'TX', myGrid: 'Mio grid (Maidenhead)',
+        qrzUser: 'Utente QRZ.com', qrzPass: 'Password QRZ.com',
         save: 'Salva',
         cfgHint: 'I nominativi sono assegnati alle finestre mappa in ordine. Gli slot vuoti restano vuoti nella dashboard.<br>La distanza è calcolata tra la stazione monitorata e quella spotter.<br>Gli spot sono forniti automaticamente: CW da reversebeacon.net RBN (10 s), altri modi da dxwatch.com (30 s) - nessuna connessione a cluster necessaria.',
         cellHint: 'Imposta i nominativi nelle Impostazioni',
@@ -446,6 +454,7 @@ const I18N = {
         langLabel: 'اللغة / Language', mapTiles: 'خريطة الأساس', ttlTitle: 'مدة بقاء العلامات (دقائق)', bandTitle: 'ألوان النطاقات',
         qsoView: 'خريطة QSO', spotView: 'شبكة السبوت', stWaiting: 'في انتظار بيانات N1MM+…', stLastQso: 'آخر QSO',
         stMults: 'المضاعفات', stPoints: 'النقاط', stTx: 'إرسال', myGrid: 'شبكتي (Maidenhead)',
+        qrzUser: 'اسم مستخدم QRZ.com', qrzPass: 'كلمة مرور QRZ.com',
         save: 'حفظ',
         cfgHint: 'تُسند النداءات إلى نوافذ الخريطة بالترتيب، وتبقى الفتحات الفارغة خالية في اللوحة.<br>تُحسب المسافة بين المحطة المراقَبة ومحطة الرصد.<br>تُجلب السبوتات تلقائياً: CW من reversebeacon.net RBN (كل 10 ثوانٍ)، والأنماط الأخرى من dxwatch.com (كل 30 ثانية) - لا حاجة لتسجيل الدخول إلى أي كلاستر.',
         cellHint: 'حدد النداءات في الإعدادات',
@@ -487,6 +496,7 @@ const I18N = {
         langLabel: '언어 / Language', mapTiles: '기본 지도', ttlTitle: '마커 유지 시간 (분)', bandTitle: '밴드 색상',
         qsoView: 'QSO 지도', spotView: '스팟 그리드', stWaiting: 'N1MM+ 데이터 대기 중…', stLastQso: '마지막 QSO',
         stMults: '멀티', stPoints: '포인트', stTx: '송신', myGrid: '내 그리드 (Maidenhead)',
+        qrzUser: 'QRZ.com 사용자명', qrzPass: 'QRZ.com 비밀번호',
         save: '저장',
         cfgHint: '콜사인은 순서대로 지도 슬롯에 배정됩니다. 빈 슬롯은 대시보드에서 비워 둡니다.<br>거리는 모니터링 국과 스포팅 국 사이로 계산됩니다.<br>스폿은 자동으로 제공됩니다: CW는 reversebeacon.net RBN (10초), 다른 모드는 dxwatch.com (30초) - 클러스터 로그인이 필요 없습니다.',
         cellHint: '설정에서 콜사인을 입력하세요',
@@ -528,6 +538,7 @@ const I18N = {
         langLabel: '言語 / Language', mapTiles: 'ベースマップ', ttlTitle: 'マーカー生存時間 (分)', bandTitle: 'バンドカラー',
         qsoView: 'QSOマップ', spotView: 'スポットグリッド', stWaiting: 'N1MM+ データを待っています…', stLastQso: '直近の QSO',
         stMults: 'マルチ', stPoints: 'ポイント', stTx: '送信', myGrid: '自局グリッド (Maidenhead)',
+        qrzUser: 'QRZ.com ユーザー名', qrzPass: 'QRZ.com パスワード',
         save: '保存',
         cfgHint: 'コールサインは順番にマップ枠へ割り当てられます。空き枠はダッシュボードで空白のままです。<br>距離は監視局とスポッター局の間で計算されます。<br>スポットは自動取得されます: CWはreversebeacon.net RBN (10秒)、その他のモードはdxwatch.com (30秒) - クラスターへのログインは不要です。',
         cellHint: '設定でコールサインを入力してください',
@@ -1627,6 +1638,8 @@ function applyLang() {
     $('#ttlTitle').textContent = t('ttlTitle');
     $('#bandTitle').textContent = t('bandTitle');
     $('#gridLabel').textContent = t('myGrid');
+    $('#qrzUserLabel').textContent = t('qrzUser');
+    $('#qrzPassLabel').textContent = t('qrzPass');
     $('#stLMults').textContent = t('stMults');
     $('#stLPoints').textContent = t('stPoints');
     $('#stLLast').textContent = t('stLastQso');
@@ -2071,6 +2084,26 @@ function init() {
     // Spot grid <-> QSO map view switch
     $('#btnQsoView').addEventListener('click', () =>
         setViewMode(qsoState.view === 'qso' ? 'spots' : 'qso'));
+    // QRZ.com XML credentials (QSO coordinate lookups; needs a QRZ XML
+    // subscription). Stored server-side in flow context; the password is
+    // never read back into the form.
+    const qrzUser = $('#setQrzUser'), qrzPass = $('#setQrzPass');
+    fetch('/api/qrz/config').then(r => r.json()).then(c => {
+        if (c && c.configured) qrzUser.value = c.username || '';
+    }).catch(() => {});
+    function saveQrzCreds() {
+        const username = qrzUser.value.trim(), password = qrzPass.value.trim();
+        if (!username || !password) return;
+        fetch('/api/qrz/config', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({username, password})
+        }).then(r => r.json()).then(r => {
+            if (r && r.ok) { qrzPass.value = ''; showToast(t('saved')); }
+            else showToast(t('saveFail'));
+        }).catch(() => showToast(t('saveFail')));
+    }
+    qrzPass.addEventListener('change', saveQrzCreds);
     [['ttlCw', 'CW'], ['ttlSsb', 'SSB'], ['ttlDigi', 'DIGI']].forEach(([id, mode]) => {
         const inp = $('#' + id);
         inp.value = settings.ttl[mode];
