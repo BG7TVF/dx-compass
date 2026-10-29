@@ -27,23 +27,30 @@ wget -qO- https://raw.githubusercontent.com/BG7TVF/dx-compass/main/bootstrap.sh 
 
 ## 功能特性
 
-- **多分屏布局**：`1×1` / `2×2` / `3×3` 自由切换，一个呼号对应一张地图，最多同时监测 9 个呼号
-- **实时打点**：每 30 秒从 dxwatch.com 拉取全球聚合 spot（FT8/SSB/DIGI 等），每 10 秒从 reversebeacon.net RBN 拉取 CW skimmer spot（含真实 SNR dB），解析报告人（DE）位置后在地图上标点，数据自动流入，无需任何连接配置
+- **多分屏布局**：`1×1` / `2×2` / `3×3` 自由切换，一个呼号对应一张地图，最多同时监测 9 个呼号；呼号多于可见窗口时支持自动轮询翻页
+- **实时打点**：每 30 秒从 dxwatch.com 拉取全球聚合 spot（FT8/SSB/DIGI 等），每 10 秒从 reversebeacon.net RBN 拉取 CW skimmer spot（含真实 SNR dB），DIGI 另有 PSKReporter MQTT 实时流，解析报告人（DE）位置后在地图上标点，数据自动流入，无需任何连接配置
 - **历史回溯**：新添加被监测呼号时，自动回溯该呼号最近 7 天（最多 150 条）的 spot
 - **标点存活时间可配置**：标记按模式（CW / SSB / DIGI）分别设置存活时间（默认各 30 分钟），随存活时间线性淡出直至消失；标记颜色按频段区分，均可在 Settings 中自定义
+- **频段热力图**：CW / DIGI 模式按频段生成热力图，强度随 SNR 与标记存活时间变化；点击频段框切换对应频段热力图
+- **晨昏线**：所有地图实时显示灰线（昼夜分界线）与夜半球阴影，每分钟自动刷新
+- **录制功能**：手动或定时（UTC，一次性）录制 spot 到独立 `recording_spots` 表，可下载 CSV，记录最长保留两个月
 - **完整记录**：每条 spot 记录时间、频率、报告人、模式（CW/DIGI/PHONE）、信号强度（CW 的 SNR dB 来自 RBN；FT8 的 SNR 来自 dxwatch）、距离等，存入 SQLite
 - **赛后分析**：记录面板支持按呼号筛选、一键导出 CSV
 - **距离计算**：直接使用数据源附带的呼号经纬度 + Haversine 公式，计算报告人相对本台的距离（公里/英里），不依赖第三方定位接口
+- **多语言界面**：支持中文 / English / Deutsch / Français / Español / Português / Русский / Italiano / العربية（RTL）/ 한국어 / 日本語 共 11 种界面语言
+- **底图可切换**：OpenStreetMap 与高德地图（中国大陆网络环境可用），切换后所有地图显示约定保持不变
 - **N1MM+ 本台集成**（可选）：接收 N1MM+ UDP 广播后，大屏顶部状态栏实时显示当前电台频率/模式/TX、当前总分（QSO/乘数/点数/Score）与上一个 QSO；一键切换全屏 **QSO 地图**，每个 QSO 按频段着色并从本台位置画大圆线，新乘数带 M 徽章，全部持久化到 `qsos` 表
 
 ## 技术架构
 
 ```
 dxwatch.com   (HTTPS/JSON, 30s 轮询, FT8/SSB/DIGI 等) ──┐
+                                                       │
+reversebeacon.net (HTTPS/JSON, 10s 轮询, CW 含 dB) ────┤
                                                        ├──► Node-RED 流程 ──► 按监测呼号过滤
-reversebeacon.net (HTTPS/JSON, 10s 轮询, CW 含 dB) ────┘        ├──► 内置经纬度 + Haversine 距离计算
+PSKReporter     (MQTT v2 实时流, DIGI) ────────────────┘        ├──► 内置经纬度 + Haversine 距离计算
                                                                 ├──► 模式 / 信号强度解析（跨源去重）
-                                                                ├──► SQLite 持久化记录（spot_id 去重）
+N1MM+           (UDP 12060-12062, 本台 QSO/电台/记分) ────────► ├──► SQLite 持久化记录（spot_id 去重）
                                                                 └──► WebSocket 实时推送 ──► 前端多地图大屏
 ```
 
@@ -129,11 +136,13 @@ sudo bash install.sh
 ## 首次使用配置
 
 1. 浏览器打开监测大屏 `http://<服务器IP>:5758/`
-2. 点击右上角 **Settings**，填入 **Home latitude / longitude**（本台经纬度，用于计算到各报告台的距离），点 **Save**
-3. 在每个分屏的呼号输入框中填入要监测的呼号，回车确认：
+2. 点击右上角 **Settings**，在 **Monitored Callsigns** 槽位中填入要监测的呼号，点 **Save**
+3. 点击工具栏 **▶ 开始监控** 按钮启动监控：
    - 系统立即开始接收实时 spot（CW 每 10 秒、其它模式每 30 秒刷新）
-   - 同时自动从 dxwatch 回溯该呼号最近 7 天的历史 spot，地图和 Records 面板很快就会有数据
+   - 同时自动从数据源回溯该呼号最近 7 天的历史 spot，地图和 Records 面板很快就会有数据
 4. 无需任何集群地址、登录呼号或 Connect 操作——数据源开箱即用
+
+> Settings 的 **Global Settings** 区可切换界面语言（11 种）、底图源（OSM / 高德）、各模式标记存活时间、各频段颜色，并填写本台梅登海德网格（N1MM+ QSO 地图用）。
 
 > 数据来自 dxwatch.com 与 reversebeacon.net 的公开接口。CW spot 由 RBN skimmer 网络提供，带真实 SNR（dB）与发报速度（WPM）；FT8/FT4 的 SNR 来自 dxwatch；普通 SSB spot 本身不携带信号强度，对应列为空属正常。
 
@@ -213,9 +222,9 @@ cd /opt/dx-compass
 npm install --omit=dev --registry=https://registry.npmmirror.com
 ```
 
-**4. 地图底图加载慢？**
+**4. 地图底图加载慢或无法加载？**
 
-底图来自 OpenStreetMap，服务器或浏览器需能访问外网；地图打点和记录功能不依赖底图加载。
+默认底图为 OpenStreetMap，国内网络环境可在 **Settings → Base map** 切换为**高德地图**；切换即时生效，所有标记、连线、热力图与晨昏线保持不变。地图打点和记录功能本身不依赖底图加载。
 
 **5. 如何修改端口？**
 
