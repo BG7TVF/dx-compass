@@ -25,6 +25,12 @@ wget -qO- https://raw.githubusercontent.com/BG7TVF/dx-compass/main/bootstrap.sh 
 > 服务器通过代理访问 GitHub 时：先下载脚本再带代理变量运行，见文末[常见问题](#常见问题)。
 > 云服务器记得在安全组放行 **TCP 5758**。
 
+**没有 root 权限？** 去掉 `sudo` 即可按当前用户安装到自己的家目录（见[方式三：普通用户免 root 安装](#方式三普通用户免-root安装)）：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/BG7TVF/dx-compass/main/bootstrap.sh | bash
+```
+
 ## 功能特性
 
 - **多分屏布局**：`1×1` / `2×2` / `3×3` 自由切换，一个呼号对应一张地图，最多同时监测 9 个呼号；呼号多于可见窗口时支持自动轮询翻页
@@ -82,7 +88,7 @@ dx-compass/
 ## 环境要求
 
 - **操作系统**：Ubuntu 22.04 / 24.04（Debian 系）
-- **Node.js**：>= 18（安装脚本会自动检测并安装 Node.js 20 LTS）
+- **Node.js**：>= 18（系统级安装会自动检测并安装 Node.js 20 LTS；免 root 用户安装需提前自备）
 - **内存**：建议 512MB 以上
 - **网络**：服务器需能访问 `https://dxwatch.com` 与 `https://www.reversebeacon.net`（出站 HTTPS 443）；无需 telnet、无需集群账号
 - **端口**：对外放行 **5758**（TCP）
@@ -124,6 +130,60 @@ sudo bash install.sh
 7. 等待端口就绪、校验数据库 API 可用，并输出访问地址
 
 脚本可重复执行（幂等）。
+
+### 方式三：普通用户免 root 安装
+
+任何登录用户都可以在自己的家目录部署一份，**完全不需要 sudo**：安装到 `~/dx-compass`，并注册为 `systemctl --user` 服务。
+
+```bash
+# 一行安装（不带 sudo）
+curl -fsSL https://raw.githubusercontent.com/BG7TVF/dx-compass/main/bootstrap.sh | bash
+
+# 或指定目录 / 分支
+DX_COMPASS_DIR=$HOME/dx-compass DX_COMPASS_BRANCH=main bash bootstrap.sh
+```
+
+前置条件（因无 root 权限安装这些组件）：
+
+- 已安装 **Node.js >= 18**（可用 nvm / fnm 装到家目录）
+- 已安装 **git**、**curl**
+- 建议已安装编译工具（`build-essential python3 make g++`），否则 sqlite3 原生模块可能无法编译；脚本检测缺失时会提示
+
+安装完成后服务由当前用户管理：
+
+```bash
+systemctl --user status dx-compass     # 查看状态
+systemctl --user restart dx-compass    # 重启
+systemctl --user stop dx-compass       # 停止
+journalctl --user -u dx-compass -f     # 日志
+```
+
+> 脚本会尝试 `loginctl enable-linger <用户>` 让服务在退出登录后继续运行；若失败会提示管理员执行 `sudo loginctl enable-linger <用户>`。
+> 同一台机器上多人使用时，5758 端口只能被一套实例占用；如已被占用，需调整 `settings.js` 的 `uiPort`（见文末常见问题）。
+
+### 关于 git 目录属主（dubious ownership）
+
+git 默认拒绝操作"属主不是当前用户"的仓库，会报：
+
+```
+fatal: detected dubious ownership in repository at '/opt/dx-compass'
+```
+
+`bootstrap.sh` 已内置处理，无需手动干预：
+
+- **以 root 运行时**：自动检测目录属主，并以该属主身份执行 `fetch` / `reset`，同时对属主登记 `safe.directory`
+- **以普通用户运行、且目录属于别人**：会明确提示改用属主账号，或执行 `sudo chown -R <你> /opt/dx-compass` 取得所有权
+
+若手动执行 git 命令遇到该错误，可任选其一：
+
+```bash
+# 方案 A：以属主身份拉取（推荐，避免文件属主混乱）
+sudo -u <属主> git -C /opt/dx-compass pull
+
+# 方案 B：把该目录加入当前用户的 safe.directory 白名单
+git config --global --add safe.directory /opt/dx-compass
+git -C /opt/dx-compass pull
+```
 
 ### 访问
 
@@ -167,6 +227,8 @@ sudo bash install.sh
 
 ## 服务管理
 
+系统级安装（`sudo`）：
+
 ```bash
 sudo systemctl status dx-compass       # 查看状态
 sudo systemctl restart dx-compass      # 重启
@@ -174,6 +236,18 @@ sudo systemctl stop dx-compass         # 停止
 sudo systemctl disable dx-compass      # 取消开机自启
 journalctl -u dx-compass -f            # 实时查看日志
 ```
+
+按用户安装（方式三，无需 sudo）：
+
+```bash
+systemctl --user status dx-compass     # 查看状态
+systemctl --user restart dx-compass    # 重启
+systemctl --user stop dx-compass       # 停止
+systemctl --user disable dx-compass    # 取消开机自启
+journalctl --user -u dx-compass -f     # 实时查看日志
+```
+
+两种模式均**不会**修改系统已有的 Node-RED（如 1880 端口 / `nodered` 服务）或 `~/.node-red`。
 
 数据库文件 `dxcompass.db`、上下文目录 `.context/` 在首次运行后生成于项目目录，均已在 `.gitignore` 中忽略。
 
@@ -200,6 +274,10 @@ sudo https_proxy=http://127.0.0.1:7890 http_proxy=http://127.0.0.1:7890 bash /tm
 ```
 
 代理变量会被后续的 git / npm 步骤继承；npm 部分还会自动切换国内镜像重试。
+
+**0b. 更新时报 `detected dubious ownership in repository`？**
+
+见[关于 git 目录属主](#关于-git-目录属主dubious-ownership)。一键脚本已自动处理；手动拉取时用 `sudo -u <属主> git -C /opt/dx-compass pull`，或把目录加入 `safe.directory`。
 
 **1. 大屏打开正常但收不到 spot？**
 

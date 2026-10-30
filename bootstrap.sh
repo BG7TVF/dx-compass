@@ -7,18 +7,25 @@
 #
 #    curl -fsSL https://raw.githubusercontent.com/BG7TVF/dx-compass/main/bootstrap.sh | sudo bash
 #
-#    wget -qO- https://raw.githubusercontent.com/BG7TVF/dx-compass/main/bootstrap.sh | sudo bash
+#  System-wide install (sudo): programme goes to /opt/dx-compass and runs
+#  as the invoking user via a systemd system service.
 #
-#  What it does:
-#    1. Downloads (git clone) or updates the project to /opt/dx-compass
-#    2. Hands over to install.sh which installs deps and starts the service
+#  Per-user install (no sudo needed, no root privileges required):
 #
-#  Optional variables:
-#    sudo DX_COMPASS_DIR=/srv/dx-compass bash bootstrap.sh      # custom path
-#    sudo DX_COMPASS_BRANCH=dev bash bootstrap.sh              # custom branch
+#    curl -fsSL https://raw.githubusercontent.com/BG7TVF/dx-compass/main/bootstrap.sh | bash
 #
-#  Note: must run as root (prefix the curl/wget command with sudo) because
-#        apt packages and the systemd service are installed.
+#  ...or with a custom directory / branch:
+#
+#    DX_COMPASS_DIR=$HOME/dx-compass DX_COMPASS_BRANCH=main bash bootstrap.sh
+#
+#  Requirement for the no-sudo mode: Node.js >= 18, git and curl must
+#  already be installed (the script cannot apt-get without root).
+#
+#  Ownership: a repository directory owned by another user is handled
+#  automatically - when running as root the git commands are executed as
+#  the directory owner, and the path is registered in git's
+#  safe.directory list. This avoids the "detected dubious ownership"
+#  error that used to force every pull to be run as the original owner.
 #
 ###############################################################################
 
@@ -30,7 +37,18 @@ set -euo pipefail
 REPO_URL="https://github.com/BG7TVF/dx-compass.git"
 RAW_BASE="https://raw.githubusercontent.com/BG7TVF/dx-compass"
 BRANCH="${DX_COMPASS_BRANCH:-main}"
-INSTALL_DIR="${DX_COMPASS_DIR:-/opt/dx-compass}"
+
+# --------------------------------------------------------------------------- #
+# Root vs per-user mode
+# --------------------------------------------------------------------------- #
+CUR_USER="$(id -un)"
+if [[ ${EUID} -eq 0 ]]; then
+    MODE="system"
+    INSTALL_DIR="${DX_COMPASS_DIR:-/opt/dx-compass}"
+else
+    MODE="user"
+    INSTALL_DIR="${DX_COMPASS_DIR:-${HOME}/dx-compass}"
+fi
 
 # --------------------------------------------------------------------------- #
 # Output helpers (ASCII only)
@@ -46,40 +64,65 @@ die()   { err "$*"; exit 1; }
 echo
 echo "=============================================================="
 echo "  DX-Compass bootstrap installer"
-echo "  Branch: ${BRANCH}   Target: ${INSTALL_DIR}"
+echo "  Mode: ${MODE}   Branch: ${BRANCH}"
+echo "  Target: ${INSTALL_DIR}"
 echo "=============================================================="
 echo
 
 # --------------------------------------------------------------------------- #
-# Root check (apt + systemd need it)
-# --------------------------------------------------------------------------- #
-if [[ ${EUID} -ne 0 ]]; then
-    err "This installer must run as root."
-    err "Please re-run with sudo, for example:"
-    err "  curl -fsSL ${RAW_BASE}/${BRANCH}/bootstrap.sh | sudo bash"
-    exit 1
-fi
-
-# --------------------------------------------------------------------------- #
-# Basic tools: make sure curl/git/ca-certificates are present
+# Basic tools: make sure curl/git/ca-certificates are present.
+# Only root can install packages; per-user mode checks and explains instead.
 # --------------------------------------------------------------------------- #
 NEED_INSTALL=()
 command -v curl >/dev/null 2>&1 || NEED_INSTALL+=(curl ca-certificates)
 command -v git  >/dev/null 2>&1 || NEED_INSTALL+=(git)
 if [[ ${#NEED_INSTALL[@]} -gt 0 ]]; then
-    info "Installing required tools: ${NEED_INSTALL[*]} ..."
-    apt-get update -qq
-    env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "${NEED_INSTALL[@]}" >/dev/null
+    if [[ ${EUID} -eq 0 ]]; then
+        info "Installing required tools: ${NEED_INSTALL[*]} ..."
+        apt-get update -qq
+        env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "${NEED_INSTALL[@]}" >/dev/null
+    else
+        warn "Missing tools: ${NEED_INSTALL[*]} (per-user mode cannot install them)."
+    fi
 fi
-command -v curl >/dev/null 2>&1 || die "curl is required but could not be installed."
+command -v curl >/dev/null 2>&1 || die "curl is required. Install it first:  sudo apt-get install -y curl ca-certificates"
+command -v git  >/dev/null 2>&1 || die "git is required. Install it first:  sudo apt-get install -y git"
+
+# --------------------------------------------------------------------------- #
+# Git ownership handling
+#   A repository created by root or by another user triggers git's
+#   "detected dubious ownership" refusal. Solve it without forcing the
+#   operator to switch accounts:
+#     * root        -> run the git commands as the directory owner
+#     * regular user-> register the path in this user's global safe.directory
+# --------------------------------------------------------------------------- #
+GIT_AS=(git)
+build_git_runner() {
+    local dir="$1" owner
+    owner="$(stat -c '%U' "${dir}" 2>/dev/null || true)"
+    if [[ -n "${owner}" && "${owner}" != "${CUR_USER}" ]]; then
+        if [[ ${EUID} -eq 0 ]]; then
+            info "Repository is owned by '${owner}' - running git as that user."
+            GIT_AS=(sudo -u "${owner}" -H git)
+        else
+            err "Repository ${dir} is owned by '${owner}', current user is '${CUR_USER}'."
+            err "Run the update as the owner:  sudo -u ${owner} bash ${BASH_SOURCE[0]}"
+            err "Or take ownership:            sudo chown -R ${CUR_USER}:${CUR_USER} ${dir}"
+            exit 1
+        fi
+    fi
+    # Register the path as safe for whichever identity runs git.
+    "${GIT_AS[@]}" config --global --add safe.directory "${dir}" 2>/dev/null || true
+}
 
 # --------------------------------------------------------------------------- #
 # Download / update the project
 # --------------------------------------------------------------------------- #
 if [[ -d "${INSTALL_DIR}/.git" ]]; then
     info "Existing installation found at ${INSTALL_DIR} - updating..."
-    git -C "${INSTALL_DIR}" fetch --depth 1 origin "${BRANCH}"
-    git -C "${INSTALL_DIR}" reset --hard "origin/${BRANCH}"
+    build_git_runner "${INSTALL_DIR}"
+    "${GIT_AS[@]}" -C "${INSTALL_DIR}" fetch --depth 1 origin "${BRANCH}"
+    "${GIT_AS[@]}" -C "${INSTALL_DIR}" reset --hard "origin/${BRANCH}"
     ok "Project updated to branch ${BRANCH}"
 
 elif [[ -f "${INSTALL_DIR}/install.sh" ]]; then

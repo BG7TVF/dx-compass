@@ -57,6 +57,7 @@ die()   { err "$*"; exit 1; }
 # Privilege / user handling
 # --------------------------------------------------------------------------- #
 if [[ ${EUID} -eq 0 ]]; then
+    MODE="system"
     SUDO=""
     if [[ -n "${SUDO_USER:-}" && "${SUDO_USER}" != "root" ]]; then
         RUN_USER="${SUDO_USER}"
@@ -64,12 +65,16 @@ if [[ ${EUID} -eq 0 ]]; then
         RUN_USER="dxcompass"   # dedicated system user (created below)
     fi
 else
-    SUDO="sudo"
+    # Per-user install: no root privileges, no apt, no system service.
+    # Everything runs from the current user's own directory and is managed
+    # through systemctl --user.
+    MODE="user"
+    SUDO=""
     RUN_USER="$(id -un)"
 fi
 RUN_GROUP="$(id -gn "${RUN_USER}" 2>/dev/null || echo "${RUN_USER}")"
 run_as_user() {
-    if [[ ${EUID} -eq 0 ]]; then
+    if [[ ${MODE} == "system" && ${EUID} -eq 0 ]]; then
         local user_home
         user_home="$(getent passwd "${RUN_USER}" | cut -d: -f6)"
         sudo -u "${RUN_USER}" HOME="${user_home}" "$@"
@@ -79,6 +84,7 @@ run_as_user() {
 }
 
 info "DX-Compass installer"
+info "Install mode  : ${MODE}$([[ ${MODE} == "user" ]] && echo ' (systemctl --user, no root)')"
 info "App directory : ${APP_DIR}"
 info "Service user  : ${RUN_USER}"
 info "Listen port   : ${APP_PORT}"
@@ -90,6 +96,12 @@ echo
 [[ -f "${PACKAGE_FILE}" ]]  || die "package.json not found in ${APP_DIR}"
 [[ -f "${SETTINGS_FILE}" ]] || die "settings.js not found in ${APP_DIR}"
 [[ -f "${FLOW_FILE}" ]]     || die "flow.json not found in ${APP_DIR}"
+
+# Per-user installs must own the folder they are about to write into
+# (node_modules, dxcompass.db, flow context files all live here).
+if [[ ${MODE} == "user" && ! -w "${APP_DIR}" ]]; then
+    die "${APP_DIR} is not writable by ${RUN_USER} (owner: $(stat -c '%U' "${APP_DIR}" 2>/dev/null || echo unknown)). Ask an administrator to run:  sudo chown -R ${RUN_USER}:${RUN_GROUP} ${APP_DIR}"
+fi
 
 if [[ ! -f /etc/os-release ]]; then
     warn "Cannot detect OS (/etc/os-release missing) - continuing anyway."
@@ -155,11 +167,27 @@ ok "Disk space OK ($(( FREE_KB / 1024 )) MB available)"
 # 2. System packages (build tools needed by the sqlite native module)
 # --------------------------------------------------------------------------- #
 info "Installing system packages (ca-certificates, curl, build tools)..."
-${SUDO} apt-get update -qq
-${SUDO} env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
-    ca-certificates curl gnupg iproute2 \
-    build-essential python3 make g++ >/dev/null
-ok "System packages ready"
+if [[ ${MODE} == "system" ]]; then
+    ${SUDO} apt-get update -qq
+    ${SUDO} env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
+        ca-certificates curl gnupg iproute2 \
+        build-essential python3 make g++ >/dev/null
+    ok "System packages ready"
+else
+    # Per-user mode cannot install packages; verify what npm needs instead.
+    missing=()
+    for tool in curl python3 make g++ cc; do
+        command -v "${tool}" >/dev/null 2>&1 || missing+=("${tool}")
+    done
+    if [[ ${#missing[@]} -gt 0 ]]; then
+        warn "Per-user mode: missing build tools (${missing[*]})."
+        warn "If the sqlite3 native module is not prebuilt for your Node.js,"
+        warn "npm install will fail. Ask an administrator to run:"
+        warn "  sudo apt-get install -y build-essential python3 make g++"
+    else
+        ok "Build tools present"
+    fi
+fi
 
 # --------------------------------------------------------------------------- #
 # 3. Node.js (>= 18) - use existing one if present, apt next, NodeSource last
@@ -168,19 +196,25 @@ node_major() { node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo
 
 if command -v node >/dev/null 2>&1 && [[ "$(node_major)" -ge ${REQUIRED_NODE_MAJOR} ]]; then
     ok "Node.js $(node -v) already installed - using it"
-else
+elif [[ ${MODE} == "system" ]]; then
     info "Node.js >= ${REQUIRED_NODE_MAJOR} not found. Trying Ubuntu repository..."
     ${SUDO} env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq nodejs npm >/dev/null || true
+else
+    warn "Node.js >= ${REQUIRED_NODE_MAJOR} not found (per-user mode cannot install it)."
 fi
 
-if ! command -v node >/dev/null 2>&1 || [[ "$(node_major)" -lt ${REQUIRED_NODE_MAJOR} ]]; then
+if [[ ${MODE} == "system" ]] && { ! command -v node >/dev/null 2>&1 || [[ "$(node_major)" -lt ${REQUIRED_NODE_MAJOR} ]]; }; then
     warn "apt Node.js is too old/missing. Installing Node.js 20 LTS from NodeSource..."
     curl -fsSL "https://deb.nodesource.com/setup_20.x" | ${SUDO} bash - >/dev/null
     ${SUDO} env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq nodejs >/dev/null
 fi
 
-command -v node >/dev/null 2>&1 || die "Node.js installation failed."
-[[ "$(node_major)" -ge ${REQUIRED_NODE_MAJOR} ]] || die "Node.js >= ${REQUIRED_NODE_MAJOR} is required, found $(node -v 2>/dev/null || echo 'none')."
+if ! command -v node >/dev/null 2>&1 || [[ "$(node_major)" -lt ${REQUIRED_NODE_MAJOR} ]]; then
+    if [[ ${MODE} == "user" ]]; then
+        die "Node.js >= ${REQUIRED_NODE_MAJOR} is required. Install it in your home directory with nvm/fnm, or ask an administrator, then re-run this installer."
+    fi
+    die "Node.js installation failed."
+fi
 ok "Node.js $(node -v), npm $(npm -v)"
 NODE_BIN="$(command -v node)"
 
@@ -196,10 +230,11 @@ fi
 # --------------------------------------------------------------------------- #
 # 5. npm dependencies (local node_modules inside the app folder)
 # --------------------------------------------------------------------------- #
-info "Making ${RUN_USER} the owner of the application folder..."
-${SUDO} chown -R "${RUN_USER}:${RUN_GROUP}" "${APP_DIR}"
-
 info "Installing npm dependencies locally (this can take a few minutes)..."
+if [[ ${MODE} == "system" ]]; then
+    info "Making ${RUN_USER} the owner of the application folder..."
+    ${SUDO} chown -R "${RUN_USER}:${RUN_GROUP}" "${APP_DIR}"
+fi
 NPM_ARGS=(install --omit=dev --no-audit --no-fund)
 if ! run_as_user npm "${NPM_ARGS[@]}" ; then
     warn "Default npm registry failed, retrying with mirror ${NPM_MIRROR} ..."
@@ -301,7 +336,16 @@ ok "Database schema ready (dxcompass.db)"
 # 6. systemd service (fully isolated from any other Node-RED instance)
 # --------------------------------------------------------------------------- #
 UNIT_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
+if [[ ${MODE} == "user" ]]; then
+    UNIT_DIR="${HOME}/.config/systemd/user"
+    UNIT_FILE="${UNIT_DIR}/${SERVICE_NAME}.service"
+    mkdir -p "${UNIT_DIR}"
+fi
 info "Writing systemd unit ${UNIT_FILE} ..."
+WANTED_BY="multi-user.target"
+if [[ ${MODE} == "user" ]]; then
+    WANTED_BY="default.target"
+fi
 ${SUDO} tee "${UNIT_FILE}" >/dev/null <<EOF
 [Unit]
 Description=DX-Compass - Multi-callsign DX Spot Monitor (Node-RED, port ${APP_PORT})
@@ -324,17 +368,29 @@ StandardError=journal
 SyslogIdentifier=${SERVICE_NAME}
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=${WANTED_BY}
 EOF
 ok "systemd unit installed"
 
 # --------------------------------------------------------------------------- #
 # 7. Enable and start
 # --------------------------------------------------------------------------- #
+if [[ ${MODE} == "user" ]]; then
+    CTL="systemctl --user"
+    LOG_CMD="journalctl --user -u ${SERVICE_NAME} -f"
+    # Keep the user service alive after the last session closes.
+    if command -v loginctl >/dev/null 2>&1; then
+        loginctl enable-linger "${RUN_USER}" >/dev/null 2>&1 \
+            || warn "Could not enable lingering - the service stops on logout. Ask an administrator: sudo loginctl enable-linger ${RUN_USER}"
+    fi
+else
+    CTL="systemctl"
+    LOG_CMD="journalctl -u ${SERVICE_NAME} -f"
+fi
 info "Enabling and starting ${SERVICE_NAME} ..."
-${SUDO} systemctl daemon-reload
-${SUDO} systemctl enable "${SERVICE_NAME}.service" >/dev/null 2>&1
-${SUDO} systemctl restart "${SERVICE_NAME}.service"
+${SUDO} ${CTL} daemon-reload
+${SUDO} ${CTL} enable "${SERVICE_NAME}.service" >/dev/null 2>&1
+${SUDO} ${CTL} restart "${SERVICE_NAME}.service"
 
 # Wait for the port to come up (max ~20 s)
 info "Waiting for DX-Compass to start ..."
@@ -349,10 +405,10 @@ PRIMARY_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
 PRIMARY_IP="${PRIMARY_IP:-<server-ip>}"
 
 echo
-if systemctl is-active --quiet "${SERVICE_NAME}.service"; then
+if ${SUDO} ${CTL} is-active --quiet "${SERVICE_NAME}.service"; then
     ok "DX-Compass is RUNNING"
 else
-    err "DX-Compass service is not active. Show logs with:  journalctl -u ${SERVICE_NAME} -f"
+    err "DX-Compass service is not active. Show logs with:  ${LOG_CMD}"
     exit 1
 fi
 
@@ -376,7 +432,7 @@ done
 if [[ ${api_ok} -eq 1 ]]; then
     ok "Database API responding"
 else
-    warn "/api/spots did not respond - the database layer may be broken. Check: journalctl -u ${SERVICE_NAME} -f"
+    warn "/api/spots did not respond - the database layer may be broken. Check: ${LOG_CMD}"
 fi
 
 echo
@@ -386,11 +442,17 @@ echo "------------------------------------------------------------------------"
 echo "  Dashboard      : http://${PRIMARY_IP}:${APP_PORT}/"
 echo "  Node-RED editor: http://${PRIMARY_IP}:${APP_PORT}/red"
 echo ""
-echo "  Manage the service:"
-echo "    sudo systemctl status  ${SERVICE_NAME}"
-echo "    sudo systemctl restart ${SERVICE_NAME}"
-echo "    sudo systemctl stop    ${SERVICE_NAME}"
-echo "    journalctl -u ${SERVICE_NAME} -f"
+echo "  Manage the service${MODE:+ (${MODE} mode)}:"
+if [[ ${MODE} == "user" ]]; then
+    echo "    systemctl --user status  ${SERVICE_NAME}"
+    echo "    systemctl --user restart ${SERVICE_NAME}"
+    echo "    systemctl --user stop    ${SERVICE_NAME}"
+else
+    echo "    sudo systemctl status  ${SERVICE_NAME}"
+    echo "    sudo systemctl restart ${SERVICE_NAME}"
+    echo "    sudo systemctl stop    ${SERVICE_NAME}"
+fi
+echo "    ${LOG_CMD}"
 echo ""
 echo "  Coexistence: an existing Node-RED (e.g. port 1880 / nodered service)"
 echo "  and ~/.node-red were not modified. Both instances run independently."
