@@ -18,7 +18,7 @@ const LANG_NAMES = {
 /* ---------- i18n ---------- */
 const I18N = {
     zh: {
-        subtitle: '多呼号 Spot 监视器',
+        subtitle: '多呼号 Spot 与竞赛监视器',
         settings: '设置', menu: '菜单',
         startMon: '▶ 开始监控', stopMon: '■ 停止监控',
         needCall: '请先在设置中配置至少一个呼号',
@@ -77,7 +77,7 @@ const I18N = {
         spotsN: n => n + ' spots'
     },
     en: {
-        subtitle: 'Multi-Call Spot Monitor',
+        subtitle: 'Multi-Call Spot & Contest Monitor',
         settings: 'Settings', menu: 'Menu',
         startMon: '▶ Start Monitor', stopMon: '■ Stop Monitor',
         needCall: 'Set at least one callsign in Settings first',
@@ -136,7 +136,7 @@ const I18N = {
         spotsN: n => n + ' spots'
     },
     de: {
-        subtitle: 'Multi-Rufzeichen Spot-Monitor',
+        subtitle: 'Multi-Rufzeichen Spot- & Contest-Monitor',
         settings: 'Einstellungen', menu: 'Menü',
         startMon: '▶ Überwachung starten', stopMon: '■ Überwachung stoppen',
         needCall: 'Zuerst mindestens ein Rufzeichen in den Einstellungen setzen',
@@ -195,7 +195,7 @@ const I18N = {
         spotsN: n => n + ' Spots'
     },
     fr: {
-        subtitle: 'Moniteur de spots multi-indicatifs',
+        subtitle: 'Moniteur spots & concours multi-indicatifs',
         settings: 'Paramètres', menu: 'Menu',
         startMon: '▶ Démarrer la surveillance', stopMon: '■ Arrêter la surveillance',
         needCall: "Définissez d'abord au moins un indicatif dans les paramètres",
@@ -254,7 +254,7 @@ const I18N = {
         spotsN: n => n + ' spots'
     },
     es: {
-        subtitle: 'Monitor de spots multiindicativo',
+        subtitle: 'Monitor de spots y concursos multiindicativo',
         settings: 'Ajustes', menu: 'Menú',
         startMon: '▶ Iniciar monitorización', stopMon: '■ Detener monitorización',
         needCall: 'Configure primero al menos un indicativo en Ajustes',
@@ -313,7 +313,7 @@ const I18N = {
         spotsN: n => n + ' spots'
     },
     pt: {
-        subtitle: 'Monitor de spots multichamada',
+        subtitle: 'Monitor de spots e concursos multichamada',
         settings: 'Configurações', menu: 'Menu',
         startMon: '▶ Iniciar monitorização', stopMon: '■ Parar monitorização',
         needCall: 'Defina primeiro pelo menos um indicativo nas Configurações',
@@ -372,7 +372,7 @@ const I18N = {
         spotsN: n => n + ' spots'
     },
     ru: {
-        subtitle: 'Монитор спотов на несколько позывных',
+        subtitle: 'Монитор спотов и контестов на несколько позывных',
         settings: 'Настройки', menu: 'Меню',
         startMon: '▶ Начать мониторинг', stopMon: '■ Остановить мониторинг',
         needCall: 'Сначала задайте хотя бы один позывной в Настройках',
@@ -431,7 +431,7 @@ const I18N = {
         spotsN: n => n + ' спотов'
     },
     it: {
-        subtitle: 'Monitor di spot multi-nominativo',
+        subtitle: 'Monitor spot e contest multi-nominativo',
         settings: 'Impostazioni', menu: 'Menu',
         startMon: '▶ Avvia monitoraggio', stopMon: '■ Ferma monitoraggio',
         needCall: 'Imposta prima almeno un nominativo nelle Impostazioni',
@@ -490,7 +490,7 @@ const I18N = {
         spotsN: n => n + ' spot'
     },
     ar: {
-        subtitle: 'مراقب سبوت متعدد النداءات',
+        subtitle: 'مراقب سبوت ومسابقات متعدد النداءات',
         settings: 'الإعدادات', menu: 'القائمة',
         startMon: '▶ بدء المراقبة', stopMon: '■ إيقاف المراقبة',
         needCall: 'حدد أولاً نداءً واحداً على الأقل في الإعدادات',
@@ -549,7 +549,7 @@ const I18N = {
         spotsN: n => n + ' سبوت'
     },
     ko: {
-        subtitle: '다중 콜사인 스폿 모니터',
+        subtitle: '다중 콜사인 스폿 & 콘테스트 모니터',
         settings: '설정', menu: '메뉴',
         startMon: '▶ 모니터링 시작', stopMon: '■ 모니터링 중지',
         needCall: '먼저 설정에서 콜사인을 하나 이상 입력하세요',
@@ -608,7 +608,7 @@ const I18N = {
         spotsN: n => n + ' 스폿'
     },
     ja: {
-        subtitle: 'マルチコール・スポットモニター',
+        subtitle: 'マルチコール・スポット＆コンテストモニター',
         settings: '設定', menu: 'メニュー',
         startMon: '▶ 監視開始', stopMon: '■ 監視停止',
         needCall: '先に設定でコールサインを1つ以上入力してください',
