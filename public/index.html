@@ -15,31 +15,7 @@
             <span class="subtitle">Multi-Call Spot Monitor</span>
         </div>
 
-        <div class="layout-group" id="layoutGroup">
-            <button class="layout-btn active" data-layout="1x1">1 × 1</button>
-            <button class="layout-btn" data-layout="2x2">2 × 2</button>
-            <button class="layout-btn" data-layout="3x3">3 × 3</button>
-        </div>
-
-        <div class="rotate-group" id="rotateGroup" title="Page through callsigns when there are more than visible cells">
-            <button class="action-btn rotate-btn" id="btnRotate" disabled>🔁 开始轮询</button>
-            <button class="action-btn" id="btnRotateNext" disabled title="Next page">⏭</button>
-            <input type="number" id="rotSec" class="rot-sec" min="3" max="600" step="1" value="15" title="Rotation interval (seconds)">
-            <span class="rot-unit">s</span>
-            <span class="rot-page" id="rotPage"></span>
-        </div>
-
-        <div class="status-group">
-            <span class="conn-dot" id="connDot" title="Live data link"></span>
-            <span class="conn-text" id="connText">disconnected</span>
-            <span class="sep">|</span>
-            <span class="stat" id="spotCount">0 spots</span>
-            <span class="sep">|</span>
-            <span class="stat" id="utcClock">--:--:--</span>
-        </div>
-
         <div class="action-group">
-            <button class="action-btn monitor-btn" id="btnMonitor" disabled>▶ 开始监控</button>
             <div class="menu-wrap" id="menuWrap">
                 <button class="action-btn menu-btn" id="btnMenu" title="Menu" aria-expanded="false" aria-controls="appMenu">☰</button>
                 <div class="app-menu hidden" id="appMenu">
@@ -103,6 +79,31 @@
                 <span class="panel-title">Spot Records</span>
             </div>
             <div class="panel-body">
+                <div class="panel-controls-row status-strip">
+                    <div class="status-group">
+                        <span class="conn-dot" id="connDot" title="Live data link"></span>
+                        <span class="conn-text" id="connText">disconnected</span>
+                        <span class="sep">|</span>
+                        <span class="stat" id="spotCount">0 spots</span>
+                        <span class="sep">|</span>
+                        <span class="stat" id="utcClock">--:--:--</span>
+                    </div>
+                    <button class="action-btn monitor-btn" id="btnMonitor" disabled>▶ 开始监控</button>
+                </div>
+                <div class="panel-controls-row view-controls">
+                    <div class="layout-group" id="layoutGroup">
+                        <button class="layout-btn active" data-layout="1x1">1 × 1</button>
+                        <button class="layout-btn" data-layout="2x2">2 × 2</button>
+                        <button class="layout-btn" data-layout="3x3">3 × 3</button>
+                    </div>
+                    <div class="rotate-group" id="rotateGroup" title="Page through callsigns when there are more than visible cells">
+                        <button class="action-btn rotate-btn" id="btnRotate" disabled>🔁 开始轮询</button>
+                        <button class="action-btn" id="btnRotateNext" disabled title="Next page">⏭</button>
+                        <input type="number" id="rotSec" class="rot-sec" min="3" max="600" step="1" value="15" title="Rotation interval (seconds)">
+                        <span class="rot-unit">s</span>
+                        <span class="rot-page" id="rotPage"></span>
+                    </div>
+                </div>
                 <div class="panel-controls">
                     <select id="recordCallSelect">
                         <option value="">-- All monitored calls --</option>

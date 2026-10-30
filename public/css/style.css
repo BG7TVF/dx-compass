@@ -415,6 +415,35 @@ html, body {
 .dock-panel .rec-tabs { flex: none; }
 .dock-panel .panel-footer { flex: none; }
 
+/* Control rows docked at the top of the records panel:
+ * row 1 = live link status + start/stop monitoring,
+ * row 2 = grid layout + callsign rotation. */
+.dock-panel .panel-controls-row { flex: none; }
+.panel-controls-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    margin-bottom: 8px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+}
+.status-strip { justify-content: space-between; }
+.status-strip .status-group {
+    flex: 1;
+    min-width: 0;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+.status-strip .conn-text { min-width: 0; }
+.status-strip .monitor-btn { flex: none; padding: 5px 12px; }
+.view-controls { flex-wrap: wrap; gap: 8px; }
+.view-controls .layout-btn { padding: 5px 10px; }
+.view-controls .rotate-group { flex: 1; min-width: 0; }
+.view-controls .rotate-group .action-btn { padding: 5px 10px; font-size: 11px; }
+.view-controls .rot-sec { padding: 5px 4px; }
+
 .panel-controls {
     display: flex;
     gap: 8px;
