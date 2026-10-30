@@ -1001,6 +1001,9 @@ function connectWS() {
 }
 
 function handleSpot(spot) {
+    // Messages without a callsign are not spots (e.g. settings broadcasts on
+    // an older cached app.js that has no 'settings' case yet).
+    if (!spot || (!spot.monitored_call && !spot.call)) return;
     if (!state.monitoring) return; // nothing is rendered until monitoring starts
     state.totalSpots++;
     $('#spotCount').textContent = t('spotsN')(state.totalSpots);
