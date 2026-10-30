@@ -1836,17 +1836,20 @@ function renderLastQso() {
 const QSO_RATE_BUCKET_MS = 5 * 60 * 1000;   // 5 minutes per bar
 const QSO_RATE_BUCKETS = 12;                // -> rolling 60 minutes
 
-/* Rolling QSO rate chart: one bar per 5-minute bucket, oldest to newest.
+/* QSO rate chart: one bar per 5-minute bucket, oldest to newest. Buckets are
+ * aligned to wall-clock boundaries (:00/:05/...) instead of rolling with
+ * Date.now(), so a QSO stays in the same bar between re-renders and the
+ * chart only shifts once when a boundary is crossed.
  * Counts come from qsoState.allTs (every QSO, live or backfilled, whether
  * it has coordinates or not). */
 function renderQsoRate() {
-    const now = Date.now();
+    const nowSlot = Math.floor(Date.now() / QSO_RATE_BUCKET_MS);
     const counts = new Array(QSO_RATE_BUCKETS).fill(0);
     let total = 0;
     qsoState.allTs.forEach(t => {
-        if (isNaN(t) || t > now) return;
-        const idx = QSO_RATE_BUCKETS - 1 - Math.floor((now - t) / QSO_RATE_BUCKET_MS);
-        if (idx >= 0) {
+        if (isNaN(t)) return;
+        const idx = QSO_RATE_BUCKETS - 1 - (nowSlot - Math.floor(t / QSO_RATE_BUCKET_MS));
+        if (idx >= 0 && idx < QSO_RATE_BUCKETS) {
             counts[idx]++;
             total++;
         }
@@ -1869,16 +1872,18 @@ function renderQsoRate() {
     $('#qRateSum').textContent = total + ' QSO · ' + total + '/h';
 }
 
-/* QSO per minute: one bar per minute over the last 30 minutes. */
+/* QSO per minute: one bar per minute over the last 30 minutes. Buckets are
+ * aligned to wall-clock minute boundaries (see renderQsoRate) so bars do
+ * not drift between the periodic re-renders. */
 const QSO_MIN_BUCKETS = 30;
 function renderQsoMinute() {
-    const now = Date.now();
+    const nowSlot = Math.floor(Date.now() / 60000);
     const counts = new Array(QSO_MIN_BUCKETS).fill(0);
     let total = 0;
     qsoState.allTs.forEach(t => {
-        if (isNaN(t) || t > now) return;
-        const idx = QSO_MIN_BUCKETS - 1 - Math.floor((now - t) / 60000);
-        if (idx >= 0) { counts[idx]++; total++; }
+        if (isNaN(t)) return;
+        const idx = QSO_MIN_BUCKETS - 1 - (nowSlot - Math.floor(t / 60000));
+        if (idx >= 0 && idx < QSO_MIN_BUCKETS) { counts[idx]++; total++; }
     });
     const max = Math.max(1, ...counts);
     const chart = $('#qMinChart');
