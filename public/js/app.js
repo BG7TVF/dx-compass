@@ -2581,7 +2581,7 @@ async function init() {
     // UTC clock
     setInterval(() => {
         const d = new Date();
-        $('#utcClock').textContent = d.toISOString().substring(11, 19) + 'Z';
+        $('#utcClock').textContent = 'UTC: ' + d.toISOString().substring(11, 19);
         if (qsoState.view === 'qso') updateQsoAge();
     }, 1000);
 
