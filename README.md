@@ -40,7 +40,7 @@ curl -fsSL https://raw.githubusercontent.com/BG7TVF/dx-compass/main/bootstrap.sh
 - **频段热力图**：CW / DIGI 模式按频段生成热力图，强度随 SNR 与标记存活时间变化；点击频段框切换对应频段热力图
 - **晨昏线**：所有地图实时显示灰线（昼夜分界线）与夜半球阴影，每分钟自动刷新
 - **录制功能**：手动或定时（UTC，一次性）录制 spot 到独立 `recording_spots` 表，可下载 CSV，记录最长保留两个月
-- **一键清除**：Settings → 全局 → 一键清除，删除全部界面设置、监听呼号以及 spots / qsos / recording_spots 三张表数据，相当于恢复出厂状态（不可撤销）
+- **一键清除**：Settings → 全局 → 一键清除，停止监控/录制，删除全部界面设置（含 QRZ.com 凭据）、监听呼号以及 spots / qsos / recording_spots 三张表数据，相当于恢复出厂状态（不可撤销）
 - **完整记录**：每条 spot 记录时间、频率、报告人、模式（CW/DIGI/PHONE）、信号强度（CW 的 SNR dB 来自 RBN；FT8 的 SNR 来自 dxwatch）、距离等，存入 SQLite
 - **赛后分析**：记录面板支持按呼号筛选、一键导出 CSV
 - **距离计算**：直接使用数据源附带的呼号经纬度 + Haversine 公式，计算报告人相对本台的距离（公里/英里），不依赖第三方定位接口

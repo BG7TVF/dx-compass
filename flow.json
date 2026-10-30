@@ -2158,8 +2158,8 @@
         "y": 840,
         "wires": []
     },
-    {
-        "id": "dxc00000000000c0",
+        {
+        "id": "dxc00000000000e0",
         "type": "http in",
         "z": "dxc0000000000001",
         "name": "POST /api/reset",
@@ -2171,16 +2171,16 @@
         "y": 1040,
         "wires": [
             [
-                "dxc00000000000c1"
+                "dxc00000000000e1"
             ]
         ]
     },
     {
-        "id": "dxc00000000000c1",
+        "id": "dxc00000000000e1",
         "type": "function",
         "z": "dxc0000000000001",
         "name": "Reset: spots",
-        "func": "// Factory reset: stop recording/monitoring, drop in-memory dedup state,\n// then hand the first DELETE to the sqlite chain.\nglobal.set('recording', { active: false, manual: false, startedAt: null, schedule: null });\nglobal.set('monitoring', false);\nflow.set('lastSpotId', 0);\nflow.set('seenIds', {});\nflow.set('dedupKeys', {});\nmsg.topic = 'DELETE FROM spots;';\nreturn msg;",
+        "func": "// Factory reset: stop recording/monitoring, drop in-memory dedup state,\n// clear QRZ.com credentials, then hand the first DELETE to the sqlite chain.\nglobal.set('recording', { active: false, manual: false, startedAt: null, schedule: null });\nglobal.set('monitoring', false);\nflow.set('lastSpotId', 0);\nflow.set('seenIds', {});\nflow.set('dedupKeys', {});\nflow.set('qrzuser', null);\nflow.set('qrzpass', null);\nflow.set('qrzkey', null);\nmsg.topic = 'DELETE FROM spots;';\nreturn msg;",
         "outputs": 1,
         "timeout": "",
         "noerr": 0,
@@ -2191,12 +2191,12 @@
         "y": 1040,
         "wires": [
             [
-                "dxc00000000000c2"
+                "dxc00000000000e2"
             ]
         ]
     },
     {
-        "id": "dxc00000000000c2",
+        "id": "dxc00000000000e2",
         "type": "sqlite",
         "z": "dxc0000000000001",
         "mydb": "dxc0000000000027",
@@ -2207,12 +2207,12 @@
         "y": 1040,
         "wires": [
             [
-                "dxc00000000000c3"
+                "dxc00000000000e3"
             ]
         ]
     },
     {
-        "id": "dxc00000000000c3",
+        "id": "dxc00000000000e3",
         "type": "function",
         "z": "dxc0000000000001",
         "name": "Reset: qsos",
@@ -2227,12 +2227,12 @@
         "y": 1100,
         "wires": [
             [
-                "dxc00000000000c4"
+                "dxc00000000000e4"
             ]
         ]
     },
     {
-        "id": "dxc00000000000c4",
+        "id": "dxc00000000000e4",
         "type": "sqlite",
         "z": "dxc0000000000001",
         "mydb": "dxc0000000000027",
@@ -2243,12 +2243,12 @@
         "y": 1100,
         "wires": [
             [
-                "dxc00000000000c5"
+                "dxc00000000000e5"
             ]
         ]
     },
     {
-        "id": "dxc00000000000c5",
+        "id": "dxc00000000000e5",
         "type": "function",
         "z": "dxc0000000000001",
         "name": "Reset: recordings",
@@ -2263,12 +2263,12 @@
         "y": 1160,
         "wires": [
             [
-                "dxc00000000000c6"
+                "dxc00000000000e6"
             ]
         ]
     },
     {
-        "id": "dxc00000000000c6",
+        "id": "dxc00000000000e6",
         "type": "sqlite",
         "z": "dxc0000000000001",
         "mydb": "dxc0000000000027",
@@ -2279,12 +2279,12 @@
         "y": 1160,
         "wires": [
             [
-                "dxc00000000000c7"
+                "dxc00000000000e7"
             ]
         ]
     },
     {
-        "id": "dxc00000000000c7",
+        "id": "dxc00000000000e7",
         "type": "function",
         "z": "dxc0000000000001",
         "name": "Reset response",
@@ -2299,12 +2299,12 @@
         "y": 1220,
         "wires": [
             [
-                "dxc00000000000c8"
+                "dxc00000000000e8"
             ]
         ]
     },
     {
-        "id": "dxc00000000000c8",
+        "id": "dxc00000000000e8",
         "type": "http response",
         "z": "dxc0000000000001",
         "name": "",
