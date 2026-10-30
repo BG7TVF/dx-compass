@@ -859,7 +859,11 @@ tbody tr:nth-child(even) { background: #141a20; }
 .qt-freq b { color: var(--accent); font-size: 26px; }
 .qt-call b { font-size: 26px; letter-spacing: 1.5px; color: var(--green); }
 .qt-exch { flex: 0 1 auto; }
-.qt-exch b { color: var(--yellow); font-size: 17px; overflow: hidden; text-overflow: ellipsis; }
+.qt-exch b { color: var(--yellow); font-size: 20px; overflow: hidden; text-overflow: ellipsis; }
+.qt-band b { color: var(--accent); }
+.qt-mode b { color: var(--yellow); }
+.qt-age b { color: var(--text-dim); }
+/* Auxiliary radio frequencies (SO2R / MS / MM) */
 .qt-meta {
     margin-left: auto;
     display: flex;

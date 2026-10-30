@@ -1308,6 +1308,10 @@ function applyLang() {
     $('#qtLCall').textContent = t('lblCall');
     $('#qtLRst').textContent = t('lblRst');
     $('#qtLExch').textContent = t('lblExch');
+    $('#qtLBand').textContent = t('lblBand');
+    $('#qtLMode').textContent = t('lblMode');
+    $('#qtLOp').textContent = t('lblOp');
+    $('#qtLAge').textContent = t('lblAge');
     $('#btnSpotView').textContent = t('spotView');
     $('#btnQsoView').textContent = t('qsoView');
     $('#qsoPanelTitle').textContent = t('stPanel');
@@ -1627,8 +1631,8 @@ function renderQsoTopbar() {
     $('#qtCall').textContent = (q && q.call) || '—';
     $('#qtRst').textContent = q ? (q.rstSnt || '--') + '/' + (q.rstRcv || '--') : '--/--';
     $('#qtExch').textContent = (q && q.exchange) || '—';
-    $('#qtBand').textContent = (q && q.band) || '';
-    $('#qtMode').textContent = (q && q.mode) || (r && r.mode) || '';
+    $('#qtBand').textContent = (q && q.band) || '—';
+    $('#qtMode').textContent = (q && q.mode) || (r && r.mode) || '—';
     const op = (q && q.operator) || (r && r.opCall) || '';
     $('#qtOp').textContent = settings.category + (op ? ' · ' + op : '');
     // SO2R / MS / MM: show each radio's frequency so both VFOs stay visible
@@ -1642,8 +1646,19 @@ function renderQsoTopbar() {
         }).filter(Boolean).join(' / ');
     }
     $('#qtRadios').textContent = radioTxt;
+    updateQsoAge();
+}
+
+/* Elapsed time since the newest QSO as HH:MM:SS (ticks once per second). */
+function fmtElapsed(ms) {
+    const s = Math.max(0, Math.floor(ms / 1000));
+    const p = n => String(n).padStart(2, '0');
+    return p(Math.floor(s / 3600)) + ':' + p(Math.floor((s % 3600) / 60)) + ':' + p(s % 60);
+}
+function updateQsoAge() {
+    const q = qsoState.lastQso;
     const ts = q ? new Date(q.ts) : null;
-    $('#qtAge').textContent = ts && !isNaN(ts) ? timeAgo(ts) : '';
+    $('#qtAge').textContent = ts && !isNaN(ts) ? fmtElapsed(Date.now() - ts.getTime()) : '--:--:--';
 }
 
 /* Refresh the QSO panel after the bar was removed from the page. */
@@ -2037,6 +2052,7 @@ function init() {
     setInterval(() => {
         const d = new Date();
         $('#utcClock').textContent = d.toISOString().substring(11, 19) + 'Z';
+        if (qsoState.view === 'qso') updateQsoAge();
     }, 1000);
 
     // Recording status: keep the panel indicator fresh, auto-refresh
