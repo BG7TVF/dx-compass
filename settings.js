@@ -24,9 +24,11 @@ module.exports = {
     // Root for HTTP-in nodes (REST API)
     httpNodeRoot: "/",
 
-    // Allow function nodes to use core modules (https) and load the local
-    // propagation collector instead of adding extra node types to the palette
-    functionExternalModules: true,
+    // functionGlobalContext exposes the local propagation collector to
+    // function nodes. NOTE: functionExternalModules is intentionally NOT
+    // enabled here -- it spins up the runtime npm loader on startup, which
+    // can crash Node-RED if npm / the module cache has permission issues.
+    // functionGlobalContext works independently and is all we need.
     functionGlobalContext: {
         prop: require("./lib/prop.js")
     },

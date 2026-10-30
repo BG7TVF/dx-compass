@@ -2472,7 +2472,7 @@
         "type": "function",
         "z": "dxc0000000000100",
         "name": "Reply propagation data",
-        "func": "// Latest collector snapshot; the UI polls this every minute.\nconst data = await global.get(\"propData\");\nmsg.headers = {\"Cache-Control\": \"no-store\"};\nmsg.payload = data || {error: \"collecting\"};\nreturn msg;",
+        "func": "// Latest collector snapshot; the UI polls this every minute.\ntry {\n    const data = await global.get(\"propData\");\n    msg.headers = {\"Cache-Control\": \"no-store\"};\n    msg.payload = data || {error: \"collecting\"};\n} catch (e) {\n    msg.statusCode = 500;\n    msg.payload = {error: e.message};\n}\nreturn msg;",
         "outputs": 1,
         "timeout": 0,
         "noerr": 0,
