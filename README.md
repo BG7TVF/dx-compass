@@ -50,6 +50,7 @@ curl -fsSL https://raw.githubusercontent.com/BG7TVF/dx-compass/main/bootstrap.sh
 - **本台 Spot 提醒**：本台呼号出现在 spot 上时，QSO 地图以红色标记标出（可选），并可与弹窗（8 秒自动消失）和语音播报「you get a new spot」一起开启；提醒与普通 Spot 监控独立开关，标记存活时间与最多显示数量可调，语音按当前界面语言播报
 - **底图可切换**：OpenStreetMap 与高德地图（中国大陆网络环境可用），切换后所有地图显示约定保持不变
 - **N1MM+ 本台集成**（可选）：接收 N1MM+ UDP 广播后，QSO 视图顶部条实时显示最新的 RUN/S&P、频率、对方呼号、RST 与交换信息，右侧面板显示当前电台频率/模式/TX、当前总分（QSO/乘数/点数/Score）、上一个 QSO 与 QSO 速率图表；一键切换全屏 **QSO 地图**，每个 QSO 按频段着色并从本台位置画大圆线，新乘数带 M 徽章，全部持久化到 `qsos` 表
+- **传播地图**：独立第三视图，Canvas 世界地图（Mercator / 方位投影 / Robinson）+ 传播预测 / 天气 / 极光 三种背景 + 实时晨昏线；右侧面板汇总空间天气指数（SFI、SSN、Kp、A、Bz、Bt、太阳风、X 射线、Dst、极光、DRAP，均带历史曲线）、NOAA R/S/G、HamQSL 频段条件、DE→DX 24 小时可用性矩阵与全球 MUF 读数
 
 ## 技术架构
 
@@ -85,9 +86,12 @@ dx-compass/
 ├── public/            # 前端大屏
 │   ├── index.html
 │   ├── css/style.css
+│   ├── data/land.js    # 离线陆地轮廓（世界地图海岸线，供传播地图 Canvas 绘制）
 │   └── js/
 │       ├── i18n.js     # 界面翻译（LANGS / LANG_NAMES / I18N），新增语言只改这个文件
+│       ├── prop.js      # 传播地图（投影 / 背景层 / 晨昏线 / 数据面板）
 │       └── app.js      # 应用逻辑
+├── lib/prop.js         # 传播数据采集器（NOAA SWPC / HamQSL / prop.kc2g / Open-Meteo）
 └── LICENSE
 ```
 
@@ -246,6 +250,42 @@ git -C /opt/dx-compass pull
 3. 服务器防火墙放行 UDP：`sudo ufw allow 12060:12062/udp`
 4. （可选）大屏 **Settings** 填入 **QRZ.com 用户名 / 密码**（需 QRZ XML Data 订阅），QSO 坐标将优先从 QRZ.com 查询；凭据保存在服务器端 Node-RED 上下文中，密码不会回显
 5. N1MM+ 产生 QSO、频率变化或记分更新时大屏实时刷新
+
+## 传播地图（Propagation）
+
+菜单中的 **Propagation** 是独立于 Spot / QSO 的第三个全屏视图：左侧为 Canvas 世界地图，右侧停靠传播数据面板。进入该视图后自动隐藏 Spot 专用控件（布局、轮询、开始监控、Spot 计数）。
+
+**地图**
+
+- **投影**：Mercator / 方位投影（以本台网格为中心）/ Robinson，三者均按 cover 语义铺满画布（无信箱黑边），可随时切换并保存到浏览器设置
+- **背景层**：**传播预测**（按全球电离层台站 foF2/MUF3000 插值的 MUF 色块）/ **天气**（Open-Meteo 全球温度网格）/ **极光**（NOAA OVATION 极光概率）
+- **晨昏线**：与 Spot/QSO 地图同一套太阳赤纬算法，夜半球半透明黑罩 + 灰色分界线，每分钟刷新；春分/秋分附近（|赤纬| < 0.6°）自动切换为经线模式，避免极点抖动
+- **交互**：鼠标悬停显示经纬度；点击地图设置 DX 位置（持久化到浏览器设置，用于点对点路径与 DX 天气）
+- 本台位置（DE）取自 Settings 中的 Maidenhead 网格
+
+**数据面板**
+
+- **空间天气卡片**（各带历史迷你曲线）：SFI、SSN、Kp、A、Bz、Bt、太阳风速度、质子密度、X 射线、Dst、极光概率、DRAP；Kp ≥ 4 / Bz ≤ −5 / Dst ≤ −50 等阈值以警示色标出
+- **NOAA R / S / G** 三级事件标度
+- **HamQSL 频段条件**：8 个 HF 频段的日间 / 夜间 Good / Fair / Poor
+- **DE → DX 点对点矩阵**：10 个 HF 频段 × 24 小时可用性（当前小时列高亮，每行最优小时描边），并按当前小时给出最佳频段
+- **全球读数**：MUF @ DE、全球最高 MUF 台站、MUF @ DX、极光最大值、DRAP @ DE / DX、TOA（最佳发射仰角）、DX 天气
+
+**数据来源**
+
+| 数据 | 来源 |
+| --- | --- |
+| Kp、Dst、10.7cm 通量、黑子数、X 射线、太阳风/IMF、OVATION 极光、DRAP、R/S/G | NOAA SWPC 公开 JSON / 文本接口 |
+| 当前 SFI/SSN/Kp/X 射线/极光与 HF 频段条件 | HamQSL `solarxml.php` |
+| 全球 MUF / foF2（电离层台站实测） | prop.kc2g.com `stations.json` |
+| 全球天气网格 | Open-Meteo `forecast` |
+
+**实现与接口**
+
+- 采集器 `lib/prop.js` 通过 `settings.js` 的 `functionGlobalContext` 暴露为 `prop`，无需新增 Node-RED 节点类型；`flow.json` 中的 **Propagation** 标签页每 5 分钟采集一次，结果缓存在 global 上下文 `propData`
+- 前端每 60 秒请求 `GET /api/prop`（`Cache-Control: no-store`），接口直接返回缓存，失败源保留上一次的值并在面板标注
+- 各级缓存有效期：太阳风 / 极光 / X 射线等大文件 20 分钟，小数据集 4 分钟，天气 10 分钟（避免对公开接口造成压力）
+- **点对点矩阵与可用性为近似模型**（依据 MUF、DRAP 吸收、路径昼夜太阳高度角与距离的启发式计算，面板标注「approximate forecast」），不是 VOACAP 的输出；需要精确预测时请以专业软件为准
 
 ## 服务管理
 

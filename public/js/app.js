@@ -65,6 +65,7 @@ function defaultSettings() {
         category: 'SO1R', qsoMax: 1500, qsoLines: true, qsoAutoFit: true,
         qsoSpotAlert: true, qsoVoiceAlert: true,
         mySpotTtl: 30, mySpotMax: 300, mySpotPopup: true, mySpotVoice: true,
+        propProj: 'mercator', propLayer: 'muf', propDxLat: 40, propDxLon: -100,
         ttl: {...DEFAULT_TTL_MIN}, bandColors: {...DEFAULT_BAND_COLORS}
     };
 }
@@ -96,6 +97,12 @@ function sanitizeSettings(input) {
     if (msm >= 10 && msm <= 2000) d.mySpotMax = msm;
     if (typeof raw.mySpotPopup === 'boolean') d.mySpotPopup = raw.mySpotPopup;
     if (typeof raw.mySpotVoice === 'boolean') d.mySpotVoice = raw.mySpotVoice;
+    // Propagation page options: projection, background layer, DX point
+    if (['mercator', 'azimuthal', 'robinson'].includes(raw.propProj)) d.propProj = raw.propProj;
+    if (['muf', 'weather', 'aurora'].includes(raw.propLayer)) d.propLayer = raw.propLayer;
+    const pdlat = parseFloat(raw.propDxLat), pdlon = parseFloat(raw.propDxLon);
+    if (isFinite(pdlat) && Math.abs(pdlat) <= 85) d.propDxLat = pdlat;
+    if (isFinite(pdlon) && Math.abs(pdlon) <= 180) d.propDxLon = pdlon;
     for (const m of Object.keys(d.ttl)) {
         const v = parseInt(raw.ttl && raw.ttl[m], 10);
         if (v >= 1 && v <= 180) d.ttl[m] = v;
@@ -1545,6 +1552,11 @@ function applyLang() {
     $('#qtLAge').textContent = t('lblAge');
     $('#btnSpotView').textContent = t('spotView');
     $('#btnQsoView').textContent = t('qsoView');
+    $('#btnPropView').textContent = t('propView');
+    $('#propTitle').textContent = t('propView');
+    $('#propProjLabel').textContent = t('propProjection');
+    $('#propLayerLabel').textContent = t('propLayer');
+    if (typeof applyPropLang === 'function') applyPropLang();
     $('#qsoPanelTitle').textContent = t('stPanel');
     $('#qLastTitle').textContent = t('stLastQso');
     $('#qRateTitle').textContent = t('qsoRate');
@@ -1674,27 +1686,37 @@ function rebuildHome() {
     }
 }
 
-/* Full-screen switch: spot grid (+ Records panel) <-> QSO map (+ QSO panel). */
+/* Full-screen switch: spot grid (+ Records) <-> QSO map (+ QSO panel)
+ * <-> propagation map (+ propagation panel). */
 function setViewMode(mode) {
     if (qsoState.view === mode) return;
+    const leaving = qsoState.view;
     qsoState.view = mode;
-    const isQso = mode === 'qso';
-    $('#grid').classList.toggle('hidden', isQso);
+    const isQso = mode === 'qso', isProp = mode === 'prop';
+    $('#grid').classList.toggle('hidden', isQso || isProp);
     $('#qsoView').classList.toggle('hidden', !isQso);
-    $('#recordsPanel').classList.toggle('hidden', isQso);
+    $('#propView').classList.toggle('hidden', !isProp);
+    $('#recordsPanel').classList.toggle('hidden', isQso || isProp);
     $('#qsoPanel').classList.toggle('hidden', !isQso);
-    const spotBtn = $('#btnSpotView'), qsoBtn = $('#btnQsoView');
-    spotBtn.classList.toggle('active', !isQso);
+    $('#propPanel').classList.toggle('hidden', !isProp);
+    const spotBtn = $('#btnSpotView'), qsoBtn = $('#btnQsoView'), propBtn = $('#btnPropView');
+    spotBtn.classList.toggle('active', mode === 'spots');
     qsoBtn.classList.toggle('active', isQso);
+    propBtn.classList.toggle('active', isProp);
     spotBtn.textContent = t('spotView');
     qsoBtn.textContent = t('qsoView');
+    propBtn.textContent = t('propView');
     // Spot-only toolbar controls (layout, rotation, start monitoring) are
-    // irrelevant on the QSO map, so they are hidden via a body class.
+    // irrelevant on the QSO and propagation maps, so they are hidden.
     document.body.classList.toggle('qso-mode', isQso);
+    document.body.classList.toggle('prop-mode', isProp);
+    if (leaving === 'prop' && !isProp && typeof hidePropView === 'function') hidePropView();
     if (isQso) {
         qsoState.map.invalidateSize();
         fitQsoMap();
         renderQsoPanel();
+    } else if (isProp) {
+        showPropView();
     } else {
         hideSpotAlertAndVoice();
         visibleCells().forEach(c => { c.map.invalidateSize(); fitCellView(c); });
@@ -2538,9 +2560,10 @@ async function init() {
         if (!myVoiceChk.checked && 'speechSynthesis' in window) speechSynthesis.cancel();
     });
     $('#saClose').addEventListener('click', hideSpotAlertAndVoice);
-    // Spot grid <-> QSO map switch (two independent buttons)
+    // Spot grid <-> QSO map <-> propagation map switch (three buttons)
     $('#btnSpotView').addEventListener('click', () => { closeConfig(); setViewMode('spots'); });
     $('#btnQsoView').addEventListener('click', () => { closeConfig(); setViewMode('qso'); });
+    $('#btnPropView').addEventListener('click', () => { closeConfig(); setViewMode('prop'); });
     // QRZ.com XML credentials (QSO coordinate lookups; needs a QRZ XML
     // subscription). Stored server-side in flow context; the password is
     // never read back into the form.
@@ -2597,6 +2620,7 @@ async function init() {
     // Initial layout (shared setting; not re-saved on boot)
     setLayout(settings.layout, false);
     initQsoMap();
+    initProp();
     updateMonitorBtn();
     applyLang();
 
@@ -2622,6 +2646,7 @@ async function init() {
             qsoState.map.invalidateSize();
             fitQsoMap();
         }
+        if (qsoState.view === 'prop' && typeof propResize === 'function') propResize();
     });
 
     // WebSocket

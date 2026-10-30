@@ -2401,5 +2401,101 @@
         "x": 600,
         "y": 1130,
         "wires": []
+    },
+    {
+        "id": "dxc0000000000100",
+        "type": "tab",
+        "label": "Propagation",
+        "disabled": false,
+        "info": ""
+    },
+    {
+        "id": "dxc0000000000101",
+        "type": "inject",
+        "z": "dxc0000000000100",
+        "name": "collector tick",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "300",
+        "crontab": "",
+        "once": true,
+        "onceDelay": 10,
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 140,
+        "y": 120,
+        "wires": [
+            [
+                "dxc0000000000102"
+            ]
+        ]
+    },
+    {
+        "id": "dxc0000000000102",
+        "type": "function",
+        "z": "dxc0000000000100",
+        "name": "Collect propagation data",
+        "func": "// Space weather + propagation feeds (see lib/prop.js). Cached in global\n// context as propData so every browser tab reads the same snapshot.\ntry {\n    const data = await prop.collect(global);\n    const errs = (data && data.errors) || [];\n    node.status({fill: errs.length ? \"yellow\" : \"green\", shape: \"dot\",\n        text: \"ok \" + new Date().toISOString().slice(11, 16) +\n        (errs.length ? \" (\" + errs.length + \" err)\" : \"\")});\n} catch (e) {\n    node.status({fill: \"red\", shape: \"ring\", text: e.message});\n    node.warn(\"prop collect failed: \" + e.message);\n}\nreturn null;",
+        "outputs": 0,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 400,
+        "y": 120,
+        "wires": []
+    },
+    {
+        "id": "dxc0000000000103",
+        "type": "http in",
+        "z": "dxc0000000000100",
+        "name": "GET /api/prop",
+        "url": "/api/prop",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 140,
+        "y": 220,
+        "wires": [
+            [
+                "dxc0000000000104"
+            ]
+        ]
+    },
+    {
+        "id": "dxc0000000000104",
+        "type": "function",
+        "z": "dxc0000000000100",
+        "name": "Reply propagation data",
+        "func": "// Latest collector snapshot; the UI polls this every minute.\nconst data = await global.get(\"propData\");\nmsg.headers = {\"Cache-Control\": \"no-store\"};\nmsg.payload = data || {error: \"collecting\"};\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 400,
+        "y": 220,
+        "wires": [
+            [
+                "dxc0000000000105"
+            ]
+        ]
+    },
+    {
+        "id": "dxc0000000000105",
+        "type": "http response",
+        "z": "dxc0000000000100",
+        "name": "",
+        "statusCode": "",
+        "headers": {},
+        "x": 640,
+        "y": 220,
+        "wires": []
     }
 ]

@@ -667,3 +667,131 @@ const I18N = {
         spotsN: n => n + ' スポット'
     }
 };
+
+/* ---------- Propagation page ----------
+ * Kept in a separate block (merged below) so the main dictionaries stay
+ * readable; missing locales fall back to English. */
+const PROP_I18N = {
+    zh: {
+        propView: '传播地图', propProjection: '投影', propLayer: '背景',
+        propMercator: '墨卡托', propAzimuthal: '方位投影', propRobinson: '罗宾逊',
+        propLayerMuf: '传播预测', propLayerWeather: '天气', propLayerAurora: '极光',
+        propSpaceWx: '空间天气', propBands: '频段条件', propPath: '点对点路径',
+        propReadouts: '全球读数', propApprox: '近似预测',
+        propDay: '白天', propNight: '夜间',
+        propClickDx: '点击地图设置 DX', propSetGrid: '请先在设置中填写本机网格',
+        propNoData: '暂无传播数据', propUpdated: '更新', propBestBand: '当前最佳波段',
+        propWeatherDx: 'DX 天气'
+    },
+    en: {
+        propView: 'Propagation', propProjection: 'Projection', propLayer: 'Background',
+        propMercator: 'Mercator', propAzimuthal: 'Azimuthal', propRobinson: 'Robinson',
+        propLayerMuf: 'Propagation forecast', propLayerWeather: 'Weather', propLayerAurora: 'Aurora',
+        propSpaceWx: 'Space weather', propBands: 'Band conditions', propPath: 'Point-to-point path',
+        propReadouts: 'Global readouts', propApprox: 'approximate forecast',
+        propDay: 'Day', propNight: 'Night',
+        propClickDx: 'Click the map to set DX', propSetGrid: 'Set your grid in Settings first',
+        propNoData: 'No propagation data yet', propUpdated: 'Updated', propBestBand: 'Best band now',
+        propWeatherDx: 'DX weather'
+    },
+    de: {
+        propView: 'Ausbreitungskarte', propProjection: 'Projektion', propLayer: 'Hintergrund',
+        propMercator: 'Mercator', propAzimuthal: 'Azimutal', propRobinson: 'Robinson',
+        propLayerMuf: 'Ausbreitungsprognose', propLayerWeather: 'Wetter', propLayerAurora: 'Polarlicht',
+        propSpaceWx: 'Weltraumwetter', propBands: 'Bandbedingungen', propPath: 'Punkt-zu-Punkt-Strecke',
+        propReadouts: 'Globale Messwerte', propApprox: 'ungefähre Prognose',
+        propDay: 'Tag', propNight: 'Nacht',
+        propClickDx: 'Karte anklicken, um DX zu setzen', propSetGrid: 'Eigenes Raster in den Einstellungen eintragen',
+        propNoData: 'Keine Ausbreitungsdaten', propUpdated: 'Aktualisiert', propBestBand: 'Bestes Band',
+        propWeatherDx: 'DX-Wetter'
+    },
+    fr: {
+        propView: 'Carte de propagation', propProjection: 'Projection', propLayer: 'Fond',
+        propMercator: 'Mercator', propAzimuthal: 'Azimutale', propRobinson: 'Robinson',
+        propLayerMuf: 'Prévision de propagation', propLayerWeather: 'Météo', propLayerAurora: 'Aurores',
+        propSpaceWx: 'Météo spatiale', propBands: 'Conditions par bande', propPath: 'Trajet point à point',
+        propReadouts: 'Mesures globales', propApprox: 'prévision approximative',
+        propDay: 'Jour', propNight: 'Nuit',
+        propClickDx: 'Cliquez sur la carte pour définir le DX', propSetGrid: 'Renseignez votre grille dans les paramètres',
+        propNoData: 'Aucune donnée de propagation', propUpdated: 'Mis à jour', propBestBand: 'Meilleure bande',
+        propWeatherDx: 'Météo à DX'
+    },
+    es: {
+        propView: 'Mapa de propagación', propProjection: 'Proyección', propLayer: 'Capa',
+        propMercator: 'Mercator', propAzimuthal: 'Acimutal', propRobinson: 'Robinson',
+        propLayerMuf: 'Predicción de propagación', propLayerWeather: 'Tiempo', propLayerAurora: 'Aurora',
+        propSpaceWx: 'Clima espacial', propBands: 'Condiciones por banda', propPath: 'Ruta punto a punto',
+        propReadouts: 'Lecturas globales', propApprox: 'predicción aproximada',
+        propDay: 'Día', propNight: 'Noche',
+        propClickDx: 'Haz clic en el mapa para fijar DX', propSetGrid: 'Configura tu cuadrícula en ajustes',
+        propNoData: 'Sin datos de propagación', propUpdated: 'Actualizado', propBestBand: 'Mejor banda',
+        propWeatherDx: 'Tiempo en DX'
+    },
+    pt: {
+        propView: 'Mapa de propagação', propProjection: 'Projeção', propLayer: 'Camada',
+        propMercator: 'Mercator', propAzimuthal: 'Azimutal', propRobinson: 'Robinson',
+        propLayerMuf: 'Previsão de propagação', propLayerWeather: 'Clima', propLayerAurora: 'Aurora',
+        propSpaceWx: 'Clima espacial', propBands: 'Condições por banda', propPath: 'Caminho ponto a ponto',
+        propReadouts: 'Leituras globais', propApprox: 'previsão aproximada',
+        propDay: 'Dia', propNight: 'Noite',
+        propClickDx: 'Clique no mapa para definir o DX', propSetGrid: 'Informe sua grade nas configurações',
+        propNoData: 'Sem dados de propagação', propUpdated: 'Atualizado', propBestBand: 'Melhor banda',
+        propWeatherDx: 'Clima em DX'
+    },
+    ru: {
+        propView: 'Карта распространения', propProjection: 'Проекция', propLayer: 'Слой',
+        propMercator: 'Меркатор', propAzimuthal: 'Азимутальная', propRobinson: 'Робинсон',
+        propLayerMuf: 'Прогноз распространения', propLayerWeather: 'Погода', propLayerAurora: 'Полярное сияние',
+        propSpaceWx: 'Космическая погода', propBands: 'Условия по диапазонам', propPath: 'Трасса точка-точка',
+        propReadouts: 'Глобальные показатели', propApprox: 'приблизительный прогноз',
+        propDay: 'День', propNight: 'Ночь',
+        propClickDx: 'Нажмите на карту, чтобы задать DX', propSetGrid: 'Укажите свой квадрат в настройках',
+        propNoData: 'Нет данных о распространении', propUpdated: 'Обновлено', propBestBand: 'Лучший диапазон',
+        propWeatherDx: 'Погода в DX'
+    },
+    it: {
+        propView: 'Mappa di propagazione', propProjection: 'Proiezione', propLayer: 'Livello',
+        propMercator: 'Mercatore', propAzimuthal: 'Azimutale', propRobinson: 'Robinson',
+        propLayerMuf: 'Previsione di propagazione', propLayerWeather: 'Meteo', propLayerAurora: 'Aurora',
+        propSpaceWx: 'Meteo spaziale', propBands: 'Condizioni per banda', propPath: 'Percorso punto a punto',
+        propReadouts: 'Valori globali', propApprox: 'previsione approssimativa',
+        propDay: 'Giorno', propNight: 'Notte',
+        propClickDx: 'Clicca sulla mappa per impostare il DX', propSetGrid: 'Imposta il tuo reticolo nelle impostazioni',
+        propNoData: 'Nessun dato di propagazione', propUpdated: 'Aggiornato', propBestBand: 'Banda migliore',
+        propWeatherDx: 'Meteo a DX'
+    },
+    ar: {
+        propView: 'خريطة الانتشار', propProjection: 'الإسقاط', propLayer: 'الطبقة',
+        propMercator: 'مركاتور', propAzimuthal: 'السمتية', propRobinson: 'روبنسون',
+        propLayerMuf: 'توقع الانتشار', propLayerWeather: 'الطقس', propLayerAurora: 'الشفق',
+        propSpaceWx: 'الطقس الفضائي', propBands: 'ظروف النطاقات', propPath: 'مسار نقطة إلى نقطة',
+        propReadouts: 'قراءات عالمية', propApprox: 'توقع تقريبي',
+        propDay: 'نهار', propNight: 'ليل',
+        propClickDx: 'انقر على الخريطة لتحديد DX', propSetGrid: 'أدخل مربعك في الإعدادات',
+        propNoData: 'لا توجد بيانات انتشار', propUpdated: 'تم التحديث', propBestBand: 'أفضل نطاق',
+        propWeatherDx: 'طقس DX'
+    },
+    ko: {
+        propView: '전파 지도', propProjection: '투영', propLayer: '배경',
+        propMercator: '메르카토르', propAzimuthal: '방위', propRobinson: '로빈슨',
+        propLayerMuf: '전파 예측', propLayerWeather: '날씨', propLayerAurora: '오로라',
+        propSpaceWx: '우주 기상', propBands: '밴드 조건', propPath: '지점 간 경로',
+        propReadouts: '글로벌 판독값', propApprox: '근사 예측',
+        propDay: '주간', propNight: '야간',
+        propClickDx: '지도를 클릭하여 DX 설정', propSetGrid: '설정에서 그리드를 입력하세요',
+        propNoData: '전파 데이터 없음', propUpdated: '업데이트', propBestBand: '최적 밴드',
+        propWeatherDx: 'DX 날씨'
+    },
+    ja: {
+        propView: '伝播マップ', propProjection: '投影法', propLayer: '背景',
+        propMercator: 'メルカトル', propAzimuthal: '方位', propRobinson: 'ロビンソン',
+        propLayerMuf: '伝播予測', propLayerWeather: '天気', propLayerAurora: 'オーロラ',
+        propSpaceWx: '宇宙天気', propBands: 'バンド条件', propPath: 'ポイントツーポイント経路',
+        propReadouts: 'グローバル値', propApprox: '近似予測',
+        propDay: '昼', propNight: '夜',
+        propClickDx: '地図をクリックして DX を設定', propSetGrid: '設定でグリッドを入力してください',
+        propNoData: '伝播データなし', propUpdated: '更新', propBestBand: '最適バンド',
+        propWeatherDx: 'DX の天気'
+    }
+};
+for (const l of LANGS) Object.assign(I18N[l], PROP_I18N[l] || PROP_I18N.en);

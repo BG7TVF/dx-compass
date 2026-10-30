@@ -24,9 +24,11 @@ module.exports = {
     // Root for HTTP-in nodes (REST API)
     httpNodeRoot: "/",
 
-    // Allow function nodes to use httpRequest and other core modules
+    // Allow function nodes to use core modules (https) and load the local
+    // propagation collector instead of adding extra node types to the palette
+    functionExternalModules: true,
     functionGlobalContext: {
-        // os: require("os"),
+        prop: require("./lib/prop.js")
     },
 
     // Persist context to disk so settings (callsigns, home lat/lon) survive restarts

@@ -12,8 +12,9 @@
         <div class="menu-wrap" id="menuWrap">
             <button class="action-btn menu-btn" id="btnMenu" title="Menu" aria-expanded="false" aria-controls="appMenu">☰</button>
             <div class="app-menu hidden" id="appMenu">
-                <button class="menu-item view-btn active" id="btnSpotView" title="Spot grid">Spot</button>
+                <button class="menu-item view-btn" id="btnSpotView" title="Spot grid">Spot</button>
                 <button class="menu-item view-btn" id="btnQsoView" title="QSO map">QSO</button>
+                <button class="menu-item view-btn" id="btnPropView" title="Propagation map">Propagation</button>
                 <div class="menu-sep"></div>
                 <button class="menu-item" id="btnConfig" title="Settings">Settings</button>
             </div>
@@ -69,6 +70,21 @@
                 <div class="qt-meta" id="qtMeta">
                     <span id="qtRadios"></span>
                 </div>
+            </div>
+        </div>
+
+        <!-- Propagation view: canvas world map (projections + gray line) -->
+        <div id="propView" class="prop-view hidden">
+            <div class="prop-bar">
+                <label id="propProjLabel" for="propProj">Projection</label>
+                <select id="propProj" class="prop-sel"></select>
+                <label id="propLayerLabel" for="propLayer">Layer</label>
+                <select id="propLayer" class="prop-sel"></select>
+                <span class="prop-hint" id="propHint">Click the map to set DX</span>
+            </div>
+            <div id="propMapWrap" class="prop-map-wrap">
+                <canvas id="propCanvas"></canvas>
+                <div class="prop-hover hidden" id="propHover"></div>
             </div>
         </div>
 
@@ -204,6 +220,14 @@
                     <div class="qso-col-chart" id="qBandDist"></div>
                 </div>
             </div>
+        </div>
+
+        <!-- Propagation panel: space weather + band conditions + path matrix -->
+        <div id="propPanel" class="dock-panel prop-panel hidden">
+            <div class="panel-header">
+                <span class="panel-title" id="propTitle">Propagation</span>
+            </div>
+            <div class="panel-body" id="propBody"></div>
         </div>
 
         <!-- Settings Panel -->
@@ -390,6 +414,8 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="vendor/leaflet-heat.js"></script>
     <script src="js/i18n.js"></script>
+    <script src="data/land.js"></script>
     <script src="js/app.js"></script>
+    <script src="js/prop.js"></script>
 </body>
 </html>
