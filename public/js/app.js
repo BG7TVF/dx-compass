@@ -1853,11 +1853,6 @@ function applyLang() {
     $('#qtLCall').textContent = t('lblCall');
     $('#qtLRst').textContent = t('lblRst');
     $('#qtLExch').textContent = t('lblExch');
-    $('#stLMults').textContent = t('stMults');
-    $('#stLPoints').textContent = t('stPoints');
-    $('#stLLast').textContent = t('stLastQso');
-    $('#stTx').textContent = t('stTx');
-    $('#stWaiting').textContent = t('stWaiting');
     $('#btnSpotView').textContent = t('spotView');
     $('#btnQsoView').textContent = t('qsoView');
     $('#qsoPanelTitle').textContent = t('stPanel');
@@ -2101,7 +2096,6 @@ function rebuildQsoMap() {
 function handleQso(q) {
     qsoState.lastQso = q;
     if (q.n1mmId) qsoState.allTs.set(q.n1mmId, new Date(q.ts).getTime());
-    $('#stationBar').classList.add('has-data');
     renderLastQso();
     addQsoMarker(q);
     renderQsoPanel();
@@ -2118,11 +2112,9 @@ function handleQsoDelete(d) {
 function renderLastQso() {
     const q = qsoState.lastQso;
     if (!q) return;
-    $('#stLastCall').textContent = q.call || '—';
     const ts = new Date(q.ts);
     const info = [q.band, q.mode, isNaN(ts) ? '' : timeAgo(ts)]
         .filter(Boolean).join(' · ');
-    $('#stLastInfo').textContent = info;
     $('#qLastCall').textContent = q.call || '—';
     $('#qLastInfo').textContent = info;
 }
@@ -2199,7 +2191,7 @@ function renderQsoTopbar() {
     $('#qtAge').textContent = ts && !isNaN(ts) ? timeAgo(ts) : '';
 }
 
-/* Mirror the station bar values into the QSO panel. */
+/* Refresh the QSO panel after the bar was removed from the page. */
 function renderQsoPanel() {
     renderQsoTopbar();
     const r = qsoState.radio, s = qsoState.score, q = qsoState.lastQso;
@@ -2231,23 +2223,11 @@ function renderQsoPanel() {
 function updateStationRadio(r) {
     qsoState.radio = r;
     if (r.radioNr) qsoState.radios[r.radioNr] = r;
-    $('#stationBar').classList.add('has-data');
-    if (typeof r.freqKhz === 'number' && isFinite(r.freqKhz)) {
-        $('#stFreq').textContent = r.freqKhz.toLocaleString('en-US',
-            {minimumFractionDigits: 2, maximumFractionDigits: 2});
-    }
-    if (r.mode) $('#stMode').textContent = r.mode;
-    $('#stTx').classList.toggle('hidden', !r.isTransmitting);
     renderQsoPanel();
 }
 
 function updateStationScore(s) {
     qsoState.score = s;
-    $('#stationBar').classList.add('has-data');
-    $('#stQsos').textContent = s.qsos || 0;
-    $('#stMults').textContent = s.mults || 0;
-    $('#stPoints').textContent = s.points || 0;
-    $('#stScore').textContent = s.score || 0;
     renderQsoPanel();
 }
 
@@ -2261,7 +2241,7 @@ function dbRowToQso(r) {
 }
 
 /* Backfill on load: last radio/score state + recent QSOs from the DB,
- * so a browser refresh does not wipe the QSO map or the station bar. */
+ * so a browser refresh does not wipe the QSO map or the QSO panel. */
 async function loadStation() {
     try {
         const st = await fetch('/api/station/state').then(r => r.json());
@@ -2283,7 +2263,6 @@ async function loadStation() {
             qsoState.lastQso = dbRowToQso(rows[0]);
             renderLastQso();
             renderQsoPanel();
-            $('#stationBar').classList.add('has-data');
         }
     } catch (e) { /* keep the waiting hint */ }
 }

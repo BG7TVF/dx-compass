@@ -174,7 +174,7 @@ html, body {
 /* ---------- Main / Grid ---------- */
 .main {
     position: relative;
-    height: calc(100% - 52px); /* toolbar; the QSO station bar adds 44px */
+    height: calc(100% - 52px); /* toolbar height */
     display: flex;
 }
 
@@ -762,29 +762,7 @@ tbody tr:nth-child(even) { background: #141a20; }
 ::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: #4a5663; }
 
-/* ---------- Station bar (N1MM+ own station) ---------- */
-.station-bar {
-    position: relative;
-    display: flex;
-    align-items: center;
-    gap: 24px;
-    height: 44px;
-    padding: 0 16px;
-    background: linear-gradient(180deg, #10161d, #0b0f13);
-    border-bottom: 1px solid var(--border);
-    z-index: 90;
-    overflow: hidden;
-}
-.st-block { display: flex; align-items: center; gap: 10px; }
-.st-radio { min-width: 230px; }
-.st-freq {
-    font-size: 22px;
-    font-weight: 800;
-    color: var(--accent);
-    font-variant-numeric: tabular-nums;
-    letter-spacing: .5px;
-}
-.st-unit { color: var(--text-dim); font-size: 11px; align-self: flex-end; padding-bottom: 3px; }
+/* Mode chip + TX indicator (shared by the QSO side panel) */
 .st-mode {
     background: var(--panel-2);
     border: 1px solid var(--border-2);
@@ -805,27 +783,6 @@ tbody tr:nth-child(even) { background: #141a20; }
     animation: txBlink 1s steps(2, start) infinite;
 }
 @keyframes txBlink { 50% { opacity: .45; } }
-.st-score { gap: 16px; }
-.st-item { display: flex; align-items: baseline; gap: 6px; }
-.st-item label { color: var(--text-dim); font-size: 11px; text-transform: uppercase; letter-spacing: .5px; }
-.st-item b { color: var(--text); font-size: 16px; font-variant-numeric: tabular-nums; }
-.st-total b { color: var(--green); font-size: 18px; }
-.st-last { gap: 8px; min-width: 0; flex: 1; }
-.st-last label { color: var(--text-dim); font-size: 11px; text-transform: uppercase; letter-spacing: .5px; white-space: nowrap; }
-.st-last-call { color: #fff; font-size: 15px; font-weight: 700; letter-spacing: 1px; }
-.st-last-info { color: var(--text-dim); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.st-waiting {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: linear-gradient(180deg, #10161d, #0b0f13);
-    color: var(--text-dim);
-    font-size: 12px;
-    letter-spacing: 1px;
-}
-.station-bar.has-data .st-waiting { display: none; }
 
 /* ---------- QSO map view ---------- */
 .qso-view {
@@ -914,20 +871,12 @@ tbody tr:nth-child(even) { background: #141a20; }
 }
 .qt-meta span:empty { display: none; }
 
-/* QSO view hides spot-only toolbar controls; the Spot view hides the
- * N1MM station bar, which is QSO-only information. */
+/* QSO view hides spot-only toolbar controls. */
 body.qso-mode #layoutGroup,
 body.qso-mode #rotateGroup,
 body.qso-mode #btnMonitor,
 body.qso-mode #spotCount,
 body.qso-mode .status-group .sep { display: none; }
-
-#stationBar { display: none; }
-body.qso-mode #stationBar { display: flex; }
-
-/* The station bar only occupies space on the QSO view */
-.main { height: calc(100% - 52px); }
-body.qso-mode .main { height: calc(100% - 52px - 44px); }
 
 .view-btn.active {
     background: var(--accent);
