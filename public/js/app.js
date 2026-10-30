@@ -1535,7 +1535,6 @@ function applyLang() {
     $('#qLMults').textContent = t('stMults');
     $('#qLPoints').textContent = t('stPoints');
     $('#qLScore').textContent = t('stScore');
-    $('#qTx').textContent = t('stTx');
     renderLastQso();
     renderQsoPanel();
     $('#btnSaveCfg').textContent = t('save');
@@ -2057,13 +2056,13 @@ function renderQsoTopbar() {
     $('#qtMode').textContent = (q && q.mode) || (r && r.mode) || '—';
     const op = (q && q.operator) || (r && r.opCall) || '';
     $('#qtOp').textContent = op || '—';
-    // SO2R / MS / MM: show the category plus each radio's frequency so both
-    // VFOs stay visible; OP itself only carries the operator callsign.
+    // SO2R / MS / MM: show each radio's frequency so all VFOs stay visible;
+    // OP itself only carries the operator callsign.
     let radioTxt = '';
     if (settings.category !== 'SO1R') {
-        const nr = r && r.radioNr ? r.radioNr : 1;
-        radioTxt = [1, 2].map(i => {
-            const ri = qsoState.radios[i] || (nr === i ? r : null);
+        const nums = radioNumbers(r);
+        radioTxt = nums.map(i => {
+            const ri = qsoState.radios[i];
             return ri && typeof ri.freqKhz === 'number'
                 ? 'R' + i + ' ' + ri.freqKhz.toFixed(2) : '';
         }).filter(Boolean).join(' / ');
@@ -2085,19 +2084,53 @@ function updateQsoAge() {
     $('#qtAge').textContent = ts && !isNaN(ts) ? fmtElapsed(Date.now() - ts.getTime()) : '--:--:--';
 }
 
+/* Radio numbers that have reported, ascending; falls back to the active one. */
+function radioNumbers(active) {
+    const nums = Object.keys(qsoState.radios).map(Number)
+        .filter(n => n > 0).sort((a, b) => a - b);
+    const nr = active && active.radioNr ? active.radioNr : 0;
+    if (nr && !nums.includes(nr)) nums.push(nr);
+    if (!nums.length) nums.push(1);
+    return nums.sort((a, b) => a - b);
+}
+
+/* Hero: one card per radio. SO1R shows a single anonymous card; SO2R / MS /
+ * MM stack a card per radio (badge R1, R2, ...) so the panel grows with the
+ * number of radios N1MM+ broadcasts. */
+function renderQsoHero(active) {
+    const box = $('#qsoHero');
+    if (!box) return;
+    const multi = settings.category !== 'SO1R';
+    const esc = s => String(s).replace(/[&<>"']/g, c => (
+        {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+    box.innerHTML = radioNumbers(active).map(i => {
+        // Empty state keeps a placeholder card instead of a blank box.
+        const r = qsoState.radios[i] ||
+            (active && i === (active.radioNr || 0) ? active : null) || {};
+        const f = typeof r.freqKhz === 'number' && isFinite(r.freqKhz)
+            ? r.freqKhz.toLocaleString('en-US',
+                {minimumFractionDigits: 2, maximumFractionDigits: 2})
+            : '--.--';
+        const sub = [r.opCall, r.radioName].filter(Boolean).join(' · ');
+        return '<div class="qso-radio-card">' +
+            '<div class="qso-freq-row">' +
+            (multi ? '<span class="qr-badge">R' + i + '</span>' : '') +
+            '<span class="qso-freq">' + f + '</span>' +
+            '<span class="qso-unit">kHz</span>' +
+            '<span class="st-mode">' + esc(r.mode || '---') + '</span>' +
+            '<span class="st-tx' + (r.isTransmitting ? '' : ' hidden') + '">' +
+            esc(t('stTx')) + '</span>' +
+            '</div>' +
+            '<div class="qso-opcall">' + esc(sub) + '</div>' +
+            '</div>';
+    }).join('');
+}
+
 /* Refresh the QSO panel after the bar was removed from the page. */
 function renderQsoPanel() {
     renderQsoTopbar();
     const r = qsoState.radio, s = qsoState.score, q = qsoState.lastQso;
-    if (r) {
-        if (typeof r.freqKhz === 'number' && isFinite(r.freqKhz)) {
-            $('#qFreq').textContent = r.freqKhz.toLocaleString('en-US',
-                {minimumFractionDigits: 2, maximumFractionDigits: 2});
-        }
-        if (r.mode) $('#qMode').textContent = r.mode;
-        $('#qTx').classList.toggle('hidden', !r.isTransmitting);
-        $('#qOpCall').textContent = [r.opCall, r.radioName].filter(Boolean).join(' · ');
-    }
+    renderQsoHero(r);
     if (s) {
         $('#qQsos').textContent = s.qsos || 0;
         $('#qMults').textContent = s.mults || 0;
