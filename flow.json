@@ -2158,7 +2158,7 @@
         "y": 840,
         "wires": []
     },
-        {
+    {
         "id": "dxc00000000000e0",
         "type": "http in",
         "z": "dxc0000000000001",
@@ -2180,7 +2180,7 @@
         "type": "function",
         "z": "dxc0000000000001",
         "name": "Reset: spots",
-        "func": "// Factory reset: stop recording/monitoring, drop in-memory dedup state,\n// clear QRZ.com credentials, then hand the first DELETE to the sqlite chain.\nglobal.set('recording', { active: false, manual: false, startedAt: null, schedule: null });\nglobal.set('monitoring', false);\nglobal.set('monitorClients', {});\nflow.set('lastSpotId', 0);\nflow.set('seenIds', {});\nflow.set('dedupKeys', {});\nflow.set('qrzuser', null);\nflow.set('qrzpass', null);\nflow.set('qrzkey', null);\nmsg.topic = 'DELETE FROM spots;';\nreturn msg;",
+        "func": "// Factory reset: stop recording/monitoring, drop in-memory dedup state,\n// clear QRZ.com credentials, then hand the first DELETE to the sqlite chain.\nglobal.set('recording', { active: false, manual: false, startedAt: null, schedule: null });\nglobal.set('monitoring', false);\nglobal.set('monitorClients', {});\nglobal.set('uiSettings', null);\nflow.set('lastSpotId', 0);\nflow.set('seenIds', {});\nflow.set('dedupKeys', {});\nflow.set('qrzuser', null);\nflow.set('qrzpass', null);\nflow.set('qrzkey', null);\nmsg.topic = 'DELETE FROM spots;';\nreturn msg;",
         "outputs": 1,
         "timeout": "",
         "noerr": 0,
@@ -2312,6 +2312,91 @@
         "headers": {},
         "x": 570,
         "y": 1220,
+        "wires": []
+    },
+    {
+        "id": "dxc00000000000f1",
+        "type": "http in",
+        "z": "dxc0000000000001",
+        "name": "GET /api/settings",
+        "url": "/api/settings",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 150,
+        "y": 1100,
+        "wires": [
+            [
+                "dxc00000000000f2"
+            ]
+        ]
+    },
+    {
+        "id": "dxc00000000000f2",
+        "type": "function",
+        "z": "dxc0000000000001",
+        "name": "Settings: get",
+        "func": "// Shared UI settings: every dashboard reads the same copy so a second\n// user does not have to redo language/layout/band colours.\nconst s = global.get('uiSettings');\nmsg.payload = { settings: (s && typeof s === 'object') ? s : null };\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 390,
+        "y": 1100,
+        "wires": [
+            [
+                "dxc00000000000f5"
+            ]
+        ]
+    },
+    {
+        "id": "dxc00000000000f3",
+        "type": "http in",
+        "z": "dxc0000000000001",
+        "name": "POST /api/settings",
+        "url": "/api/settings",
+        "method": "post",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 150,
+        "y": 1160,
+        "wires": [
+            [
+                "dxc00000000000f4"
+            ]
+        ]
+    },
+    {
+        "id": "dxc00000000000f4",
+        "type": "function",
+        "z": "dxc0000000000001",
+        "name": "Settings: save",
+        "func": "// Last write wins; kept in file-backed global context (settings.js\n// contextStorage) so the configuration survives restarts.\nconst body = msg.payload;\nif (!body || typeof body !== 'object' || Array.isArray(body)) {\n    msg.statusCode = 400;\n    msg.payload = { success: false, error: 'invalid settings body' };\n    return msg;\n}\nglobal.set('uiSettings', body);\nmsg.payload = { success: true };\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 390,
+        "y": 1160,
+        "wires": [
+            [
+                "dxc00000000000f5"
+            ]
+        ]
+    },
+    {
+        "id": "dxc00000000000f5",
+        "type": "http response",
+        "z": "dxc0000000000001",
+        "name": "Settings response",
+        "statusCode": "",
+        "headers": {},
+        "x": 600,
+        "y": 1130,
         "wires": []
     }
 ]

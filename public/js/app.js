@@ -38,39 +38,79 @@ const TILE_PROVIDERS = {
 
 const settings = loadSettings();
 
-function loadSettings() {
-    const d = {
-        lang: 'zh', tiles: 'osm', grid: '',
+function defaultSettings() {
+    return {
+        lang: 'zh', tiles: 'osm', grid: '', layout: '1x1',
         category: 'SO1R', qsoMax: 1500, qsoLines: true, qsoAutoFit: true,
         qsoSpotAlert: true, qsoVoiceAlert: true,
         ttl: {...DEFAULT_TTL_MIN}, bandColors: {...DEFAULT_BAND_COLORS}
     };
-    try {
-        const raw = JSON.parse(localStorage.getItem('dxcompass-settings') || '{}');
-        if (LANGS.includes(raw.lang)) d.lang = raw.lang;
-        if (TILE_PROVIDERS[raw.tiles]) d.tiles = raw.tiles;
-        if (/^[A-Ra-r]{2}[0-9]{2}([A-Xa-x]{2})?$/.test(raw.grid || '')) d.grid = raw.grid.toUpperCase();
-        if (CONTESTS_CATEGORIES.includes(raw.category)) d.category = raw.category;
-        const qm = parseInt(raw.qsoMax, 10);
-        if (qm >= 200 && qm <= 4000) d.qsoMax = qm;
-        if (typeof raw.qsoLines === 'boolean') d.qsoLines = raw.qsoLines;
-        if (typeof raw.qsoAutoFit === 'boolean') d.qsoAutoFit = raw.qsoAutoFit;
-        if (typeof raw.qsoSpotAlert === 'boolean') d.qsoSpotAlert = raw.qsoSpotAlert;
-        if (typeof raw.qsoVoiceAlert === 'boolean') d.qsoVoiceAlert = raw.qsoVoiceAlert;
-        for (const m of Object.keys(d.ttl)) {
-            const v = parseInt(raw.ttl && raw.ttl[m], 10);
-            if (v >= 1 && v <= 180) d.ttl[m] = v;
+}
+/* Whitelist incoming values; used for both the local cache and the shared
+ * server copy so a corrupted/older payload can never break the UI. */
+function sanitizeSettings(input) {
+    const d = defaultSettings();
+    const raw = input && typeof input === 'object' ? input : {};
+    if (LANGS.includes(raw.lang)) d.lang = raw.lang;
+    if (TILE_PROVIDERS[raw.tiles]) d.tiles = raw.tiles;
+    if (/^[A-Ra-r]{2}[0-9]{2}([A-Xa-x]{2})?$/.test(raw.grid || '')) d.grid = raw.grid.toUpperCase();
+    if (['1x1', '2x2', '3x3'].includes(raw.layout)) d.layout = raw.layout;
+    if (CONTESTS_CATEGORIES.includes(raw.category)) d.category = raw.category;
+    const qm = parseInt(raw.qsoMax, 10);
+    if (qm >= 200 && qm <= 4000) d.qsoMax = qm;
+    if (typeof raw.qsoLines === 'boolean') d.qsoLines = raw.qsoLines;
+    if (typeof raw.qsoAutoFit === 'boolean') d.qsoAutoFit = raw.qsoAutoFit;
+    if (typeof raw.qsoSpotAlert === 'boolean') d.qsoSpotAlert = raw.qsoSpotAlert;
+    if (typeof raw.qsoVoiceAlert === 'boolean') d.qsoVoiceAlert = raw.qsoVoiceAlert;
+    for (const m of Object.keys(d.ttl)) {
+        const v = parseInt(raw.ttl && raw.ttl[m], 10);
+        if (v >= 1 && v <= 180) d.ttl[m] = v;
+    }
+    if (raw.bandColors && typeof raw.bandColors === 'object') {
+        for (const b of Object.keys(d.bandColors)) {
+            if (/^#[0-9a-fA-F]{6}$/.test(raw.bandColors[b] || '')) d.bandColors[b] = raw.bandColors[b];
         }
-        if (raw.bandColors && typeof raw.bandColors === 'object') {
-            for (const b of Object.keys(d.bandColors)) {
-                if (/^#[0-9a-fA-F]{6}$/.test(raw.bandColors[b] || '')) d.bandColors[b] = raw.bandColors[b];
-            }
-        }
-    } catch (e) { /* keep defaults */ }
+    }
     return d;
+}
+function loadSettings() {
+    try {
+        return sanitizeSettings(JSON.parse(localStorage.getItem('dxcompass-settings') || '{}'));
+    } catch (e) {
+        return defaultSettings();
+    }
+}
+/* UI settings are shared by every dashboard: the local copy is only a cache,
+ * the server copy (file-backed Node-RED global context) is authoritative, so
+ * a second user opens the page already configured. */
+let settingsPushTimer = null;
+function pushSettingsToServer() {
+    if (settingsPushTimer) clearTimeout(settingsPushTimer);
+    settingsPushTimer = setTimeout(() => {
+        settingsPushTimer = null;
+        fetch('/api/settings', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(settings)
+        }).catch(() => {});
+    }, 600);
+}
+async function pullSettingsFromServer() {
+    try {
+        const res = await fetch('/api/settings');
+        const data = await res.json();
+        const shared = data && data.settings;
+        if (shared && typeof shared === 'object' && Object.keys(shared).length) {
+            Object.assign(settings, sanitizeSettings(shared));
+            localStorage.setItem('dxcompass-settings', JSON.stringify(settings));
+        } else {
+            pushSettingsToServer(); // first run: publish the local defaults
+        }
+    } catch (e) { /* backend offline: keep the local copy */ }
 }
 function saveSettings() {
     localStorage.setItem('dxcompass-settings', JSON.stringify(settings));
+    pushSettingsToServer();
 }
 
 /* Marker / info-chip / heat survival per mode (minutes, configurable in Settings) */
@@ -274,8 +314,12 @@ function cellCountForLayout(layout) {
     return r * c;
 }
 
-function setLayout(layout) {
+function setLayout(layout, persist = true) {
     state.layout = layout;
+    if (persist && settings.layout !== layout) {
+        settings.layout = layout;
+        saveSettings();   // layout is part of the shared settings
+    }
     const grid = $('#grid');
     grid.className = 'grid layout-' + layout;
 
@@ -1929,7 +1973,11 @@ function saveConfig(e) {
 }
 
 /* ---------- Init ---------- */
-function init() {
+async function init() {
+    // Shared settings first: the first paint must already use the station's
+    // language, layout and map options (the local cache is only a fallback).
+    await pullSettingsFromServer();
+
     // Layout buttons
     $all('.layout-btn').forEach(b => {
         b.addEventListener('click', () => setLayout(b.dataset.layout));
@@ -2164,8 +2212,8 @@ function init() {
         grid.appendChild(cell.el);
     }
 
-    // Initial layout
-    setLayout('1x1');
+    // Initial layout (shared setting; not re-saved on boot)
+    setLayout(settings.layout, false);
     initQsoMap();
     updateMonitorBtn();
     applyLang();
