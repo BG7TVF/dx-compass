@@ -108,9 +108,51 @@ async function pullSettingsFromServer() {
         }
     } catch (e) { /* backend offline: keep the local copy */ }
 }
+/* Set while mirroring a settings broadcast from another dashboard, so the
+ * update is never echoed back to the server (which would ping-pong). */
+let applyingRemote = false;
+
 function saveSettings() {
     localStorage.setItem('dxcompass-settings', JSON.stringify(settings));
-    pushSettingsToServer();
+    if (!applyingRemote) pushSettingsToServer();
+}
+
+/* Another dashboard saved the shared settings: apply them here live, so
+ * everybody follows without reloading. */
+function applyRemoteSettings(raw) {
+    const prev = {
+        lang: settings.lang, layout: settings.layout, tiles: settings.tiles,
+        grid: settings.grid, category: settings.category,
+        qsoLines: settings.qsoLines, qsoAutoFit: settings.qsoAutoFit,
+        colors: JSON.stringify(settings.bandColors)
+    };
+    applyingRemote = true;
+    try {
+        Object.assign(settings, sanitizeSettings(raw));
+        localStorage.setItem('dxcompass-settings', JSON.stringify(settings));
+        const setVal = (sel, v) => { const el = $(sel); if (el) el.value = v; };
+        const setChk = (sel, v) => { const el = $(sel); if (el) el.checked = v; };
+        if (settings.lang !== prev.lang) { setVal('#setLang', settings.lang); applyLang(); }
+        if (settings.tiles !== prev.tiles) { setVal('#setTiles', settings.tiles); setTileProvider(settings.tiles); }
+        if (settings.layout !== prev.layout) setLayout(settings.layout, false);
+        if (JSON.stringify(settings.bandColors) !== prev.colors) {
+            buildBandColorInputs();
+            applyBandColors();
+        }
+        if (settings.grid !== prev.grid) { setVal('#setGrid', settings.grid); rebuildQsoMap(); }
+        if (settings.category !== prev.category) { setVal('#setCategory', settings.category); renderQsoPanel(); }
+        if (settings.qsoLines !== prev.qsoLines) { setChk('#setQsoLines', settings.qsoLines); rebuildQsoMap(); }
+        if (settings.qsoAutoFit !== prev.qsoAutoFit) { setChk('#setQsoAutoFit', settings.qsoAutoFit); fitQsoMap(); }
+        // Form fields without side effects: keep them in sync too
+        setVal('#setQsoMax', settings.qsoMax);
+        setChk('#setQsoSpotAlert', settings.qsoSpotAlert);
+        setChk('#setQsoVoice', settings.qsoVoiceAlert);
+        setVal('#ttlCw', settings.ttl.CW);
+        setVal('#ttlSsb', settings.ttl.SSB);
+        setVal('#ttlDigi', settings.ttl.DIGI);
+    } finally {
+        applyingRemote = false;
+    }
 }
 
 /* Marker / info-chip / heat survival per mode (minutes, configurable in Settings) */
@@ -944,6 +986,9 @@ function connectWS() {
             case 'score': updateStationScore(msg); break;
             case 'qso': handleQso(msg); break;
             case 'qsoDelete': handleQsoDelete(msg); break;
+            case 'settings':
+                if (msg.settings && typeof msg.settings === 'object') applyRemoteSettings(msg.settings);
+                break;
             default: handleSpot(msg);
         }
     };

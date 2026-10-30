@@ -2373,8 +2373,8 @@
         "type": "function",
         "z": "dxc0000000000001",
         "name": "Settings: save",
-        "func": "// Last write wins; kept in file-backed global context (settings.js\n// contextStorage) so the configuration survives restarts.\nconst body = msg.payload;\nif (!body || typeof body !== 'object' || Array.isArray(body)) {\n    msg.statusCode = 400;\n    msg.payload = { success: false, error: 'invalid settings body' };\n    return msg;\n}\nglobal.set('uiSettings', body);\nmsg.payload = { success: true };\nreturn msg;",
-        "outputs": 1,
+        "func": "// Last write wins; kept in file-backed global context (settings.js\n// contextStorage) so the configuration survives restarts.\n// Output 2 broadcasts the new settings so every other dashboard follows.\nconst body = msg.payload;\nif (!body || typeof body !== 'object' || Array.isArray(body)) {\n    msg.statusCode = 400;\n    msg.payload = { success: false, error: 'invalid settings body' };\n    return [msg, null];\n}\nglobal.set('uiSettings', body);\nmsg.payload = { success: true };\nreturn [msg, { payload: { type: 'settings', settings: body } }];",
+        "outputs": 2,
         "timeout": "",
         "noerr": 0,
         "initialize": "",
@@ -2385,6 +2385,9 @@
         "wires": [
             [
                 "dxc00000000000f5"
+            ],
+            [
+                "dxc000000000000e"
             ]
         ]
     },
