@@ -88,10 +88,12 @@ function pushSettingsToServer() {
     if (settingsPushTimer) clearTimeout(settingsPushTimer);
     settingsPushTimer = setTimeout(() => {
         settingsPushTimer = null;
+        const shared = {...settings};
+        delete shared.layout; // layout is per-browser, never shared
         fetch('/api/settings', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(settings)
+            body: JSON.stringify(shared)
         }).catch(() => {});
     }, 600);
 }
@@ -101,7 +103,9 @@ async function pullSettingsFromServer() {
         const data = await res.json();
         const shared = data && data.settings;
         if (shared && typeof shared === 'object' && Object.keys(shared).length) {
+            const localLayout = settings.layout; // layout stays per-browser
             Object.assign(settings, sanitizeSettings(shared));
+            settings.layout = localLayout;
             localStorage.setItem('dxcompass-settings', JSON.stringify(settings));
         } else {
             pushSettingsToServer(); // first run: publish the local defaults
@@ -121,20 +125,22 @@ function saveSettings() {
  * everybody follows without reloading. */
 function applyRemoteSettings(raw) {
     const prev = {
-        lang: settings.lang, layout: settings.layout, tiles: settings.tiles,
+        lang: settings.lang, tiles: settings.tiles,
         grid: settings.grid, category: settings.category,
         qsoLines: settings.qsoLines, qsoAutoFit: settings.qsoAutoFit,
         colors: JSON.stringify(settings.bandColors)
     };
     applyingRemote = true;
     try {
-        Object.assign(settings, sanitizeSettings(raw));
-        localStorage.setItem('dxcompass-settings', JSON.stringify(settings));
+        const merged = sanitizeSettings(raw);
+        delete merged.layout; // layout stays per-browser, never follows others
+        Object.assign(settings, merged);
+        // No localStorage write here: with several tabs on one origin the
+        // shared cache would otherwise flip between each tab's own layout.
         const setVal = (sel, v) => { const el = $(sel); if (el) el.value = v; };
         const setChk = (sel, v) => { const el = $(sel); if (el) el.checked = v; };
         if (settings.lang !== prev.lang) { setVal('#setLang', settings.lang); applyLang(); }
         if (settings.tiles !== prev.tiles) { setVal('#setTiles', settings.tiles); setTileProvider(settings.tiles); }
-        if (settings.layout !== prev.layout) setLayout(settings.layout, false);
         if (JSON.stringify(settings.bandColors) !== prev.colors) {
             buildBandColorInputs();
             applyBandColors();
@@ -360,7 +366,7 @@ function setLayout(layout, persist = true) {
     state.layout = layout;
     if (persist && settings.layout !== layout) {
         settings.layout = layout;
-        saveSettings();   // layout is part of the shared settings
+        saveSettings();   // layout is local-only (stripped from the shared push)
     }
     const grid = $('#grid');
     grid.className = 'grid layout-' + layout;
