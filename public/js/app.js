@@ -1782,18 +1782,21 @@ function addMySpot(spot) {
     if (!qsoState.map) return;
     const home = gridToLatLon(settings.grid);
     const lat = Number(spot.lat), lon = Number(spot.lon); // spotter (DE) side
-    if (!home || !isFinite(lat) || !isFinite(lon)) return;
+    if (!isFinite(lat) || !isFinite(lon)) return;
     const key = mySpotKey(spot);
     const old = qsoState.mySpots.get(key);
     if (old) old.layers.forEach(l => qsoState.map.removeLayer(l));
     // Red dot + red link line: unmistakably "this is about ME".
+    // The line needs the home grid; the dot is always drawn.
     const col = '#e74c3c';
     const layers = [];
-    greatCirclePaths(home[0], home[1], lat, lon).forEach(seg => {
-        layers.push(L.polyline(seg, {
-            color: col, weight: 2, opacity: 0.9, interactive: false
-        }).addTo(qsoState.map));
-    });
+    if (home) {
+        greatCirclePaths(home[0], home[1], lat, lon).forEach(seg => {
+            layers.push(L.polyline(seg, {
+                color: col, weight: 2, opacity: 0.9, interactive: false
+            }).addTo(qsoState.map));
+        });
+    }
     const m = L.marker([lat, lon], {icon: dotIcon('#e74c3c', 12)}).addTo(qsoState.map);
     m.bindTooltip(
         [spot.spot_call, bandLabel(spot.band, Number(spot.freq)), spot.mode]
