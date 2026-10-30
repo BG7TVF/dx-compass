@@ -1,6 +1,6 @@
 # DX-Compass
 
-基于 Node-RED 的多呼号 DX Spot 实时监测大屏。通过 **dxwatch.com**（FT8/SSB/DIGI 等）与 **reversebeacon.net RBN**（CW，含 dB 信号强度）公开数据流（HTTPS 轮询，无需登录 DX Cluster、无需 telnet）同时监测最多 **9 个呼号**收到的 spot，在地图上实时打点显示，支持硬盘录像机（DVR）风格的多分屏切换，并将所有 spot 记录到数据库用于赛后分析。
+基于 Node-RED 的 DX Spot 与竞赛实时监测大屏。通过 **dxwatch.com**（FT8/SSB/DIGI 等）、**reversebeacon.net RBN**（CW，含 dB 信号强度）与 **PSKReporter MQTT v2**（DIGI 实时流）三路公开数据同时监测最多 **9 个呼号**收到的 spot，在地图上实时打点；可选接入 **N1MM+**，显示本台 QSO 地图、竞赛分数与速率。支持多分屏（DVR 风格）、4 套主题、11 种界面语言，所有 spot 与 QSO 记录到 SQLite 用于赛后分析。
 
 ## 一键安装（复制即用）
 
@@ -39,12 +39,15 @@ curl -fsSL https://raw.githubusercontent.com/BG7TVF/dx-compass/main/bootstrap.sh
 - **标点存活时间可配置**：标记按模式（CW / SSB / DIGI）分别设置存活时间（默认各 30 分钟），随存活时间线性淡出直至消失；标记颜色按频段区分，均可在 Settings 中自定义
 - **频段热力图**：CW / DIGI 模式按频段生成热力图，强度随 SNR 与标记存活时间变化；点击频段框切换对应频段热力图
 - **晨昏线**：所有地图实时显示灰线（昼夜分界线）与夜半球阴影，每分钟自动刷新
-- **录制功能**：手动或定时（UTC，一次性）录制 spot 到独立 `recording_spots` 表，可下载 CSV，记录最长保留两个月
+- **录制功能**：手动或定时（UTC，一次性）录制 spot 到独立 `recording_spots` 表，录制记录最长保留两个月，超期每小时自动清理；All Spots / Recorded 两个视图可用同一 **Export CSV** 按钮按当前视图导出
 - **一键清除**：Settings → 全局 → 一键清除，停止监控/录制，删除全部界面设置（含 QRZ.com 凭据）、监听呼号以及 spots / qsos / recording_spots 三张表数据，相当于恢复出厂状态（不可撤销）
 - **完整记录**：每条 spot 记录时间、频率、报告人、模式（CW/DIGI/PHONE）、信号强度（CW 的 SNR dB 来自 RBN；FT8 的 SNR 来自 dxwatch）、距离等，存入 SQLite
 - **赛后分析**：记录面板支持按呼号筛选、一键导出 CSV
 - **距离计算**：直接使用数据源附带的呼号经纬度 + Haversine 公式，计算报告人相对本台的距离（公里/英里），不依赖第三方定位接口
 - **多语言界面**：支持中文 / English / Deutsch / Français / Español / Português / Русский / Italiano / العربية / 한국어 / 日本語 共 11 种界面语言，文案独立在 `public/js/i18n.js`，新增语言无需改动应用代码
+- **4 套主题**：**黑暗**（默认）、**明亮**（浅色底，适合白天或投影）、**深海**、**琥珀**，在 Settings → 全局 即时切换；整套配色（工具栏、面板、表格、弹窗、地图底色）随主题变化
+- **多人协作**：监听呼号、标记存活时间、频段颜色、底图、主题、提醒开关等设置保存在服务器端，修改后经 WebSocket 实时同步到所有打开的浏览器；分屏布局（1×1/2×2/3×3）只保存在各自浏览器
+- **本台 Spot 提醒**：本台呼号出现在 spot 上时，QSO 地图以红色标记标出（可选），并可与弹窗（8 秒自动消失）和语音播报「you get a new spot」一起开启；提醒与普通 Spot 监控独立开关，标记存活时间与最多显示数量可调，语音按当前界面语言播报
 - **底图可切换**：OpenStreetMap 与高德地图（中国大陆网络环境可用），切换后所有地图显示约定保持不变
 - **N1MM+ 本台集成**（可选）：接收 N1MM+ UDP 广播后，QSO 视图顶部条实时显示最新的 RUN/S&P、频率、对方呼号、RST 与交换信息，右侧面板显示当前电台频率/模式/TX、当前总分（QSO/乘数/点数/Score）、上一个 QSO 与 QSO 速率图表；一键切换全屏 **QSO 地图**，每个 QSO 按频段着色并从本台位置画大圆线，新乘数带 M 徽章，全部持久化到 `qsos` 表
 
@@ -208,13 +211,13 @@ git -C /opt/dx-compass pull
 ## 首次使用配置
 
 1. 浏览器打开监测大屏 `http://<服务器IP>:5758/`
-2. 点击右上角 **Settings**，在 **Monitored Callsigns** 槽位中填入要监测的呼号，点 **Save**
-3. 点击工具栏 **▶ 开始监控** 按钮启动监控：
+2. 点击左上角 **☰ 菜单 → Settings**，在 **Spot 地图** 页的呼号槽位中填入要监测的呼号，点 **Save**
+3. 点击右侧 **Records** 面板顶部的 **▶ 开始监控** 按钮启动监控：
    - 系统立即开始接收实时 spot（CW 每 10 秒、其它模式每 30 秒刷新）
    - 同时自动从数据源回溯该呼号最近 7 天的历史 spot，地图和 Records 面板很快就会有数据
 4. 无需任何集群地址、登录呼号或 Connect 操作——数据源开箱即用
 
-> Settings 分为三页：**全局**（界面语言 11 种、底图源 OSM/高德）、**Spot 地图**（监测呼号、各模式标记存活时间、各频段颜色）、**QSO 地图**（本台梅登海德网格、竞赛组别 SO1R/SO2R/MS/MM、自动缩放、本台连线、QSO 标记上限、QRZ 凭据）。
+> Settings 为整页三标签：**全局**（界面语言 11 种、主题 4 套、底图源 OSM/高德、本台呼号、一键清除）、**Spot 地图**（监测呼号、各模式标记存活时间、各频段颜色）、**QSO 地图**（本台梅登海德网格、竞赛组别 SO1R/SO2R/MS/MM、自动缩放、本台 Spot 提醒与连线、QSO 标记上限、QRZ 凭据）。设置保存在服务器端并实时同步给所有浏览器，仅分屏布局保存在本机。
 
 > 数据来自 dxwatch.com 与 reversebeacon.net 的公开接口。CW spot 由 RBN skimmer 网络提供，带真实 SNR（dB）与发报速度（WPM）；FT8/FT4 的 SNR 来自 dxwatch；普通 SSB spot 本身不携带信号强度，对应列为空属正常。
 
@@ -222,14 +225,15 @@ git -C /opt/dx-compass pull
 
 在 N1MM+ 竞赛日志软件中开启 UDP 广播后，可切换到全屏 QSO 地图（顶栏与本台状态栏只在 QSO 视图显示，Spot 视图保持简洁）：
 
-- **状态栏**：当前电台频率 / 模式 / 发射指示（TX）、当前总分（QSO 数 / 乘数 / 点数 / Score）、上一个 QSO
+- **状态栏**：按已上报电台动态生成的频率 / 模式 / TX 卡片（SO2R / MS / MM 下多台并列）、当前总分（QSO 数 / 乘数 / 点数 / Score）、上一个 QSO
 - **QSO 地图**：与 Spot 视图各有独立按钮，一键全屏切换；进入 QSO 视图后自动隐藏布局（1×1/2×2/3×3）、轮询、开始监控等 Spot 专用控件；每个 QSO 一个按频段着色的永久标记，从本台位置画大圆线连接；新乘数（Multiplier）带黄色 M 徽章；QSO 持久化在 SQLite `qsos` 表，浏览器刷新与服务重启后自动恢复
 - **QSO 顶部实时条**：地图上方显示最新 QSO —— RUN / S&P 状态（由 N1MM RadioInfo 实时判断）、频率、对方呼号、信号报告（RST 收发）、交换信息，以及频段/模式/操作员/相对时间
-- **竞赛组别支持**：Settings → QSO 地图 可选择 SO1R / SO2R / MS / MM；多发射机与多操作员组别下顶部条额外显示 R1 / R2 两台电台频率
+- **竞赛组别支持**：Settings → QSO 地图 可选择 SO1R / SO2R / MS / MM；QSO 面板按已上报的电台动态生成频率卡片，SO2R / MS / MM 下每台电台一张（R1、R2、R3…），顶部条同步显示全部电台频率，页面刷新后自动回填
 - **新 Spot 弹窗提醒**：QSO 地图下，被监听呼号出现新 Spot 时弹出提示（呼号、频段、模式、频率、监听站 DE、SNR、时间），8 秒后自动消失；任何时刻只存在一个弹窗，新 Spot 会直接覆盖旧内容并重置计时，绝不叠加；可在 Settings → QSO 地图 中开关
 - **语音提醒（Web Speech API）**：与弹窗同时播报——首次出现为「{呼号} 新 Spot」；与上一条同呼号 Spot 相比频段变化为「{呼号} 换频段」（此时不再播报新频率）；仅频率变化为「{呼号} 新频率」；新的播报会打断上一条，绝不排队；可在 Settings → QSO 地图 中独立开关
-- **QSO 视图右侧面板**：显示当前电台频率/模式/TX、当前分数（QSO/乘数/点数/Score）、上一个 QSO 详情，以及最近 60 分钟的 QSO 速率柱状图（5 分钟一根柱）；Spot Records 面板仅在 Spot 视图显示
-- **设置分页**：Settings 面板分为 **全局**（语言、底图源）/ **Spot 地图**（监测呼号、标记存活时间、频段颜色）/ **QSO 地图**（本台网格、竞赛组别、自动缩放、本台连线、标记上限、QRZ 凭据）三页
+- **本台 Spot 提醒**：本台呼号被别人 spot 时，QSO 地图以红点标出（有本台网格时同时画红色大圆线）；可独立开启弹窗与语音「you get a new spot」，语音随当前界面语言播报；标记存活时间与最多显示数量可调，与普通 Spot 的提醒互不影响
+- **QSO 视图右侧面板**：按电台动态显示频率/模式/TX 卡片、当前分数（QSO/乘数/点数/Score）、上一个 QSO，以及最近 60 分钟的 QSO 速率柱状图（5 分钟一根柱，按墙钟整点对齐不抖动）、QSO/分钟图、按操作员与按频段统计条形图；Spot Records 面板仅在 Spot 视图显示
+- **设置分页**：Settings 面板分为 **全局**（语言、主题、底图源、本台呼号）/ **Spot 地图**（监测呼号、标记存活时间、频段颜色）/ **QSO 地图**（本台网格、竞赛组别、自动缩放、本台 Spot 提醒、标记上限、QRZ 凭据）三页
 - QSO 坐标**优先从 QRZ.com 查询**（与原 n1mm_dashboard 项目一致，需在 Settings 中配置 QRZ 用户名/密码，需 QRZ XML 订阅）；未配置或查询失败时依次回退到通联中的 gridsquare 字段、已积累的 spot 坐标库
 
 配置方法：
@@ -272,14 +276,17 @@ journalctl --user -u dx-compass -f     # 实时查看日志
 ## 数据与导出
 
 - 所有匹配的 spot 写入 SQLite `spots` 表，字段含：`spot_id`（数据源唯一 ID，用于去重；RBN 记录为负数）、`timestamp`（时间）、`monitored_call`（被监测呼号）、`de`（报告人）、`freq`（频率）、`spot_call`、`mode`（CW/DIGI/PHONE）、`signal`（RST）、`snr`（CW/FT8 的 dB）、`lat`/`lon`、`distance_km`/`distance_miles`、`comment`
-- 大屏右上角 **Records** 面板可按呼号查询并一键 **Export CSV**，用于赛后分析
+- 右侧 **Records** 面板可按呼号查询，**Export CSV** 按当前标签导出（All Spots 导出全部 spot，Recorded 导出本次录制），用于赛后分析
 - REST API：
   - `GET  /api/config` / `POST /api/config`：读取 / 保存配置（本台经纬度）
   - `GET  /api/callsigns` / `POST /api/callsigns`：读取 / 保存监测呼号列表（POST 新呼号会自动触发历史回溯）
+  - `GET  /api/settings` / `POST /api/settings`：读取 / 保存共享设置（主题、语言、底图、标记存活时间等），保存后经 WebSocket 广播给所有客户端
   - `GET  /api/spots?call=呼号&limit=数量`：查询记录
+  - `POST /api/spots/clear`：仅清空 spots 表（保留录制数据）
   - `GET  /api/qsos?limit=数量`：查询本台 QSO 记录（N1MM+ 集成）
-  - `GET  /api/station/state`：最近一次电台状态与竞赛记分（N1MM+ 集成）
-  - `POST /api/reset`：清空 spots / qsos / recording_spots 三张表（Settings 的一键清除会同时清空监听呼号与本地设置）
+  - `GET  /api/station/state`：返回全部已上报电台的状态映射（`radios`）与最近一次竞赛记分（N1MM+ 集成）
+  - `GET  /api/qrz/config` / `POST /api/qrz/config`：读取 / 保存 QRZ.com 凭据（密码不回显）
+  - `POST /api/reset`：清空 spots / qsos / recording_spots 三张表与电台/记分状态（Settings 的一键清除会同时清空监听呼号与全部设置）
 
 ## 常见问题
 
