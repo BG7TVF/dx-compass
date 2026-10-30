@@ -81,9 +81,20 @@ dx-compass/
 ├── public/            # 前端大屏
 │   ├── index.html
 │   ├── css/style.css
-│   └── js/app.js
+│   └── js/
+│       ├── i18n.js     # 界面翻译（LANGS / LANG_NAMES / I18N），新增语言只改这个文件
+│       └── app.js      # 应用逻辑
 └── LICENSE
 ```
+
+## 添加新语言
+
+界面文案已独立到 [public/js/i18n.js](public/js/i18n.js)（在 `index.html` 中先于 `app.js` 加载），新增语言无需改动应用逻辑：
+
+1. 在 `LANGS` 数组末尾追加语言代码（如 `'nl'`）
+2. 在 `LANG_NAMES` 中补充该语言的母语名称（会显示在 Settings 的语言下拉框中）
+3. 在 `I18N` 中复制英文块，新增该语言条目并翻译所有键（键名必须与英文块完全一致，缺失的键会回退到英文）
+4. 刷新页面即可在 Settings → 全局 → Language 中选择
 
 ## 环境要求
 
