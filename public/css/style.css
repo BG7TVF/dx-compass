@@ -43,7 +43,6 @@ html, body {
 }
 
 .brand { display: flex; align-items: center; gap: 8px; }
-.brand .logo { color: var(--accent); font-size: 20px; }
 .brand .title {
     font-size: 18px;
     font-weight: 700;
@@ -109,7 +108,6 @@ html, body {
 .sep { color: var(--border-2); }
 .stat { color: var(--text); }
 
-.action-group { margin-left: auto; display: flex; gap: 6px; }
 .action-btn, .mini-btn, .primary-btn {
     background: var(--panel-2);
     color: var(--text);
@@ -317,16 +315,16 @@ html, body {
 /* ---------- Collapsible toolbar menu ---------- */
 .menu-wrap { position: relative; }
 .menu-btn {
-    font-size: 17px;
+    font-size: 20px;
     line-height: 1;
-    padding: 5px 11px;
+    padding: 5px 12px;
     color: var(--accent);
 }
 .menu-btn:hover { background: #1b404e; }
 .app-menu {
     position: absolute;
     top: calc(100% + 8px);
-    right: 0;
+    left: 0;
     min-width: 190px;
     padding: 6px;
     background: var(--panel);

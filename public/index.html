@@ -9,25 +9,22 @@
 </head>
 <body>
     <div class="toolbar">
+        <div class="menu-wrap" id="menuWrap">
+            <button class="action-btn menu-btn" id="btnMenu" title="Menu" aria-expanded="false" aria-controls="appMenu">☰</button>
+            <div class="app-menu hidden" id="appMenu">
+                <button class="menu-item view-btn active" id="btnSpotView" title="Spot grid">Spot</button>
+                <button class="menu-item view-btn" id="btnQsoView" title="QSO map">QSO</button>
+                <div class="menu-sep"></div>
+                <button class="menu-item" id="btnConfig" title="Settings">Settings</button>
+            </div>
+        </div>
+
         <div class="brand">
-            <span class="logo">✦</span>
             <span class="title">DX-Compass</span>
             <span class="subtitle">Multi-Call Spot Monitor</span>
         </div>
 
         <span class="toolbar-clock" id="utcClock">UTC: --:--:--</span>
-
-        <div class="action-group">
-            <div class="menu-wrap" id="menuWrap">
-                <button class="action-btn menu-btn" id="btnMenu" title="Menu" aria-expanded="false" aria-controls="appMenu">☰</button>
-                <div class="app-menu hidden" id="appMenu">
-                    <button class="menu-item view-btn active" id="btnSpotView" title="Spot grid">Spot</button>
-                    <button class="menu-item view-btn" id="btnQsoView" title="QSO map">QSO</button>
-                    <div class="menu-sep"></div>
-                    <button class="menu-item" id="btnConfig" title="Settings">Settings</button>
-                </div>
-            </div>
-        </div>
     </div>
 
     <div class="main">
