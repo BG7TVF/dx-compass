@@ -19,7 +19,7 @@ const LANG_NAMES = {
 const I18N = {
     zh: {
         subtitle: '多呼号 Spot 监视器',
-        settings: '设置',
+        settings: '设置', menu: '菜单',
         startMon: '▶ 开始监控', stopMon: '■ 停止监控',
         needCall: '请先在设置中配置至少一个呼号',
         startRot: '🔁 开始轮询', stopRot: '⏸ 停止轮询',
@@ -77,7 +77,7 @@ const I18N = {
     },
     en: {
         subtitle: 'Multi-Call Spot Monitor',
-        settings: 'Settings',
+        settings: 'Settings', menu: 'Menu',
         startMon: '▶ Start Monitor', stopMon: '■ Stop Monitor',
         needCall: 'Set at least one callsign in Settings first',
         startRot: '🔁 Rotate', stopRot: '⏸ Stop',
@@ -135,7 +135,7 @@ const I18N = {
     },
     de: {
         subtitle: 'Multi-Rufzeichen Spot-Monitor',
-        settings: 'Einstellungen',
+        settings: 'Einstellungen', menu: 'Menü',
         startMon: '▶ Überwachung starten', stopMon: '■ Überwachung stoppen',
         needCall: 'Zuerst mindestens ein Rufzeichen in den Einstellungen setzen',
         startRot: '🔁 Rotation starten', stopRot: '⏸ Rotation stoppen',
@@ -193,7 +193,7 @@ const I18N = {
     },
     fr: {
         subtitle: 'Moniteur de spots multi-indicatifs',
-        settings: 'Paramètres',
+        settings: 'Paramètres', menu: 'Menu',
         startMon: '▶ Démarrer la surveillance', stopMon: '■ Arrêter la surveillance',
         needCall: "Définissez d'abord au moins un indicatif dans les paramètres",
         startRot: '🔁 Démarrer la rotation', stopRot: '⏸ Arrêter la rotation',
@@ -251,7 +251,7 @@ const I18N = {
     },
     es: {
         subtitle: 'Monitor de spots multiindicativo',
-        settings: 'Ajustes',
+        settings: 'Ajustes', menu: 'Menú',
         startMon: '▶ Iniciar monitorización', stopMon: '■ Detener monitorización',
         needCall: 'Configure primero al menos un indicativo en Ajustes',
         startRot: '🔁 Iniciar rotación', stopRot: '⏸ Detener rotación',
@@ -309,7 +309,7 @@ const I18N = {
     },
     pt: {
         subtitle: 'Monitor de spots multichamada',
-        settings: 'Configurações',
+        settings: 'Configurações', menu: 'Menu',
         startMon: '▶ Iniciar monitorização', stopMon: '■ Parar monitorização',
         needCall: 'Defina primeiro pelo menos um indicativo nas Configurações',
         startRot: '🔁 Iniciar rotação', stopRot: '⏸ Parar rotação',
@@ -367,7 +367,7 @@ const I18N = {
     },
     ru: {
         subtitle: 'Монитор спотов на несколько позывных',
-        settings: 'Настройки',
+        settings: 'Настройки', menu: 'Меню',
         startMon: '▶ Начать мониторинг', stopMon: '■ Остановить мониторинг',
         needCall: 'Сначала задайте хотя бы один позывной в Настройках',
         startRot: '🔁 Начать ротацию', stopRot: '⏸ Остановить ротацию',
@@ -425,7 +425,7 @@ const I18N = {
     },
     it: {
         subtitle: 'Monitor di spot multi-nominativo',
-        settings: 'Impostazioni',
+        settings: 'Impostazioni', menu: 'Menu',
         startMon: '▶ Avvia monitoraggio', stopMon: '■ Ferma monitoraggio',
         needCall: 'Imposta prima almeno un nominativo nelle Impostazioni',
         startRot: '🔁 Avvia rotazione', stopRot: '⏸ Ferma rotazione',
@@ -483,7 +483,7 @@ const I18N = {
     },
     ar: {
         subtitle: 'مراقب سبوت متعدد النداءات',
-        settings: 'الإعدادات',
+        settings: 'الإعدادات', menu: 'القائمة',
         startMon: '▶ بدء المراقبة', stopMon: '■ إيقاف المراقبة',
         needCall: 'حدد أولاً نداءً واحداً على الأقل في الإعدادات',
         startRot: '🔁 بدء التدوير', stopRot: '⏸ إيقاف التدوير',
@@ -541,7 +541,7 @@ const I18N = {
     },
     ko: {
         subtitle: '다중 콜사인 스폿 모니터',
-        settings: '설정',
+        settings: '설정', menu: '메뉴',
         startMon: '▶ 모니터링 시작', stopMon: '■ 모니터링 중지',
         needCall: '먼저 설정에서 콜사인을 하나 이상 입력하세요',
         startRot: '🔁 순환 시작', stopRot: '⏸ 순환 중지',
@@ -599,7 +599,7 @@ const I18N = {
     },
     ja: {
         subtitle: 'マルチコール・スポットモニター',
-        settings: '設定',
+        settings: '設定', menu: 'メニュー',
         startMon: '▶ 監視開始', stopMon: '■ 監視停止',
         needCall: '先に設定でコールサインを1つ以上入力してください',
         startRot: '🔁 ローテーション開始', stopRot: '⏸ ローテーション停止',

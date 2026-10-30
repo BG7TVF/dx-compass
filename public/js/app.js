@@ -1475,6 +1475,7 @@ function applyLang() {
     const bc = $('#btnConfig');
     bc.textContent = t('settings');
     bc.title = t('settings');
+    $('#btnMenu').title = t('menu');
     $('#recordsPanel .panel-title').textContent = t('records');
     $('#btnRefreshRecords').textContent = t('refresh');
     $('#btnExportCsv').textContent = t('exportCsv');
@@ -1679,6 +1680,7 @@ function setViewMode(mode) {
         hideSpotAlertAndVoice();
         visibleCells().forEach(c => { c.map.invalidateSize(); fitCellView(c); });
     }
+    closeAppMenu();
 }
 
 /* QSO map auto-fit: same convention as cells - zoom in as far as all
@@ -2167,11 +2169,31 @@ async function loadStation() {
 }
 
 /* ---------- Config ---------- */
+/* Settings is a dedicated page covering the map area, not a drawer. */
 function openConfig() {
+    closeAppMenu();
     $('#configPanel').classList.remove('hidden');
     loadConfig();
 }
-function closeConfig() { $('#configPanel').classList.add('hidden'); }
+function closeConfig() {
+    if ($('#configPanel').classList.contains('hidden')) return;
+    $('#configPanel').classList.add('hidden');
+    // Maps were covered by the page: refresh their size/auto-fit.
+    if (qsoState.view === 'qso') {
+        if (qsoState.map) { qsoState.map.invalidateSize(); fitQsoMap(); }
+    } else {
+        visibleCells().forEach(c => { c.map.invalidateSize(); fitCellView(c); });
+    }
+}
+
+/* Collapsible toolbar menu holding the page switch and Settings. */
+function toggleAppMenu(force) {
+    const m = $('#appMenu'), b = $('#btnMenu');
+    const show = typeof force === 'boolean' ? force : m.classList.contains('hidden');
+    m.classList.toggle('hidden', !show);
+    b.setAttribute('aria-expanded', show ? 'true' : 'false');
+}
+function closeAppMenu() { toggleAppMenu(false); }
 
 function loadConfig() {
     fetch('/api/callsigns').then(r => r.json()).then(calls => {
@@ -2222,9 +2244,18 @@ async function init() {
     // Panel close buttons
     $all('.panel-close').forEach(b => {
         b.addEventListener('click', () => {
+            if (b.dataset.close === 'configPanel') { closeConfig(); return; }
             document.getElementById(b.dataset.close).classList.add('hidden');
         });
     });
+
+    // Collapsible menu: closes on outside click or after picking an entry
+    $('#btnMenu').addEventListener('click', e => {
+        e.stopPropagation();
+        toggleAppMenu();
+    });
+    $('#appMenu').addEventListener('click', e => e.stopPropagation());
+    document.addEventListener('click', () => closeAppMenu());
 
     $('#btnConfig').addEventListener('click', openConfig);
     $('#btnMonitor').addEventListener('click', () => setMonitoring(!state.monitoring));
@@ -2445,8 +2476,8 @@ async function init() {
     });
     $('#saClose').addEventListener('click', hideSpotAlertAndVoice);
     // Spot grid <-> QSO map switch (two independent buttons)
-    $('#btnSpotView').addEventListener('click', () => setViewMode('spots'));
-    $('#btnQsoView').addEventListener('click', () => setViewMode('qso'));
+    $('#btnSpotView').addEventListener('click', () => { closeConfig(); setViewMode('spots'); });
+    $('#btnQsoView').addEventListener('click', () => { closeConfig(); setViewMode('qso'); });
     // QRZ.com XML credentials (QSO coordinate lookups; needs a QRZ XML
     // subscription). Stored server-side in flow context; the password is
     // never read back into the form.

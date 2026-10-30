@@ -39,10 +39,16 @@
         </div>
 
         <div class="action-group">
-            <button class="action-btn view-btn active" id="btnSpotView" title="Spot grid">Spot</button>
-            <button class="action-btn view-btn" id="btnQsoView" title="QSO map">QSO</button>
             <button class="action-btn monitor-btn" id="btnMonitor" disabled>▶ 开始监控</button>
-            <button class="action-btn" id="btnConfig" title="Settings">Settings</button>
+            <div class="menu-wrap" id="menuWrap">
+                <button class="action-btn menu-btn" id="btnMenu" title="Menu" aria-expanded="false" aria-controls="appMenu">☰</button>
+                <div class="app-menu hidden" id="appMenu">
+                    <button class="menu-item view-btn active" id="btnSpotView" title="Spot grid">Spot</button>
+                    <button class="menu-item view-btn" id="btnQsoView" title="QSO map">QSO</button>
+                    <div class="menu-sep"></div>
+                    <button class="menu-item" id="btnConfig" title="Settings">Settings</button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -212,7 +218,7 @@
         </div>
 
         <!-- Settings Panel -->
-        <div id="configPanel" class="side-panel hidden">
+        <div id="configPanel" class="settings-page hidden">
             <div class="panel-header">
                 <span class="panel-title">Settings</span>
                 <button class="panel-close" data-close="configPanel">&times;</button>
