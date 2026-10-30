@@ -1634,8 +1634,9 @@ function renderQsoTopbar() {
     $('#qtBand').textContent = (q && q.band) || '—';
     $('#qtMode').textContent = (q && q.mode) || (r && r.mode) || '—';
     const op = (q && q.operator) || (r && r.opCall) || '';
-    $('#qtOp').textContent = settings.category + (op ? ' · ' + op : '');
-    // SO2R / MS / MM: show each radio's frequency so both VFOs stay visible
+    $('#qtOp').textContent = op || '—';
+    // SO2R / MS / MM: show the category plus each radio's frequency so both
+    // VFOs stay visible; OP itself only carries the operator callsign.
     let radioTxt = '';
     if (settings.category !== 'SO1R') {
         const nr = r && r.radioNr ? r.radioNr : 1;
@@ -1644,6 +1645,7 @@ function renderQsoTopbar() {
             return ri && typeof ri.freqKhz === 'number'
                 ? 'R' + i + ' ' + ri.freqKhz.toFixed(2) : '';
         }).filter(Boolean).join(' / ');
+        if (radioTxt) radioTxt = settings.category + ' · ' + radioTxt;
     }
     $('#qtRadios').textContent = radioTxt;
     updateQsoAge();
