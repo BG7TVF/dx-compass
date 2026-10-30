@@ -41,9 +41,27 @@ const TILE_PROVIDERS = {
 
 const settings = loadSettings();
 
+/* UI themes (palettes live in css/style.css under body[data-theme="..."]). */
+const THEMES = ['dark', 'light', 'ocean', 'amber'];
+function applyTheme(name) {
+    settings.theme = THEMES.includes(name) ? name : 'dark';
+    document.body.dataset.theme = settings.theme;
+}
+function themeLabel(th) {
+    return t('theme' + th.charAt(0).toUpperCase() + th.slice(1));
+}
+/* Options are rebuilt on every language switch so the names follow the UI. */
+function renderThemeOptions() {
+    const sel = $('#setTheme');
+    if (!sel) return;
+    sel.innerHTML = THEMES.map(th =>
+        `<option value="${th}">${themeLabel(th)}</option>`).join('');
+    sel.value = settings.theme;
+}
+
 function defaultSettings() {
     return {
-        lang: 'zh', tiles: 'osm', grid: '', layout: '1x1', myCall: '',
+        lang: 'zh', theme: 'dark', tiles: 'osm', grid: '', layout: '1x1', myCall: '',
         category: 'SO1R', qsoMax: 1500, qsoLines: true, qsoAutoFit: true,
         qsoSpotAlert: true, qsoVoiceAlert: true,
         mySpotTtl: 30, mySpotMax: 300, mySpotPopup: true, mySpotVoice: true,
@@ -56,6 +74,7 @@ function sanitizeSettings(input) {
     const d = defaultSettings();
     const raw = input && typeof input === 'object' ? input : {};
     if (LANGS.includes(raw.lang)) d.lang = raw.lang;
+    if (THEMES.includes(raw.theme)) d.theme = raw.theme;
     if (TILE_PROVIDERS[raw.tiles]) d.tiles = raw.tiles;
     if (/^[A-Ra-r]{2}[0-9]{2}([A-Xa-x]{2})?$/.test(raw.grid || '')) d.grid = raw.grid.toUpperCase();
     if (typeof raw.myCall === 'string') {
@@ -140,7 +159,7 @@ function saveSettings() {
  * everybody follows without reloading. */
 function applyRemoteSettings(raw) {
     const prev = {
-        lang: settings.lang, tiles: settings.tiles,
+        lang: settings.lang, theme: settings.theme, tiles: settings.tiles,
         grid: settings.grid, category: settings.category,
         qsoLines: settings.qsoLines, qsoAutoFit: settings.qsoAutoFit,
         myCall: settings.myCall,
@@ -156,6 +175,7 @@ function applyRemoteSettings(raw) {
         const setVal = (sel, v) => { const el = $(sel); if (el) el.value = v; };
         const setChk = (sel, v) => { const el = $(sel); if (el) el.checked = v; };
         if (settings.lang !== prev.lang) { setVal('#setLang', settings.lang); applyLang(); }
+        if (settings.theme !== prev.theme) { applyTheme(settings.theme); renderThemeOptions(); }
         if (settings.tiles !== prev.tiles) { setVal('#setTiles', settings.tiles); setTileProvider(settings.tiles); }
         if (JSON.stringify(settings.bandColors) !== prev.colors) {
             buildBandColorInputs();
@@ -1490,6 +1510,8 @@ function applyLang() {
     $('#configPanel .panel-title').textContent = t('settings');
     $('#cfgSectionTitle').textContent = t('cfgSection');
     $('#langLabel').textContent = t('langLabel');
+    $('#themeLabel').textContent = t('theme');
+    renderThemeOptions();
     $('#tilesLabel').textContent = t('mapTiles');
     $('#myCallLabel').textContent = t('myCall');
     $('#mySpotSectionTitle').textContent = t('mySpotSection');
@@ -2271,6 +2293,8 @@ async function init() {
     // Shared settings first: the first paint must already use the station's
     // language, layout and map options (the local cache is only a fallback).
     await pullSettingsFromServer();
+    // Theme before the maps are created, so tiles/canvas pick the right bg
+    applyTheme(settings.theme);
 
     // Layout buttons
     $all('.layout-btn').forEach(b => {
@@ -2358,6 +2382,12 @@ async function init() {
         settings.lang = $('#setLang').value;
         saveSettings();
         applyLang();
+    });
+    // UI theme (palette from css/style.css, applied through body[data-theme])
+    renderThemeOptions();
+    $('#setTheme').addEventListener('change', () => {
+        applyTheme($('#setTheme').value);
+        saveSettings();
     });
     // Base map provider (options built from TILE_PROVIDERS, like the language selector)
     const tilesSel = $('#setTiles');
