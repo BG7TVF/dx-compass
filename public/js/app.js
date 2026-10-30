@@ -1101,18 +1101,23 @@ function showSpotAlert(spot, call) {
 
     // Voice alert: first report of a call -> "new spot"; a different band
     // -> "change band" (and "new frequency" is suppressed); same band but
-    // another frequency -> "new frequency".
+    // another frequency -> "new frequency". Frequency changes within
+    // +/-1 kHz are ignored (RBN report jitter) and keep the old anchor, so
+    // slow drift still triggers once it exceeds 1 kHz from the anchor.
     const prev = lastSpotByCall.get(call);
     const curFreq = Number(spot.freq);
     let phrase = t('voiceNewSpot');
     if (prev) {
         if (prev.band && spot.band && prev.band !== spot.band) {
             phrase = t('voiceChangeBand');
-        } else if (prev.freq !== curFreq) {
+        } else if (isFinite(prev.freq) && isFinite(curFreq) && Math.abs(curFreq - prev.freq) > 1) {
             phrase = t('voiceNewFreq');
+            lastSpotByCall.set(call, { band: spot.band, freq: curFreq });
         }
     }
-    lastSpotByCall.set(call, { band: spot.band, freq: curFreq });
+    if (!prev || phrase === t('voiceChangeBand')) {
+        lastSpotByCall.set(call, { band: spot.band, freq: curFreq });
+    }
     if (settings.qsoVoiceAlert) {
         speakAlert(String(phrase).replace(/\{call\}/g, spellCall(call)));
     }
