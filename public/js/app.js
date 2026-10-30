@@ -1461,6 +1461,26 @@ const VOICE_LANGS = {
     pt: 'pt-PT', ru: 'ru-RU', it: 'it-IT', ar: 'ar-SA', ko: 'ko-KR', ja: 'ja-JP'
 };
 
+/* ICAO/NATO phonetic alphabet: callsigns are spelled out letter by letter
+ * so the TTS engine never reads "BG5WKP" as one ambiguous word. */
+const ICAO_ALPHABET = {
+    A: 'Alfa', B: 'Bravo', C: 'Charlie', D: 'Delta', E: 'Echo', F: 'Foxtrot',
+    G: 'Golf', H: 'Hotel', I: 'India', J: 'Juliett', K: 'Kilo', L: 'Lima',
+    M: 'Mike', N: 'November', O: 'Oscar', P: 'Papa', Q: 'Quebec', R: 'Romeo',
+    S: 'Sierra', T: 'Tango', U: 'Uniform', V: 'Victor', W: 'Whiskey',
+    X: 'X-ray', Y: 'Yankee', Z: 'Zulu',
+    '0': 'Zero', '1': 'One', '2': 'Two', '3': 'Three', '4': 'Four',
+    '5': 'Five', '6': 'Six', '7': 'Seven', '8': 'Eight', '9': 'Nine'
+};
+
+function spellCall(call) {
+    return String(call || '').toUpperCase().split('').map(ch => {
+        if (ICAO_ALPHABET[ch]) return ICAO_ALPHABET[ch];
+        if (ch === '/') return 'slash';
+        return ''; // separators and punctuation are not spoken
+    }).filter(Boolean).join(' ');
+}
+
 /* Web Speech API: the newest announcement always wins (cancel + speak), so
  * alerts can never queue up and overlap each other. */
 function speakAlert(text) {
@@ -1521,7 +1541,7 @@ function showSpotAlert(spot, call) {
     }
     lastSpotByCall.set(call, { band: spot.band, freq: curFreq });
     if (settings.qsoVoiceAlert) {
-        speakAlert(String(phrase).replace(/\{call\}/g, call));
+        speakAlert(String(phrase).replace(/\{call\}/g, spellCall(call)));
     }
 
     clearTimeout(spotAlertTimer);
