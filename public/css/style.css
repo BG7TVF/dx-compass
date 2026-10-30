@@ -1104,3 +1104,12 @@ body.qso-mode .main { height: calc(100% - 52px - 44px); }
     line-height: 12px;
     pointer-events: none;
 }
+
+/* Arabic: RTL text inside an LTR dashboard (the page must NOT be mirrored) */
+body.lang-ar .form-row label,
+body.lang-ar .section-title,
+body.lang-ar .hint,
+body.lang-ar .cfg-tab,
+body.lang-ar .qt-box label,
+body.lang-ar .rec-tz { text-align: right; }
+

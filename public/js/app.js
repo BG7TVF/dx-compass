@@ -1811,7 +1811,10 @@ function exportCsv(forceRec) {
  * dynamic ones (buttons, table headers, statuses). */
 function applyLang() {
     document.documentElement.lang = settings.lang;
-    document.documentElement.dir = settings.lang === 'ar' ? 'rtl' : 'ltr';
+    // Arabic text is right-to-left by Unicode bidi, but the dashboard layout
+    // must stay LTR: mirroring the whole page breaks maps, panels and toolbar.
+    document.documentElement.dir = 'ltr';
+    document.body.classList.toggle('lang-ar', settings.lang === 'ar');
     const bc = $('#btnConfig');
     bc.textContent = t('settings');
     bc.title = t('settings');
