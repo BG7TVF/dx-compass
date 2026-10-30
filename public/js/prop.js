@@ -289,7 +289,8 @@ function themeColors() {
     const get = n => cs.getPropertyValue(n).trim();
     return {
         bg: get('--map-bg') || '#0a1929',
-        land: get('--panel-2') || '#1c232c',
+        land: get('--map-land') || get('--panel-2') || '#1c232c',
+        line: get('--map-line') || get('--text-dim') || '#8a97a5',
         border: get('--border') || '#2a333d',
         text: get('--text') || '#d6dde4',
         dim: get('--text-dim') || '#8a97a5',
@@ -311,6 +312,21 @@ function drawProp() {
     ctx.fillStyle = C.bg;
     ctx.fillRect(0, 0, w, h);
 
+    /* land: filled polygons, then country borders, then coastlines */
+    const land = window.LAND || [];
+    const trace = ring => {
+        ctx.beginPath();
+        let started = false;
+        for (const pt of ring) {
+            const p = proj.fwd(pt[0], pt[1]);
+            if (!p) { started = false; continue; }
+            if (!started) { ctx.moveTo(p[0], p[1]); started = true; }
+            else ctx.lineTo(p[0], p[1]);
+        }
+    };
+    ctx.fillStyle = C.land;
+    for (const ring of land) { trace(ring); ctx.closePath(); ctx.fill(); }
+
     /* graticule every 30 degrees */
     ctx.strokeStyle = C.border;
     ctx.globalAlpha = 0.55;
@@ -331,37 +347,14 @@ function drawProp() {
         }
         ctx.stroke();
     }
-    ctx.globalAlpha = 1;
 
-    /* land outlines */
-    const land = window.LAND || [];
-    ctx.fillStyle = C.land;
-    ctx.strokeStyle = C.border;
-    for (const ring of land) {
-        ctx.beginPath();
-        let started = false;
-        for (const pt of ring) {
-            const p = proj.fwd(pt[0], pt[1]);
-            if (!p) { started = false; continue; }
-            if (!started) { ctx.moveTo(p[0], p[1]); started = true; }
-            else ctx.lineTo(p[0], p[1]);
-        }
-        ctx.closePath();
-        ctx.fill();
-    }
-    ctx.globalAlpha = 0.75;
-    ctx.strokeStyle = C.dim;
-    for (const ring of land) {
-        ctx.beginPath();
-        let started = false;
-        for (const pt of ring) {
-            const p = proj.fwd(pt[0], pt[1]);
-            if (!p) { started = false; continue; }
-            if (!started) { ctx.moveTo(p[0], p[1]); started = true; }
-            else ctx.lineTo(p[0], p[1]);
-        }
-        ctx.stroke();
-    }
+    ctx.strokeStyle = C.line;
+    ctx.globalAlpha = 0.4;
+    ctx.lineWidth = 0.7;
+    for (const seg of (window.BORDERS || [])) { trace(seg); ctx.stroke(); }
+    ctx.globalAlpha = 0.85;
+    ctx.lineWidth = 1;
+    for (const ring of land) { trace(ring); ctx.stroke(); }
     ctx.globalAlpha = 1;
 
     /* background layer */
@@ -686,7 +679,7 @@ function renderPropPanel() {
     const html = [];
 
     /* ---- space weather cards ---- */
-    html.push('<div class="prop-sec"><div class="prop-sec-title">' + t('propSpaceWx') +
+    html.push('<div class="prop-sec sec-wx"><div class="prop-sec-title">' + t('propSpaceWx') +
         '<span class="prop-upd">' + t('propUpdated') + ' ' +
         propShortTime(d.ts) + '</span></div><div class="prop-cards">');
     for (const c of PROP_CARDS) {
@@ -718,7 +711,7 @@ function renderPropPanel() {
         const night = bands.filter(b => b.time === 'night');
         const row = (title, list) => '<tr><th>' + title + '</th>' + list.map(b =>
             '<td class="' + bandCondClass(b.cond) + '">' + b.cond + '</td>').join('') + '</tr>';
-        html.push('<div class="prop-sec"><div class="prop-sec-title">' + t('propBands') +
+        html.push('<div class="prop-sec sec-bands"><div class="prop-sec-title">' + t('propBands') +
             '</div><table class="prop-bandtab"><thead><tr><th></th>' +
             day.map(b => '<th>' + b.name + '</th>').join('') + '</tr></thead><tbody>' +
             row(t('propDay'), day) + row(t('propNight'), night) + '</tbody></table>');
@@ -732,7 +725,7 @@ function renderPropPanel() {
     /* ---- DE -> DX path matrix ---- */
     const mat = propPathMatrix();
     if (mat) {
-        html.push('<div class="prop-sec"><div class="prop-sec-title">' + t('propPath') +
+        html.push('<div class="prop-sec sec-path"><div class="prop-sec-title">' + t('propPath') +
             '<span class="prop-upd">' + t('propApprox') + '</span></div>');
         html.push('<div class="prop-path-head"><b>DE</b> ' + propState.de.lat.toFixed(1) + '°, ' +
             propState.de.lon.toFixed(1) + '° <span class="prop-arrow">→</span> <b>DX</b> ' +
@@ -774,7 +767,7 @@ function renderPropPanel() {
     let auMax = 0;
     if (au) for (const p of au) if (p[2] > auMax) auMax = p[2];
     const wx = propWxAt(propState.dx.lat, propState.dx.lon);
-    html.push('<div class="prop-sec"><div class="prop-sec-title">' + t('propReadouts') +
+    html.push('<div class="prop-sec sec-read"><div class="prop-sec-title">' + t('propReadouts') +
         '</div><div class="prop-read">');
     const read = (k, v) => '<div class="pr-row"><span>' + k + '</span><b>' + v + '</b></div>';
     html.push(read('MUF @ DE', propNum(propState.de ? propMufAt(propState.de.lat, propState.de.lon) : null, 1) + ' MHz'));

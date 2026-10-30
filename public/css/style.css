@@ -29,6 +29,8 @@
     --hover-2: #252d37;
     --track: #253039;
     --map-bg: #0a1929;
+    --map-land: #22313f;
+    --map-line: #55707f;
     --row-alt: #141a20;
     --row-hover: #1c252e;
     --row-border: #1a2027;
@@ -1334,6 +1336,8 @@ body[data-theme="light"] {
     --hover-2: #e6ecf3;
     --track: #dbe3eb;
     --map-bg: #eaf1f6;
+    --map-land: #c9d8e3;
+    --map-line: #7d93a6;
     --row-alt: #f4f7fa;
     --row-hover: #e8f0f7;
     --row-border: #e1e8ef;
@@ -1376,6 +1380,8 @@ body[data-theme="ocean"] {
     --hover-2: #103245;
     --track: #123c50;
     --map-bg: #071f2e;
+    --map-land: #10374c;
+    --map-line: #4d86a3;
     --row-alt: #0a2233;
     --row-hover: #103345;
     --row-border: #113146;
@@ -1418,6 +1424,8 @@ body[data-theme="amber"] {
     --hover-2: #33291b;
     --track: #3a2e1e;
     --map-bg: #1a140c;
+    --map-land: #2e2417;
+    --map-line: #8a7455;
     --row-alt: #1f1810;
     --row-hover: #2b2317;
     --row-border: #2a2115;
@@ -1474,9 +1482,9 @@ body[data-theme="amber"] {
 .prop-hint { margin-left: auto; color: var(--text-dim); font-size: 11px; }
 
 .prop-map-wrap {
-    flex: 1;
+    flex: 1 1 0;
     position: relative;
-    min-height: 0;
+    min-height: 260px;
     background: var(--map-bg);
 }
 #propCanvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
@@ -1495,10 +1503,30 @@ body[data-theme="amber"] {
     z-index: 2;
 }
 
-.prop-panel { width: 480px; flex: 0 0 480px; }
-.prop-panel .panel-body { display: block; overflow-y: auto; padding: 12px; }
+/* The propagation panel docks below the map at full width (it lives inside
+ * .prop-view), so the whole page fits without scrolling; the map simply
+ * takes the space the panel leaves. */
+.prop-panel {
+    width: auto;
+    flex: 0 1 auto;
+    max-height: 52%;
+    border-left: none;
+    border-top: 1px solid var(--border);
+}
+/* Sections carry their own titles, so the panel header is redundant. */
+.prop-panel .panel-header { display: none; }
+.prop-panel .panel-body {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 4px 18px;
+    overflow-y: auto;
+    padding: 8px 12px;
+}
 
-.prop-sec { margin-bottom: 14px; }
+.prop-sec { margin-bottom: 6px; flex: 1 1 260px; min-width: 230px; }
+.prop-sec.sec-wx { flex: 2.6 1 620px; }
+.prop-sec.sec-path { flex: 2 1 470px; }
 .prop-sec-title {
     display: flex;
     align-items: baseline;
@@ -1523,10 +1551,10 @@ body[data-theme="amber"] {
 }
 
 /* Space-weather cards: label + value on one line, sparkline below */
-.prop-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.prop-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(98px, 1fr)); gap: 6px; }
 .prop-card {
     min-width: 0;
-    padding: 6px 8px 3px;
+    padding: 4px 7px 2px;
     background: var(--panel-2);
     border: 1px solid var(--border);
     border-radius: 4px;
@@ -1542,14 +1570,14 @@ body[data-theme="amber"] {
 .pc-label { color: var(--text-dim); font-size: 11px; letter-spacing: .5px; }
 .pc-val {
     color: var(--text-strong);
-    font-size: 16px;
+    font-size: 14px;
     font-weight: 700;
     font-variant-numeric: tabular-nums;
 }
 .prop-card.warn .pc-val { color: var(--orange); }
 .prop-card.alert .pc-val { color: var(--red); }
 .pc-unit { height: 11px; color: var(--text-dim); font-size: 9px; }
-.pc-spark { display: block; width: 100%; height: 26px; }
+.pc-spark { display: block; width: 100%; height: 18px; }
 
 /* NOAA R / S / G scales */
 .prop-scales {

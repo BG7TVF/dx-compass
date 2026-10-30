@@ -87,6 +87,7 @@ dx-compass/
 │   ├── index.html
 │   ├── css/style.css
 │   ├── data/land.js    # 离线陆地轮廓（世界地图海岸线，供传播地图 Canvas 绘制）
+│   ├── data/borders.js # 离线国家边界线（Natural Earth 110m，供传播地图 Canvas 绘制）
 │   └── js/
 │       ├── i18n.js     # 界面翻译（LANGS / LANG_NAMES / I18N），新增语言只改这个文件
 │       ├── prop.js      # 传播地图（投影 / 背景层 / 晨昏线 / 数据面板）

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DX-Compass</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/style.css?v=2.0.1">
 </head>
 <body>
     <div class="toolbar">
@@ -85,6 +85,15 @@
             <div id="propMapWrap" class="prop-map-wrap">
                 <canvas id="propCanvas"></canvas>
                 <div class="prop-hover hidden" id="propHover"></div>
+            </div>
+
+            <!-- Propagation panel: space weather + band conditions + path
+                 matrix, docked below the map so everything fits one page -->
+            <div id="propPanel" class="dock-panel prop-panel hidden">
+                <div class="panel-header">
+                    <span class="panel-title" id="propTitle">Propagation</span>
+                </div>
+                <div class="panel-body" id="propBody"></div>
             </div>
         </div>
 
@@ -222,14 +231,6 @@
             </div>
         </div>
 
-        <!-- Propagation panel: space weather + band conditions + path matrix -->
-        <div id="propPanel" class="dock-panel prop-panel hidden">
-            <div class="panel-header">
-                <span class="panel-title" id="propTitle">Propagation</span>
-            </div>
-            <div class="panel-body" id="propBody"></div>
-        </div>
-
         <!-- Settings Panel -->
         <div id="configPanel" class="settings-page hidden">
             <div class="panel-header">
@@ -261,6 +262,10 @@
                         <div class="form-row">
                             <label id="myCallLabel" for="setMyCall">My callsign</label>
                             <input type="text" id="setMyCall" class="set-input" maxlength="12" placeholder="e.g. BG7TVF" style="text-transform:uppercase">
+                        </div>
+                        <div class="form-row">
+                            <label id="gridLabel" for="setGrid">My grid (Maidenhead)</label>
+                            <input type="text" id="setGrid" class="set-input" maxlength="6" placeholder="e.g. OM89vx" style="text-transform:uppercase">
                         </div>
                         <div class="form-row reset-row">
                             <label id="resetAllLabel">Reset everything</label>
@@ -305,10 +310,6 @@
                     <div class="cfg-pane" id="paneQso">
                         <div class="form-section">
                             <div class="section-title" id="qsoSectionTitle">QSO Map</div>
-                            <div class="form-row">
-                                <label id="gridLabel" for="setGrid">My grid (Maidenhead)</label>
-                                <input type="text" id="setGrid" class="set-input" maxlength="6" placeholder="e.g. OM89vx" style="text-transform:uppercase">
-                            </div>
                             <div class="form-row">
                                 <label id="catLabel" for="setCategory">Contest category</label>
                                 <select id="setCategory" class="set-input">
@@ -413,9 +414,10 @@
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="vendor/leaflet-heat.js"></script>
-    <script src="js/i18n.js"></script>
-    <script src="data/land.js"></script>
-    <script src="js/app.js"></script>
-    <script src="js/prop.js"></script>
+    <script src="js/i18n.js?v=2.0.1"></script>
+    <script src="data/land.js?v=2.0.1"></script>
+    <script src="data/borders.js?v=2.0.1"></script>
+    <script src="js/app.js?v=2.0.1"></script>
+    <script src="js/prop.js?v=2.0.1"></script>
 </body>
 </html>
