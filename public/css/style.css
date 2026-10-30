@@ -1058,7 +1058,27 @@ body.qso-mode .status-group .sep { display: none; }
 }
 .qso-min-fill.has-qso { background: linear-gradient(180deg, var(--yellow), var(--orange)); }
 
-/* Vertical bar charts (QSO by OP / by band) */
+/* Horizontal bars (QSO by OP) */
+.qso-dist { display: flex; flex-direction: column; gap: 5px; }
+.qso-dist-row { display: flex; align-items: center; gap: 8px; font-size: 11px; }
+.qso-dist-label {
+    color: var(--text);
+    width: 68px;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.qso-dist-bar { flex: 1; height: 8px; background: #253039; border-radius: 3px; overflow: hidden; }
+.qso-dist-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
+.qso-dist-count {
+    color: var(--text-dim);
+    min-width: 28px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Vertical bar charts (QSO by band) */
 .qso-col-chart {
     display: flex;
     align-items: flex-end;

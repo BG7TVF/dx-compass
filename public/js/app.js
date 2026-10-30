@@ -1669,8 +1669,9 @@ function renderQsoMinute() {
     $('#qMinSum').textContent = total + ' QSO · ' + (total / QSO_MIN_BUCKETS).toFixed(1) + '/min';
 }
 
-/* Vertical bar chart: one column per key (OP or band), tallest first. */
-function renderDist(el, map) {
+/* Distribution chart: horizontal bars (original layout) or vertical columns,
+ * tallest first, top 6 keys. */
+function renderDist(el, map, vertical) {
     el.textContent = '';
     const rows = Array.from(map.entries()).sort((a, b) => b[1] - a[1]).slice(0, 6);
     if (!rows.length) {
@@ -1679,6 +1680,26 @@ function renderDist(el, map) {
     }
     const max = Math.max(1, ...rows.map(r => r[1]));
     rows.forEach(([label, n]) => {
+        if (!vertical) {
+            const row = document.createElement('div');
+            row.className = 'qso-dist-row';
+            row.title = label + ': ' + n;
+            const l = document.createElement('span');
+            l.className = 'qso-dist-label';
+            l.textContent = label;
+            const bar = document.createElement('div');
+            bar.className = 'qso-dist-bar';
+            const fill = document.createElement('div');
+            fill.className = 'qso-dist-fill';
+            fill.style.width = Math.max(3, (n / max) * 100) + '%';
+            bar.appendChild(fill);
+            const c = document.createElement('span');
+            c.className = 'qso-dist-count';
+            c.textContent = n;
+            row.append(l, bar, c);
+            el.appendChild(row);
+            return;
+        }
         const col = document.createElement('div');
         col.className = 'qso-col';
         col.title = label + ': ' + n;
@@ -1707,8 +1728,8 @@ function renderQsoDist() {
         const b = v.band || '—';
         bands.set(b, (bands.get(b) || 0) + 1);
     });
-    renderDist($('#qOpDist'), ops);
-    renderDist($('#qBandDist'), bands);
+    renderDist($('#qOpDist'), ops, false);
+    renderDist($('#qBandDist'), bands, true);
 }
 
 /* Latest-QSO banner above the QSO map: RUN / S&P, frequency, DX call,
