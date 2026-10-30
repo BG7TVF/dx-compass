@@ -32,7 +32,10 @@ const TILE_PROVIDERS = {
     amap: {
         name: '高德地图 (AMap)',
         url: 'https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
-        options: { attribution: '&copy; AutoNavi 高德地图', maxZoom: 18, subdomains: ['1', '2', '3', '4'] }
+        // AMap raster tiles only exist for z>=3; our world-cover minZoom can
+        // go below that in small cells (2x2/3x3), which used to leave the map
+        // blank. minNativeZoom makes Leaflet up-scale the z=3 tiles instead.
+        options: { attribution: '&copy; AutoNavi 高德地图', maxZoom: 18, minNativeZoom: 3, subdomains: ['1', '2', '3', '4'] }
     }
 };
 
