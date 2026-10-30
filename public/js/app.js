@@ -1017,10 +1017,13 @@ function handleSpot(spot) {
     // an older cached app.js that has no 'settings' case yet).
     if (!spot || (!spot.monitored_call && !spot.call)) return;
     if (!state.monitoring) return; // nothing is rendered until monitoring starts
-    // A report OF my own station: draw the spotter on the QSO map.
-    if (settings.myCall &&
-        String(spot.monitored_call || spot.call || '').toUpperCase() === settings.myCall) {
+    // A report OF my own station: draw the spotter on the QSO map in red
+    // with a dedicated "you get a new spot" popup + voice alert.
+    const isMySpot = settings.myCall &&
+        String(spot.monitored_call || spot.call || '').toUpperCase() === settings.myCall;
+    if (isMySpot) {
         addMySpot(spot);
+        showMySpotAlert(spot);
     }
     state.totalSpots++;
     $('#spotCount').textContent = t('spotsN')(state.totalSpots);
@@ -1033,7 +1036,7 @@ function handleSpot(spot) {
         const sel = $('#recordCallSelect');
         if (sel.value === call || sel.value === '') refreshRecordsSoon();
     }
-    showSpotAlert(spot, call);
+    if (!isMySpot) showSpotAlert(spot, call); // my spots use their own alert
 }
 
 /* ---------- New-spot alert on the QSO map ---------- */
@@ -1073,12 +1076,12 @@ function spellCall(call) {
 
 /* Web Speech API: the newest announcement always wins (cancel + speak), so
  * alerts can never queue up and overlap each other. */
-function speakAlert(text) {
+function speakAlert(text, lang) {
     if (!text || !('speechSynthesis' in window)) return;
     try {
         speechSynthesis.cancel();
         const u = new SpeechSynthesisUtterance(text);
-        u.lang = VOICE_LANGS[settings.lang] || 'en-US';
+        u.lang = lang || VOICE_LANGS[settings.lang] || 'en-US';
         u.rate = 1.05;
         u.volume = 1;
         speechSynthesis.speak(u);
@@ -1139,6 +1142,32 @@ function showSpotAlert(spot, call) {
         speakAlert(String(phrase).replace(/\{call\}/g, spellCall(call)));
     }
 
+    clearTimeout(spotAlertTimer);
+    spotAlertTimer = setTimeout(hideSpotAlert, SPOT_ALERT_MS);
+}
+
+/* Alert when someone reports MY station: same single popup element with a
+ * red accent, voice always speaks the fixed English phrase. Respects the
+ * same QSO-map toggles as the monitored-callsign alerts. */
+function showMySpotAlert(spot) {
+    if (qsoState.view !== 'qso' || !settings.qsoSpotAlert) return;
+    const box = $('#spotAlert');
+    $('#saCall').textContent = settings.myCall || '—';
+    $('#saBand').textContent = spot.band || '';
+    $('#saMode').textContent = spot.mode || '';
+    $('#saFreq').textContent = spot.freq ? spot.freq + ' kHz' : '';
+    const de = spot.spot_call || spot.de || '';
+    $('#saDe').textContent = de ? 'DE ' + de : '';
+    $('#saSnr').textContent = spot.snr !== null && spot.snr !== undefined
+        ? 'SNR ' + spot.snr + ' dB' : (spot.signal || '');
+    const ts = new Date(spot.timestamp);
+    $('#saTime').textContent = isNaN(ts) ? '' : timeAgo(ts);
+    box.style.borderLeftColor = '#e74c3c';
+    box.classList.remove('alert-in');
+    box.classList.remove('hidden');
+    void box.offsetWidth;
+    box.classList.add('alert-in');
+    if (settings.qsoVoiceAlert) speakAlert('You get a new spot', 'en-US');
     clearTimeout(spotAlertTimer);
     spotAlertTimer = setTimeout(hideSpotAlert, SPOT_ALERT_MS);
 }
@@ -1757,11 +1786,12 @@ function addMySpot(spot) {
     const key = mySpotKey(spot);
     const old = qsoState.mySpots.get(key);
     if (old) old.layers.forEach(l => qsoState.map.removeLayer(l));
-    const col = bandColorOf(spot.band);
+    // Red dot + red link line: unmistakably "this is about ME".
+    const col = '#e74c3c';
     const layers = [];
     greatCirclePaths(home[0], home[1], lat, lon).forEach(seg => {
         layers.push(L.polyline(seg, {
-            color: col, weight: 1.5, opacity: 0.85, interactive: false
+            color: col, weight: 2, opacity: 0.9, interactive: false
         }).addTo(qsoState.map));
     });
     const m = L.marker([lat, lon], {icon: dotIcon('#e74c3c', 12)}).addTo(qsoState.map);
