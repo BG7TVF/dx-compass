@@ -43,7 +43,7 @@ const settings = loadSettings();
 
 function defaultSettings() {
     return {
-        lang: 'zh', tiles: 'osm', grid: '', layout: '1x1',
+        lang: 'zh', tiles: 'osm', grid: '', layout: '1x1', myCall: '',
         category: 'SO1R', qsoMax: 1500, qsoLines: true, qsoAutoFit: true,
         qsoSpotAlert: true, qsoVoiceAlert: true,
         ttl: {...DEFAULT_TTL_MIN}, bandColors: {...DEFAULT_BAND_COLORS}
@@ -57,6 +57,10 @@ function sanitizeSettings(input) {
     if (LANGS.includes(raw.lang)) d.lang = raw.lang;
     if (TILE_PROVIDERS[raw.tiles]) d.tiles = raw.tiles;
     if (/^[A-Ra-r]{2}[0-9]{2}([A-Xa-x]{2})?$/.test(raw.grid || '')) d.grid = raw.grid.toUpperCase();
+    if (typeof raw.myCall === 'string') {
+        const c = raw.myCall.trim().toUpperCase();
+        if (c === '' || /^[A-Z0-9/]{3,12}$/.test(c)) d.myCall = c;
+    }
     if (['1x1', '2x2', '3x3'].includes(raw.layout)) d.layout = raw.layout;
     if (CONTESTS_CATEGORIES.includes(raw.category)) d.category = raw.category;
     const qm = parseInt(raw.qsoMax, 10);
@@ -131,6 +135,7 @@ function applyRemoteSettings(raw) {
         lang: settings.lang, tiles: settings.tiles,
         grid: settings.grid, category: settings.category,
         qsoLines: settings.qsoLines, qsoAutoFit: settings.qsoAutoFit,
+        myCall: settings.myCall,
         colors: JSON.stringify(settings.bandColors)
     };
     applyingRemote = true;
@@ -149,6 +154,7 @@ function applyRemoteSettings(raw) {
             applyBandColors();
         }
         if (settings.grid !== prev.grid) { setVal('#setGrid', settings.grid); rebuildQsoMap(); }
+        if (settings.myCall !== prev.myCall) { setVal('#setMyCall', settings.myCall); clearMySpots(); }
         if (settings.category !== prev.category) { setVal('#setCategory', settings.category); renderQsoPanel(); }
         if (settings.qsoLines !== prev.qsoLines) { setChk('#setQsoLines', settings.qsoLines); rebuildQsoMap(); }
         if (settings.qsoAutoFit !== prev.qsoAutoFit) { setChk('#setQsoAutoFit', settings.qsoAutoFit); fitQsoMap(); }
@@ -171,7 +177,10 @@ function ttlForMode(mode) {
     return mins * 60 * 1000;
 }
 function bandColorOf(band) {
-    return settings.bandColors[band] || '#00e5ff';
+    // Spot data uses '20m' keys; N1MM QSO band is a bare number ('20').
+    let b = String(band || '').toLowerCase();
+    if (/^\d+$/.test(b)) b += 'm';
+    return settings.bandColors[b] || '#00e5ff';
 }
 
 /* Standard amateur bands in metres. N1MM reports the band either as metres
@@ -1008,6 +1017,11 @@ function handleSpot(spot) {
     // an older cached app.js that has no 'settings' case yet).
     if (!spot || (!spot.monitored_call && !spot.call)) return;
     if (!state.monitoring) return; // nothing is rendered until monitoring starts
+    // A report OF my own station: draw the spotter on the QSO map.
+    if (settings.myCall &&
+        String(spot.monitored_call || spot.call || '').toUpperCase() === settings.myCall) {
+        addMySpot(spot);
+    }
     state.totalSpots++;
     $('#spotCount').textContent = t('spotsN')(state.totalSpots);
     // Find the cell monitoring this call
@@ -1431,6 +1445,7 @@ function applyLang() {
     $('#cfgSectionTitle').textContent = t('cfgSection');
     $('#langLabel').textContent = t('langLabel');
     $('#tilesLabel').textContent = t('mapTiles');
+    $('#myCallLabel').textContent = t('myCall');
     $('#ttlTitle').textContent = t('ttlTitle');
     $('#bandTitle').textContent = t('bandTitle');
     $('#gridLabel').textContent = t('myGrid');
@@ -1533,7 +1548,9 @@ const qsoState = {
     view: 'spots',        // 'spots' | 'qso'
     map: null, tile: null, homeLayer: null,
     qsos: [],             // rendered QSO objects (only ones with coordinates)
-    byId: new Map(),      // n1mmId -> {layers:[...]} (contactreplace/contactdelete)
+    byId: new Map(),      // n1mmId -> {layers, lines, color} (contactreplace/contactdelete)
+    latestId: null,       // n1mmId of the newest QSO (its link line is green)
+    mySpots: new Map(),   // "SPOTTER|BAND" -> {layers, spot, _dieAt, _bornAt}
     allTs: new Map(),     // n1mmId -> QSO time (ms) for every QSO, map or not
     all: new Map(),       // n1mmId -> {ts, operator, band} for OP/BAND charts
     radio: null, score: null, lastQso: null,
@@ -1655,6 +1672,7 @@ function removeQsoMarker(n1mmId) {
     if (!e || !qsoState.map) return;
     e.layers.forEach(l => qsoState.map.removeLayer(l));
     qsoState.byId.delete(n1mmId);
+    if (qsoState.latestId === n1mmId) qsoState.latestId = null;
 }
 
 function addQsoMarker(q) {
@@ -1664,12 +1682,15 @@ function addQsoMarker(q) {
     removeQsoMarker(q.n1mmId); // contactreplace carries the same id
     const col = bandColorOf(q.band);
     const layers = [];
+    const lines = [];
     const home = gridToLatLon(settings.grid);
     if (home && settings.qsoLines) {
         greatCirclePaths(home[0], home[1], q.lat, q.lon).forEach(seg => {
-            layers.push(L.polyline(seg, {
+            const pl = L.polyline(seg, {
                 color: col, weight: 1.5, opacity: 0.55, interactive: false
-            }).addTo(qsoState.map));
+            }).addTo(qsoState.map);
+            layers.push(pl);
+            lines.push(pl);
         });
     }
     const m = L.marker([q.lat, q.lon], {
@@ -1682,7 +1703,7 @@ function addQsoMarker(q) {
     }).addTo(qsoState.map);
     m.bindTooltip(qsoTooltip(q), {direction: 'top'});
     layers.push(m);
-    qsoState.byId.set(q.n1mmId, {layers});
+    qsoState.byId.set(q.n1mmId, {layers, lines, color: col});
     qsoState.qsos.push(q);
     while (qsoState.qsos.length > settings.qsoMax) {
         removeQsoMarker(qsoState.qsos.shift().n1mmId);
@@ -1690,15 +1711,92 @@ function addQsoMarker(q) {
     scheduleQsoFit();
 }
 
+/* The newest QSO keeps a green link line; older lines fall back to their
+ * band color. */
+function markLatestQso(id) {
+    if (!id || qsoState.latestId === id) return;
+    const old = qsoState.byId.get(qsoState.latestId);
+    if (old) old.lines.forEach(l => l.setStyle({color: old.color, weight: 1.5, opacity: 0.55}));
+    qsoState.latestId = id;
+    const cur = qsoState.byId.get(id);
+    if (cur) cur.lines.forEach(l => l.setStyle({color: '#2ecc71', weight: 2.5, opacity: 0.95}));
+}
+
 /* Grid changed: home moved, so every link line must be redrawn. */
 function rebuildQsoMap() {
     if (!qsoState.map) return;
     const qsos = qsoState.qsos.slice();
+    const keep = qsoState.latestId; // removeQsoMarker clears it: capture first
     qsoState.byId.forEach((_, id) => removeQsoMarker(id));
     qsoState.qsos = [];
     qsos.forEach(addQsoMarker);
+    // Link lines were recreated in band colors: re-highlight the newest one.
+    qsoState.latestId = null;
+    if (keep) markLatestQso(keep);
+    // My-spot link lines also start from home: redraw them, keep their age.
+    const my = Array.from(qsoState.mySpots.entries()).filter(([, e]) => Date.now() < e._dieAt);
+    clearMySpots();
+    my.forEach(([, e]) => {
+        addMySpot(e.spot);
+        const cur = qsoState.mySpots.get(mySpotKey(e.spot));
+        if (cur) { cur._dieAt = e._dieAt; cur._bornAt = e._bornAt; applyMarkerFade(cur, Date.now()); }
+    });
     rebuildHome();
     fitQsoMap();
+}
+
+/* ---------- My spots on the QSO map (stations reporting my callsign) ---------- */
+function mySpotKey(spot) {
+    return `${(spot.spot_call || '?').toUpperCase()}|${spot.band || ''}`;
+}
+function addMySpot(spot) {
+    if (!qsoState.map) return;
+    const home = gridToLatLon(settings.grid);
+    const lat = Number(spot.lat), lon = Number(spot.lon); // spotter (DE) side
+    if (!home || !isFinite(lat) || !isFinite(lon)) return;
+    const key = mySpotKey(spot);
+    const old = qsoState.mySpots.get(key);
+    if (old) old.layers.forEach(l => qsoState.map.removeLayer(l));
+    const col = bandColorOf(spot.band);
+    const layers = [];
+    greatCirclePaths(home[0], home[1], lat, lon).forEach(seg => {
+        layers.push(L.polyline(seg, {
+            color: col, weight: 1.5, opacity: 0.85, interactive: false
+        }).addTo(qsoState.map));
+    });
+    const m = L.marker([lat, lon], {icon: dotIcon('#e74c3c', 12)}).addTo(qsoState.map);
+    m.bindTooltip(
+        [spot.spot_call, bandLabel(spot.band, Number(spot.freq)), spot.mode]
+            .filter(Boolean).join(' · '),
+        {direction: 'top'});
+    layers.push(m);
+    const ttl = ttlForMode(spot.mode);
+    const entry = {layers, spot, _dieAt: Date.now() + ttl, _bornAt: Date.now()};
+    qsoState.mySpots.set(key, entry);
+    applyMarkerFade(entry, Date.now());
+    while (qsoState.mySpots.size > 300) {
+        const k0 = qsoState.mySpots.keys().next().value;
+        qsoState.mySpots.get(k0).layers.forEach(l => qsoState.map.removeLayer(l));
+        qsoState.mySpots.delete(k0);
+    }
+}
+function clearMySpots() {
+    if (qsoState.map) {
+        qsoState.mySpots.forEach(e => e.layers.forEach(l => qsoState.map.removeLayer(l)));
+    }
+    qsoState.mySpots.clear();
+}
+/* Same linear fade as spot-map markers; expired entries are removed. */
+function fadeMySpots(now) {
+    if (!qsoState.map) return;
+    qsoState.mySpots.forEach((e, k) => {
+        if (now >= e._dieAt) {
+            e.layers.forEach(l => qsoState.map.removeLayer(l));
+            qsoState.mySpots.delete(k);
+        } else {
+            applyMarkerFade(e, now);
+        }
+    });
 }
 
 function handleQso(q) {
@@ -1711,6 +1809,7 @@ function handleQso(q) {
     }
     renderLastQso();
     addQsoMarker(q);
+    if (q.n1mmId) markLatestQso(q.n1mmId);
     renderQsoPanel();
 }
 
@@ -2164,6 +2263,22 @@ async function init() {
             rebuildQsoMap();
         }
     });
+    // Own station callsign: reports OF this call are drawn on the QSO map
+    const myCallInp = $('#setMyCall');
+    myCallInp.value = settings.myCall;
+    myCallInp.addEventListener('change', () => {
+        const v = myCallInp.value.trim().toUpperCase();
+        if (v && !/^[A-Z0-9/]{3,12}$/.test(v)) {
+            myCallInp.value = settings.myCall; // invalid: revert
+            return;
+        }
+        myCallInp.value = v;
+        if (v !== settings.myCall) {
+            settings.myCall = v;
+            saveSettings();
+            clearMySpots();
+        }
+    });
     // Settings panes: Global / Spot map / QSO map
     $all('.cfg-tab').forEach(btn => btn.addEventListener('click', () => {
         $all('.cfg-tab').forEach(b => b.classList.toggle('active', b === btn));
@@ -2346,6 +2461,7 @@ async function init() {
             c.markers.forEach(g => applyMarkerFade(g, now));
             Object.keys(c.heat).forEach(b => updateHeat(c, b, now));
         });
+        fadeMySpots(now);
         if (qsoState.lastQso) {
             renderLastQso(); // keep the age text fresh
             if (qsoState.view === 'qso') renderQsoPanel();
