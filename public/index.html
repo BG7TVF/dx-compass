@@ -283,6 +283,10 @@
                                 <input type="checkbox" id="setQsoLines" class="set-check">
                             </div>
                             <div class="form-row">
+                                <label id="qsoSpotAlertLabel" for="setQsoSpotAlert">New spot alert</label>
+                                <input type="checkbox" id="setQsoSpotAlert" class="set-check">
+                            </div>
+                            <div class="form-row">
                                 <label id="qsoDoubleLabel" for="setQsoDouble">QSO markers limit</label>
                                 <input type="number" id="setQsoMax" class="set-input" min="200" max="4000" step="100">
                             </div>
@@ -311,6 +315,22 @@
     </div>
 
     <div class="toast" id="toast"></div>
+
+    <!-- Single new-spot alert (QSO view): a newer spot overwrites this one -->
+    <div class="spot-alert hidden" id="spotAlert">
+        <div class="sa-row1">
+            <span class="sa-call" id="saCall">—</span>
+            <span class="sa-band" id="saBand"></span>
+            <span class="sa-mode" id="saMode"></span>
+            <button class="sa-close" id="saClose" title="Close">&times;</button>
+        </div>
+        <div class="sa-row2">
+            <span class="sa-freq" id="saFreq"></span>
+            <span class="sa-de" id="saDe"></span>
+            <span class="sa-snr" id="saSnr"></span>
+            <span class="sa-time" id="saTime"></span>
+        </div>
+    </div>
 
     <!-- Custom dark-theme confirm modal -->
     <div class="modal-overlay hidden" id="modalOverlay">
