@@ -96,7 +96,7 @@ function setTileProvider(key) {
     if (!TILE_PROVIDERS[key] || settings.tiles === key) return;
     settings.tiles = key;
     saveSettings();
-    cells.forEach(c => {
+    state.cells.forEach(c => {
         if (c.tile) c.map.removeLayer(c.tile);
         c.tile = makeTileLayer().addTo(c.map);
     });
