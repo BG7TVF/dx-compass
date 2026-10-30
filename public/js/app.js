@@ -188,7 +188,18 @@ function applyRemoteSettings(raw) {
             buildBandColorInputs();
             applyBandColors();
         }
-        if (settings.grid !== prev.grid) { setVal('#setGrid', settings.grid); rebuildQsoMap(); }
+        if (settings.grid !== prev.grid) {
+            setVal('#setGrid', settings.grid);
+            rebuildQsoMap();
+            // DE on the propagation map follows the same global grid
+            if (typeof propSyncDe === 'function') {
+                propSyncDe();
+                if (typeof propState !== 'undefined' && propState.view) {
+                    drawProp();
+                    renderPropPanel();
+                }
+            }
+        }
         if (settings.myCall !== prev.myCall) { setVal('#setMyCall', settings.myCall); clearMySpots(); }
         if (settings.category !== prev.category) { setVal('#setCategory', settings.category); renderQsoPanel(); }
         if (settings.qsoLines !== prev.qsoLines) { setChk('#setQsoLines', settings.qsoLines); rebuildQsoMap(); }
@@ -1553,7 +1564,6 @@ function applyLang() {
     $('#btnSpotView').textContent = t('spotView');
     $('#btnQsoView').textContent = t('qsoView');
     $('#btnPropView').textContent = t('propView');
-    $('#propTitle').textContent = t('propView');
     $('#propProjLabel').textContent = t('propProjection');
     $('#propLayerLabel').textContent = t('propLayer');
     if (typeof applyPropLang === 'function') applyPropLang();
@@ -1698,7 +1708,6 @@ function setViewMode(mode) {
     $('#propView').classList.toggle('hidden', !isProp);
     $('#recordsPanel').classList.toggle('hidden', isQso || isProp);
     $('#qsoPanel').classList.toggle('hidden', !isQso);
-    $('#propPanel').classList.toggle('hidden', !isProp);
     const spotBtn = $('#btnSpotView'), qsoBtn = $('#btnQsoView'), propBtn = $('#btnPropView');
     spotBtn.classList.toggle('active', mode === 'spots');
     qsoBtn.classList.toggle('active', isQso);
@@ -2452,6 +2461,14 @@ async function init() {
             settings.grid = v;
             saveSettings();
             rebuildQsoMap();
+            // The propagation map's DE follows the same global grid
+            if (typeof propSyncDe === 'function') {
+                propSyncDe();
+                if (typeof propState !== 'undefined' && propState.view) {
+                    drawProp();
+                    renderPropPanel();
+                }
+            }
         }
     });
     // Own station callsign: reports OF this call are drawn on the QSO map

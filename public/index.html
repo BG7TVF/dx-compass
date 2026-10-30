@@ -1,11 +1,11 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DX-Compass</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <link rel="stylesheet" href="css/style.css?v=2.0.1">
+    <link rel="stylesheet" href="css/style.css?v=2.1.3">
 </head>
 <body>
     <div class="toolbar">
@@ -82,18 +82,16 @@
                 <select id="propLayer" class="prop-sel"></select>
                 <span class="prop-hint" id="propHint">Click the map to set DX</span>
             </div>
-            <div id="propMapWrap" class="prop-map-wrap">
-                <canvas id="propCanvas"></canvas>
-                <div class="prop-hover hidden" id="propHover"></div>
-            </div>
-
-            <!-- Propagation panel: space weather + band conditions + path
-                 matrix, docked below the map so everything fits one page -->
-            <div id="propPanel" class="dock-panel prop-panel hidden">
-                <div class="panel-header">
-                    <span class="panel-title" id="propTitle">Propagation</span>
+            <!-- Inverted-L layout: the map sits top-left, a narrow column of
+                 space-weather cards runs down its right side and a full-width
+                 strip of tables/readouts closes the bottom of the L. -->
+            <div class="prop-layout">
+                <div id="propMapWrap" class="prop-map-wrap">
+                    <canvas id="propCanvas"></canvas>
+                    <div class="prop-hover hidden" id="propHover"></div>
                 </div>
-                <div class="panel-body" id="propBody"></div>
+                <div id="propSide" class="prop-side"></div>
+                <div id="propFoot" class="prop-foot"></div>
             </div>
         </div>
 
@@ -414,10 +412,13 @@
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="vendor/leaflet-heat.js"></script>
-    <script src="js/i18n.js?v=2.0.1"></script>
-    <script src="data/land.js?v=2.0.1"></script>
-    <script src="data/borders.js?v=2.0.1"></script>
-    <script src="js/app.js?v=2.0.1"></script>
-    <script src="js/prop.js?v=2.0.1"></script>
+    <script src="js/i18n.js?v=2.1.3"></script>
+    <script src="data/land.js?v=2.1.3"></script>
+    <script src="data/borders.js?v=2.1.3"></script>
+    <script src="js/app.js?v=2.1.3"></script>
+    <script src="js/prop.js?v=2.1.3"></script>
 </body>
 </html>
+
+
+

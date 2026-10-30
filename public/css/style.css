@@ -1481,11 +1481,49 @@ body[data-theme="amber"] {
 .prop-sel:focus { outline: none; border-color: var(--accent); }
 .prop-hint { margin-left: auto; color: var(--text-dim); font-size: 11px; }
 
+/* Inverted-L layout: the map occupies the top-left cell, a narrow column of
+ * space-weather cards runs down its right edge, and a full-width strip of
+ * tables/readouts closes the bottom -- the charts wrap the map on two sides.
+ * The whole view is one grid, so it always fits without page scrolling. */
+.prop-layout {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 350px;
+    grid-template-rows: minmax(0, 1fr) auto;
+    gap: 8px;
+    padding: 8px;
+}
+
 .prop-map-wrap {
-    flex: 1 1 0;
+    grid-column: 1;
+    grid-row: 1;
     position: relative;
-    min-height: 260px;
+    min-width: 0;
+    min-height: 0;
     background: var(--map-bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.prop-side {
+    grid-column: 2;
+    grid-row: 1;
+    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.prop-foot {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    display: grid;
+    grid-template-columns: minmax(0, .95fr) minmax(0, 1.25fr) minmax(0, .6fr);
+    align-items: start;
+    gap: 0 18px;
 }
 #propCanvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
 .prop-hover {
@@ -1503,30 +1541,14 @@ body[data-theme="amber"] {
     z-index: 2;
 }
 
-/* The propagation panel docks below the map at full width (it lives inside
- * .prop-view), so the whole page fits without scrolling; the map simply
- * takes the space the panel leaves. */
-.prop-panel {
-    width: auto;
-    flex: 0 1 auto;
-    max-height: 52%;
-    border-left: none;
-    border-top: 1px solid var(--border);
-}
-/* Sections carry their own titles, so the panel header is redundant. */
-.prop-panel .panel-header { display: none; }
-.prop-panel .panel-body {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: flex-start;
-    gap: 4px 18px;
-    overflow-y: auto;
-    padding: 8px 12px;
-}
-
-.prop-sec { margin-bottom: 6px; flex: 1 1 260px; min-width: 230px; }
-.prop-sec.sec-wx { flex: 2.6 1 620px; }
-.prop-sec.sec-path { flex: 2 1 470px; }
+/* Sections carry their own titles; sizing depends on which arm of the L
+ * they belong to. */
+.prop-sec { margin-bottom: 4px; min-width: 0; }
+.prop-side .prop-sec { margin-bottom: 0; }
+.prop-foot .sec-bands { grid-column: 1; }
+.prop-foot .sec-path { grid-column: 2; min-width: 0; }
+.prop-foot .sec-read { grid-column: 3; }
+.prop-foot .sec-bands .prop-bandtab { font-size: 11px; }
 .prop-sec-title {
     display: flex;
     align-items: baseline;
@@ -1551,7 +1573,7 @@ body[data-theme="amber"] {
 }
 
 /* Space-weather cards: label + value on one line, sparkline below */
-.prop-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(98px, 1fr)); gap: 6px; }
+.prop-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 5px; }
 .prop-card {
     min-width: 0;
     padding: 4px 7px 2px;
@@ -1584,7 +1606,7 @@ body[data-theme="amber"] {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: 6px;
-    margin: 8px 0 14px;
+    margin: 8px 0 2px;
 }
 .prop-scale {
     display: flex;
@@ -1663,7 +1685,7 @@ body[data-theme="amber"] {
     font-variant-numeric: tabular-nums;
 }
 .prop-matrix { overflow-x: auto; }
-.prop-matrix table { border-collapse: collapse; }
+.prop-matrix table { border-collapse: collapse; font-size: 10px; }
 .prop-matrix th {
     min-width: 15px;
     padding: 1px;

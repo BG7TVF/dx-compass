@@ -666,17 +666,21 @@ function bandCondClass(cond) {
 }
 
 function renderPropPanel() {
-    const body = $('#propBody');
-    if (!body) return;
+    const side = $('#propSide'), foot = $('#propFoot');
+    if (!side || !foot) return;
     const d = propState.data;
     if (!d) {
-        body.innerHTML = '<div class="prop-empty">' + t('propNoData') +
+        side.innerHTML = '<div class="prop-empty">' + t('propNoData') +
             (propState.err ? '<br><span class="prop-dim">' + propState.err + '</span>' : '') +
             '</div>';
+        foot.innerHTML = '';
         return;
     }
     const ham = d.ham || {};
-    const html = [];
+    /* The inverted-L places the space-weather cards in the column right of
+     * the map and the tables/readouts in the strip underneath it. */
+    const html = [];   // right-hand column
+    const low = [];    // bottom strip
 
     /* ---- space weather cards ---- */
     html.push('<div class="prop-sec sec-wx"><div class="prop-sec-title">' + t('propSpaceWx') +
@@ -702,7 +706,7 @@ function renderPropPanel() {
             (o ? (o.text || '') : '—') + '</span><i>G' + lvl + '</i></div>';
     };
     html.push('<div class="prop-scales">' + scaleBox('R', sc.r) + scaleBox('S', sc.s) +
-        scaleBox('G', sc.g) + '</div>');
+        scaleBox('G', sc.g) + '</div></div>');
 
     /* ---- HamQSL band conditions ---- */
     const bands = ham.bands || [];
@@ -711,34 +715,34 @@ function renderPropPanel() {
         const night = bands.filter(b => b.time === 'night');
         const row = (title, list) => '<tr><th>' + title + '</th>' + list.map(b =>
             '<td class="' + bandCondClass(b.cond) + '">' + b.cond + '</td>').join('') + '</tr>';
-        html.push('<div class="prop-sec sec-bands"><div class="prop-sec-title">' + t('propBands') +
+        low.push('<div class="prop-sec sec-bands"><div class="prop-sec-title">' + t('propBands') +
             '</div><table class="prop-bandtab"><thead><tr><th></th>' +
             day.map(b => '<th>' + b.name + '</th>').join('') + '</tr></thead><tbody>' +
             row(t('propDay'), day) + row(t('propNight'), night) + '</tbody></table>');
         if (ham.geomag) {
-            html.push('<div class="prop-note">Geomag: ' + ham.geomag +
+            low.push('<div class="prop-note">Geomag: ' + ham.geomag +
                 ' · Noise: ' + (ham.noise || '—') + '</div>');
         }
-        html.push('</div>');
+        low.push('</div>');
     }
 
     /* ---- DE -> DX path matrix ---- */
     const mat = propPathMatrix();
     if (mat) {
-        html.push('<div class="prop-sec sec-path"><div class="prop-sec-title">' + t('propPath') +
+        low.push('<div class="prop-sec sec-path"><div class="prop-sec-title">' + t('propPath') +
             '<span class="prop-upd">' + t('propApprox') + '</span></div>');
-        html.push('<div class="prop-path-head"><b>DE</b> ' + propState.de.lat.toFixed(1) + '°, ' +
+        low.push('<div class="prop-path-head"><b>DE</b> ' + propState.de.lat.toFixed(1) + '°, ' +
             propState.de.lon.toFixed(1) + '° <span class="prop-arrow">→</span> <b>DX</b> ' +
             propState.dx.lat.toFixed(1) + '°, ' + propState.dx.lon.toFixed(1) + '°</div>');
-        html.push('<div class="prop-path-meta">' + Math.round(mat.dist) + ' km · ' +
+        low.push('<div class="prop-path-meta">' + Math.round(mat.dist) + ' km · ' +
             Math.round(mat.bearing) + '° · MUF ' + propNum(mat.baseMuf, 1) + ' MHz</div>');
-        html.push('<div class="prop-matrix"><table><thead><tr><th></th>' +
+        low.push('<div class="prop-matrix"><table><thead><tr><th></th>' +
             Array.from({length: 24}, (_, h) =>
                 '<th class="' + (h === mat.hourNow ? 'now' : '') + '">' + h + '</th>').join('') +
             '</tr></thead><tbody>');
         for (const r of mat.rows) {
             const best = Math.max(...r.cells);
-            html.push('<tr><th>' + r.name + '</th>' + r.cells.map((p, h) => {
+            low.push('<tr><th>' + r.name + '</th>' + r.cells.map((p, h) => {
                 const alpha = p < 10 ? 0 : 0.12 + (p / 100) * 0.62;
                 const cls = (h === mat.hourNow ? 'now' : '') + (p === best ? ' best' : '');
                 return '<td class="' + cls + '" style="background:rgba(46,204,113,' +
@@ -746,16 +750,16 @@ function renderPropPanel() {
                     (p >= 55 ? '•' : '') + '</td>';
             }).join('') + '</tr>');
         }
-        html.push('</tbody></table></div>');
+        low.push('</tbody></table></div>');
         const nowRow = mat.rows.reduce((a, b) => {
             const pa = a.cells[mat.hourNow], pb = b.cells[mat.hourNow];
             return pb > pa ? b : a;
         });
-        html.push('<div class="prop-note">' + t('propBestBand') + ': <b>' + nowRow.name +
+        low.push('<div class="prop-note">' + t('propBestBand') + ': <b>' + nowRow.name +
             '</b> (' + nowRow.cells[mat.hourNow] + '%)</div>');
-        html.push('</div>');
+        low.push('</div>');
     } else if (!propState.de) {
-        html.push('<div class="prop-sec"><div class="prop-note">' + t('propSetGrid') +
+        low.push('<div class="prop-sec"><div class="prop-note">' + t('propSetGrid') +
             '</div></div>');
     }
 
@@ -767,25 +771,26 @@ function renderPropPanel() {
     let auMax = 0;
     if (au) for (const p of au) if (p[2] > auMax) auMax = p[2];
     const wx = propWxAt(propState.dx.lat, propState.dx.lon);
-    html.push('<div class="prop-sec sec-read"><div class="prop-sec-title">' + t('propReadouts') +
+    low.push('<div class="prop-sec sec-read"><div class="prop-sec-title">' + t('propReadouts') +
         '</div><div class="prop-read">');
     const read = (k, v) => '<div class="pr-row"><span>' + k + '</span><b>' + v + '</b></div>';
-    html.push(read('MUF @ DE', propNum(propState.de ? propMufAt(propState.de.lat, propState.de.lon) : null, 1) + ' MHz'));
-    html.push(read('MUF max', maxSt ? propNum(maxSt[2], 1) + ' MHz · ' + maxSt[4] : '—'));
-    html.push(read('MUF @ DX', propNum(propMufAt(propState.dx.lat, propState.dx.lon), 1) + ' MHz'));
-    html.push(read('Aurora (OVATION)', auMax ? auMax + '%' : '—'));
-    html.push(read('DRAP @ DE', propNum(cardValue('drap'), 1) + ' MHz'));
-    html.push(read('DRAP @ DX', propNum(propDrapAt(propState.dx.lat, propState.dx.lon), 1) + ' MHz'));
-    html.push(read('TOA', propState.de
+    low.push(read('MUF @ DE', propNum(propState.de ? propMufAt(propState.de.lat, propState.de.lon) : null, 1) + ' MHz'));
+    low.push(read('MUF max', maxSt ? propNum(maxSt[2], 1) + ' MHz · ' + maxSt[4] : '—'));
+    low.push(read('MUF @ DX', propNum(propMufAt(propState.dx.lat, propState.dx.lon), 1) + ' MHz'));
+    low.push(read('Aurora (OVATION)', auMax ? auMax + '%' : '—'));
+    low.push(read('DRAP @ DE', propNum(cardValue('drap'), 1) + ' MHz'));
+    low.push(read('DRAP @ DX', propNum(propDrapAt(propState.dx.lat, propState.dx.lon), 1) + ' MHz'));
+    low.push(read('TOA', propState.de
         ? Math.round(propDeg(Math.atan(300 / Math.max(1, propDistance(propState.de, propState.dx) / 2)))) + '°'
         : '—'));
-    html.push(read(t('propWeatherDx'), wx ? (propNum(wx[2], 1) + '°C · WMO ' + (wx[3] === null ? '—' : wx[3])) : '—'));
-    html.push('</div></div>');
+    low.push(read(t('propWeatherDx'), wx ? (propNum(wx[2], 1) + '°C · WMO ' + (wx[3] === null ? '—' : wx[3])) : '—'));
+    low.push('</div></div>');
 
-    body.innerHTML = html.join('');
+    side.innerHTML = html.join('');
+    foot.innerHTML = low.join('');
 
     /* sparklines are drawn after the markup exists (clientWidth is known) */
-    body.querySelectorAll('[data-card]').forEach(el => {
+    side.querySelectorAll('[data-card]').forEach(el => {
         const key = el.dataset.card;
         const vals = sparkValues(key);
         if (!vals.length) return;
