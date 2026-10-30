@@ -1058,24 +1058,54 @@ body.qso-mode .status-group .sep { display: none; }
 }
 .qso-min-fill.has-qso { background: linear-gradient(180deg, var(--yellow), var(--orange)); }
 
-/* Horizontal distribution bars (QSO by OP / by band) */
-.qso-dist { display: flex; flex-direction: column; gap: 5px; }
-.qso-dist-row { display: flex; align-items: center; gap: 8px; font-size: 11px; }
-.qso-dist-label {
+/* Vertical bar charts (QSO by OP / by band) */
+.qso-col-chart {
+    display: flex;
+    align-items: flex-end;
+    gap: 6px;
+    height: 84px;
+    padding-top: 4px;
+    border-bottom: 1px solid var(--border-2);
+}
+.qso-col {
+    flex: 1;
+    height: 100%;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+.qso-col-val {
+    flex: none;
     color: var(--text);
-    width: 68px;
-    font-weight: 600;
+    font-size: 10px;
+    font-variant-numeric: tabular-nums;
+    line-height: 12px;
+}
+.qso-col-bar {
+    flex: 1;
+    width: 100%;
+    min-height: 0;
+    display: flex;
+    align-items: flex-end;
+    padding: 1px 0;
+}
+.qso-col-fill {
+    width: 100%;
+    background: linear-gradient(180deg, var(--accent), var(--accent-2));
+    border-radius: 2px 2px 0 0;
+    transition: height .3s ease;
+}
+.qso-col-label {
+    flex: none;
+    max-width: 100%;
+    margin-top: 4px;
+    color: var(--text-dim);
+    font-size: 10px;
+    line-height: 12px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-}
-.qso-dist-bar { flex: 1; height: 8px; background: #253039; border-radius: 3px; overflow: hidden; }
-.qso-dist-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
-.qso-dist-count {
-    color: var(--text-dim);
-    min-width: 28px;
-    text-align: right;
-    font-variant-numeric: tabular-nums;
 }
 .qso-dist-empty { color: var(--text-dim); font-size: 11px; }
 .qso-dot {

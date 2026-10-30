@@ -1669,7 +1669,7 @@ function renderQsoMinute() {
     $('#qMinSum').textContent = total + ' QSO · ' + (total / QSO_MIN_BUCKETS).toFixed(1) + '/min';
 }
 
-/* Horizontal distribution bars: one row per key (OP or band). */
+/* Vertical bar chart: one column per key (OP or band), tallest first. */
 function renderDist(el, map) {
     el.textContent = '';
     const rows = Array.from(map.entries()).sort((a, b) => b[1] - a[1]).slice(0, 6);
@@ -1679,22 +1679,23 @@ function renderDist(el, map) {
     }
     const max = Math.max(1, ...rows.map(r => r[1]));
     rows.forEach(([label, n]) => {
-        const row = document.createElement('div');
-        row.className = 'qso-dist-row';
-        const l = document.createElement('span');
-        l.className = 'qso-dist-label';
-        l.textContent = label;
+        const col = document.createElement('div');
+        col.className = 'qso-col';
+        col.title = label + ': ' + n;
+        const val = document.createElement('span');
+        val.className = 'qso-col-val';
+        val.textContent = n;
         const bar = document.createElement('div');
-        bar.className = 'qso-dist-bar';
+        bar.className = 'qso-col-bar';
         const fill = document.createElement('div');
-        fill.className = 'qso-dist-fill';
-        fill.style.width = Math.max(3, (n / max) * 100) + '%';
+        fill.className = 'qso-col-fill';
+        fill.style.height = Math.max(4, (n / max) * 100) + '%';
         bar.appendChild(fill);
-        const c = document.createElement('span');
-        c.className = 'qso-dist-count';
-        c.textContent = n;
-        row.append(l, bar, c);
-        el.appendChild(row);
+        const l = document.createElement('span');
+        l.className = 'qso-col-label';
+        l.textContent = label;
+        col.append(val, bar, l);
+        el.appendChild(col);
     });
 }
 
