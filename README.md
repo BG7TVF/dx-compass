@@ -40,12 +40,13 @@ curl -fsSL https://raw.githubusercontent.com/BG7TVF/dx-compass/main/bootstrap.sh
 - **频段热力图**：CW / DIGI 模式按频段生成热力图，强度随 SNR 与标记存活时间变化；点击频段框切换对应频段热力图
 - **晨昏线**：所有地图实时显示灰线（昼夜分界线）与夜半球阴影，每分钟自动刷新
 - **录制功能**：手动或定时（UTC，一次性）录制 spot 到独立 `recording_spots` 表，可下载 CSV，记录最长保留两个月
+- **一键清除**：Settings → 全局 → 一键清除，删除全部界面设置、监听呼号以及 spots / qsos / recording_spots 三张表数据，相当于恢复出厂状态（不可撤销）
 - **完整记录**：每条 spot 记录时间、频率、报告人、模式（CW/DIGI/PHONE）、信号强度（CW 的 SNR dB 来自 RBN；FT8 的 SNR 来自 dxwatch）、距离等，存入 SQLite
 - **赛后分析**：记录面板支持按呼号筛选、一键导出 CSV
 - **距离计算**：直接使用数据源附带的呼号经纬度 + Haversine 公式，计算报告人相对本台的距离（公里/英里），不依赖第三方定位接口
-- **多语言界面**：支持中文 / English / Deutsch / Français / Español / Português / Русский / Italiano / العربية（RTL）/ 한국어 / 日本語 共 11 种界面语言
+- **多语言界面**：支持中文 / English / Deutsch / Français / Español / Português / Русский / Italiano / العربية / 한국어 / 日本語 共 11 种界面语言，文案独立在 `public/js/i18n.js`，新增语言无需改动应用代码
 - **底图可切换**：OpenStreetMap 与高德地图（中国大陆网络环境可用），切换后所有地图显示约定保持不变
-- **N1MM+ 本台集成**（可选）：接收 N1MM+ UDP 广播后，大屏顶部状态栏实时显示当前电台频率/模式/TX、当前总分（QSO/乘数/点数/Score）与上一个 QSO；一键切换全屏 **QSO 地图**，每个 QSO 按频段着色并从本台位置画大圆线，新乘数带 M 徽章，全部持久化到 `qsos` 表
+- **N1MM+ 本台集成**（可选）：接收 N1MM+ UDP 广播后，QSO 视图顶部条实时显示最新的 RUN/S&P、频率、对方呼号、RST 与交换信息，右侧面板显示当前电台频率/模式/TX、当前总分（QSO/乘数/点数/Score）、上一个 QSO 与 QSO 速率图表；一键切换全屏 **QSO 地图**，每个 QSO 按频段着色并从本台位置画大圆线，新乘数带 M 徽章，全部持久化到 `qsos` 表
 
 ## 技术架构
 
@@ -278,6 +279,7 @@ journalctl --user -u dx-compass -f     # 实时查看日志
   - `GET  /api/spots?call=呼号&limit=数量`：查询记录
   - `GET  /api/qsos?limit=数量`：查询本台 QSO 记录（N1MM+ 集成）
   - `GET  /api/station/state`：最近一次电台状态与竞赛记分（N1MM+ 集成）
+  - `POST /api/reset`：清空 spots / qsos / recording_spots 三张表（Settings 的一键清除会同时清空监听呼号与本地设置）
 
 ## 常见问题
 

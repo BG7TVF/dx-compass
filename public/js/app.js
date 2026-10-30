@@ -1302,6 +1302,8 @@ function applyLang() {
     $('#qsoDoubleLabel').textContent = t('qsoMaxMarkers');
     $('#qsoSpotAlertLabel').textContent = t('qsoSpotAlert');
     $('#qsoVoiceLabel').textContent = t('qsoVoice');
+    $('#resetAllLabel').textContent = t('resetAll');
+    $('#btnResetAll').textContent = t('resetAll');
     $('#qtLFreq').textContent = t('lblFreq');
     $('#qtLCall').textContent = t('lblCall');
     $('#qtLRst').textContent = t('lblRst');
@@ -1848,6 +1850,30 @@ function init() {
         `<option value="${k}">${TILE_PROVIDERS[k].name}</option>`).join('');
     tilesSel.value = settings.tiles;
     tilesSel.addEventListener('change', () => setTileProvider(tilesSel.value));
+    // One-click factory reset: every UI setting, the monitored callsigns and
+    // all database tables (spots, qsos, recording_spots), then a reload.
+    $('#btnResetAll').addEventListener('click', async () => {
+        const ok = await showConfirm(t('resetConfirm'), {
+            title: t('resetAll'), okText: t('danger'), danger: true
+        });
+        if (!ok) return;
+        try {
+            const [r1, r2] = await Promise.all([
+                fetch('/api/reset', {method: 'POST'}),
+                fetch('/api/callsigns', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: '[]'
+                })
+            ]);
+            if (!r1.ok || !r2.ok) throw new Error('HTTP');
+            ['dxcompass-settings', 'dxcompass-monitoring', 'dxcompass-rot-sec']
+                .forEach(k => localStorage.removeItem(k));
+            location.reload();
+        } catch (e) {
+            showToast(t('resetFail'));
+        }
+    });
     // Own-station Maidenhead grid (QSO map home marker + link lines)
     const gridInp = $('#setGrid');
     gridInp.value = settings.grid;

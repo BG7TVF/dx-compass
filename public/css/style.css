@@ -1062,3 +1062,13 @@ body.lang-ar .cfg-tab,
 body.lang-ar .qt-box label,
 body.lang-ar .rec-tz { text-align: right; }
 
+
+/* One-click factory reset row (Global settings) */
+.reset-row {
+    margin-top: 8px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+}
+.reset-row label { color: var(--red); }
+.reset-row .mini-btn { align-self: flex-start; }
+
