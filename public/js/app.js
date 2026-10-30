@@ -2175,8 +2175,11 @@ function dbRowToQso(r) {
 async function loadStation() {
     try {
         const st = await fetch('/api/station/state').then(r => r.json());
-        if (st.radio1) qsoState.radios[1] = st.radio1;
-        if (st.radio2) qsoState.radios[2] = st.radio2;
+        if (st.radios) {
+            Object.keys(st.radios).forEach(k => {
+                if (st.radios[k]) qsoState.radios[k] = st.radios[k];
+            });
+        }
         if (st.radio) updateStationRadio(st.radio);
         if (st.score) updateStationScore(st.score);
     } catch (e) { /* no station data yet */ }
