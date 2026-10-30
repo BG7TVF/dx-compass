@@ -135,6 +135,21 @@ const MAX_CELLS = 9;
 const WORLD_BOUNDS = [[-85.06, -180], [85.06, 180]];
 const AUTO_FIT_MAX_ZOOM = 7; // cap for marker auto-fit (single tight cluster)
 
+/* Per-tab id: the backend aggregates the monitoring flag over every open
+ * dashboard, so one idle browser can no longer stop the spot feed for the
+ * others. Kept in sessionStorage so a reload keeps the same registration. */
+const CLIENT_ID = (() => {
+    try {
+        const saved = sessionStorage.getItem('dxcompass-client-id');
+        if (saved) return saved;
+        const id = Math.random().toString(36).slice(2) + Date.now().toString(36);
+        sessionStorage.setItem('dxcompass-client-id', id);
+        return id;
+    } catch (e) {
+        return 'c' + Math.random().toString(36).slice(2);
+    }
+})();
+
 const state = {
     layout: '1x1',
     cells: [],          // array of {index, call, map, markers:[], count}
@@ -490,15 +505,6 @@ function updateRotateUI() {
     $('#rotPage').textContent = need
         ? ((state.rotation.offset % pages) + 1) + '/' + pages
         : '';
-}
-
-function syncCallsigns() {
-    const calls = state.cells.map(c => c.call);
-    fetch('/api/callsigns', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(calls.filter(Boolean))
-    }).catch(() => showToast(t('saveFail')));
 }
 
 function clearCell(cell) {
@@ -910,7 +916,7 @@ function handleSpot(spot) {
         addMarkerToCell(cell, spot);
         // Records panel is docked and always visible: refresh it live
         const sel = $('#recordCallSelect');
-        if (sel.value === call || sel.value === '') refreshRecords();
+        if (sel.value === call || sel.value === '') refreshRecordsSoon();
     }
     showSpotAlert(spot, call);
 }
@@ -1031,12 +1037,14 @@ function updateMonitorBtn() {
 }
 
 /* Tell the backend whether to accept spots; the poll chains and the
- * PSKR feed are gated on this flag (recording sessions keep it open). */
+ * PSKR feed are gated on this flag (recording sessions keep it open).
+ * Each tab reports its own flag with a client id - the backend keeps the
+ * feed on while at least one dashboard is monitoring. */
 function syncMonitoring() {
     fetch('/api/monitoring', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({on: state.monitoring})
+        body: JSON.stringify({on: state.monitoring, client: CLIENT_ID})
     }).catch(() => {});
 }
 
@@ -1105,13 +1113,28 @@ function recHeadHtml(rec) {
     return t(rec ? 'headRec' : 'headAll').map(h => `<th>${h}</th>`).join('');
 }
 
+let recordsSeq = 0, recordsTimer = null;
+
+/* Spots arrive in bursts; with several dashboards open, refreshing the whole
+ * table for every single spot hammers both the DB and the browser. Coalesce
+ * live refreshes into at most one per 2 seconds. */
+function refreshRecordsSoon() {
+    if (recordsTimer) return;
+    recordsTimer = setTimeout(() => {
+        recordsTimer = null;
+        refreshRecords();
+    }, 2000);
+}
+
 function refreshRecords() {
+    const seq = ++recordsSeq;
     const call = $('#recordCallSelect').value;
     const rec = state.recView === 'rec';
     const base = rec ? '/api/recording/spots' : '/api/spots';
     const url = call ? `${base}?call=${encodeURIComponent(call)}` : base;
     $('#recordsHead').innerHTML = recHeadHtml(rec);
     fetch(url).then(r => r.json()).then(rows => {
+        if (seq !== recordsSeq) return; // a newer request already answered
         const body = $('#recordsBody');
         body.innerHTML = '';
         rows.forEach(r => {
@@ -2173,6 +2196,20 @@ function init() {
 
     // WebSocket
     connectWS();
+
+    // Monitoring heartbeat: keeps this tab's registration fresh so the
+    // backend can drop entries belonging to closed tabs.
+    setInterval(() => { if (state.monitoring) syncMonitoring(); }, 30000);
+
+    // Closing the tab releases its monitoring registration immediately.
+    window.addEventListener('pagehide', () => {
+        if (!state.monitoring) return;
+        try {
+            navigator.sendBeacon('/api/monitoring',
+                new Blob([JSON.stringify({on: false, client: CLIENT_ID})],
+                    {type: 'application/json'}));
+        } catch (e) { /* beacon unavailable: the server prunes it later */ }
+    });
 
     // UTC clock
     setInterval(() => {
