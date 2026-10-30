@@ -1162,11 +1162,11 @@ function showSpotAlert(spot, call) {
 }
 
 /* Alert when someone reports MY station: same single popup element with a
- * red accent, voice always speaks the fixed English phrase. Respects the
- * same QSO-map toggles as the monitored-callsign alerts. */
+ * red accent. Popup and voice have their own toggles (Settings > QSO Map);
+ * the spoken phrase follows the UI language. */
 function showMySpotAlert(spot) {
     if (qsoState.view !== 'qso') return;
-    if (settings.mySpotVoice) speakAlert('You get a new spot', 'en-US');
+    if (settings.mySpotVoice) speakAlert(String(t('voiceMySpot')));
     if (!settings.mySpotPopup) return;
     const box = $('#spotAlert');
     $('#saCall').textContent = settings.myCall || '—';
