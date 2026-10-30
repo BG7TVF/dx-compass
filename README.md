@@ -202,7 +202,7 @@ git -C /opt/dx-compass pull
    - 同时自动从数据源回溯该呼号最近 7 天的历史 spot，地图和 Records 面板很快就会有数据
 4. 无需任何集群地址、登录呼号或 Connect 操作——数据源开箱即用
 
-> Settings 的 **Global Settings** 区可切换界面语言（11 种）、底图源（OSM / 高德）、各模式标记存活时间、各频段颜色，并填写本台梅登海德网格（N1MM+ QSO 地图用）。
+> Settings 分为三页：**全局**（界面语言 11 种、底图源 OSM/高德）、**Spot 地图**（监测呼号、各模式标记存活时间、各频段颜色）、**QSO 地图**（本台梅登海德网格、竞赛组别 SO1R/SO2R/MS/MM、自动缩放、本台连线、QSO 标记上限、QRZ 凭据）。
 
 > 数据来自 dxwatch.com 与 reversebeacon.net 的公开接口。CW spot 由 RBN skimmer 网络提供，带真实 SNR（dB）与发报速度（WPM）；FT8/FT4 的 SNR 来自 dxwatch；普通 SSB spot 本身不携带信号强度，对应列为空属正常。
 
@@ -211,8 +211,11 @@ git -C /opt/dx-compass pull
 在 N1MM+ 竞赛日志软件中开启 UDP 广播后，大屏顶部出现本台状态栏，并可切换到全屏 QSO 地图：
 
 - **状态栏**：当前电台频率 / 模式 / 发射指示（TX）、当前总分（QSO 数 / 乘数 / 点数 / Score）、上一个 QSO
-- **QSO 地图**：与 Spot 视图各有独立按钮，一键全屏切换；每个 QSO 一个按频段着色的永久标记，从本台位置画大圆线连接；新乘数（Multiplier）带黄色 M 徽章；QSO 持久化在 SQLite `qsos` 表，浏览器刷新与服务重启后自动恢复
+- **QSO 地图**：与 Spot 视图各有独立按钮，一键全屏切换；进入 QSO 视图后自动隐藏布局（1×1/2×2/3×3）、轮询、开始监控等 Spot 专用控件；每个 QSO 一个按频段着色的永久标记，从本台位置画大圆线连接；新乘数（Multiplier）带黄色 M 徽章；QSO 持久化在 SQLite `qsos` 表，浏览器刷新与服务重启后自动恢复
+- **QSO 顶部实时条**：地图上方显示最新 QSO —— RUN / S&P 状态（由 N1MM RadioInfo 实时判断）、频率、对方呼号、信号报告（RST 收发）、交换信息，以及频段/模式/操作员/相对时间
+- **竞赛组别支持**：Settings → QSO 地图 可选择 SO1R / SO2R / MS / MM；多发射机与多操作员组别下顶部条额外显示 R1 / R2 两台电台频率
 - **QSO 视图右侧面板**：显示当前电台频率/模式/TX、当前分数（QSO/乘数/点数/Score）、上一个 QSO 详情，以及最近 60 分钟的 QSO 速率柱状图（5 分钟一根柱）；Spot Records 面板仅在 Spot 视图显示
+- **设置分页**：Settings 面板分为 **全局**（语言、底图源）/ **Spot 地图**（监测呼号、标记存活时间、频段颜色）/ **QSO 地图**（本台网格、竞赛组别、自动缩放、本台连线、标记上限、QRZ 凭据）三页
 - QSO 坐标**优先从 QRZ.com 查询**（与原 n1mm_dashboard 项目一致，需在 Settings 中配置 QRZ 用户名/密码，需 QRZ XML 订阅）；未配置或查询失败时依次回退到通联中的 gridsquare 字段、已积累的 spot 坐标库
 
 配置方法：

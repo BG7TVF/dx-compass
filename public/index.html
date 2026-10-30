@@ -70,7 +70,36 @@
 
     <div class="main">
         <div id="grid" class="grid layout-1x1"></div>
-        <div id="qsoView" class="qso-view hidden"></div>
+
+        <!-- QSO view: latest-QSO banner on top, map below -->
+        <div id="qsoView" class="qso-view hidden">
+            <div class="qso-topbar" id="qsoTopbar">
+                <div class="qt-run" id="qtRun">S&amp;P</div>
+                <div class="qt-box qt-freq">
+                    <label id="qtLFreq">FREQ</label>
+                    <b id="qtFreq">--.--</b>
+                </div>
+                <div class="qt-box qt-call">
+                    <label id="qtLCall">CALL</label>
+                    <b id="qtCall">—</b>
+                </div>
+                <div class="qt-box qt-rst">
+                    <label id="qtLRst">RST</label>
+                    <b id="qtRst">--/--</b>
+                </div>
+                <div class="qt-box qt-exch">
+                    <label id="qtLExch">EXCH</label>
+                    <b id="qtExch">—</b>
+                </div>
+                <div class="qt-meta" id="qtMeta">
+                    <span id="qtBand"></span>
+                    <span id="qtMode"></span>
+                    <span id="qtOp"></span>
+                    <span id="qtRadios"></span>
+                    <span id="qtAge"></span>
+                </div>
+            </div>
+        </div>
 
         <!-- Records Panel: docked on the right, always visible -->
         <div id="recordsPanel" class="dock-panel">
@@ -177,22 +206,14 @@
             </div>
             <div class="panel-body">
                 <form id="configForm" class="config-form">
-                    <div class="form-section">
-                        <div class="section-title" id="cfgSectionTitle">Monitored Callsigns</div>
-                        <div class="call-inputs" id="callInputs">
-                            <input type="text" class="cfg-call" placeholder="Slot 1" maxlength="16">
-                            <input type="text" class="cfg-call" placeholder="Slot 2" maxlength="16">
-                            <input type="text" class="cfg-call" placeholder="Slot 3" maxlength="16">
-                            <input type="text" class="cfg-call" placeholder="Slot 4" maxlength="16">
-                            <input type="text" class="cfg-call" placeholder="Slot 5" maxlength="16">
-                            <input type="text" class="cfg-call" placeholder="Slot 6" maxlength="16">
-                            <input type="text" class="cfg-call" placeholder="Slot 7" maxlength="16">
-                            <input type="text" class="cfg-call" placeholder="Slot 8" maxlength="16">
-                            <input type="text" class="cfg-call" placeholder="Slot 9" maxlength="16">
-                        </div>
+                    <div class="cfg-tabs" id="cfgTabs">
+                        <button type="button" class="cfg-tab active" data-pane="global" id="tabGlobal">Global</button>
+                        <button type="button" class="cfg-tab" data-pane="spot" id="tabSpot">Spot Map</button>
+                        <button type="button" class="cfg-tab" data-pane="qso" id="tabQso">QSO Map</button>
                     </div>
-                    <div class="form-section">
-                        <div class="section-title" id="globalSectionTitle">Global Settings</div>
+
+                    <!-- Global settings -->
+                    <div class="cfg-pane active" id="paneGlobal">
                         <div class="form-row">
                             <label id="langLabel" for="setLang">Language / 语言</label>
                             <select id="setLang" class="set-input"></select>
@@ -201,29 +222,81 @@
                             <label id="tilesLabel" for="setTiles">Base map</label>
                             <select id="setTiles" class="set-input"></select>
                         </div>
-                        <div class="form-row">
-                            <label id="gridLabel" for="setGrid">My grid (Maidenhead)</label>
-                            <input type="text" id="setGrid" class="set-input" maxlength="6" placeholder="e.g. OM89vx" style="text-transform:uppercase">
-                        </div>
-                        <div class="form-row">
-                            <label id="qrzUserLabel" for="setQrzUser">QRZ.com username</label>
-                            <input type="text" id="setQrzUser" class="set-input" maxlength="32" autocomplete="username">
-                        </div>
-                        <div class="form-row">
-                            <label id="qrzPassLabel" for="setQrzPass">QRZ.com password</label>
-                            <input type="password" id="setQrzPass" class="set-input" maxlength="64" autocomplete="new-password">
-                        </div>
-                        <div class="form-row">
-                            <label id="ttlTitle">Marker lifetime (minutes)</label>
-                            <div class="ttl-grid">
-                                <span>CW</span><input type="number" id="ttlCw" min="1" max="180" step="1">
-                                <span>SSB</span><input type="number" id="ttlSsb" min="1" max="180" step="1">
-                                <span>DIGI</span><input type="number" id="ttlDigi" min="1" max="180" step="1">
+                    </div>
+
+                    <!-- Spot map settings -->
+                    <div class="cfg-pane" id="paneSpot">
+                        <div class="form-section">
+                            <div class="section-title" id="cfgSectionTitle">Monitored Callsigns</div>
+                            <div class="call-inputs" id="callInputs">
+                                <input type="text" class="cfg-call" placeholder="Slot 1" maxlength="16">
+                                <input type="text" class="cfg-call" placeholder="Slot 2" maxlength="16">
+                                <input type="text" class="cfg-call" placeholder="Slot 3" maxlength="16">
+                                <input type="text" class="cfg-call" placeholder="Slot 4" maxlength="16">
+                                <input type="text" class="cfg-call" placeholder="Slot 5" maxlength="16">
+                                <input type="text" class="cfg-call" placeholder="Slot 6" maxlength="16">
+                                <input type="text" class="cfg-call" placeholder="Slot 7" maxlength="16">
+                                <input type="text" class="cfg-call" placeholder="Slot 8" maxlength="16">
+                                <input type="text" class="cfg-call" placeholder="Slot 9" maxlength="16">
                             </div>
                         </div>
-                        <div class="form-row">
-                            <label id="bandTitle">Band colors</label>
-                            <div class="band-colors" id="bandColors"></div>
+                        <div class="form-section">
+                            <div class="section-title" id="spotSectionTitle">Spot Map</div>
+                            <div class="form-row">
+                                <label id="ttlTitle">Marker lifetime (minutes)</label>
+                                <div class="ttl-grid">
+                                    <span>CW</span><input type="number" id="ttlCw" min="1" max="180" step="1">
+                                    <span>SSB</span><input type="number" id="ttlSsb" min="1" max="180" step="1">
+                                    <span>DIGI</span><input type="number" id="ttlDigi" min="1" max="180" step="1">
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <label id="bandTitle">Band colors</label>
+                                <div class="band-colors" id="bandColors"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- QSO map settings -->
+                    <div class="cfg-pane" id="paneQso">
+                        <div class="form-section">
+                            <div class="section-title" id="qsoSectionTitle">QSO Map</div>
+                            <div class="form-row">
+                                <label id="gridLabel" for="setGrid">My grid (Maidenhead)</label>
+                                <input type="text" id="setGrid" class="set-input" maxlength="6" placeholder="e.g. OM89vx" style="text-transform:uppercase">
+                            </div>
+                            <div class="form-row">
+                                <label id="catLabel" for="setCategory">Contest category</label>
+                                <select id="setCategory" class="set-input">
+                                    <option value="SO1R">SO1R</option>
+                                    <option value="SO2R">SO2R</option>
+                                    <option value="MS">MS</option>
+                                    <option value="MM">MM</option>
+                                </select>
+                            </div>
+                            <div class="form-row">
+                                <label id="qsoAutoFitLabel" for="setQsoAutoFit">Auto zoom to fit QSOs</label>
+                                <input type="checkbox" id="setQsoAutoFit" class="set-check">
+                            </div>
+                            <div class="form-row">
+                                <label id="qsoLinesLabel" for="setQsoLines">Home - QSO great-circle lines</label>
+                                <input type="checkbox" id="setQsoLines" class="set-check">
+                            </div>
+                            <div class="form-row">
+                                <label id="qsoDoubleLabel" for="setQsoDouble">QSO markers limit</label>
+                                <input type="number" id="setQsoMax" class="set-input" min="200" max="4000" step="100">
+                            </div>
+                        </div>
+                        <div class="form-section">
+                            <div class="section-title" id="qrzSectionTitle">QRZ.com</div>
+                            <div class="form-row">
+                                <label id="qrzUserLabel" for="setQrzUser">QRZ.com username</label>
+                                <input type="text" id="setQrzUser" class="set-input" maxlength="32" autocomplete="username">
+                            </div>
+                            <div class="form-row">
+                                <label id="qrzPassLabel" for="setQrzPass">QRZ.com password</label>
+                                <input type="password" id="setQrzPass" class="set-input" maxlength="64" autocomplete="new-password">
+                            </div>
                         </div>
                     </div>
                     <div class="form-row">
