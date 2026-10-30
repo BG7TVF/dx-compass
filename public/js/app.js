@@ -47,7 +47,7 @@ function loadSettings() {
     const d = {
         lang: 'zh', tiles: 'osm', grid: '',
         category: 'SO1R', qsoMax: 1500, qsoLines: true, qsoAutoFit: true,
-        qsoSpotAlert: true,
+        qsoSpotAlert: true, qsoVoiceAlert: true,
         ttl: {...DEFAULT_TTL_MIN}, bandColors: {...DEFAULT_BAND_COLORS}
     };
     try {
@@ -61,6 +61,7 @@ function loadSettings() {
         if (typeof raw.qsoLines === 'boolean') d.qsoLines = raw.qsoLines;
         if (typeof raw.qsoAutoFit === 'boolean') d.qsoAutoFit = raw.qsoAutoFit;
         if (typeof raw.qsoSpotAlert === 'boolean') d.qsoSpotAlert = raw.qsoSpotAlert;
+        if (typeof raw.qsoVoiceAlert === 'boolean') d.qsoVoiceAlert = raw.qsoVoiceAlert;
         for (const m of Object.keys(d.ttl)) {
             const v = parseInt(raw.ttl && raw.ttl[m], 10);
             if (v >= 1 && v <= 180) d.ttl[m] = v;
@@ -137,6 +138,8 @@ const I18N = {
         setGlobal: '全局', setSpot: 'SPOT 地图', setQso: 'QSO 地图', contestCat: '竞赛组别',
         qsoAutoFit: '自动缩放至全部 QSO', qsoLines: '显示本台连线', qsoMaxMarkers: 'QSO 标记上限',
         qsoSpotAlert: '新 Spot 弹窗提醒',
+        qsoVoice: '语音提醒', voiceNewSpot: '{call} 新 Spot',
+        voiceChangeBand: '{call} 换频段', voiceNewFreq: '{call} 新频率',
         lblFreq: '频率', lblCall: '对方呼号', lblRst: '信号报告', lblExch: '交换信息',
         qrzUser: 'QRZ.com 用户名', qrzPass: 'QRZ.com 密码',
         save: '保存',
@@ -184,6 +187,8 @@ const I18N = {
         setGlobal: 'Global', setSpot: 'Spot Map', setQso: 'QSO Map', contestCat: 'Contest category',
         qsoAutoFit: 'Auto zoom to fit QSOs', qsoLines: 'Home - QSO lines', qsoMaxMarkers: 'QSO markers limit',
         qsoSpotAlert: 'New spot alert',
+        qsoVoice: 'Voice alert', voiceNewSpot: '{call} new spot',
+        voiceChangeBand: '{call} change band', voiceNewFreq: '{call} new frequency',
         lblFreq: 'Freq', lblCall: 'Call', lblRst: 'RST', lblExch: 'Exch',
         qrzUser: 'QRZ.com username', qrzPass: 'QRZ.com password',
         save: 'Save',
@@ -231,6 +236,8 @@ const I18N = {
         setGlobal: 'Allgemein', setSpot: 'Spot-Karte', setQso: 'QSO-Karte', contestCat: 'Wertungsklasse',
         qsoAutoFit: 'Autozoom auf alle QSOs', qsoLines: 'Linien zum Heimatort', qsoMaxMarkers: 'QSO-Marker-Limit',
         qsoSpotAlert: 'Neues Spot-Popup',
+        qsoVoice: 'Sprachansage', voiceNewSpot: '{call} neuer Spot',
+        voiceChangeBand: '{call} Bandwechsel', voiceNewFreq: '{call} neue Frequenz',
         lblFreq: 'Freq.', lblCall: 'Call', lblRst: 'RST', lblExch: 'Austausch',
         qrzUser: 'QRZ.com Benutzername', qrzPass: 'QRZ.com Passwort',
         save: 'Speichern',
@@ -278,6 +285,8 @@ const I18N = {
         setGlobal: 'Général', setSpot: 'Carte Spot', setQso: 'Carte QSO', contestCat: 'Catégorie de contest',
         qsoAutoFit: 'Zoom auto sur les QSO', qsoLines: 'Lignes vers la station', qsoMaxMarkers: 'Limite de marqueurs QSO',
         qsoSpotAlert: 'Alerte nouveau spot',
+        qsoVoice: 'Annonce vocale', voiceNewSpot: '{call} nouveau spot',
+        voiceChangeBand: '{call} changement de bande', voiceNewFreq: '{call} nouvelle fréquence',
         lblFreq: 'Fréq.', lblCall: 'Indicatif', lblRst: 'RST', lblExch: 'Échange',
         qrzUser: "Nom d'utilisateur QRZ.com", qrzPass: 'Mot de passe QRZ.com',
         save: 'Enregistrer',
@@ -325,6 +334,8 @@ const I18N = {
         setGlobal: 'General', setSpot: 'Mapa Spot', setQso: 'Mapa QSO', contestCat: 'Categoría de concurso',
         qsoAutoFit: 'Zoom automático a los QSO', qsoLines: 'Líneas al home', qsoMaxMarkers: 'Límite de marcadores QSO',
         qsoSpotAlert: 'Aviso de nuevo spot',
+        qsoVoice: 'Aviso de voz', voiceNewSpot: '{call} nuevo spot',
+        voiceChangeBand: '{call} cambio de banda', voiceNewFreq: '{call} nueva frecuencia',
         lblFreq: 'Frec.', lblCall: 'Indicativo', lblRst: 'RST', lblExch: 'Intercambio',
         qrzUser: 'Usuario QRZ.com', qrzPass: 'Contraseña QRZ.com',
         save: 'Guardar',
@@ -372,6 +383,8 @@ const I18N = {
         setGlobal: 'Geral', setSpot: 'Mapa Spot', setQso: 'Mapa QSO', contestCat: 'Categoria de concurso',
         qsoAutoFit: 'Zoom automático aos QSO', qsoLines: 'Linhas para o home', qsoMaxMarkers: 'Limite de marcadores QSO',
         qsoSpotAlert: 'Aviso de novo spot',
+        qsoVoice: 'Aviso de voz', voiceNewSpot: '{call} novo spot',
+        voiceChangeBand: '{call} mudança de banda', voiceNewFreq: '{call} nova frequência',
         lblFreq: 'Freq.', lblCall: 'Indicativo', lblRst: 'RST', lblExch: 'Troca',
         qrzUser: 'Utilizador QRZ.com', qrzPass: 'Palavra-passe QRZ.com',
         save: 'Guardar',
@@ -419,6 +432,8 @@ const I18N = {
         setGlobal: 'Общие', setSpot: 'Карта спотов', setQso: 'Карта QSO', contestCat: 'Категория соревнования',
         qsoAutoFit: 'Автозум на все QSO', qsoLines: 'Линии к дому', qsoMaxMarkers: 'Лимит маркеров QSO',
         qsoSpotAlert: 'Оповещение о новом споте',
+        qsoVoice: 'Голосовое оповещение', voiceNewSpot: '{call} новый спот',
+        voiceChangeBand: '{call} смена диапазона', voiceNewFreq: '{call} новая частота',
         lblFreq: 'Частота', lblCall: 'Позывной', lblRst: 'RST', lblExch: 'Обмен',
         qrzUser: 'Имя пользователя QRZ.com', qrzPass: 'Пароль QRZ.com',
         save: 'Сохранить',
@@ -466,6 +481,8 @@ const I18N = {
         setGlobal: 'Generali', setSpot: 'Mappa Spot', setQso: 'Mappa QSO', contestCat: 'Categoria gara',
         qsoAutoFit: 'Zoom automatico sui QSO', qsoLines: 'Linee verso la stazione', qsoMaxMarkers: 'Limite marcatori QSO',
         qsoSpotAlert: 'Avviso nuovo spot',
+        qsoVoice: 'Avviso vocale', voiceNewSpot: '{call} nuovo spot',
+        voiceChangeBand: '{call} cambio banda', voiceNewFreq: '{call} nuova frequenza',
         lblFreq: 'Freq.', lblCall: 'Nominativo', lblRst: 'RST', lblExch: 'Scambio',
         qrzUser: 'Utente QRZ.com', qrzPass: 'Password QRZ.com',
         save: 'Salva',
@@ -513,6 +530,8 @@ const I18N = {
         setGlobal: 'عام', setSpot: 'خريطة Spot', setQso: 'خريطة QSO', contestCat: 'فئة المسابقة',
         qsoAutoFit: 'تكبير تلقائي لكل QSO', qsoLines: 'خطوط إلى المحطة', qsoMaxMarkers: 'حد علامات QSO',
         qsoSpotAlert: 'تنبيه Spot جديد',
+        qsoVoice: 'تنبيه صوتي', voiceNewSpot: '{call} Spot جديد',
+        voiceChangeBand: '{call} تغيير النطاق', voiceNewFreq: '{call} تردد جديد',
         lblFreq: 'التردد', lblCall: 'نداء الطرف', lblRst: 'RST', lblExch: 'التبادل',
         qrzUser: 'اسم مستخدم QRZ.com', qrzPass: 'كلمة مرور QRZ.com',
         save: 'حفظ',
@@ -560,6 +579,8 @@ const I18N = {
         setGlobal: '일반', setSpot: 'Spot 지도', setQso: 'QSO 지도', contestCat: '경기 부문',
         qsoAutoFit: '모든 QSO 자동 확대', qsoLines: '본국 연결선', qsoMaxMarkers: 'QSO 마커 한도',
         qsoSpotAlert: '새 Spot 알림',
+        qsoVoice: '음성 알림', voiceNewSpot: '{call} 새 Spot',
+        voiceChangeBand: '{call} 밴드 변경', voiceNewFreq: '{call} 새 주파수',
         lblFreq: '주파수', lblCall: '상대 호출부호', lblRst: 'RST', lblExch: '교환 정보',
         qrzUser: 'QRZ.com 사용자명', qrzPass: 'QRZ.com 비밀번호',
         save: '저장',
@@ -607,6 +628,8 @@ const I18N = {
         setGlobal: '一般', setSpot: 'Spotマップ', setQso: 'QSOマップ', contestCat: 'コンテスト部門',
         qsoAutoFit: '全QSOに自動ズーム', qsoLines: '自局へのライン', qsoMaxMarkers: 'QSOマーカー上限',
         qsoSpotAlert: '新Spotアラート',
+        qsoVoice: '音声通知', voiceNewSpot: '{call} 新Spot',
+        voiceChangeBand: '{call} バンド変更', voiceNewFreq: '{call} 新しい周波数',
         lblFreq: '周波数', lblCall: '相手コール', lblRst: 'RST', lblExch: '交換情報',
         qrzUser: 'QRZ.com ユーザー名', qrzPass: 'QRZ.com パスワード',
         save: '保存',
@@ -1430,10 +1453,38 @@ function handleSpot(spot) {
 const SPOT_ALERT_MS = 8000;
 let spotAlertTimer = null;
 
+/* Per-callsign last spot (band + frequency), used by the voice alert to
+ * decide between "new spot", "change band" and "new frequency". */
+const lastSpotByCall = new Map();
+const VOICE_LANGS = {
+    zh: 'zh-CN', en: 'en-US', de: 'de-DE', fr: 'fr-FR', es: 'es-ES',
+    pt: 'pt-PT', ru: 'ru-RU', it: 'it-IT', ar: 'ar-SA', ko: 'ko-KR', ja: 'ja-JP'
+};
+
+/* Web Speech API: the newest announcement always wins (cancel + speak), so
+ * alerts can never queue up and overlap each other. */
+function speakAlert(text) {
+    if (!text || !('speechSynthesis' in window)) return;
+    try {
+        speechSynthesis.cancel();
+        const u = new SpeechSynthesisUtterance(text);
+        u.lang = VOICE_LANGS[settings.lang] || 'en-US';
+        u.rate = 1.05;
+        u.volume = 1;
+        speechSynthesis.speak(u);
+    } catch (e) { /* speech unavailable: stay silent */ }
+}
+
 function hideSpotAlert() {
     clearTimeout(spotAlertTimer);
     spotAlertTimer = null;
     $('#spotAlert').classList.add('hidden');
+}
+
+/* Also stop any pending announcement when the alert is dismissed. */
+function hideSpotAlertAndVoice() {
+    hideSpotAlert();
+    if ('speechSynthesis' in window) speechSynthesis.cancel();
 }
 
 function showSpotAlert(spot, call) {
@@ -1454,6 +1505,25 @@ function showSpotAlert(spot, call) {
     box.classList.remove('hidden');
     void box.offsetWidth;
     box.classList.add('alert-in');
+
+    // Voice alert: first report of a call -> "new spot"; a different band
+    // -> "change band" (and "new frequency" is suppressed); same band but
+    // another frequency -> "new frequency".
+    const prev = lastSpotByCall.get(call);
+    const curFreq = Number(spot.freq);
+    let phrase = t('voiceNewSpot');
+    if (prev) {
+        if (prev.band && spot.band && prev.band !== spot.band) {
+            phrase = t('voiceChangeBand');
+        } else if (prev.freq !== curFreq) {
+            phrase = t('voiceNewFreq');
+        }
+    }
+    lastSpotByCall.set(call, { band: spot.band, freq: curFreq });
+    if (settings.qsoVoiceAlert) {
+        speakAlert(String(phrase).replace(/\{call\}/g, call));
+    }
+
     clearTimeout(spotAlertTimer);
     spotAlertTimer = setTimeout(hideSpotAlert, SPOT_ALERT_MS);
 }
@@ -1755,6 +1825,7 @@ function applyLang() {
     $('#qsoLinesLabel').textContent = t('qsoLines');
     $('#qsoDoubleLabel').textContent = t('qsoMaxMarkers');
     $('#qsoSpotAlertLabel').textContent = t('qsoSpotAlert');
+    $('#qsoVoiceLabel').textContent = t('qsoVoice');
     $('#qtLFreq').textContent = t('lblFreq');
     $('#qtLCall').textContent = t('lblCall');
     $('#qtLRst').textContent = t('lblRst');
@@ -1912,7 +1983,7 @@ function setViewMode(mode) {
         fitQsoMap();
         renderQsoPanel();
     } else {
-        hideSpotAlert();
+        hideSpotAlertAndVoice();
         visibleCells().forEach(c => { c.map.invalidateSize(); fitCellView(c); });
     }
 }
@@ -2384,7 +2455,14 @@ function init() {
         saveSettings();
         if (!alertChk.checked) hideSpotAlert();
     });
-    $('#saClose').addEventListener('click', hideSpotAlert);
+    const voiceChk = $('#setQsoVoice');
+    voiceChk.checked = settings.qsoVoiceAlert;
+    voiceChk.addEventListener('change', () => {
+        settings.qsoVoiceAlert = voiceChk.checked;
+        saveSettings();
+        if (!voiceChk.checked && 'speechSynthesis' in window) speechSynthesis.cancel();
+    });
+    $('#saClose').addEventListener('click', hideSpotAlertAndVoice);
     // Spot grid <-> QSO map switch (two independent buttons)
     $('#btnSpotView').addEventListener('click', () => setViewMode('spots'));
     $('#btnQsoView').addEventListener('click', () => setViewMode('qso'));
