@@ -46,6 +46,7 @@ function defaultSettings() {
         lang: 'zh', tiles: 'osm', grid: '', layout: '1x1', myCall: '',
         category: 'SO1R', qsoMax: 1500, qsoLines: true, qsoAutoFit: true,
         qsoSpotAlert: true, qsoVoiceAlert: true,
+        mySpotTtl: 30, mySpotMax: 300, mySpotPopup: true, mySpotVoice: true,
         ttl: {...DEFAULT_TTL_MIN}, bandColors: {...DEFAULT_BAND_COLORS}
     };
 }
@@ -69,6 +70,13 @@ function sanitizeSettings(input) {
     if (typeof raw.qsoAutoFit === 'boolean') d.qsoAutoFit = raw.qsoAutoFit;
     if (typeof raw.qsoSpotAlert === 'boolean') d.qsoSpotAlert = raw.qsoSpotAlert;
     if (typeof raw.qsoVoiceAlert === 'boolean') d.qsoVoiceAlert = raw.qsoVoiceAlert;
+    // My-spot options are independent from the monitored-callsign alerts.
+    const mst = parseInt(raw.mySpotTtl, 10);
+    if (mst >= 1 && mst <= 180) d.mySpotTtl = mst;
+    const msm = parseInt(raw.mySpotMax, 10);
+    if (msm >= 10 && msm <= 2000) d.mySpotMax = msm;
+    if (typeof raw.mySpotPopup === 'boolean') d.mySpotPopup = raw.mySpotPopup;
+    if (typeof raw.mySpotVoice === 'boolean') d.mySpotVoice = raw.mySpotVoice;
     for (const m of Object.keys(d.ttl)) {
         const v = parseInt(raw.ttl && raw.ttl[m], 10);
         if (v >= 1 && v <= 180) d.ttl[m] = v;
@@ -162,6 +170,13 @@ function applyRemoteSettings(raw) {
         setVal('#setQsoMax', settings.qsoMax);
         setChk('#setQsoSpotAlert', settings.qsoSpotAlert);
         setChk('#setQsoVoice', settings.qsoVoiceAlert);
+        setVal('#setMySpotTtl', settings.mySpotTtl);
+        setVal('#setMySpotMax', settings.mySpotMax);
+        setChk('#setMySpotPopup', settings.mySpotPopup);
+        setChk('#setMySpotVoice', settings.mySpotVoice);
+        if (settings.mySpotTtl !== prev.mySpotTtl || settings.mySpotMax !== prev.mySpotMax) {
+            applyMySpotLimits();
+        }
         setVal('#ttlCw', settings.ttl.CW);
         setVal('#ttlSsb', settings.ttl.SSB);
         setVal('#ttlDigi', settings.ttl.DIGI);
@@ -1150,7 +1165,9 @@ function showSpotAlert(spot, call) {
  * red accent, voice always speaks the fixed English phrase. Respects the
  * same QSO-map toggles as the monitored-callsign alerts. */
 function showMySpotAlert(spot) {
-    if (qsoState.view !== 'qso' || !settings.qsoSpotAlert) return;
+    if (qsoState.view !== 'qso') return;
+    if (settings.mySpotVoice) speakAlert('You get a new spot', 'en-US');
+    if (!settings.mySpotPopup) return;
     const box = $('#spotAlert');
     $('#saCall').textContent = settings.myCall || '—';
     $('#saBand').textContent = spot.band || '';
@@ -1167,7 +1184,6 @@ function showMySpotAlert(spot) {
     box.classList.remove('hidden');
     void box.offsetWidth;
     box.classList.add('alert-in');
-    if (settings.qsoVoiceAlert) speakAlert('You get a new spot', 'en-US');
     clearTimeout(spotAlertTimer);
     spotAlertTimer = setTimeout(hideSpotAlert, SPOT_ALERT_MS);
 }
@@ -1475,6 +1491,11 @@ function applyLang() {
     $('#langLabel').textContent = t('langLabel');
     $('#tilesLabel').textContent = t('mapTiles');
     $('#myCallLabel').textContent = t('myCall');
+    $('#mySpotSectionTitle').textContent = t('mySpotSection');
+    $('#mySpotTtlLabel').textContent = t('mySpotTtl');
+    $('#mySpotMaxLabel').textContent = t('mySpotMax');
+    $('#mySpotPopupLabel').textContent = t('mySpotPopup');
+    $('#mySpotVoiceLabel').textContent = t('mySpotVoice');
     $('#ttlTitle').textContent = t('ttlTitle');
     $('#bandTitle').textContent = t('bandTitle');
     $('#gridLabel').textContent = t('myGrid');
@@ -1775,8 +1796,12 @@ function rebuildQsoMap() {
 }
 
 /* ---------- My spots on the QSO map (stations reporting my callsign) ---------- */
+/* One marker per report: a newer spot must never replace an older one.
+ * spot_id is the dedup key handed down by the backend. */
 function mySpotKey(spot) {
-    return `${(spot.spot_call || '?').toUpperCase()}|${spot.band || ''}`;
+    if (spot.spot_id !== null && spot.spot_id !== undefined) return 'id' + spot.spot_id;
+    return [spot.spot_call || '?', spot.band || '', spot.freq || '', spot.timestamp || '']
+        .join('|');
 }
 function addMySpot(spot) {
     if (!qsoState.map) return;
@@ -1803,15 +1828,27 @@ function addMySpot(spot) {
             .filter(Boolean).join(' · '),
         {direction: 'top'});
     layers.push(m);
-    const ttl = ttlForMode(spot.mode);
+    const ttl = settings.mySpotTtl * 60 * 1000;
     const entry = {layers, spot, _dieAt: Date.now() + ttl, _bornAt: Date.now()};
     qsoState.mySpots.set(key, entry);
     applyMarkerFade(entry, Date.now());
-    while (qsoState.mySpots.size > 300) {
+    trimMySpots();
+}
+/* Keep at most settings.mySpotMax markers (oldest reports go first). */
+function trimMySpots() {
+    if (!qsoState.map) { qsoState.mySpots.clear(); return; }
+    while (qsoState.mySpots.size > settings.mySpotMax) {
         const k0 = qsoState.mySpots.keys().next().value;
         qsoState.mySpots.get(k0).layers.forEach(l => qsoState.map.removeLayer(l));
         qsoState.mySpots.delete(k0);
     }
+}
+/* Re-apply TTL / cap after the options were changed (locally or remotely). */
+function applyMySpotLimits() {
+    const ttlMs = settings.mySpotTtl * 60 * 1000;
+    qsoState.mySpots.forEach(e => { e._dieAt = e._bornAt + ttlMs; });
+    trimMySpots();
+    fadeMySpots(Date.now());
 }
 function clearMySpots() {
     if (qsoState.map) {
@@ -2369,6 +2406,42 @@ async function init() {
         settings.qsoVoiceAlert = voiceChk.checked;
         saveSettings();
         if (!voiceChk.checked && 'speechSynthesis' in window) speechSynthesis.cancel();
+    });
+    // My-spot options: own TTL, marker cap and dedicated popup/voice toggles
+    const myTtlInp = $('#setMySpotTtl');
+    myTtlInp.value = settings.mySpotTtl;
+    myTtlInp.addEventListener('change', () => {
+        let v = parseInt(myTtlInp.value, 10);
+        if (!isFinite(v)) v = settings.mySpotTtl;
+        v = Math.min(180, Math.max(1, v));
+        myTtlInp.value = v;
+        settings.mySpotTtl = v;
+        saveSettings();
+        applyMySpotLimits();
+    });
+    const myMaxInp = $('#setMySpotMax');
+    myMaxInp.value = settings.mySpotMax;
+    myMaxInp.addEventListener('change', () => {
+        let v = parseInt(myMaxInp.value, 10);
+        if (!isFinite(v)) v = settings.mySpotMax;
+        v = Math.min(2000, Math.max(10, v));
+        myMaxInp.value = v;
+        settings.mySpotMax = v;
+        saveSettings();
+        applyMySpotLimits();
+    });
+    const myPopupChk = $('#setMySpotPopup');
+    myPopupChk.checked = settings.mySpotPopup;
+    myPopupChk.addEventListener('change', () => {
+        settings.mySpotPopup = myPopupChk.checked;
+        saveSettings();
+    });
+    const myVoiceChk = $('#setMySpotVoice');
+    myVoiceChk.checked = settings.mySpotVoice;
+    myVoiceChk.addEventListener('change', () => {
+        settings.mySpotVoice = myVoiceChk.checked;
+        saveSettings();
+        if (!myVoiceChk.checked && 'speechSynthesis' in window) speechSynthesis.cancel();
     });
     $('#saClose').addEventListener('click', hideSpotAlertAndVoice);
     // Spot grid <-> QSO map switch (two independent buttons)

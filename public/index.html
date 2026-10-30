@@ -239,6 +239,25 @@
                             <label id="myCallLabel" for="setMyCall">My callsign</label>
                             <input type="text" id="setMyCall" class="set-input" maxlength="12" placeholder="e.g. BG7TVF" style="text-transform:uppercase">
                         </div>
+                        <div class="form-section">
+                            <div class="section-title" id="mySpotSectionTitle">My Spots</div>
+                            <div class="form-row">
+                                <label id="mySpotTtlLabel" for="setMySpotTtl">Marker lifetime (minutes)</label>
+                                <input type="number" id="setMySpotTtl" class="set-input" min="1" max="180" step="1">
+                            </div>
+                            <div class="form-row">
+                                <label id="mySpotMaxLabel" for="setMySpotMax">Max markers shown</label>
+                                <input type="number" id="setMySpotMax" class="set-input" min="10" max="2000" step="10">
+                            </div>
+                            <div class="form-row">
+                                <label id="mySpotPopupLabel" for="setMySpotPopup">Popup alert</label>
+                                <input type="checkbox" id="setMySpotPopup" class="set-check">
+                            </div>
+                            <div class="form-row">
+                                <label id="mySpotVoiceLabel" for="setMySpotVoice">Voice alert</label>
+                                <input type="checkbox" id="setMySpotVoice" class="set-check">
+                            </div>
+                        </div>
                         <div class="form-row reset-row">
                             <label id="resetAllLabel">Reset everything</label>
                             <button type="button" class="mini-btn danger-btn" id="btnResetAll">Reset all</button>
