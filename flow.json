@@ -2180,7 +2180,7 @@
         "type": "function",
         "z": "dxc0000000000001",
         "name": "Reset: spots",
-        "func": "// Factory reset: stop recording/monitoring, drop in-memory dedup state,\n// clear QRZ.com credentials, then hand the first DELETE to the sqlite chain.\nglobal.set('recording', { active: false, manual: false, startedAt: null, schedule: null });\nglobal.set('monitoring', false);\nglobal.set('monitorClients', {});\nglobal.set('uiSettings', null);\nflow.set('lastSpotId', 0);\nflow.set('seenIds', {});\nflow.set('dedupKeys', {});\nflow.set('qrzuser', null);\nflow.set('qrzpass', null);\nflow.set('qrzkey', null);\nmsg.topic = 'DELETE FROM spots;';\nreturn msg;",
+        "func": "// Factory reset: stop recording/monitoring, drop in-memory dedup state,\n// clear QRZ.com credentials and station state, then hand the first DELETE to\n// the sqlite chain. Without clearing radioState*/scoreState the /api/station\n// state backfill would re-render the old topbar/hero/score after reload.\nglobal.set('recording', { active: false, manual: false, startedAt: null, schedule: null });\nglobal.set('monitoring', false);\nglobal.set('monitorClients', {});\nglobal.set('uiSettings', null);\nflow.set('lastSpotId', 0);\nflow.set('seenIds', {});\nflow.set('dedupKeys', {});\nflow.set('radioState', null);\nflow.set('radioState1', null);\nflow.set('radioState2', null);\nflow.set('scoreState', null);\nflow.set('qrzuser', null);\nflow.set('qrzpass', null);\nflow.set('qrzkey', null);\nmsg.topic = 'DELETE FROM spots;';\nreturn msg;",
         "outputs": 1,
         "timeout": "",
         "noerr": 0,
