@@ -174,7 +174,7 @@ html, body {
 /* ---------- Main / Grid ---------- */
 .main {
     position: relative;
-    height: calc(100% - 52px - 44px); /* toolbar + station bar */
+    height: calc(100% - 52px); /* toolbar; the QSO station bar adds 44px */
     display: flex;
 }
 
@@ -914,15 +914,20 @@ tbody tr:nth-child(even) { background: #141a20; }
 }
 .qt-meta span:empty { display: none; }
 
-/* QSO view hides spot-only toolbar controls and the spot station bar,
- * because the QSO topbar + QSO panel already show that information. */
+/* QSO view hides spot-only toolbar controls; the Spot view hides the
+ * N1MM station bar, which is QSO-only information. */
 body.qso-mode #layoutGroup,
 body.qso-mode #rotateGroup,
 body.qso-mode #btnMonitor,
 body.qso-mode #spotCount,
-body.qso-mode #stationBar,
 body.qso-mode .status-group .sep { display: none; }
-body.qso-mode .main { height: calc(100% - 52px); }
+
+#stationBar { display: none; }
+body.qso-mode #stationBar { display: flex; }
+
+/* The station bar only occupies space on the QSO view */
+.main { height: calc(100% - 52px); }
+body.qso-mode .main { height: calc(100% - 52px - 44px); }
 
 .view-btn.active {
     background: var(--accent);
