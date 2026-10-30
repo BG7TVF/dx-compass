@@ -811,14 +811,110 @@ tbody tr:nth-child(even) { background: #141a20; }
     background: #0a1929;
 }
 .qso-map { position: absolute; inset: 0; }
-#btnQsoView.active {
+.view-btn.active {
     background: var(--accent);
     color: #001b22;
     border-color: var(--accent);
     font-weight: 600;
 }
 
-/* MULT badge on QSO map markers */
+/* ---------- QSO panel (right dock while the QSO map is shown) ---------- */
+.qso-panel { width: 340px; flex: 0 0 340px; }
+.qso-panel .panel-body { padding: 14px; gap: 14px; display: flex; flex-direction: column; overflow-y: auto; }
+
+.qso-hero {
+    background: linear-gradient(180deg, #182430, #101820);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px;
+}
+.qso-freq-row { display: flex; align-items: baseline; gap: 8px; }
+.qso-freq {
+    font-size: 30px;
+    font-weight: 800;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: .5px;
+    line-height: 1;
+}
+.qso-unit { color: var(--text-dim); font-size: 11px; }
+.qso-opcall {
+    margin-top: 8px;
+    color: var(--text-dim);
+    font-size: 12px;
+    letter-spacing: .5px;
+    min-height: 15px;
+}
+
+.qso-score-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+.qso-score-card {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.qso-score-card label { color: var(--text-dim); font-size: 10px; text-transform: uppercase; letter-spacing: .5px; }
+.qso-score-card b { color: var(--text); font-size: 18px; font-variant-numeric: tabular-nums; }
+.qso-score-total b { color: var(--green); font-size: 22px; }
+
+.qso-last-box, .qso-rate-box {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 12px;
+}
+.qso-last-title, .qso-rate-title {
+    color: var(--text-dim);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    display: block;
+    margin-bottom: 6px;
+}
+.qso-last-row { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.qso-last-call { color: #fff; font-size: 16px; font-weight: 700; letter-spacing: 1px; }
+.qso-last-info { color: var(--text-dim); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.qso-rate-head { display: flex; align-items: baseline; justify-content: space-between; }
+.qso-rate-head .qso-rate-title { margin-bottom: 6px; }
+.qso-rate-sum { color: var(--green); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.qso-rate-chart {
+    display: flex;
+    align-items: flex-end;
+    gap: 3px;
+    height: 86px;
+    padding-top: 4px;
+    border-bottom: 1px solid var(--border-2);
+}
+.qso-rate-bar {
+    flex: 1;
+    height: 100%;
+    display: flex;
+    align-items: flex-end;
+    min-width: 0;
+}
+.qso-rate-bar:hover { background: rgba(0,229,255,.06); }
+.qso-rate-fill {
+    width: 100%;
+    background: #253039;
+    border-radius: 2px 2px 0 0;
+    transition: height .3s ease;
+}
+.qso-rate-fill.has-qso { background: linear-gradient(180deg, var(--accent), var(--accent-2)); }
+.qso-rate-axis {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 4px;
+    color: var(--text-dim);
+    font-size: 10px;
+}
 .qso-dot {
     width: 12px; height: 12px;
     border-radius: 50%;

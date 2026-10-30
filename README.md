@@ -211,7 +211,8 @@ git -C /opt/dx-compass pull
 在 N1MM+ 竞赛日志软件中开启 UDP 广播后，大屏顶部出现本台状态栏，并可切换到全屏 QSO 地图：
 
 - **状态栏**：当前电台频率 / 模式 / 发射指示（TX）、当前总分（QSO 数 / 乘数 / 点数 / Score）、上一个 QSO
-- **QSO 地图**：每个 QSO 一个按频段着色的永久标记，从本台位置画大圆线连接；新乘数（Multiplier）带黄色 M 徽章；QSO 持久化在 SQLite `qsos` 表，浏览器刷新与服务重启后自动恢复
+- **QSO 地图**：与 Spot 视图各有独立按钮，一键全屏切换；每个 QSO 一个按频段着色的永久标记，从本台位置画大圆线连接；新乘数（Multiplier）带黄色 M 徽章；QSO 持久化在 SQLite `qsos` 表，浏览器刷新与服务重启后自动恢复
+- **QSO 视图右侧面板**：显示当前电台频率/模式/TX、当前分数（QSO/乘数/点数/Score）、上一个 QSO 详情，以及最近 60 分钟的 QSO 速率柱状图（5 分钟一根柱）；Spot Records 面板仅在 Spot 视图显示
 - QSO 坐标**优先从 QRZ.com 查询**（与原 n1mm_dashboard 项目一致，需在 Settings 中配置 QRZ 用户名/密码，需 QRZ XML 订阅）；未配置或查询失败时依次回退到通联中的 gridsquare 字段、已积累的 spot 坐标库
 
 配置方法：

@@ -39,7 +39,8 @@
         </div>
 
         <div class="action-group">
-            <button class="action-btn" id="btnQsoView" title="QSO map">QSO Map</button>
+            <button class="action-btn view-btn active" id="btnSpotView" title="Spot grid">Spot</button>
+            <button class="action-btn view-btn" id="btnQsoView" title="QSO map">QSO</button>
             <button class="action-btn monitor-btn" id="btnMonitor" disabled>▶ 开始监控</button>
             <button class="action-btn" id="btnConfig" title="Settings">Settings</button>
         </div>
@@ -123,6 +124,48 @@
                     </table>
                 </div>
                 <div class="panel-footer" id="recordsFooter">0 records</div>
+            </div>
+        </div>
+
+        <!-- QSO panel: docked on the right while the QSO map is shown -->
+        <div id="qsoPanel" class="dock-panel qso-panel hidden">
+            <div class="panel-header">
+                <span class="panel-title" id="qsoPanelTitle">Station</span>
+            </div>
+            <div class="panel-body">
+                <div class="qso-hero">
+                    <div class="qso-freq-row">
+                        <span class="qso-freq" id="qFreq">--.--</span>
+                        <span class="qso-unit">kHz</span>
+                        <span class="st-mode" id="qMode">---</span>
+                        <span class="st-tx hidden" id="qTx">TX</span>
+                    </div>
+                    <div class="qso-opcall" id="qOpCall"></div>
+                </div>
+                <div class="qso-score-grid">
+                    <div class="qso-score-card"><label id="qLQsos">QSO</label><b id="qQsos">0</b></div>
+                    <div class="qso-score-card"><label id="qLMults">Mults</label><b id="qMults">0</b></div>
+                    <div class="qso-score-card"><label id="qLPoints">Points</label><b id="qPoints">0</b></div>
+                    <div class="qso-score-card qso-score-total"><label id="qLScore">Score</label><b id="qScore">0</b></div>
+                </div>
+                <div class="qso-last-box">
+                    <div class="qso-last-title" id="qLastTitle">Last QSO</div>
+                    <div class="qso-last-row">
+                        <span class="qso-last-call" id="qLastCall">—</span>
+                        <span class="qso-last-info" id="qLastInfo"></span>
+                    </div>
+                </div>
+                <div class="qso-rate-box">
+                    <div class="qso-rate-head">
+                        <span class="qso-rate-title" id="qRateTitle">QSO Rate</span>
+                        <span class="qso-rate-sum" id="qRateSum"></span>
+                    </div>
+                    <div class="qso-rate-chart" id="qRateChart"></div>
+                    <div class="qso-rate-axis">
+                        <span id="qRateFrom">-60m</span>
+                        <span id="qRateNow">now</span>
+                    </div>
+                </div>
             </div>
         </div>
 

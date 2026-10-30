@@ -118,6 +118,7 @@ const I18N = {
         langLabel: '语言 / Language', mapTiles: '地图源', ttlTitle: '标记点存活时间（分钟）', bandTitle: '频段颜色',
         qsoView: 'QSO 地图', spotView: 'Spot 网格', stWaiting: '等待 N1MM+ 数据…', stLastQso: '上一 QSO',
         stMults: '乘数', stPoints: '点数', stTx: '发射中', myGrid: '本台网格 (梅登海德)',
+        stQsos: 'QSO', stScore: '总分', stPanel: '本台状态', qsoRate: 'QSO 速率',
         qrzUser: 'QRZ.com 用户名', qrzPass: 'QRZ.com 密码',
         save: '保存',
         cfgHint: '呼号按顺序分配到地图窗口，空槽位在仪表盘上保持空白。<br>距离为被监听台与监听台之间计算得出。<br>Spot 自动获取：CW 来自 reversebeacon.net RBN（10 秒），其他模式来自 dxwatch.com（30 秒）——无需集群登录或连接设置。',
@@ -160,6 +161,7 @@ const I18N = {
         langLabel: 'Language / 语言', mapTiles: 'Base map', ttlTitle: 'Marker lifetime (minutes)', bandTitle: 'Band colors',
         qsoView: 'QSO Map', spotView: 'Spot Grid', stWaiting: 'Waiting for N1MM+ data…', stLastQso: 'Last QSO',
         stMults: 'Mults', stPoints: 'Points', stTx: 'TX', myGrid: 'My grid (Maidenhead)',
+        stQsos: 'QSOs', stScore: 'Score', stPanel: 'Station', qsoRate: 'QSO Rate',
         qrzUser: 'QRZ.com username', qrzPass: 'QRZ.com password',
         save: 'Save',
         cfgHint: 'Callsigns are assigned to map slots in order. Empty slots stay blank on the dashboard.<br>Distance is computed between the monitored station and the spotting station.<br>Spots are provided automatically: CW by reversebeacon.net RBN (10s), other modes by dxwatch.com (30s) - no cluster login or connection setup is needed.',
@@ -202,6 +204,7 @@ const I18N = {
         langLabel: 'Sprache / Language', mapTiles: 'Basiskarte', ttlTitle: 'Marker-Lebensdauer (Minuten)', bandTitle: 'Bandfarben',
         qsoView: 'QSO-Karte', spotView: 'Spot-Raster', stWaiting: 'Warte auf N1MM+-Daten…', stLastQso: 'Letztes QSO',
         stMults: 'Multis', stPoints: 'Punkte', stTx: 'TX', myGrid: 'Mein Grid (Maidenhead)',
+        stQsos: 'QSOs', stScore: 'Score', stPanel: 'Station', qsoRate: 'QSO-Rate',
         qrzUser: 'QRZ.com Benutzername', qrzPass: 'QRZ.com Passwort',
         save: 'Speichern',
         cfgHint: 'Rufzeichen werden der Reihe nach den Kartenfenstern zugewiesen. Leere Plätze bleiben im Dashboard frei.<br>Die Entfernung wird zwischen überwachter und spotender Station berechnet.<br>Spots werden automatisch geliefert: CW von reversebeacon.net RBN (10 s), andere Modi von dxwatch.com (30 s) - kein Cluster-Login nötig.',
@@ -244,6 +247,7 @@ const I18N = {
         langLabel: 'Langue / Language', mapTiles: 'Fond de carte', ttlTitle: 'Durée de vie des marqueurs (minutes)', bandTitle: 'Couleurs des bandes',
         qsoView: 'Carte QSO', spotView: 'Grille Spots', stWaiting: 'En attente des données N1MM+…', stLastQso: 'Dernier QSO',
         stMults: 'Mults', stPoints: 'Points', stTx: 'TX', myGrid: 'Ma grille (Maidenhead)',
+        stQsos: 'QSO', stScore: 'Score', stPanel: 'Station', qsoRate: 'Taux QSO',
         qrzUser: "Nom d'utilisateur QRZ.com", qrzPass: 'Mot de passe QRZ.com',
         save: 'Enregistrer',
         cfgHint: "Les indicatifs sont attribués aux fenêtres de carte dans l'ordre. Les emplacements vides restent vides sur le tableau de bord.<br>La distance est calculée entre la station surveillée et la station spotteuse.<br>Les spots sont fournis automatiquement : CW via reversebeacon.net RBN (10 s), autres modes via dxwatch.com (30 s) - aucune connexion à un cluster n'est nécessaire.",
@@ -286,6 +290,7 @@ const I18N = {
         langLabel: 'Idioma / Language', mapTiles: 'Mapa base', ttlTitle: 'Vida útil de los marcadores (minutos)', bandTitle: 'Colores de banda',
         qsoView: 'Mapa QSO', spotView: 'Rejilla Spots', stWaiting: 'Esperando datos de N1MM+…', stLastQso: 'Último QSO',
         stMults: 'Mults', stPoints: 'Puntos', stTx: 'TX', myGrid: 'Mi grid (Maidenhead)',
+        stQsos: 'QSO', stScore: 'Puntuación', stPanel: 'Estación', qsoRate: 'Ritmo QSO',
         qrzUser: 'Usuario QRZ.com', qrzPass: 'Contraseña QRZ.com',
         save: 'Guardar',
         cfgHint: 'Los indicativos se asignan a las ventanas de mapa en orden. Los espacios vacíos quedan en blanco en el panel.<br>La distancia se calcula entre la estación monitorizada y la estación spottera.<br>Los spots se obtienen automáticamente: CW por reversebeacon.net RBN (10 s), otros modos por dxwatch.com (30 s), sin necesidad de conexión a clúster.',
@@ -328,6 +333,7 @@ const I18N = {
         langLabel: 'Idioma / Language', mapTiles: 'Mapa base', ttlTitle: 'Vida útil dos marcadores (minutos)', bandTitle: 'Cores das bandas',
         qsoView: 'Mapa QSO', spotView: 'Grade Spots', stWaiting: 'Aguardando dados do N1MM+…', stLastQso: 'Último QSO',
         stMults: 'Mults', stPoints: 'Pontos', stTx: 'TX', myGrid: 'Meu grid (Maidenhead)',
+        stQsos: 'QSO', stScore: 'Pontuação', stPanel: 'Estação', qsoRate: 'Ritmo QSO',
         qrzUser: 'Utilizador QRZ.com', qrzPass: 'Palavra-passe QRZ.com',
         save: 'Guardar',
         cfgHint: 'Os indicativos são atribuídos às janelas de mapa por ordem. Espaços vazios ficam em branco no painel.<br>A distância é calculada entre a estação monitorizada e a estação spotter.<br>Os spots são fornecidos automaticamente: CW pelo reversebeacon.net RBN (10 s), outros modos pelo dxwatch.com (30 s) - sem necessidade de ligação a cluster.',
@@ -370,6 +376,7 @@ const I18N = {
         langLabel: 'Язык / Language', mapTiles: 'Базовая карта', ttlTitle: 'Время жизни маркеров (минуты)', bandTitle: 'Цвета диапазонов',
         qsoView: 'Карта QSO', spotView: 'Сетка спотов', stWaiting: 'Ожидание данных N1MM+…', stLastQso: 'Последний QSO',
         stMults: 'Мульты', stPoints: 'Очки', stTx: 'TX', myGrid: 'Мой квадрат (Maidenhead)',
+        stQsos: 'QSO', stScore: 'Счёт', stPanel: 'Станция', qsoRate: 'Темп QSO',
         qrzUser: 'Имя пользователя QRZ.com', qrzPass: 'Пароль QRZ.com',
         save: 'Сохранить',
         cfgHint: 'Позывные назначаются окнам карт по порядку. Пустые слоты остаются пустыми на панели.<br>Расстояние вычисляется между отслеживаемой и наблюдающей станциями.<br>Споты поступают автоматически: CW с reversebeacon.net RBN (10 с), другие моды с dxwatch.com (30 с) — подключение к кластеру не требуется.',
@@ -412,6 +419,7 @@ const I18N = {
         langLabel: 'Lingua / Language', mapTiles: 'Mappa base', ttlTitle: 'Durata dei marker (minuti)', bandTitle: 'Colori delle bande',
         qsoView: 'Mappa QSO', spotView: 'Griglia Spot', stWaiting: 'In attesa dei dati N1MM+…', stLastQso: 'Ultimo QSO',
         stMults: 'Molt.', stPoints: 'Punti', stTx: 'TX', myGrid: 'Mio grid (Maidenhead)',
+        stQsos: 'QSO', stScore: 'Punteggio', stPanel: 'Stazione', qsoRate: 'Ritmo QSO',
         qrzUser: 'Utente QRZ.com', qrzPass: 'Password QRZ.com',
         save: 'Salva',
         cfgHint: 'I nominativi sono assegnati alle finestre mappa in ordine. Gli slot vuoti restano vuoti nella dashboard.<br>La distanza è calcolata tra la stazione monitorata e quella spotter.<br>Gli spot sono forniti automaticamente: CW da reversebeacon.net RBN (10 s), altri modi da dxwatch.com (30 s) - nessuna connessione a cluster necessaria.',
@@ -454,6 +462,7 @@ const I18N = {
         langLabel: 'اللغة / Language', mapTiles: 'خريطة الأساس', ttlTitle: 'مدة بقاء العلامات (دقائق)', bandTitle: 'ألوان النطاقات',
         qsoView: 'خريطة QSO', spotView: 'شبكة السبوت', stWaiting: 'في انتظار بيانات N1MM+…', stLastQso: 'آخر QSO',
         stMults: 'المضاعفات', stPoints: 'النقاط', stTx: 'إرسال', myGrid: 'شبكتي (Maidenhead)',
+        stQsos: 'QSO', stScore: 'المجموع', stPanel: 'المحطة', qsoRate: 'معدل QSO',
         qrzUser: 'اسم مستخدم QRZ.com', qrzPass: 'كلمة مرور QRZ.com',
         save: 'حفظ',
         cfgHint: 'تُسند النداءات إلى نوافذ الخريطة بالترتيب، وتبقى الفتحات الفارغة خالية في اللوحة.<br>تُحسب المسافة بين المحطة المراقَبة ومحطة الرصد.<br>تُجلب السبوتات تلقائياً: CW من reversebeacon.net RBN (كل 10 ثوانٍ)، والأنماط الأخرى من dxwatch.com (كل 30 ثانية) - لا حاجة لتسجيل الدخول إلى أي كلاستر.',
@@ -496,6 +505,7 @@ const I18N = {
         langLabel: '언어 / Language', mapTiles: '기본 지도', ttlTitle: '마커 유지 시간 (분)', bandTitle: '밴드 색상',
         qsoView: 'QSO 지도', spotView: '스팟 그리드', stWaiting: 'N1MM+ 데이터 대기 중…', stLastQso: '마지막 QSO',
         stMults: '멀티', stPoints: '포인트', stTx: '송신', myGrid: '내 그리드 (Maidenhead)',
+        stQsos: 'QSO', stScore: '점수', stPanel: '국 상태', qsoRate: 'QSO 속도',
         qrzUser: 'QRZ.com 사용자명', qrzPass: 'QRZ.com 비밀번호',
         save: '저장',
         cfgHint: '콜사인은 순서대로 지도 슬롯에 배정됩니다. 빈 슬롯은 대시보드에서 비워 둡니다.<br>거리는 모니터링 국과 스포팅 국 사이로 계산됩니다.<br>스폿은 자동으로 제공됩니다: CW는 reversebeacon.net RBN (10초), 다른 모드는 dxwatch.com (30초) - 클러스터 로그인이 필요 없습니다.',
@@ -538,6 +548,7 @@ const I18N = {
         langLabel: '言語 / Language', mapTiles: 'ベースマップ', ttlTitle: 'マーカー生存時間 (分)', bandTitle: 'バンドカラー',
         qsoView: 'QSOマップ', spotView: 'スポットグリッド', stWaiting: 'N1MM+ データを待っています…', stLastQso: '直近の QSO',
         stMults: 'マルチ', stPoints: 'ポイント', stTx: '送信', myGrid: '自局グリッド (Maidenhead)',
+        stQsos: 'QSO', stScore: 'スコア', stPanel: '自局', qsoRate: 'QSOレート',
         qrzUser: 'QRZ.com ユーザー名', qrzPass: 'QRZ.com パスワード',
         save: '保存',
         cfgHint: 'コールサインは順番にマップ枠へ割り当てられます。空き枠はダッシュボードで空白のままです。<br>距離は監視局とスポッター局の間で計算されます。<br>スポットは自動取得されます: CWはreversebeacon.net RBN (10秒)、その他のモードはdxwatch.com (30秒) - クラスターへのログインは不要です。',
@@ -1645,8 +1656,18 @@ function applyLang() {
     $('#stLLast').textContent = t('stLastQso');
     $('#stTx').textContent = t('stTx');
     $('#stWaiting').textContent = t('stWaiting');
-    $('#btnQsoView').textContent = qsoState.view === 'qso' ? t('spotView') : t('qsoView');
+    $('#btnSpotView').textContent = t('spotView');
+    $('#btnQsoView').textContent = t('qsoView');
+    $('#qsoPanelTitle').textContent = t('stPanel');
+    $('#qLastTitle').textContent = t('stLastQso');
+    $('#qRateTitle').textContent = t('qsoRate');
+    $('#qLQsos').textContent = t('stQsos');
+    $('#qLMults').textContent = t('stMults');
+    $('#qLPoints').textContent = t('stPoints');
+    $('#qLScore').textContent = t('stScore');
+    $('#qTx').textContent = t('stTx');
     renderLastQso();
+    renderQsoPanel();
     $('#btnSaveCfg').textContent = t('save');
     $('#cfgHint').innerHTML = t('cfgHint');
     $('#btnRotateNext').title = t('nextPage');
@@ -1708,8 +1729,9 @@ const QSO_MAX_MARKERS = 1500;
 const qsoState = {
     view: 'spots',        // 'spots' | 'qso'
     map: null, tile: null, homeLayer: null,
-    qsos: [],             // rendered QSO objects, oldest first
+    qsos: [],             // rendered QSO objects (only ones with coordinates)
     byId: new Map(),      // n1mmId -> {layers:[...]} (contactreplace/contactdelete)
+    allTs: new Map(),     // n1mmId -> QSO time (ms) for every QSO, map or not
     radio: null, score: null, lastQso: null
 };
 
@@ -1760,19 +1782,24 @@ function rebuildHome() {
     }
 }
 
-/* Full-screen switch between the spot grid and the QSO map. */
+/* Full-screen switch: spot grid (+ Records panel) <-> QSO map (+ QSO panel). */
 function setViewMode(mode) {
     if (qsoState.view === mode) return;
     qsoState.view = mode;
     const isQso = mode === 'qso';
     $('#grid').classList.toggle('hidden', isQso);
     $('#qsoView').classList.toggle('hidden', !isQso);
-    const btn = $('#btnQsoView');
-    btn.classList.toggle('active', isQso);
-    btn.textContent = isQso ? t('spotView') : t('qsoView');
+    $('#recordsPanel').classList.toggle('hidden', isQso);
+    $('#qsoPanel').classList.toggle('hidden', !isQso);
+    const spotBtn = $('#btnSpotView'), qsoBtn = $('#btnQsoView');
+    spotBtn.classList.toggle('active', !isQso);
+    qsoBtn.classList.toggle('active', isQso);
+    spotBtn.textContent = t('spotView');
+    qsoBtn.textContent = t('qsoView');
     if (isQso) {
         qsoState.map.invalidateSize();
         fitQsoMap();
+        renderQsoPanel();
     } else {
         visibleCells().forEach(c => { c.map.invalidateSize(); fitCellView(c); });
     }
@@ -1866,15 +1893,19 @@ function rebuildQsoMap() {
 
 function handleQso(q) {
     qsoState.lastQso = q;
+    if (q.n1mmId) qsoState.allTs.set(q.n1mmId, new Date(q.ts).getTime());
     $('#stationBar').classList.add('has-data');
     renderLastQso();
     addQsoMarker(q);
+    renderQsoPanel();
 }
 
 function handleQsoDelete(d) {
     removeQsoMarker(d.n1mmId);
+    qsoState.allTs.delete(d.n1mmId);
     const i = qsoState.qsos.findIndex(q => q.n1mmId === d.n1mmId);
     if (i >= 0) qsoState.qsos.splice(i, 1);
+    renderQsoPanel();
 }
 
 function renderLastQso() {
@@ -1882,8 +1913,76 @@ function renderLastQso() {
     if (!q) return;
     $('#stLastCall').textContent = q.call || '—';
     const ts = new Date(q.ts);
-    $('#stLastInfo').textContent = [q.band, q.mode, isNaN(ts) ? '' : timeAgo(ts)]
+    const info = [q.band, q.mode, isNaN(ts) ? '' : timeAgo(ts)]
         .filter(Boolean).join(' · ');
+    $('#stLastInfo').textContent = info;
+    $('#qLastCall').textContent = q.call || '—';
+    $('#qLastInfo').textContent = info;
+}
+
+/* ---------- QSO side panel (shown instead of Records on the QSO map) ---------- */
+const QSO_RATE_BUCKET_MS = 5 * 60 * 1000;   // 5 minutes per bar
+const QSO_RATE_BUCKETS = 12;                // -> rolling 60 minutes
+
+/* Rolling QSO rate chart: one bar per 5-minute bucket, oldest to newest.
+ * Counts come from qsoState.allTs (every QSO, live or backfilled, whether
+ * it has coordinates or not). */
+function renderQsoRate() {
+    const now = Date.now();
+    const counts = new Array(QSO_RATE_BUCKETS).fill(0);
+    let total = 0;
+    qsoState.allTs.forEach(t => {
+        if (isNaN(t) || t > now) return;
+        const idx = QSO_RATE_BUCKETS - 1 - Math.floor((now - t) / QSO_RATE_BUCKET_MS);
+        if (idx >= 0) {
+            counts[idx]++;
+            total++;
+        }
+    });
+    const max = Math.max(1, ...counts);
+    const chart = $('#qRateChart');
+    chart.textContent = '';
+    counts.forEach((n, i) => {
+        const bar = document.createElement('div');
+        bar.className = 'qso-rate-bar';
+        bar.title = (QSO_RATE_BUCKETS - 1 - i) * 5 + '–' +
+            (QSO_RATE_BUCKETS - i) * 5 + ' min: ' + n;
+        const fill = document.createElement('div');
+        fill.className = 'qso-rate-fill';
+        fill.style.height = Math.max(n ? 6 : 1, (n / max) * 100) + '%';
+        if (n) fill.classList.add('has-qso');
+        bar.appendChild(fill);
+        chart.appendChild(bar);
+    });
+    $('#qRateSum').textContent = total + ' QSO · ' + total + '/h';
+}
+
+/* Mirror the station bar values into the QSO panel. */
+function renderQsoPanel() {
+    const r = qsoState.radio, s = qsoState.score, q = qsoState.lastQso;
+    if (r) {
+        if (typeof r.freqKhz === 'number' && isFinite(r.freqKhz)) {
+            $('#qFreq').textContent = r.freqKhz.toLocaleString('en-US',
+                {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        }
+        if (r.mode) $('#qMode').textContent = r.mode;
+        $('#qTx').classList.toggle('hidden', !r.isTransmitting);
+        $('#qOpCall').textContent = [r.opCall, r.radioName].filter(Boolean).join(' · ');
+    }
+    if (s) {
+        $('#qQsos').textContent = s.qsos || 0;
+        $('#qMults').textContent = s.mults || 0;
+        $('#qPoints').textContent = s.points || 0;
+        $('#qScore').textContent = s.score || 0;
+    }
+    if (q) {
+        $('#qLastCall').textContent = q.call || '—';
+        const ts = new Date(q.ts);
+        $('#qLastInfo').textContent = [q.band, q.mode, q.freqKhz ?
+            q.freqKhz.toFixed(2) : '', isNaN(ts) ? '' : timeAgo(ts)]
+            .filter(Boolean).join(' · ');
+    }
+    renderQsoRate();
 }
 
 function updateStationRadio(r) {
@@ -1895,6 +1994,7 @@ function updateStationRadio(r) {
     }
     if (r.mode) $('#stMode').textContent = r.mode;
     $('#stTx').classList.toggle('hidden', !r.isTransmitting);
+    renderQsoPanel();
 }
 
 function updateStationScore(s) {
@@ -1904,6 +2004,7 @@ function updateStationScore(s) {
     $('#stMults').textContent = s.mults || 0;
     $('#stPoints').textContent = s.points || 0;
     $('#stScore').textContent = s.score || 0;
+    renderQsoPanel();
 }
 
 /* DB row (qsos table) -> the qso object shape used by live WS messages. */
@@ -1926,12 +2027,16 @@ async function loadStation() {
     try {
         const rows = await fetch('/api/qsos?limit=500').then(r => r.json());
         if (Array.isArray(rows) && rows.length) {
+            // rows come newest-first; replay oldest-first so the marker
+            // list and the rate chart stay chronologically ordered
             rows.slice().reverse().forEach(r => {
                 const q = dbRowToQso(r);
+                qsoState.allTs.set(q.n1mmId, new Date(q.ts).getTime());
                 if (q.lat !== null && q.lat !== undefined) addQsoMarker(q);
             });
             qsoState.lastQso = dbRowToQso(rows[0]);
             renderLastQso();
+            renderQsoPanel();
             $('#stationBar').classList.add('has-data');
         }
     } catch (e) { /* keep the waiting hint */ }
@@ -2081,9 +2186,9 @@ function init() {
             rebuildQsoMap();
         }
     });
-    // Spot grid <-> QSO map view switch
-    $('#btnQsoView').addEventListener('click', () =>
-        setViewMode(qsoState.view === 'qso' ? 'spots' : 'qso'));
+    // Spot grid <-> QSO map switch (two independent buttons)
+    $('#btnSpotView').addEventListener('click', () => setViewMode('spots'));
+    $('#btnQsoView').addEventListener('click', () => setViewMode('qso'));
     // QRZ.com XML credentials (QSO coordinate lookups; needs a QRZ XML
     // subscription). Stored server-side in flow context; the password is
     // never read back into the form.
@@ -2194,7 +2299,10 @@ function init() {
             c.markers.forEach(g => applyMarkerFade(g, now));
             Object.keys(c.heat).forEach(b => updateHeat(c, b, now));
         });
-        if (qsoState.lastQso) renderLastQso(); // keep the age text fresh
+        if (qsoState.lastQso) {
+            renderLastQso(); // keep the age text fresh
+            if (qsoState.view === 'qso') renderQsoPanel();
+        }
     }, 10000);
 
     // Every 30s: expire chips together with their markers.
