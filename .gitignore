@@ -9,7 +9,6 @@ dxcompass.db
 dxcompass.db-journal
 .context/
 context/
-lib/
 flows_*.json
 *.log
 
