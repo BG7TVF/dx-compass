@@ -1038,6 +1038,46 @@ body.qso-mode .status-group .sep { display: none; }
     color: var(--text-dim);
     font-size: 10px;
 }
+
+/* QSO per minute: one bar per minute over the last 30 minutes */
+.qso-min-chart {
+    display: flex;
+    align-items: flex-end;
+    gap: 2px;
+    height: 56px;
+    padding-top: 4px;
+    border-bottom: 1px solid var(--border-2);
+}
+.qso-min-bar { flex: 1; height: 100%; display: flex; align-items: flex-end; min-width: 0; }
+.qso-min-bar:hover { background: rgba(241,196,15,.06); }
+.qso-min-fill {
+    width: 100%;
+    background: #253039;
+    border-radius: 2px 2px 0 0;
+    transition: height .3s ease;
+}
+.qso-min-fill.has-qso { background: linear-gradient(180deg, var(--yellow), var(--orange)); }
+
+/* Horizontal distribution bars (QSO by OP / by band) */
+.qso-dist { display: flex; flex-direction: column; gap: 5px; }
+.qso-dist-row { display: flex; align-items: center; gap: 8px; font-size: 11px; }
+.qso-dist-label {
+    color: var(--text);
+    width: 68px;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.qso-dist-bar { flex: 1; height: 8px; background: #253039; border-radius: 3px; overflow: hidden; }
+.qso-dist-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
+.qso-dist-count {
+    color: var(--text-dim);
+    min-width: 28px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+.qso-dist-empty { color: var(--text-dim); font-size: 11px; }
 .qso-dot {
     width: 12px; height: 12px;
     border-radius: 50%;

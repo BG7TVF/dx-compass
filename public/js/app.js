@@ -83,6 +83,22 @@ function bandColorOf(band) {
     return settings.bandColors[band] || '#00e5ff';
 }
 
+/* Standard amateur bands in metres. N1MM reports the band either as metres
+ * ("20") or as MHz ("14"); both must display as wavelength, e.g. 14 MHz -> 20M. */
+const BAND_METERS = [160, 80, 60, 40, 30, 20, 17, 15, 12, 10, 6, 4, 2];
+function bandLabel(band, freqKhz) {
+    let n = parseFloat(String(band || '').replace(/[^0-9.]/g, ''));
+    if (!isFinite(n) || n <= 0) {
+        n = typeof freqKhz === 'number' ? freqKhz / 1000 : 0;
+        if (!n) return '';
+    }
+    if (BAND_METERS.includes(Math.round(n))) return Math.round(n) + 'M';
+    // MHz value -> nearest standard band in metres
+    const m = 300 / n;
+    const best = BAND_METERS.reduce((a, b) => Math.abs(b - m) < Math.abs(a - m) ? b : a);
+    return best + 'M';
+}
+
 /* Base map tiles are built per map so the provider can be swapped live.
  * noWrap + WORLD_BOUNDS keep the single-world convention on every provider. */
 function makeTileLayer() {
@@ -1317,6 +1333,9 @@ function applyLang() {
     $('#qsoPanelTitle').textContent = t('stPanel');
     $('#qLastTitle').textContent = t('stLastQso');
     $('#qRateTitle').textContent = t('qsoRate');
+    $('#qMinTitle').textContent = t('qsoPerMin');
+    $('#qOpTitle').textContent = t('qsoByOp');
+    $('#qBandTitle').textContent = t('qsoByBand');
     $('#qLQsos').textContent = t('stQsos');
     $('#qLMults').textContent = t('stMults');
     $('#qLPoints').textContent = t('stPoints');
@@ -1387,6 +1406,7 @@ const qsoState = {
     qsos: [],             // rendered QSO objects (only ones with coordinates)
     byId: new Map(),      // n1mmId -> {layers:[...]} (contactreplace/contactdelete)
     allTs: new Map(),     // n1mmId -> QSO time (ms) for every QSO, map or not
+    all: new Map(),       // n1mmId -> {ts, operator, band} for OP/BAND charts
     radio: null, score: null, lastQso: null,
     radios: {}            // radioNr -> RadioInfo (SO2R / multi-op support)
 };
@@ -1496,7 +1516,7 @@ function scheduleQsoFit() {
 
 function qsoTooltip(q) {
     const ts = new Date(q.ts);
-    return [q.call, [q.band, q.mode].filter(Boolean).join(' '),
+    return [q.call, [bandLabel(q.band, q.freqKhz), q.mode].filter(Boolean).join(' '),
         isNaN(ts) ? '' : timeAgo(ts),
         q.isMult ? 'MULT' : ''].filter(Boolean).join(' · ');
 }
@@ -1554,7 +1574,12 @@ function rebuildQsoMap() {
 
 function handleQso(q) {
     qsoState.lastQso = q;
-    if (q.n1mmId) qsoState.allTs.set(q.n1mmId, new Date(q.ts).getTime());
+    if (q.n1mmId) {
+        qsoState.allTs.set(q.n1mmId, new Date(q.ts).getTime());
+        qsoState.all.set(q.n1mmId, {
+            ts: q.ts, operator: q.operator || '', band: bandLabel(q.band, q.freqKhz)
+        });
+    }
     renderLastQso();
     addQsoMarker(q);
     renderQsoPanel();
@@ -1563,6 +1588,7 @@ function handleQso(q) {
 function handleQsoDelete(d) {
     removeQsoMarker(d.n1mmId);
     qsoState.allTs.delete(d.n1mmId);
+    qsoState.all.delete(d.n1mmId);
     const i = qsoState.qsos.findIndex(q => q.n1mmId === d.n1mmId);
     if (i >= 0) qsoState.qsos.splice(i, 1);
     renderQsoPanel();
@@ -1572,7 +1598,7 @@ function renderLastQso() {
     const q = qsoState.lastQso;
     if (!q) return;
     const ts = new Date(q.ts);
-    const info = [q.band, q.mode, isNaN(ts) ? '' : timeAgo(ts)]
+    const info = [bandLabel(q.band, q.freqKhz), q.mode, isNaN(ts) ? '' : timeAgo(ts)]
         .filter(Boolean).join(' · ');
     $('#qLastCall').textContent = q.call || '—';
     $('#qLastInfo').textContent = info;
@@ -1615,6 +1641,75 @@ function renderQsoRate() {
     $('#qRateSum').textContent = total + ' QSO · ' + total + '/h';
 }
 
+/* QSO per minute: one bar per minute over the last 30 minutes. */
+const QSO_MIN_BUCKETS = 30;
+function renderQsoMinute() {
+    const now = Date.now();
+    const counts = new Array(QSO_MIN_BUCKETS).fill(0);
+    let total = 0;
+    qsoState.allTs.forEach(t => {
+        if (isNaN(t) || t > now) return;
+        const idx = QSO_MIN_BUCKETS - 1 - Math.floor((now - t) / 60000);
+        if (idx >= 0) { counts[idx]++; total++; }
+    });
+    const max = Math.max(1, ...counts);
+    const chart = $('#qMinChart');
+    chart.textContent = '';
+    counts.forEach((n, i) => {
+        const bar = document.createElement('div');
+        bar.className = 'qso-min-bar';
+        bar.title = (QSO_MIN_BUCKETS - 1 - i) + ' min: ' + n;
+        const fill = document.createElement('div');
+        fill.className = 'qso-min-fill';
+        fill.style.height = Math.max(n ? 6 : 1, (n / max) * 100) + '%';
+        if (n) fill.classList.add('has-qso');
+        bar.appendChild(fill);
+        chart.appendChild(bar);
+    });
+    $('#qMinSum').textContent = total + ' QSO · ' + (total / QSO_MIN_BUCKETS).toFixed(1) + '/min';
+}
+
+/* Horizontal distribution bars: one row per key (OP or band). */
+function renderDist(el, map) {
+    el.textContent = '';
+    const rows = Array.from(map.entries()).sort((a, b) => b[1] - a[1]).slice(0, 6);
+    if (!rows.length) {
+        el.innerHTML = '<div class="qso-dist-empty">—</div>';
+        return;
+    }
+    const max = Math.max(1, ...rows.map(r => r[1]));
+    rows.forEach(([label, n]) => {
+        const row = document.createElement('div');
+        row.className = 'qso-dist-row';
+        const l = document.createElement('span');
+        l.className = 'qso-dist-label';
+        l.textContent = label;
+        const bar = document.createElement('div');
+        bar.className = 'qso-dist-bar';
+        const fill = document.createElement('div');
+        fill.className = 'qso-dist-fill';
+        fill.style.width = Math.max(3, (n / max) * 100) + '%';
+        bar.appendChild(fill);
+        const c = document.createElement('span');
+        c.className = 'qso-dist-count';
+        c.textContent = n;
+        row.append(l, bar, c);
+        el.appendChild(row);
+    });
+}
+
+function renderQsoDist() {
+    const ops = new Map(), bands = new Map();
+    qsoState.all.forEach(v => {
+        const op = v.operator || '—';
+        ops.set(op, (ops.get(op) || 0) + 1);
+        const b = v.band || '—';
+        bands.set(b, (bands.get(b) || 0) + 1);
+    });
+    renderDist($('#qOpDist'), ops);
+    renderDist($('#qBandDist'), bands);
+}
+
 /* Latest-QSO banner above the QSO map: RUN / S&P, frequency, DX call,
  * RST sent/received and exchange - layout parity with BY7WZ's dashboard.
  * The live RadioInfo stream decides RUN vs S&P; the rest is the newest QSO. */
@@ -1631,7 +1726,7 @@ function renderQsoTopbar() {
     $('#qtCall').textContent = (q && q.call) || '—';
     $('#qtRst').textContent = q ? (q.rstSnt || '--') + '/' + (q.rstRcv || '--') : '--/--';
     $('#qtExch').textContent = (q && q.exchange) || '—';
-    $('#qtBand').textContent = (q && q.band) || '—';
+    $('#qtBand').textContent = bandLabel(q && q.band, q && q.freqKhz) || '—';
     $('#qtMode').textContent = (q && q.mode) || (r && r.mode) || '—';
     const op = (q && q.operator) || (r && r.opCall) || '';
     $('#qtOp').textContent = op || '—';
@@ -1685,11 +1780,13 @@ function renderQsoPanel() {
     if (q) {
         $('#qLastCall').textContent = q.call || '—';
         const ts = new Date(q.ts);
-        $('#qLastInfo').textContent = [q.band, q.mode, q.freqKhz ?
+        $('#qLastInfo').textContent = [bandLabel(q.band, q.freqKhz), q.mode, q.freqKhz ?
             q.freqKhz.toFixed(2) : '', isNaN(ts) ? '' : timeAgo(ts)]
             .filter(Boolean).join(' · ');
     }
     renderQsoRate();
+    renderQsoMinute();
+    renderQsoDist();
 }
 
 function updateStationRadio(r) {
@@ -1707,7 +1804,8 @@ function updateStationScore(s) {
 function dbRowToQso(r) {
     return {
         type: 'qso', n1mmId: r.n1mm_id, ts: r.timestamp, mycall: r.mycall,
-        call: r.call, band: r.band, freqKhz: r.freq_khz, mode: r.mode,
+        operator: r.operator, call: r.call, band: r.band, freqKhz: r.freq_khz,
+        mode: r.mode, rstSnt: r.rst_snt, rstRcv: r.rst_rcv, exchange: r.exchange,
         points: r.points, isMult: !!r.is_mult, lat: r.lat, lon: r.lon
     };
 }
@@ -1730,6 +1828,10 @@ async function loadStation() {
             rows.slice().reverse().forEach(r => {
                 const q = dbRowToQso(r);
                 qsoState.allTs.set(q.n1mmId, new Date(q.ts).getTime());
+                qsoState.all.set(q.n1mmId, {
+                    ts: q.ts, operator: q.operator || '',
+                    band: bandLabel(q.band, q.freqKhz)
+                });
                 if (q.lat !== null && q.lat !== undefined) addQsoMarker(q);
             });
             qsoState.lastQso = dbRowToQso(rows[0]);
