@@ -1455,11 +1455,10 @@ function snrClass(r) {
     return 'signal-weak';
 }
 
-/* Export CSV. forceRec=true always exports the recorded-session data
- * (Download button); otherwise the export follows the current view. */
-function exportCsv(forceRec) {
+/* Export CSV of the current view: all spots or the recorded session. */
+function exportCsv() {
     const call = $('#recordCallSelect').value;
-    const rec = forceRec === true || (forceRec === undefined && state.recView === 'rec');
+    const rec = state.recView === 'rec';
     const base = rec ? '/api/recording/spots' : '/api/spots';
     const url = call ? `${base}?call=${encodeURIComponent(call)}&limit=10000` : `${base}?limit=10000`;
     const headers = rec ?
@@ -1501,7 +1500,6 @@ function applyLang() {
     $('#btnExportCsv').textContent = t('exportCsv');
     $('#btnClearDb').textContent = t('clearDb');
     $('#btnRecSched').textContent = t('schedule');
-    $('#btnRecDownload').textContent = t('download');
     $('#btnRecSchedSet').textContent = t('set');
     $('#btnRecSchedClear').textContent = t('clear');
     $('.rec-tz').textContent = t('recTz');
@@ -2355,7 +2353,6 @@ async function init() {
     });
     $('#btnRefreshRecords').addEventListener('click', refreshRecords);
     $('#btnExportCsv').addEventListener('click', () => exportCsv());
-    $('#btnRecDownload').addEventListener('click', () => exportCsv(true));
     $('#recordCallSelect').addEventListener('change', refreshRecords);
     // Manual database clear (spots table only; recording_spots is kept)
     $('#btnClearDb').addEventListener('click', async () => {
