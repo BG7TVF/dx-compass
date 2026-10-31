@@ -1,4 +1,4 @@
-/* ============================================================
+﻿/* ============================================================
  * DX-Compass - Propagation page
  *
  * A dedicated page ("Propagation Map") combining:
@@ -58,7 +58,7 @@ function propShortTime(iso) {
 
 /* ---------------------------------------------------------------
  * Projections. Each returns {fwd(lon,lat), inv(x,y)} in CSS pixels,
- * fitted width-first (see fitWorld): the map always spans the full canvas
+ * fitted width-first (see propFit): the map always spans the full canvas
  * width, the northern edge sits on the top border, and the polar caps are
  * clipped -- Antarctica first, then the Arctic islands -- but never beyond
  * PROP_SOUTH_MIN / PROP_NORTH_MIN, so no mainland is ever cut. The map is
@@ -96,7 +96,7 @@ function robLatFromY(y) {
  *  - and if even that window is too tall, shrink so side margins remain.
  * yOf(lat) must return the (positive) projected distance from the equator and
  * latFromY(y) its inverse, so the same logic serves every projection. */
-function fitWorld(w, h, worldWidth, yNorth, yOf, latFromY, northLimit) {
+function propFit(w, h, worldWidth, yNorth, yOf, latFromY, northLimit) {
     const scW = w / worldWidth;
     const need = h / scW;                       // vertical span at full width
     const yS = yOf(Math.abs(PROP_SOUTH_MIN));   // deepest allowed southern crop
@@ -153,7 +153,7 @@ function makeProjection(kind, w, h, de) {
     if (kind === 'robinson') {
         const xMax = 0.8487 * Math.PI, yMax = 1.3523;
         const yOf = lat => 1.3523 * robinsonTable(Math.abs(lat), ROB_Y);
-        const fit = fitWorld(w, h, 2 * xMax, yMax, yOf, robLatFromY, 90);
+        const fit = propFit(w, h, 2 * xMax, yMax, yOf, robLatFromY, 90);
         const sc = fit.sc, cx = w / 2;
         const cy = fit.centered ? h / 2 : yOf(fit.north) * sc;
         return {
@@ -179,7 +179,7 @@ function makeProjection(kind, w, h, de) {
         clamp(lat, -northLimit, northLimit) * Math.PI / 360));
     const yOf = lat => MY(Math.abs(lat));
     const latFromY = y => propDeg(2 * Math.atan(Math.exp(y)) - Math.PI / 2);
-    const fit = fitWorld(w, h, 2 * Math.PI, MY(northLimit), yOf, latFromY, northLimit);
+    const fit = propFit(w, h, 2 * Math.PI, MY(northLimit), yOf, latFromY, northLimit);
     const sc = fit.sc, cx = w / 2;
     const cy = fit.centered ? h / 2 : yOf(fit.north) * sc;
     return {
