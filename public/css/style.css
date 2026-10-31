@@ -1656,6 +1656,9 @@ body[data-theme="amber"] {
     display: flex;
     flex-direction: column;
     min-height: 0;
+    /* Lets the label/value/unit sizes track the card's height (cqh), so the
+     * cards grow their type when the rows stretch on taller viewports. */
+    container-type: size;
 }
 .prop-card.alert { border-color: var(--red); }
 .prop-card.warn { border-color: var(--orange); }
@@ -1668,19 +1671,21 @@ body[data-theme="amber"] {
 /* Localised card names can be long (e.g. "Solarfluss", "Rayons X"), so the
  * label may wrap while the value keeps its width. */
 .pc-label {
-    color: var(--text-dim); font-size: 11px; letter-spacing: .5px;
+    color: var(--text-dim);
+    font-size: clamp(11px, 7cqh, 16px);
+    letter-spacing: .5px;
     min-width: 0; line-height: 1.15; overflow-wrap: break-word;
 }
 .pc-val {
     flex: 0 0 auto;
     color: var(--text-strong);
-    font-size: 14px;
+    font-size: clamp(14px, 9cqh, 26px);
     font-weight: 700;
     font-variant-numeric: tabular-nums;
 }
 .prop-card.warn .pc-val { color: var(--orange); }
 .prop-card.alert .pc-val { color: var(--red); }
-.pc-unit { height: 11px; color: var(--text-dim); font-size: 9px; }
+.pc-unit { color: var(--text-dim); font-size: clamp(9px, 5.5cqh, 14px); }
 .pc-spark { display: block; width: 100%; flex: 1; min-height: 18px; }
 
 /* NOAA R / S / G scales */
@@ -1734,11 +1739,14 @@ body[data-theme="amber"] {
     background: var(--panel-2);
     border: 1px solid var(--border);
     border-radius: 4px;
+    /* Type scales with the card height (cqh): the five stretched rows of the
+     * left arm get larger labels when the viewport is tall. */
+    container-type: size;
 }
 .bc-name {
     margin-bottom: 2px;
     color: var(--accent);
-    font-size: 11px;
+    font-size: clamp(11px, 9cqh, 20px);
     font-weight: 700;
     letter-spacing: .5px;
 }
@@ -1748,9 +1756,9 @@ body[data-theme="amber"] {
     justify-content: space-between;
     gap: 4px;
 }
-.bc-time { color: var(--text-dim); font-size: 9px; }
+.bc-time { color: var(--text-dim); font-size: clamp(9px, 6.5cqh, 15px); }
 .bc-cond {
-    font-size: 10px;
+    font-size: clamp(10px, 7.5cqh, 18px);
     font-weight: 700;
     white-space: nowrap;
 }
