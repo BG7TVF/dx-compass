@@ -1523,6 +1523,10 @@ body[data-theme="amber"] {
 }
 .prop-arm { grid-column: 1; }
 .prop-side { grid-column: 3; }
+/* The space-weather title and update stamp are raised together with the card
+ * type so the whole right arm reads at one scale. */
+.prop-side .prop-sec-title { font-size: 13px; }
+.prop-side .prop-upd { font-size: 11px; }
 
 .prop-foot {
     grid-column: 1 / -1;
@@ -1672,20 +1676,20 @@ body[data-theme="amber"] {
  * label may wrap while the value keeps its width. */
 .pc-label {
     color: var(--text-dim);
-    font-size: clamp(11px, 7cqh, 16px);
+    font-size: clamp(12px, 7.5cqh, 19px);
     letter-spacing: .5px;
     min-width: 0; line-height: 1.15; overflow-wrap: break-word;
 }
 .pc-val {
     flex: 0 0 auto;
     color: var(--text-strong);
-    font-size: clamp(14px, 9cqh, 26px);
+    font-size: clamp(17px, 11cqh, 30px);
     font-weight: 700;
     font-variant-numeric: tabular-nums;
 }
 .prop-card.warn .pc-val { color: var(--orange); }
 .prop-card.alert .pc-val { color: var(--red); }
-.pc-unit { color: var(--text-dim); font-size: clamp(9px, 5.5cqh, 14px); }
+.pc-unit { color: var(--text-dim); font-size: clamp(10px, 6.5cqh, 16px); }
 .pc-spark { display: block; width: 100%; flex: 1; min-height: 18px; }
 
 /* NOAA R / S / G scales */
@@ -1706,15 +1710,15 @@ body[data-theme="amber"] {
     border-left: 3px solid var(--sev, var(--green));
     border-radius: 4px;
 }
-.prop-scale b { color: var(--sev, var(--green)); font-size: 13px; }
+.prop-scale b { color: var(--sev, var(--green)); font-size: 16px; }
 .prop-scale span {
     color: var(--text-dim);
-    font-size: 10px;
+    font-size: 12px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
-.prop-scale i { font-style: normal; color: var(--sev, var(--green)); font-size: 10px; }
+.prop-scale i { font-style: normal; color: var(--sev, var(--green)); font-size: 12px; }
 .prop-scale.s0 { --sev: var(--green); }
 .prop-scale.s1 { --sev: #2ecc71; }
 .prop-scale.s2 { --sev: #f1c40f; }
