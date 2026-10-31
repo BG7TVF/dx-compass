@@ -682,10 +682,22 @@ function renderPropPanel() {
     const html = [];   // right-hand column
     const low = [];    // bottom strip
 
-    /* ---- space weather cards ---- */
+    /* ---- NOAA R / S / G (placed above the cards so the card grid can
+     * flex-fill all the way down to the map's bottom edge) ---- */
+    const sc = d.scales || {};
+    const scaleBox = (k, o) => {
+        const lvl = o && o.scale !== null ? o.scale : 0;
+        return '<div class="prop-scale s' + lvl + '"><b>' + k + '</b><span>' +
+            (o ? (o.text || '') : '—') + '</span><i>G' + lvl + '</i></div>';
+    };
     html.push('<div class="prop-sec sec-wx"><div class="prop-sec-title">' + t('propSpaceWx') +
         '<span class="prop-upd">' + t('propUpdated') + ' ' +
-        propShortTime(d.ts) + '</span></div><div class="prop-cards">');
+        propShortTime(d.ts) + '</span></div>');
+    html.push('<div class="prop-scales">' + scaleBox('R', sc.r) + scaleBox('S', sc.s) +
+        scaleBox('G', sc.g) + '</div>');
+
+    /* ---- space weather cards (flex-fill the remaining height) ---- */
+    html.push('<div class="prop-cards">');
     for (const c of PROP_CARDS) {
         const v = cardValue(c.key);
         const cls = cardClass(c.key, v);
@@ -696,17 +708,7 @@ function renderPropPanel() {
             '<div class="pc-unit">' + (c.unit || '') + '</div>' +
             '<canvas class="pc-spark"></canvas></div>');
     }
-    html.push('</div>');
-
-    /* ---- NOAA R/S/G ---- */
-    const sc = d.scales || {};
-    const scaleBox = (k, o) => {
-        const lvl = o && o.scale !== null ? o.scale : 0;
-        return '<div class="prop-scale s' + lvl + '"><b>' + k + '</b><span>' +
-            (o ? (o.text || '') : '—') + '</span><i>G' + lvl + '</i></div>';
-    };
-    html.push('<div class="prop-scales">' + scaleBox('R', sc.r) + scaleBox('S', sc.s) +
-        scaleBox('G', sc.g) + '</div></div>');
+    html.push('</div></div>');
 
     /* ---- HamQSL band conditions ---- */
     const bands = ham.bands || [];
@@ -799,7 +801,15 @@ function renderPropPanel() {
     side.innerHTML = html.join('');
     foot.innerHTML = low.join('');
 
-    /* sparklines are drawn after the markup exists (clientWidth is known) */
+    redrawPropSparks();
+}
+
+/* Redraw every space-weather sparkline against its current canvas size.
+ * Called after renderPropPanel and on every resize so the lines rescale
+ * when the card grid stretches to match the map height. */
+function redrawPropSparks() {
+    const side = $('#propSide');
+    if (!side) return;
     side.querySelectorAll('[data-card]').forEach(el => {
         const key = el.dataset.card;
         const vals = sparkValues(key);
@@ -861,6 +871,7 @@ function propResize() {
     propState.ctx = cv.getContext('2d');
     propState.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     drawProp();
+    redrawPropSparks();
 }
 
 /* ---------------------------------------------------------------

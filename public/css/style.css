@@ -1542,9 +1542,17 @@ body[data-theme="amber"] {
 }
 
 /* Sections carry their own titles; sizing depends on which arm of the L
- * they belong to. */
+ * they belong to. The space-weather section in the side column stretches
+ * to match the map height so the card grid stays flush with the map at
+ * every resolution. */
 .prop-sec { margin-bottom: 4px; min-width: 0; }
-.prop-side .prop-sec { margin-bottom: 0; }
+.prop-side .prop-sec {
+    margin-bottom: 0;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
 .prop-foot .sec-bands { grid-column: 1; }
 .prop-foot .sec-path { grid-column: 2; min-width: 0; }
 .prop-foot .sec-sdo { grid-column: 3; min-width: 0; }
@@ -1573,14 +1581,27 @@ body[data-theme="amber"] {
     white-space: nowrap;
 }
 
-/* Space-weather cards: label + value on one line, sparkline below */
-.prop-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 5px; }
+/* Space-weather cards: label + value on one line, sparkline below.
+ * The grid rows stretch to fill the side column (which matches the map
+ * height), and each sparkline grows with its card so the grid is always
+ * flush with the map regardless of screen resolution. */
+.prop-cards {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+    grid-auto-rows: minmax(0, 1fr);
+    gap: 5px;
+}
 .prop-card {
     min-width: 0;
     padding: 4px 7px 2px;
     background: var(--panel-2);
     border: 1px solid var(--border);
     border-radius: 4px;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
 }
 .prop-card.alert { border-color: var(--red); }
 .prop-card.warn { border-color: var(--orange); }
@@ -1600,14 +1621,14 @@ body[data-theme="amber"] {
 .prop-card.warn .pc-val { color: var(--orange); }
 .prop-card.alert .pc-val { color: var(--red); }
 .pc-unit { height: 11px; color: var(--text-dim); font-size: 9px; }
-.pc-spark { display: block; width: 100%; height: 18px; }
+.pc-spark { display: block; width: 100%; flex: 1; min-height: 18px; }
 
 /* NOAA R / S / G scales */
 .prop-scales {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: 6px;
-    margin: 8px 0 2px;
+    margin: 0 0 8px;
 }
 .prop-scale {
     display: flex;
