@@ -763,7 +763,16 @@ function renderPropPanel() {
             '</div></div>');
     }
 
-    /* ---- global readouts ---- */
+    /* ---- SDO latest solar image (NASA GSFC "latest" mirror, ~1/min) ---- */
+    const sdoCap = new Date().toISOString().slice(11, 16) + 'Z';
+    low.push('<div class="prop-sec sec-sdo"><div class="prop-sec-title">' + t('propSdo') +
+        '</div><div class="prop-sdo">' +
+        '<img src="https://sdo.gsfc.nasa.gov/assets/img/latest/latest_512_0193.jpg?t=' + Date.now() +
+        '" alt="SDO AIA 193" onerror="this.parentElement.classList.add(\'sdo-fail\')">' +
+        '<div class="prop-sdo-cap">AIA 193 Å · ' + sdoCap + '</div>' +
+        '</div></div>');
+
+    /* ---- global readouts (card tiles, same visual language as space-weather cards) ---- */
     const st = (d.muf && d.muf.stations) || [];
     let maxSt = null;
     for (const s of st) if (s[2] !== null && (!maxSt || s[2] > maxSt[2])) maxSt = s;
@@ -773,7 +782,8 @@ function renderPropPanel() {
     const wx = propWxAt(propState.dx.lat, propState.dx.lon);
     low.push('<div class="prop-sec sec-read"><div class="prop-sec-title">' + t('propReadouts') +
         '</div><div class="prop-read">');
-    const read = (k, v) => '<div class="pr-row"><span>' + k + '</span><b>' + v + '</b></div>';
+    const read = (k, v) => '<div class="pr-card"><div class="pr-label">' + k +
+        '</div><div class="pr-val">' + v + '</div></div>';
     low.push(read('MUF @ DE', propNum(propState.de ? propMufAt(propState.de.lat, propState.de.lon) : null, 1) + ' MHz'));
     low.push(read('MUF max', maxSt ? propNum(maxSt[2], 1) + ' MHz · ' + maxSt[4] : '—'));
     low.push(read('MUF @ DX', propNum(propMufAt(propState.dx.lat, propState.dx.lon), 1) + ' MHz'));

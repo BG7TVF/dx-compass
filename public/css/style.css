@@ -1521,7 +1521,7 @@ body[data-theme="amber"] {
     grid-column: 1 / -1;
     grid-row: 2;
     display: grid;
-    grid-template-columns: minmax(0, .95fr) minmax(0, 1.25fr) minmax(0, .6fr);
+    grid-template-columns: minmax(0, .95fr) minmax(0, 1.25fr) minmax(0, .58fr) minmax(0, .6fr);
     align-items: start;
     gap: 0 18px;
 }
@@ -1547,7 +1547,8 @@ body[data-theme="amber"] {
 .prop-side .prop-sec { margin-bottom: 0; }
 .prop-foot .sec-bands { grid-column: 1; }
 .prop-foot .sec-path { grid-column: 2; min-width: 0; }
-.prop-foot .sec-read { grid-column: 3; }
+.prop-foot .sec-sdo { grid-column: 3; min-width: 0; }
+.prop-foot .sec-read { grid-column: 4; min-width: 0; }
 .prop-foot .sec-bands .prop-bandtab { font-size: 11px; }
 .prop-sec-title {
     display: flex;
@@ -1714,20 +1715,73 @@ body[data-theme="amber"] {
 .prop-matrix td.now { outline: 1px solid var(--accent); }
 .prop-matrix td.best { box-shadow: inset 0 0 0 1px var(--green); }
 
-/* Global readouts */
-.prop-read { display: flex; flex-direction: column; gap: 2px; }
-.pr-row {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 8px;
-    padding: 4px 7px;
-    background: var(--row-alt);
-    border-radius: 3px;
-    font-size: 11px;
+/* Global readouts: rendered as small cards sharing the space-weather
+ * card visual language (panel-2 fill, border, dim label + strong value). */
+.prop-read { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+.pr-card {
+    padding: 6px 7px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    min-width: 0;
 }
-.pr-row span { color: var(--text-dim); }
-.pr-row b { color: var(--text-strong); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pr-label {
+    color: var(--text-dim);
+    font-size: 10px;
+    letter-spacing: .3px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.pr-val {
+    margin-top: 2px;
+    color: var(--text-strong);
+    font-size: 13px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* SDO latest solar image */
+.prop-sdo {
+    position: relative;
+    aspect-ratio: 1 / 1;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+}
+.prop-sdo img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    background: #000;
+}
+.prop-sdo.sdo-fail::after {
+    content: "SDO image unavailable";
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-dim);
+    font-size: 11px;
+    text-align: center;
+    padding: 8px;
+}
+.prop-sdo-cap {
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    padding: 2px 6px;
+    background: rgba(0,0,0,.6);
+    color: #fff;
+    font-size: 10px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+}
 
 .prop-note { margin-top: 6px; color: var(--text-dim); font-size: 10px; }
 .prop-dim { color: var(--text-dim); }
