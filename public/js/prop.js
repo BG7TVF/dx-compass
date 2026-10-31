@@ -145,6 +145,7 @@ function makeProjection(kind, w, h, de) {
         return {
             kind: 'azimuthal',
             lon0: propDeg(lon0),
+            lat0: propDeg(lat0),
             fwd(lon, lat) {
                 const f = propRad(lat), dl = propRad(lon) - lon0;
                 const cosc = Math.sin(lat0) * Math.sin(f) +
@@ -439,6 +440,20 @@ function propRingCopies(ring, lonC, proj) {
     const flat = typeof ring[0] === 'number';
     const n = flat ? ring.length / 2 : ring.length;
     if (!n) return [];
+    const at = i => flat ? [ring[i * 2], ring[i * 2 + 1]] : ring[i];
+    const first = at(0), last = at(n - 1);
+    const closed = Math.abs(first[0] - last[0]) < 1e-6 &&
+        Math.abs(first[1] - last[1]) < 1e-6;
+    /* Natural Earth closes Antarctica through a pole: the ring ends at -90
+     * without repeating its start. Such a ring must be filled around the
+     * pole edge, never closed with a chord back to its first point -- that
+     * chord is the line that used to cut across every projection. */
+    const pole = !closed && Math.abs(last[1]) >= 89.5
+        ? (last[1] < 0 ? -89.99 : 89.99) : null;
+    let tail = 0;
+    if (pole) {
+        while (tail < n && Math.abs(at(n - 1 - tail)[1]) >= 89.5) tail++;
+    }
     const rels = new Float64Array(n), lats = new Float64Array(n);
     let prev = 0, min = Infinity, max = -Infinity;
     for (let i = 0; i < n; i++) {
@@ -461,7 +476,8 @@ function propRingCopies(ring, lonC, proj) {
             const q = proj.fwdRaw(rels[i] + 360 * k, lats[i]);
             pts[i * 2] = q[0]; pts[i * 2 + 1] = q[1];
         }
-        out.push(pts);
+        out.push({pts, pole, tail,
+            dFirst: rels[0] + 360 * k, dLast: rels[n - 1] + 360 * k});
     }
     return out;
 }
@@ -482,18 +498,26 @@ function drawProp() {
 
     ctx.clearRect(0, 0, w, h);
     ctx.fillStyle = C.bg;
+    ctx.save();
     if (disc) {
         /* paint the disc only: the corners stay transparent so the panel
          * background shows through instead of a black slab */
         ctx.beginPath();
         ctx.arc(w / 2, h / 2, discR, 0, Math.PI * 2);
         ctx.fill();
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(w / 2, h / 2, discR, 0, Math.PI * 2);
         ctx.clip();
     } else {
         ctx.fillRect(0, 0, w, h);
+        /* Clip to the projected world. The home-centred maps paint up to
+         * three +/-360 copies of every ring so the +/-180 seam never gets a
+         * chord, and a width-first fit on a very wide canvas shrinks the map
+         * and leaves side margins -- without this clip those copies drew a
+         * second world in the margins. */
+        const west = proj.fwdRaw(-180, 0)[0];
+        const east = proj.fwdRaw(180, 0)[0];
+        ctx.beginPath();
+        ctx.rect(west, 0, east - west, h);
+        ctx.clip();
     }
 
     /* land: filled polygons, then country borders, then coastlines.
@@ -521,16 +545,36 @@ function drawProp() {
     const paintRing = (ring, mode) => {
         if (disc) {
             trace(ring);
-            ctx.closePath();
+            /* No closePath: a closing chord would cut across the disc. The
+             * implicit fill closure is the pole meridian for Antarctica, and
+             * open border lines must never be tied back to their start. */
             if (mode === 'fill') ctx.fill(); else ctx.stroke();
             return;
         }
-        for (const pts of propRingCopies(ring, lonC, proj)) {
+        for (const copy of propRingCopies(ring, lonC, proj)) {
+            const pts = copy.pts;
+            /* Antarctica's pole points collapse onto one projected point, so
+             * the coastline stroke drops them and stops at the last real
+             * vertex instead of doubling back. */
+            const end = pts.length - (mode === 'stroke' && copy.pole ? copy.tail * 2 : 0);
+            if (end < 4) continue;
             ctx.beginPath();
             ctx.moveTo(pts[0], pts[1]);
-            for (let i = 2; i < pts.length; i += 2) ctx.lineTo(pts[i], pts[i + 1]);
-            ctx.closePath();
-            if (mode === 'fill') ctx.fill(); else ctx.stroke();
+            for (let i = 2; i < end; i += 2) ctx.lineTo(pts[i], pts[i + 1]);
+            if (mode === 'fill') {
+                /* fill around the pole edge instead of chording back to the
+                 * first vertex (the stray line across every projection) */
+                if (copy.pole) {
+                    const a = proj.fwdRaw(copy.dLast, copy.pole);
+                    const b = proj.fwdRaw(copy.dFirst, copy.pole);
+                    ctx.lineTo(a[0], a[1]);
+                    ctx.lineTo(b[0], b[1]);
+                }
+                ctx.closePath();
+                ctx.fill();
+            } else {
+                ctx.stroke();
+            }
         }
     };
     ctx.fillStyle = C.land;
@@ -600,11 +644,11 @@ function drawProp() {
     drawPath(ctx, proj, C);
 
     /* projection-appropriate frame: a complete circle on the disc, a
-     * rectangle for the flat maps */
+     * rectangle for the flat maps (drawn outside the world clip) */
+    ctx.restore();
     ctx.strokeStyle = C.border;
     ctx.lineWidth = 1;
     if (disc) {
-        ctx.restore();
         ctx.beginPath();
         ctx.arc(w / 2, h / 2, discR - 0.5, 0, Math.PI * 2);
         ctx.stroke();
@@ -713,15 +757,34 @@ function drawAuroraLayer(ctx, proj, C) {
     ctx.globalAlpha = 1;
 }
 
-/* Stroke a lon/lat polyline through a projection, skipping invisible points. */
-function propTraceLonLat(ctx, proj, pts) {
-    let started = false;
-    for (const p of pts) {
-        const q = proj.fwd(p[1], p[0]);
-        if (!q) { started = false; continue; }
-        if (!started) { ctx.moveTo(q[0], q[1]); started = true; }
-        else ctx.lineTo(q[0], q[1]);
+/* Terminator on the azimuthal disc as a radial boundary around the screen
+ * centre. For every bearing there is exactly one crossing of the great circle
+ * 90 degrees from the sun, so the loop is continuous everywhere -- sweeping
+ * the terminator latitude by longitude (the old approach) put consecutive
+ * samples on opposite sides of the antipode and drew chords across the map.
+ * Day/night is decided by A = sun . centre-vector: with A > 0 the centre is
+ * lit and the day region is the star around it. */
+function propDiscBoundary(proj, w, h, t) {
+    const lat0 = propRad(proj.lat0 || 0), lon0 = propRad(proj.lon0 || 0);
+    const dec = propRad(t.dec), sun = propRad(t.lonSun);
+    const A = Math.sin(dec) * Math.sin(lat0) +
+        Math.cos(dec) * Math.cos(lat0) * Math.cos(sun - lon0);
+    /* sun components along the local north and east directions at the centre */
+    const sN = Math.sin(dec) * Math.cos(lat0) -
+        Math.sin(lat0) * Math.cos(dec) * Math.cos(sun - lon0);
+    const sE = Math.cos(dec) * Math.sin(sun - lon0);
+    const cx = w / 2, cy = h / 2;
+    const cpx = Math.min(w, h) / 2 / Math.PI;   // projected pixels per radian
+    const pts = [];
+    for (let deg = 0; deg < 360; deg += 2) {
+        const th = propRad(deg);
+        const B = sN * Math.cos(th) + sE * Math.sin(th);
+        /* first root of A cos c + B sin c = 0 in [0, pi) */
+        let c = Math.atan2(-A, B);
+        c = ((c % Math.PI) + Math.PI) % Math.PI;
+        pts.push([cx + cpx * c * Math.sin(th), cy - cpx * c * Math.cos(th)]);
     }
+    return {pts, day: A > 0};
 }
 
 function drawGrayline(ctx, proj, w, h, now, C) {
@@ -729,56 +792,67 @@ function drawGrayline(ctx, proj, w, h, now, C) {
     /* the disc works in true longitudes, the flat maps in home-centred ones */
     const t = propTerminator(now, proj.kind === 'azimuthal' ? 0 : lonC);
     ctx.globalAlpha = 1;
-    /* The azimuthal disc needs the opposite fill: its terminator circle is a
-     * simple closed loop around the DAY hemisphere (a 90-degree disc centred
-     * on the sun's image), so the lon-sweep polygon + pole spike used by the
-     * flat projections would shade the daylight half instead of the night.
-     * Fill the canvas and punch the day loop out of it with the even-odd
-     * rule -- orientation-independent and correct for any centre. */
     if (proj.kind === 'azimuthal') {
+        const b = propDiscBoundary(proj, w, h, t);
         ctx.fillStyle = 'rgba(0,0,0,0.42)';
         ctx.beginPath();
-        ctx.rect(0, 0, w, h);
-        let loop;
-        if (t.equinox) {
-            loop = [];
-            for (let lat = -89; lat <= 89; lat += 2) loop.push([lat, t.lonSun - 90]);
-            for (let lat = 89; lat >= -89; lat -= 2) loop.push([lat, t.lonSun + 90]);
-        } else {
-            loop = t.base;
-        }
-        propTraceLonLat(ctx, proj, loop);
+        /* Night is the disc minus the day star when the centre is lit; fill
+         * the whole clip rect and punch the star out with even-odd. */
+        if (b.day) ctx.rect(0, 0, w, h);
+        ctx.moveTo(w / 2, h / 2);
+        for (const p of b.pts) ctx.lineTo(p[0], p[1]);
         ctx.closePath();
-        ctx.fill('evenodd');
+        ctx.fill(b.day ? 'evenodd' : 'nonzero');
 
         ctx.strokeStyle = '#aaa';
         ctx.globalAlpha = 0.85;
         ctx.lineWidth = 1.5;
         ctx.beginPath();
-        propTraceLonLat(ctx, proj, loop);
+        ctx.moveTo(b.pts[0][0], b.pts[0][1]);
+        for (let i = 1; i < b.pts.length; i++) ctx.lineTo(b.pts[i][0], b.pts[i][1]);
+        ctx.closePath();
         ctx.stroke();
         ctx.globalAlpha = 1;
         return;
     }
+    const west = proj.fwdRaw(-180, 0)[0];
+    const east = proj.fwdRaw(180, 0)[0];
     if (t.equinox) {
-        /* near the equinox the terminator degenerates to a meridian:
-         * shading the whole night half avoids the pole singularity */
-        const a = proj.fwd(t.lonSun - 90, -85), b = proj.fwd(t.lonSun - 90, 85);
-        const c = proj.fwd(t.lonSun + 90, 85), d = proj.fwd(t.lonSun + 90, -85);
-        if (a && b && c && d) {
-            ctx.fillStyle = 'rgba(0,0,0,0.42)';
-            ctx.beginPath();
-            ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]);
-            ctx.lineTo(c[0], c[1]); ctx.lineTo(d[0], d[1]);
-            ctx.closePath();
-            ctx.fill();
+        /* Near the equinox the terminator degenerates to a meridian: the day
+         * half is the arc between lonSun +/- 90 that contains the subsolar
+         * meridian; shade the other half (both pieces when it wraps around
+         * the edges of the home-centred map). */
+        const xA = proj.fwdRaw(propLonRel(t.lonSun + 90, lonC), 0)[0];
+        const xB = proj.fwdRaw(propLonRel(t.lonSun - 90, lonC), 0)[0];
+        const xSun = proj.fwdRaw(propLonRel(t.lonSun, lonC), 0)[0];
+        const lo = Math.min(xA, xB), hi = Math.max(xA, xB);
+        ctx.fillStyle = 'rgba(0,0,0,0.42)';
+        if (xSun >= lo && xSun <= hi) {
+            ctx.fillRect(west, 0, lo - west, h);
+            ctx.fillRect(hi, 0, east - hi, h);
+        } else {
+            ctx.fillRect(lo, 0, hi - lo, h);
         }
         return;
     }
+    const base = t.base;
     const night = [];
-    for (const p of t.base) night.push(p);
-    night.push([t.nightPole, 180]);
+    for (let i = 0; i < base.length; i++) night.push(base[i]);
+    /* Close the night polygon down the two edge meridians, sampling every
+     * 2 degrees. On Robinson those meridians are curves, and the old single
+     * chord from the last terminator point straight to the pole cut the
+     * shading off the map's upper/lower corners. */
+    const edgeTo = (fromLat, toLat, d) => {
+        const steps = Math.max(1, Math.ceil(Math.abs(toLat - fromLat) / 2));
+        for (let i = 1; i <= steps; i++) {
+            night.push([fromLat + (toLat - fromLat) * i / steps, d]);
+        }
+    };
+    const latEnd = base[base.length - 1][0], latStart = base[0][0];
+    edgeTo(latEnd, t.nightPole, 180);
     night.push([t.nightPole, -180]);
+    edgeTo(t.nightPole, latStart, -180);
+
     ctx.fillStyle = 'rgba(0,0,0,0.42)';
     ctx.beginPath();
     let started = false;
@@ -796,7 +870,7 @@ function drawGrayline(ctx, proj, w, h, now, C) {
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     started = false;
-    for (const p of t.base) {
+    for (const p of base) {
         const q = proj.fwdRaw(p[1], p[0]);
         if (!q) { started = false; continue; }
         if (!started) { ctx.moveTo(q[0], q[1]); started = true; }
