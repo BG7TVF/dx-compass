@@ -30,7 +30,7 @@
     --track: #253039;
     --map-bg: #0a1929;
     --map-land: #22313f;
-    --map-line: #55707f;
+    --map-line: #64879b;
     --row-alt: #141a20;
     --row-hover: #1c252e;
     --row-border: #1a2027;
@@ -1335,9 +1335,9 @@ body[data-theme="light"] {
     --hover: #dbe4ee;
     --hover-2: #e6ecf3;
     --track: #dbe3eb;
-    --map-bg: #eaf1f6;
-    --map-land: #c9d8e3;
-    --map-line: #7d93a6;
+    --map-bg: #e4edf4;
+    --map-land: #a6bccd;
+    --map-line: #5d7c96;
     --row-alt: #f4f7fa;
     --row-hover: #e8f0f7;
     --row-border: #e1e8ef;

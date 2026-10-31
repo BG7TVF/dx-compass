@@ -396,6 +396,14 @@ function drawProp() {
     ctx.fillStyle = C.land;
     for (const ring of land) { trace(ring); ctx.closePath(); ctx.fill(); }
 
+    /* Background layer: painted over the land fill but *under* the graticule
+     * and the coastline. Drawing it on top (the old order) at 0.55 alpha hid
+     * the coast completely -- the map turned into a checkerboard. HamClock
+     * keeps the coast crisp whatever the propagation field does. */
+    if (s.layer === 'muf') drawMufLayer(ctx, proj, C);
+    else if (s.layer === 'weather') drawWeatherLayer(ctx, proj, C);
+    else if (s.layer === 'aurora') drawAuroraLayer(ctx, proj, C);
+
     /* graticule every 30 degrees */
     ctx.strokeStyle = C.border;
     ctx.globalAlpha = 0.55;
@@ -430,19 +438,19 @@ function drawProp() {
         ctx.stroke();
     }
 
+    /* Country borders stay on the flat projections only: the coarse 110m
+     * outlines are stretched badly by the disc and read as noise. */
+    if (!disc) {
+        ctx.strokeStyle = C.line;
+        ctx.globalAlpha = 0.4;
+        ctx.lineWidth = 0.7;
+        for (const seg of (window.BORDERS || [])) { trace(seg); ctx.stroke(); }
+    }
+    /* coastline last, at full strength: this is what makes the land legible */
     ctx.strokeStyle = C.line;
-    ctx.globalAlpha = 0.4;
-    ctx.lineWidth = 0.7;
-    for (const seg of (window.BORDERS || [])) { trace(seg); ctx.stroke(); }
-    ctx.globalAlpha = 0.85;
+    ctx.globalAlpha = 1;
     ctx.lineWidth = 1;
     for (const ring of land) { trace(ring); ctx.stroke(); }
-    ctx.globalAlpha = 1;
-
-    /* background layer */
-    if (s.layer === 'muf') drawMufLayer(ctx, proj, C);
-    else if (s.layer === 'weather') drawWeatherLayer(ctx, proj, C);
-    else if (s.layer === 'aurora') drawAuroraLayer(ctx, proj, C);
 
     /* gray line: night shading + terminator, refreshed every minute */
     drawGrayline(ctx, proj, w, h, now, C);
@@ -485,7 +493,12 @@ function drawMufLayer(ctx, proj, C) {
     const data = propState.data;
     if (!data) return;
     const has = data.muf && data.muf.stations && data.muf.stations.length;
-    ctx.globalAlpha = 0.55;
+    /* HamClock paints its MUF field as a soft colour wash, not a checkerboard.
+     * A blurred 5x10 degree grid, drawn at low alpha under the coastline,
+     * gives the same smooth gradient while the coast stays readable. */
+    ctx.save();
+    ctx.filter = 'blur(4px)';
+    ctx.globalAlpha = 0.30;
     for (let lat = -85; lat < 85; lat += 5) {
         for (let lon = -180; lon < 180; lon += 10) {
             const muf = has ? propMufAt(lat + 2.5, lon + 5) : null;
@@ -502,7 +515,7 @@ function drawMufLayer(ctx, proj, C) {
             ctx.fill();
         }
     }
-    ctx.globalAlpha = 1;
+    ctx.restore();
 }
 
 function wxColor(t) {
@@ -576,7 +589,7 @@ function drawGrayline(ctx, proj, w, h, now, C) {
      * Fill the canvas and punch the day loop out of it with the even-odd
      * rule -- orientation-independent and correct for any centre. */
     if (proj.kind === 'azimuthal') {
-        ctx.fillStyle = 'rgba(0,0,0,0.28)';
+        ctx.fillStyle = 'rgba(0,0,0,0.24)';
         ctx.beginPath();
         ctx.rect(0, 0, w, h);
         let loop;
@@ -606,7 +619,7 @@ function drawGrayline(ctx, proj, w, h, now, C) {
         const a = proj.fwd(t.lonSun - 90, -85), b = proj.fwd(t.lonSun - 90, 85);
         const c = proj.fwd(t.lonSun + 90, 85), d = proj.fwd(t.lonSun + 90, -85);
         if (a && b && c && d) {
-            ctx.fillStyle = 'rgba(0,0,0,0.28)';
+            ctx.fillStyle = 'rgba(0,0,0,0.24)';
             ctx.beginPath();
             ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]);
             ctx.lineTo(c[0], c[1]); ctx.lineTo(d[0], d[1]);
@@ -619,7 +632,7 @@ function drawGrayline(ctx, proj, w, h, now, C) {
     for (const p of t.base) night.push(p);
     night.push([t.nightPole, 180]);
     night.push([t.nightPole, -180]);
-    ctx.fillStyle = 'rgba(0,0,0,0.28)';
+    ctx.fillStyle = 'rgba(0,0,0,0.24)';
     ctx.beginPath();
     let started = false;
     for (const p of night) {
