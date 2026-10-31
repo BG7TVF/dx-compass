@@ -605,19 +605,20 @@ function drawSpark(cv, vals, color, logScale) {
     ctx.fill();
 }
 
+/* i18n holds the localised card name; label is the fallback abbreviation. */
 const PROP_CARDS = [
-    {key: 'sfi', label: 'SFI', unit: ''},
-    {key: 'ssn', label: 'SSN', unit: ''},
-    {key: 'kp', label: 'Kp', unit: ''},
-    {key: 'a', label: 'A', unit: ''},
-    {key: 'bz', label: 'Bz', unit: 'nT'},
-    {key: 'bt', label: 'Bt', unit: 'nT'},
-    {key: 'wind', label: 'Wind', unit: 'km/s'},
-    {key: 'dens', label: 'Dens', unit: 'p/cm³'},
-    {key: 'xray', label: 'X-ray', unit: ''},
-    {key: 'dst', label: 'Dst', unit: 'nT'},
-    {key: 'aur', label: 'Aurora', unit: '%'},
-    {key: 'drap', label: 'DRAP', unit: 'MHz'}
+    {key: 'sfi', label: 'SFI', i18n: 'pcSfi', unit: ''},
+    {key: 'ssn', label: 'SSN', i18n: 'pcSsn', unit: ''},
+    {key: 'kp', label: 'Kp', i18n: 'pcKp', unit: ''},
+    {key: 'a', label: 'A', i18n: 'pcA', unit: ''},
+    {key: 'bz', label: 'Bz', i18n: 'pcBz', unit: 'nT'},
+    {key: 'bt', label: 'Bt', i18n: 'pcBt', unit: 'nT'},
+    {key: 'wind', label: 'Wind', i18n: 'pcWind', unit: 'km/s'},
+    {key: 'dens', label: 'Dens', i18n: 'pcDens', unit: 'p/cm³'},
+    {key: 'xray', label: 'X-ray', i18n: 'pcXray', unit: ''},
+    {key: 'dst', label: 'Dst', i18n: 'pcDst', unit: 'nT'},
+    {key: 'aur', label: 'Aurora', i18n: 'pcAur', unit: '%'},
+    {key: 'drap', label: 'DRAP', i18n: 'pcDrap', unit: 'MHz'}
 ];
 
 function cardValue(key) {
@@ -738,7 +739,8 @@ function renderPropPanel() {
         const v = cardValue(c.key);
         const cls = cardClass(c.key, v);
         html.push('<div class="prop-card ' + cls + '" data-card="' + c.key + '">' +
-            '<div class="pc-head"><span class="pc-label">' + c.label +
+            '<div class="pc-head"><span class="pc-label">' +
+            (c.i18n ? t(c.i18n) : c.label) +
             '</span><span class="pc-val">' + (typeof v === 'number' ? propNum(v, c.key === 'xray' ? 0 : 1) : (v || '—')) +
             '</span></div>' +
             '<div class="pc-unit">' + (c.unit || '') + '</div>' +

@@ -794,4 +794,32 @@ const PROP_I18N = {
         propWeatherDx: 'DX の天気'
     }
 };
+
+/* Space-weather card parameter names. Kept in their own table so the
+ * shared propagation keys above stay grouped; merged into I18N below. */
+const PROP_CARD_I18N = {
+    zh: {pcSfi: '太阳通量', pcSsn: '黑子数', pcKp: 'Kp', pcA: 'A 指数', pcBz: 'Bz', pcBt: 'Bt',
+        pcWind: '太阳风', pcDens: '密度', pcXray: 'X 射线', pcDst: 'Dst', pcAur: '极光', pcDrap: 'DRAP'},
+    en: {pcSfi: 'Solar flux', pcSsn: 'Sunspots', pcKp: 'Kp', pcA: 'A index', pcBz: 'Bz', pcBt: 'Bt',
+        pcWind: 'Solar wind', pcDens: 'Density', pcXray: 'X-ray', pcDst: 'Dst', pcAur: 'Aurora', pcDrap: 'DRAP'},
+    de: {pcSfi: 'Solarfluss', pcSsn: 'Flecken', pcKp: 'Kp', pcA: 'A-Index', pcBz: 'Bz', pcBt: 'Bt',
+        pcWind: 'Sonnenwind', pcDens: 'Dichte', pcXray: 'Röntgen', pcDst: 'Dst', pcAur: 'Polarlicht', pcDrap: 'DRAP'},
+    fr: {pcSfi: 'Flux solaire', pcSsn: 'Taches', pcKp: 'Kp', pcA: 'Indice A', pcBz: 'Bz', pcBt: 'Bt',
+        pcWind: 'Vent solaire', pcDens: 'Densité', pcXray: 'Rayons X', pcDst: 'Dst', pcAur: 'Aurores', pcDrap: 'DRAP'},
+    es: {pcSfi: 'Flujo solar', pcSsn: 'Manchas', pcKp: 'Kp', pcA: 'Índice A', pcBz: 'Bz', pcBt: 'Bt',
+        pcWind: 'Viento solar', pcDens: 'Densidad', pcXray: 'Rayos X', pcDst: 'Dst', pcAur: 'Aurora', pcDrap: 'DRAP'},
+    pt: {pcSfi: 'Fluxo solar', pcSsn: 'Manchas', pcKp: 'Kp', pcA: 'Índice A', pcBz: 'Bz', pcBt: 'Bt',
+        pcWind: 'Vento solar', pcDens: 'Densidade', pcXray: 'Raios X', pcDst: 'Dst', pcAur: 'Aurora', pcDrap: 'DRAP'},
+    ru: {pcSfi: 'Поток', pcSsn: 'Пятна', pcKp: 'Kp', pcA: 'Индекс A', pcBz: 'Bz', pcBt: 'Bt',
+        pcWind: 'Солн. ветер', pcDens: 'Плотность', pcXray: 'Рентген', pcDst: 'Dst', pcAur: 'Сияние', pcDrap: 'DRAP'},
+    it: {pcSfi: 'Flusso sol.', pcSsn: 'Macchie', pcKp: 'Kp', pcA: 'Indice A', pcBz: 'Bz', pcBt: 'Bt',
+        pcWind: 'Vento sol.', pcDens: 'Densità', pcXray: 'Raggi X', pcDst: 'Dst', pcAur: 'Aurora', pcDrap: 'DRAP'},
+    ar: {pcSfi: 'التدفق', pcSsn: 'البقع', pcKp: 'Kp', pcA: 'مؤشر A', pcBz: 'Bz', pcBt: 'Bt',
+        pcWind: 'الرياح', pcDens: 'الكثافة', pcXray: 'الأشعة السينية', pcDst: 'Dst', pcAur: 'الشفق', pcDrap: 'DRAP'},
+    ko: {pcSfi: '태양 플럭스', pcSsn: '흑점 수', pcKp: 'Kp', pcA: 'A 지수', pcBz: 'Bz', pcBt: 'Bt',
+        pcWind: '태양풍', pcDens: '밀도', pcXray: 'X선', pcDst: 'Dst', pcAur: '오로라', pcDrap: 'DRAP'},
+    ja: {pcSfi: '太陽フラックス', pcSsn: '黒点数', pcKp: 'Kp', pcA: 'A指数', pcBz: 'Bz', pcBt: 'Bt',
+        pcWind: '太陽風', pcDens: '密度', pcXray: 'X線', pcDst: 'Dst', pcAur: 'オーロラ', pcDrap: 'DRAP'}
+};
 for (const l of LANGS) Object.assign(I18N[l], PROP_I18N[l] || PROP_I18N.en);
+for (const l of LANGS) Object.assign(I18N[l], PROP_CARD_I18N[l] || PROP_CARD_I18N.en);

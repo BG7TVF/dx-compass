@@ -1610,8 +1610,14 @@ body[data-theme="amber"] {
     justify-content: space-between;
     gap: 6px;
 }
-.pc-label { color: var(--text-dim); font-size: 11px; letter-spacing: .5px; }
+/* Localised card names can be long (e.g. "Solarfluss", "Rayons X"), so the
+ * label may wrap while the value keeps its width. */
+.pc-label {
+    color: var(--text-dim); font-size: 11px; letter-spacing: .5px;
+    min-width: 0; line-height: 1.15; overflow-wrap: break-word;
+}
 .pc-val {
+    flex: 0 0 auto;
     color: var(--text-strong);
     font-size: 14px;
     font-weight: 700;
