@@ -312,13 +312,19 @@ function drawProp() {
     ctx.fillStyle = C.bg;
     ctx.fillRect(0, 0, w, h);
 
-    /* land: filled polygons, then country borders, then coastlines */
+    /* land: filled polygons, then country borders, then coastlines.
+     * land.js / borders.js store rings as flat [lon,lat,lon,lat,...]
+     * arrays; nested [[lon,lat],...] is also accepted. */
     const land = window.LAND || [];
     const trace = ring => {
         ctx.beginPath();
         let started = false;
-        for (const pt of ring) {
-            const p = proj.fwd(pt[0], pt[1]);
+        const flat = typeof ring[0] === 'number';
+        const n = flat ? ring.length / 2 : ring.length;
+        for (let i = 0; i < n; i++) {
+            const lon = flat ? ring[i * 2] : ring[i][0];
+            const lat = flat ? ring[i * 2 + 1] : ring[i][1];
+            const p = proj.fwd(lon, lat);
             if (!p) { started = false; continue; }
             if (!started) { ctx.moveTo(p[0], p[1]); started = true; }
             else ctx.lineTo(p[0], p[1]);
