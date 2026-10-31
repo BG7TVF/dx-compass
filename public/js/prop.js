@@ -275,15 +275,20 @@ function propBearing(a, b) {
     const x = Math.cos(f1) * Math.sin(f2) - Math.sin(f1) * Math.cos(f2) * Math.cos(dl);
     return (propDeg(Math.atan2(y, x)) + 360) % 360;
 }
-function propMidpoint(a, b) {
+/* Point at fraction t along the great circle from a to b. */
+function propAlong(a, b, t) {
     const f1 = propRad(a.lat), l1 = propRad(a.lon);
     const f2 = propRad(b.lat), l2 = propRad(b.lon);
-    const bx = Math.cos(f2) * Math.cos(l2 - l1);
-    const by = Math.cos(f2) * Math.sin(l2 - l1);
-    const f = Math.atan2(Math.sin(f1) + Math.sin(f2),
-        Math.sqrt((Math.cos(f1) + bx) ** 2 + by ** 2));
-    const l = l1 + Math.atan2(by, Math.cos(f1) + bx);
-    return {lat: propDeg(f), lon: ((propDeg(l) + 540) % 360) - 180};
+    const d = 2 * Math.asin(Math.sqrt(Math.sin((f2 - f1) / 2) ** 2 +
+        Math.cos(f1) * Math.cos(f2) * Math.sin((l2 - l1) / 2) ** 2));
+    if (d < 1e-9) return {lat: a.lat, lon: a.lon};
+    const A = Math.sin((1 - t) * d) / Math.sin(d);
+    const B = Math.sin(t * d) / Math.sin(d);
+    const x = A * Math.cos(f1) * Math.cos(l1) + B * Math.cos(f2) * Math.cos(l2);
+    const y = A * Math.cos(f1) * Math.sin(l1) + B * Math.cos(f2) * Math.sin(l2);
+    const z = A * Math.sin(f1) + B * Math.sin(f2);
+    return {lat: propDeg(Math.atan2(z, Math.sqrt(x * x + y * y))),
+        lon: propDeg(Math.atan2(y, x))};
 }
 
 /* Solar zenith cosine at a location -> 1 (sun overhead) .. -1 (antipodal) */
@@ -297,19 +302,49 @@ function sunFactor(lat, lon, d) {
 /* ---------------------------------------------------------------
  * Data lookups against the last collector snapshot
  * ------------------------------------------------------------- */
-function propMufAt(lat, lon) {
+/* Interpolated ionosphere at a point from the kc2g sonde snapshot: MUF(3000)
+ * and foF2, inverse-square weighted over stations within 4000 km.
+ * The soundings are not simultaneous -- each station value belongs to its own
+ * observation time, and kc2g can serve a sounding that is hours or years old.
+ * So every value is first divided by the day factor at its station for its
+ * own measured instant (a common "noon-equivalent" reference), interpolated,
+ * and then multiplied by the day factor at the target for `when`. Without
+ * this, a daytime sounding and a night-time sounding were averaged as if they
+ * described the same ionosphere. */
+function propStationHourFactor(s) {
+    if (typeof s[5] !== 'string' || !s[5]) return 1;
+    /* kc2g timestamps carry no zone suffix; they are UTC, so pin them --
+     * otherwise Date() reads them in the viewer's local zone. */
+    const iso = /Z|[+-]\d{2}:?\d{2}$/.test(s[5]) ? s[5] : s[5] + 'Z';
+    const t = new Date(iso);
+    if (isNaN(t)) return 1;
+    return Math.max(0.55, propMufDayFactor(sunFactor(s[0], s[1], t)));
+}
+
+function propIonoAt(lat, lon, when) {
     const st = propState.data && propState.data.muf && propState.data.muf.stations;
     if (!st || !st.length) return null;
-    let num = 0, den = 0;
+    let num = 0, den = 0, numF = 0;
     for (const s of st) {
-        if (s[2] === null) continue;
+        if (typeof s[2] !== 'number') continue;
         const d = propDistance({lat, lon}, {lat: s[0], lon: s[1]});
         if (d > 4000) continue;
         const wgt = 1 / Math.pow(d + 40, 2);
-        num += s[2] * wgt;
+        const kM = propStationHourFactor(s);
+        num += (s[2] / kM) * wgt;
         den += wgt;
+        numF += ((typeof s[3] === 'number' ? s[3] : 0.62 * s[2]) / kM) * wgt;
     }
-    return den ? num / den : null;
+    if (!den) return null;
+    const base = num / den;
+    const baseF = (numF ? numF / den : 0.62 * base);
+    const kAt = propMufDayFactor(sunFactor(lat, lon, when));
+    return {muf: base * kAt, fof2: baseF * kAt};
+}
+
+function propMufAt(lat, lon, when) {
+    const p = propIonoAt(lat, lon, when || new Date());
+    return p ? p.muf : null;
 }
 
 function propDrapAt(lat, lon) {
@@ -332,22 +367,106 @@ function propWxAt(lat, lon) {
     return best;
 }
 
-/* Approximate DE->DX availability per hour (no VOACAP):
- * MUF at the path midpoint scaled by the local solar elevation, lower bound
- * from the DRAP absorption grid, then a smooth band-pass per frequency.
- * Availability (0-100) of one band on a path of `dist` km whose midpoint sits
- * at midLat/midLon, for the snapshot `when`. Shared by the DE->DX matrix and
- * the continent table so both columns come from the same model. */
-function propBandScore(b, midLat, midLon, baseMuf, baseDrap, dist, when) {
-    const sf = sunFactor(midLat, midLon, when);       // -1..1
-    const day = clamp((sf + 0.15) / 0.85, 0, 1);      // 0 night .. 1 day
-    const muf = baseMuf * (0.58 + 0.55 * day);
-    const luf = Math.max(2.0, 1.1 + 1.35 * (baseDrap || 0));
-    const hi = 1 / (1 + Math.exp((b.f - 0.95 * muf) / (0.12 * muf || 1)));
-    const lo = 1 / (1 + Math.exp((luf - b.f) / 1.1));
-    // long paths need more than a single 3000 km hop
-    const hop = dist > 3500 ? clamp(1 - (dist - 3500) / 9000, 0.55, 1) : 1;
-    return Math.round(100 * hi * lo * hop);
+/* Approximate DE->DX availability (no VOACAP, but no longer a single
+ * midpoint either):
+ *  - the path is split into PROP_HOP_KM hops; every hop is sampled at its
+ *    great-circle midpoint, so a 12000 km path crosses several local times
+ *    instead of inheriting one mid-path noon;
+ *  - the sonde snapshot gives MUF(3000) / foF2 per hop, blended by hop length
+ *    (vertical foF2 for a short hop, MUF3000 for a full 3000 km hop); each
+ *    sounding is normalised by the solar elevation at its own measured instant
+ *    and then re-evaluated at the forecast hour, because soundings are neither
+ *    simultaneous nor fresh;
+ *  - the lower bound comes from the DRAP grid, which is already "the frequency
+ *    absorbed by 1 dB"; a usable path needs ~1.55x that, scaled by sqrt(hops)
+ *    (per-hop loss budget shrinks with hop count) and by the ratio of
+ *    absorption at the forecast hour to absorption at the DRAP valid time;
+ *  - the path MUF is the weakest hop, the path LUF the strongest one.
+ * Availability (0-100) of one band for a prepared {muf, luf} window. */
+const PROP_HOP_KM = 3000;
+
+/* Great-circle profile: total length, hop count, hop length and the midpoint
+ * of every hop. */
+function propPathProfile(a, b) {
+    const dist = propDistance(a, b);
+    const hops = Math.max(1, Math.ceil(dist / PROP_HOP_KM));
+    const hopLen = dist / hops;
+    const mids = [];
+    for (let i = 0; i < hops; i++) mids.push(propAlong(a, b, (i + 0.5) / hops));
+    return {dist, hops, hopLen, mids};
+}
+
+/* Measured MUF/foF2 already sit at the snapshot's local solar elevation;
+ * normalise them to "noon-equivalent" first, then apply the forecast hour's
+ * elevation. Day factor: ~0.58 at night, ~1.13 with the sun overhead. */
+function propMufDayFactor(sf) {
+    return 0.58 + 0.55 * clamp((sf + 0.15) / 0.85, 0, 1);
+}
+
+/* Relative D-region absorption: ~0.1 at night, 1.0 with the sun overhead. */
+function propAbsWeight(sf) {
+    return clamp((sf + 0.15) / 1.15, 0.1, 1);
+}
+
+/* Sonde snapshot instant (kc2g refreshes every few minutes, so the fetch
+ * time is a good stand-in for the observation time). */
+function propSnapshotTime() {
+    const f = propState.data && propState.data.fetched;
+    if (f && f.muf) return new Date(f.muf);
+    const t = propState.data && propState.data.ts;
+    return t ? new Date(t) : new Date();
+}
+
+/* DRAP grid valid instant ("# Product Valid At : 2026-10-31 12:27 UTC"),
+ * falling back to the fetch time. Absorption must be rescaled relative to the
+ * grid's own hour, not to the sonde snapshot. */
+function propDrapTime() {
+    const d = propState.data && propState.data.drap;
+    const m = d && d.valid
+        ? /(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})\s*UTC/i.exec(d.valid) : null;
+    if (m) return new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]));
+    const f = propState.data && propState.data.fetched;
+    return f && f.drap ? new Date(f.drap) : propSnapshotTime();
+}
+
+/* Path window (weakest-hop MUF and strongest-hop LUF) for the forecast `when`. */
+function propPathWindow(prof, when) {
+    const data = propState.data;
+    const drapAt = propDrapTime();
+    const sfi = data && data.ham && data.ham.sfi;
+    let mufMin = Infinity, lufMax = 0;
+    for (const m of prof.mids) {
+        const iono = propIonoAt(m.lat, m.lon, when);
+        const span = clamp(prof.hopLen / PROP_HOP_KM, 0, 1);
+        let base;
+        if (iono) {
+            base = iono.fof2 + (iono.muf - iono.fof2) * span;
+        } else {
+            const eq = (sfi ? 1.5 + 0.22 * sfi : 8) *
+                propMufDayFactor(sunFactor(m.lat, m.lon, when));
+            base = 0.62 * eq + 0.38 * eq * span;
+        }
+        if (base < mufMin) mufMin = base;
+
+        const drap = propDrapAt(m.lat, m.lon);
+        if (drap !== null) {
+            const wAt = propAbsWeight(sunFactor(m.lat, m.lon, when));
+            const wNow = propAbsWeight(sunFactor(m.lat, m.lon, drapAt));
+            const scale = clamp(wAt / wNow, 0.3, 4);
+            const lufHop = Math.max(2.0,
+                1.55 * drap * Math.sqrt(prof.hops) * scale);
+            if (lufHop > lufMax) lufMax = lufHop;
+        }
+    }
+    if (!isFinite(mufMin)) mufMin = sfi ? 1.5 + 0.22 * sfi : 8;
+    return {muf: mufMin, luf: lufMax};
+}
+
+/* Smooth band-pass: usable below ~MUF, above the LUF. */
+function propBandScore(b, win) {
+    const hi = 1 / (1 + Math.exp((b.f - 0.95 * win.muf) / (0.12 * win.muf || 1)));
+    const lo = 1 / (1 + Math.exp((win.luf - b.f) / 1.1));
+    return Math.round(100 * hi * lo);
 }
 
 function propPathMatrix() {
@@ -355,23 +474,20 @@ function propPathMatrix() {
     if (!data) return null;
     const de = propState.de, dx = propState.dx;
     if (!de) return null;
-    const mid = propMidpoint(de, dx);
-    const dist = propDistance(de, dx);
-    const baseMuf = propMufAt(mid.lat, mid.lon) ||
-        (data.ham && data.ham.sfi ? 1.5 + 0.22 * data.ham.sfi : 8);
-    const baseDrap = propDrapAt(mid.lat, mid.lon);
+    const prof = propPathProfile(de, dx);
+    const mid = propAlong(de, dx, 0.5);
     const now = new Date();
     const hourNow = now.getUTCHours();
-    const rows = PROP_BANDS.map(b => {
-        const cells = [];
-        for (let h = 0; h < 24; h++) {
-            const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(),
-                now.getUTCDate(), h, 0, 0));
-            cells.push(propBandScore(b, mid.lat, mid.lon, baseMuf, baseDrap, dist, d));
-        }
-        return {name: b.name, f: b.f, cells};
-    });
-    return {rows, mid, dist, baseMuf, hourNow,
+    const rows = PROP_BANDS.map(b => ({name: b.name, f: b.f, cells: []}));
+    let baseMuf = 8;
+    for (let h = 0; h < 24; h++) {
+        const when = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(),
+            now.getUTCDate(), h, 0, 0));
+        const win = propPathWindow(prof, when);
+        if (h === hourNow) baseMuf = win.muf;
+        for (const r of rows) r.cells.push(propBandScore(r, win));
+    }
+    return {rows, mid, dist: prof.dist, hops: prof.hops, baseMuf, hourNow,
         bearing: propBearing(de, dx)};
 }
 
@@ -383,7 +499,6 @@ function propContinentTable() {
     const de = propState.de, data = propState.data;
     if (!de || !data) return null;
     const when = new Date();
-    const sfi = data.ham && data.ham.sfi;
     let own = null, ownDist = Infinity;
     for (const c of PROP_CONTINENTS) {
         for (const p of c.pts) {
@@ -394,17 +509,13 @@ function propContinentTable() {
     const rows = [];
     for (const c of PROP_CONTINENTS) {
         if (c.key === own) continue;
+        /* one path window per sampling point, reused for all ten bands */
+        const wins = c.pts.map(p => propPathWindow(
+            propPathProfile(de, {lat: p[0], lon: p[1]}), when));
         let best = null;
         for (const b of PROP_BANDS) {
             let sum = 0;
-            for (const p of c.pts) {
-                const tgt = {lat: p[0], lon: p[1]};
-                const mid = propMidpoint(de, tgt);
-                const dist = propDistance(de, tgt);
-                const muf = propMufAt(mid.lat, mid.lon) || (sfi ? 1.5 + 0.22 * sfi : 8);
-                const drap = propDrapAt(mid.lat, mid.lon);
-                sum += propBandScore(b, mid.lat, mid.lon, muf, drap, dist, when);
-            }
+            for (const win of wins) sum += propBandScore(b, win);
             const score = Math.round(sum / c.pts.length);
             if (!best || score > best.score) best = {band: b.name, score};
         }
