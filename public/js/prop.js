@@ -52,8 +52,10 @@ function propShortTime(iso) {
 
 /* ---------------------------------------------------------------
  * Projections. Each returns {fwd(lon,lat), inv(x,y)} in CSS pixels,
- * fitted with "cover" semantics (fills the canvas, may crop edges),
- * matching the single-world convention of the Leaflet maps.
+ * fitted with "contain" semantics: the whole world (all longitudes and
+ * latitudes up to the projection limit) always fits inside the canvas and
+ * is centred, so no part of the map is ever cropped. The map is static:
+ * no wheel zoom and no panning.
  * ------------------------------------------------------------- */
 const ROB_X = [1, 0.9986, 0.9954, 0.99, 0.9822, 0.973, 0.96, 0.9427, 0.9216,
     0.8962, 0.8679, 0.835, 0.7986, 0.7597, 0.7186, 0.6732, 0.6213, 0.5722, 0.5322];
@@ -70,7 +72,7 @@ function makeProjection(kind, w, h, de) {
     if (kind === 'azimuthal') {
         const lat0 = propRad(de ? de.lat : 40);
         const lon0 = propRad(de ? de.lon : 0);
-        const sc = Math.max(w, h) / (2 * Math.PI);
+        const sc = Math.min(w, h) / (2 * Math.PI);
         const cx = w / 2, cy = h / 2;
         return {
             fwd(lon, lat) {
@@ -102,7 +104,7 @@ function makeProjection(kind, w, h, de) {
     }
     if (kind === 'robinson') {
         const xMax = 0.8487 * Math.PI, yMax = 1.3523;
-        const sc = Math.max(w / (2 * xMax), h / (2 * yMax));
+        const sc = Math.min(w / (2 * xMax), h / (2 * yMax));
         const cx = w / 2, cy = h / 2;
         return {
             fwd(lon, lat) {
@@ -133,7 +135,7 @@ function makeProjection(kind, w, h, de) {
     const MY = lat => Math.log(Math.tan(Math.PI / 4 +
         clamp(lat, -85.06, 85.06) * Math.PI / 360));
     const myMax = MY(85.06);
-    const sc = Math.max(w / (2 * Math.PI), h / (2 * myMax));
+    const sc = Math.min(w / (2 * Math.PI), h / (2 * myMax));
     const cx = w / 2, cy = h / 2;
     return {
         fwd(lon, lat) { return [cx + propRad(lon) * sc, cy - MY(lat) * sc]; },
