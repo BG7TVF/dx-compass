@@ -357,10 +357,23 @@ function drawProp() {
     const ctx = s.ctx, w = s.w, h = s.h, C = themeColors();
     const proj = makeProjection(s.proj, w, h, s.de);
     const now = new Date();
+    /* The azimuthal view is a disc: everything is clipped to it, otherwise a
+     * land ring or graticule line crossing the antipode (where fwd() returns
+     * null) gets closed with a long straight chord right across the map --
+     * the stray lines that made the disc look scrambled. */
+    const disc = s.proj === 'azimuthal';
+    const discR = Math.min(w, h) / 2;
 
     ctx.clearRect(0, 0, w, h);
     ctx.fillStyle = C.bg;
     ctx.fillRect(0, 0, w, h);
+
+    if (disc) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(w / 2, h / 2, discR, 0, Math.PI * 2);
+        ctx.clip();
+    }
 
     /* land: filled polygons, then country borders, then coastlines.
      * land.js / borders.js store rings as flat [lon,lat,lon,lat,...]
@@ -388,6 +401,19 @@ function drawProp() {
     ctx.globalAlpha = 0.55;
     ctx.lineWidth = 1;
     for (let lon = -180; lon < 180; lon += 30) {
+        if (disc) {
+            /* meridians are curves on the disc, never straight chords */
+            ctx.beginPath();
+            let started = false;
+            for (let lat = -85; lat <= 85; lat += 3) {
+                const p = proj.fwd(lon, lat);
+                if (!p) { started = false; continue; }
+                if (!started) { ctx.moveTo(p[0], p[1]); started = true; }
+                else ctx.lineTo(p[0], p[1]);
+            }
+            ctx.stroke();
+            continue;
+        }
         const a = proj.fwd(lon, -85), b = proj.fwd(lon, 85);
         if (!a || !b) continue;
         ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
@@ -424,10 +450,18 @@ function drawProp() {
     /* DE -> DX great circle + markers */
     drawPath(ctx, proj, C);
 
-    /* projection-appropriate frame */
+    /* projection-appropriate frame: a complete circle on the disc, a
+     * rectangle for the flat maps */
     ctx.strokeStyle = C.border;
     ctx.lineWidth = 1;
-    ctx.strokeRect(0.5, 0.5, w - 1, h - 1);
+    if (disc) {
+        ctx.restore();
+        ctx.beginPath();
+        ctx.arc(w / 2, h / 2, discR - 0.5, 0, Math.PI * 2);
+        ctx.stroke();
+    } else {
+        ctx.strokeRect(0.5, 0.5, w - 1, h - 1);
+    }
 
     propState.lastDraw = Date.now();
 }
