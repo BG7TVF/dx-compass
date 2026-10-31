@@ -665,6 +665,42 @@ function bandCondClass(cond) {
     return 'closed';
 }
 
+/* ---------------------------------------------------------------
+ * Per-band HF conditions.
+ *
+ * HamQSL's solarxml.php only ships four combined groups (80m-40m /
+ * 30m-20m / 17m-15m / 12m-10m), so individual band values are estimated
+ * from the measured SFI and Kp with a simple MUF/LUF model. These are
+ * approximations, not measured band openings (labelled as such in the UI).
+ * ------------------------------------------------------------- */
+function estBandCond(freq, muf, luf, degrade) {
+    if (freq > muf) return 'Closed';          // above MUF: penetrates the ionosphere
+    if (freq < luf) return 'Poor';            // below LUF: absorbed by the D layer
+    const head = (muf - freq) / Math.max(1, muf - luf);
+    let c = head > 0.55 ? 'Good' : head > 0.25 ? 'Fair' : 'Poor';
+    if (degrade) c = c === 'Good' ? 'Fair' : 'Poor';   // geomagnetic storm penalty
+    return c;
+}
+
+function estBandConds() {
+    const sfi = cardValue('sfi');
+    if (sfi === null || !isFinite(sfi)) return null;
+    const kp = cardValue('kp');
+    const mufDay = 7 + 0.17 * sfi;                 // ~27 MHz at SFI 120
+    const mufNight = Math.max(4, 0.52 * mufDay);
+    const lufDay = 2.2 + 0.035 * sfi;              // strong D-layer absorption by day
+    const lufNight = 0.7 + 0.006 * sfi;            // night absorption is low
+    const degrade = kp !== null && kp >= 5;
+    const out = {};
+    for (const b of PROP_BANDS) {
+        out[b.name] = {
+            day: estBandCond(b.f, mufDay, lufDay, degrade),
+            night: estBandCond(b.f, mufNight, lufNight, degrade)
+        };
+    }
+    return out;
+}
+
 function renderPropPanel() {
     const side = $('#propSide'), foot = $('#propFoot');
     if (!side || !foot) return;
@@ -710,22 +746,21 @@ function renderPropPanel() {
     }
     html.push('</div></div>');
 
-    /* ---- HamQSL band conditions (card grid, same language as the
-     * space-weather cards and the global readouts) ---- */
-    const bands = ham.bands || [];
-    if (bands.length) {
-        const day = bands.filter(b => b.time === 'day');
-        const night = bands.filter(b => b.time === 'night');
+    /* ---- HF band conditions (card grid, same language as the
+     * space-weather cards and the global readouts).
+     * Per-band values are estimated from SFI/Kp; HamQSL's four combined
+     * groups are only used as a fallback when SFI is unavailable. ---- */
+    const est = estBandConds();
+    if (est) {
         low.push('<div class="prop-sec sec-bands"><div class="prop-sec-title">' + t('propBands') +
-            '</div><div class="prop-bandgrid">');
-        for (const b of day) {
-            const nb = night.find(x => x.name === b.name);
-            const condRow = (label, o) => o
-                ? '<div class="bc-row"><span class="bc-time">' + label +
-                  '</span><b class="bc-cond ' + bandCondClass(o.cond) + '">' + o.cond + '</b></div>'
-                : '';
+            '<span class="prop-upd">' + t('propApprox') + '</span></div><div class="prop-bandgrid">');
+        for (const b of PROP_BANDS) {
+            const e = est[b.name];
             low.push('<div class="band-card"><div class="bc-name">' + b.name + '</div>' +
-                condRow(t('propDay'), b) + condRow(t('propNight'), nb) + '</div>');
+                '<div class="bc-row"><span class="bc-time">' + t('propDay') +
+                '</span><b class="bc-cond ' + bandCondClass(e.day) + '">' + e.day + '</b></div>' +
+                '<div class="bc-row"><span class="bc-time">' + t('propNight') +
+                '</span><b class="bc-cond ' + bandCondClass(e.night) + '">' + e.night + '</b></div></div>');
         }
         low.push('</div>');
         if (ham.geomag) {
@@ -733,6 +768,29 @@ function renderPropPanel() {
                 ' · Noise: ' + (ham.noise || '—') + '</div>');
         }
         low.push('</div>');
+    } else {
+        const bands = ham.bands || [];
+        if (bands.length) {
+            const day = bands.filter(b => b.time === 'day');
+            const night = bands.filter(b => b.time === 'night');
+            low.push('<div class="prop-sec sec-bands"><div class="prop-sec-title">' + t('propBands') +
+                '</div><div class="prop-bandgrid">');
+            for (const b of day) {
+                const nb = night.find(x => x.name === b.name);
+                const condRow = (label, o) => o
+                    ? '<div class="bc-row"><span class="bc-time">' + label +
+                      '</span><b class="bc-cond ' + bandCondClass(o.cond) + '">' + o.cond + '</b></div>'
+                    : '';
+                low.push('<div class="band-card"><div class="bc-name">' + b.name + '</div>' +
+                    condRow(t('propDay'), b) + condRow(t('propNight'), nb) + '</div>');
+            }
+            low.push('</div>');
+            if (ham.geomag) {
+                low.push('<div class="prop-note">Geomag: ' + ham.geomag +
+                    ' · Noise: ' + (ham.noise || '—') + '</div>');
+            }
+            low.push('</div>');
+        }
     }
 
     /* ---- DE -> DX path matrix ---- */
