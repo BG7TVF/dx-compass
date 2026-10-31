@@ -1182,17 +1182,16 @@ function renderPropPanel() {
         '</div></div>');
 
     /* ---- best band to every other continent right now (same model as the
-     * DE->DX matrix, plain averages, no rounding of the underlying scores) ---- */
+     * DE->DX matrix, plain averages, no rounding of the underlying scores).
+     * Laid out as readout tiles so both sections share one card language. ---- */
     const cty = propContinentTable();
     if (cty) {
         low.push('<div class="prop-sec sec-cty"><div class="prop-sec-title">' +
-            t('propCtyTitle') + '</div><table class="prop-cty"><thead><tr><th>' +
-            t('propCtyCol') + '</th><th>' + t('propBandCol') + '</th><th class="num">' +
-            t('propScoreCol') + '</th></tr></thead><tbody>' +
-            cty.rows.map(r => '<tr><td>' +
+            t('propCtyTitle') + '</div><div class="prop-read prop-cty">' +
+            cty.rows.map(r => '<div class="pr-card"><div class="pr-label">' +
                 t('propCty' + r.key.charAt(0).toUpperCase() + r.key.slice(1)) +
-                '</td><td>' + r.band + '</td><td class="num">' + r.score + '%</td></tr>').join('') +
-            '</tbody></table></div>');
+                '</div><div class="pr-val">' + r.band + ' · ' + r.score + '%</div></div>').join('') +
+            '</div></div>');
     }
 
     /* ---- global readouts (card tiles, same visual language as space-weather cards) ---- */

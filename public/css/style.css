@@ -1599,23 +1599,6 @@ body[data-theme="amber"] {
 .prop-foot .sec-sdo .prop-sdo { flex: 0 0 auto; min-height: 0; aspect-ratio: 1 / 1; }
 .prop-foot .sec-cty { grid-column: 3; min-width: 0; }
 .prop-foot .sec-read { grid-column: 4; min-width: 0; }
-
-/* Best band per continent: a plain table, values come straight from the same
- * availability model as the path matrix. */
-.prop-cty {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 11px;
-    font-variant-numeric: tabular-nums;
-}
-.prop-cty th, .prop-cty td {
-    padding: 3px 6px;
-    border-bottom: 1px solid var(--border);
-    text-align: left;
-    white-space: nowrap;
-}
-.prop-cty th { color: var(--text-dim); font-weight: 600; }
-.prop-cty th.num, .prop-cty td.num { text-align: right; }
 .prop-sec-title {
     display: flex;
     align-items: baseline;
