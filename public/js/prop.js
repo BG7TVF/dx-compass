@@ -1196,9 +1196,9 @@ function renderPropPanel() {
                 const light = 32 + r.score * 0.14;
                 return '<div class="prop-scale" style="--sev:hsl(' + hue + ',66%,' +
                     (light - 14).toFixed(1) + '%);background:hsl(' + hue + ',66%,' +
-                    light.toFixed(1) + '%)"><b>' + r.band + '</b><span>' +
+                    light.toFixed(1) + '%)"><span>' +
                     t('propCty' + r.key.charAt(0).toUpperCase() + r.key.slice(1)) +
-                    '</span><i>' + r.score + '%</i></div>';
+                    '</span><b>' + r.band + '</b><i>' + r.score + '%</i></div>';
             }).join('') + '</div></div>');
     }
 
