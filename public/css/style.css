@@ -1531,7 +1531,8 @@ body[data-theme="amber"] {
     /* Fixed matrix column (it never rescales with the viewport), the SDO
      * image next to it, and the readout tiles taking the rest. */
     grid-template-columns: 430px 190px minmax(0, 1fr);
-    align-items: start;
+    /* Stretch so the SDO block matches the height of the path matrix. */
+    align-items: stretch;
     gap: 0 18px;
 }
 #propCanvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
@@ -1581,7 +1582,15 @@ body[data-theme="amber"] {
 }
 .prop-arm .band-card { display: flex; flex-direction: column; justify-content: center; }
 .prop-foot .sec-path { grid-column: 1; min-width: 0; width: 430px; }
-.prop-foot .sec-sdo { grid-column: 2; min-width: 0; }
+.prop-foot .sec-sdo {
+    grid-column: 2;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+/* The image box grows to the height of the tallest section in the strip
+ * (the matrix), so the bottom row stays flush. */
+.prop-foot .sec-sdo .prop-sdo { flex: 1; min-height: 0; aspect-ratio: auto; }
 .prop-foot .sec-read { grid-column: 3; min-width: 0; }
 .prop-sec-title {
     display: flex;
@@ -1772,8 +1781,8 @@ body[data-theme="amber"] {
 
 /* Global readouts: rendered as small cards sharing the space-weather
  * card visual language (panel-2 fill, border, dim label + strong value). */
-/* Fixed 4 x 2 tile grid for the eight readouts. */
-.prop-read { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; }
+/* Fixed 2 columns x 4 rows for the eight readouts. */
+.prop-read { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; }
 .pr-card {
     padding: 6px 7px;
     background: var(--panel-2);
