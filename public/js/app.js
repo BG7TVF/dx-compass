@@ -65,7 +65,8 @@ function defaultSettings() {
         category: 'SO1R', qsoMax: 1500, qsoLines: true, qsoAutoFit: true,
         qsoSpotAlert: true, qsoVoiceAlert: true,
         mySpotTtl: 30, mySpotMax: 300, mySpotPopup: true, mySpotVoice: true,
-        propProj: 'mercator', propLayer: 'muf', propDxLat: 40, propDxLon: -100,
+        propProj: 'robinson', propLayer: 'muf', propDxLat: 40, propDxLon: -100,
+        cfgV: 2,
         ttl: {...DEFAULT_TTL_MIN}, bandColors: {...DEFAULT_BAND_COLORS}
     };
 }
@@ -99,6 +100,10 @@ function sanitizeSettings(input) {
     if (typeof raw.mySpotVoice === 'boolean') d.mySpotVoice = raw.mySpotVoice;
     // Propagation page options: projection, background layer, DX point
     if (['mercator', 'azimuthal', 'robinson'].includes(raw.propProj)) d.propProj = raw.propProj;
+    /* cfgV 2: the propagation map is now fitted width-first, which Mercator's
+     * polar stretch cannot honour, so the old default follows the new one once. */
+    d.cfgV = 2;
+    if (parseInt(raw.cfgV, 10) !== 2 && d.propProj === 'mercator') d.propProj = 'robinson';
     if (['muf', 'weather', 'aurora'].includes(raw.propLayer)) d.propLayer = raw.propLayer;
     const pdlat = parseFloat(raw.propDxLat), pdlon = parseFloat(raw.propDxLon);
     if (isFinite(pdlat) && Math.abs(pdlat) <= 85) d.propDxLat = pdlat;

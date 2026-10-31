@@ -25,6 +25,9 @@ const PROP_BANDS = [
 
 const PROP_PROJECTIONS = ['mercator', 'azimuthal', 'robinson'];
 const PROP_LAYERS = ['muf', 'weather', 'aurora'];
+/* Southern edge kept when filling the width would otherwise crop the map
+ * north of this latitude: only the Antarctic cap below it is sacrificed. */
+const PROP_CUT_LAT = -70;
 
 const propState = {
     data: null, err: null, loading: false,
@@ -52,10 +55,13 @@ function propShortTime(iso) {
 
 /* ---------------------------------------------------------------
  * Projections. Each returns {fwd(lon,lat), inv(x,y)} in CSS pixels,
- * fitted with "contain" semantics: the whole world (all longitudes and
- * latitudes up to the projection limit) always fits inside the canvas and
- * is centred, so no part of the map is ever cropped. The map is static:
- * no wheel zoom and no panning.
+ * fitted width-first: the map always spans the full canvas width, the
+ * northern edge sits on the top border, and any southern overflow is
+ * clipped by the canvas. The clip never reaches further north than
+ * PROP_CUT_LAT, so only the polar cap (Antarctica) can be lost. The map
+ * is static: no wheel zoom and no panning. The azimuthal disc is an
+ * exception -- it is centred and fitted with "contain" so the circular
+ * view stays whole.
  * ------------------------------------------------------------- */
 const ROB_X = [1, 0.9986, 0.9954, 0.99, 0.9822, 0.973, 0.96, 0.9427, 0.9216,
     0.8962, 0.8679, 0.835, 0.7986, 0.7597, 0.7186, 0.6732, 0.6213, 0.5722, 0.5322];
@@ -104,8 +110,9 @@ function makeProjection(kind, w, h, de) {
     }
     if (kind === 'robinson') {
         const xMax = 0.8487 * Math.PI, yMax = 1.3523;
-        const sc = Math.min(w / (2 * xMax), h / (2 * yMax));
-        const cx = w / 2, cy = h / 2;
+        const ySouth = 1.3523 * robinsonTable(Math.abs(PROP_CUT_LAT), ROB_Y);
+        const sc = Math.min(w / (2 * xMax), h / (yMax + ySouth));
+        const cx = w / 2, cy = yMax * sc;
         return {
             fwd(lon, lat) {
                 const a = Math.abs(lat), sg = lat < 0 ? -1 : 1;
@@ -131,12 +138,13 @@ function makeProjection(kind, w, h, de) {
             }
         };
     }
-    // Mercator (default): same lat clamp as the Leaflet world bounds
+    // Mercator: full longitudes always fit the width, the southern cap may be cut
     const MY = lat => Math.log(Math.tan(Math.PI / 4 +
         clamp(lat, -85.06, 85.06) * Math.PI / 360));
     const myMax = MY(85.06);
-    const sc = Math.min(w / (2 * Math.PI), h / (2 * myMax));
-    const cx = w / 2, cy = h / 2;
+    const mySouth = MY(PROP_CUT_LAT);
+    const sc = Math.min(w / (2 * Math.PI), h / (myMax - mySouth));
+    const cx = w / 2, cy = myMax * sc;
     return {
         fwd(lon, lat) { return [cx + propRad(lon) * sc, cy - MY(lat) * sc]; },
         inv(px, py) {
