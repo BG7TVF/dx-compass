@@ -507,16 +507,23 @@ function drawProp() {
         ctx.fill();
         ctx.clip();
     } else {
-        ctx.fillRect(0, 0, w, h);
-        /* Clip to the projected world. The home-centred maps paint up to
-         * three +/-360 copies of every ring so the +/-180 seam never gets a
-         * chord, and a width-first fit on a very wide canvas shrinks the map
-         * and leaves side margins -- without this clip those copies drew a
-         * second world in the margins. */
-        const west = proj.fwdRaw(-180, 0)[0];
-        const east = proj.fwdRaw(180, 0)[0];
+        /* Clip to the world silhouette traced along the +/-180 meridians.
+         * On Robinson those meridians are curves, so a rectangle clip (the
+         * old fix) still let the +/-360 ring copies bleed past the
+         * elliptical edge at high latitudes -- land pixels outside the
+         * world. The background fills the silhouette only, so the margins
+         * show the panel colour like the disc's corners do. */
         ctx.beginPath();
-        ctx.rect(west, 0, east - west, h);
+        for (let lat = -90; lat <= 90; lat += 2) {
+            const q = proj.fwdRaw(180, lat);
+            if (lat === -90) ctx.moveTo(q[0], q[1]); else ctx.lineTo(q[0], q[1]);
+        }
+        for (let lat = 90; lat >= -90; lat -= 2) {
+            const q = proj.fwdRaw(-180, lat);
+            ctx.lineTo(q[0], q[1]);
+        }
+        ctx.closePath();
+        ctx.fill();
         ctx.clip();
     }
 
