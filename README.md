@@ -16,6 +16,14 @@ curl -fsSL https://raw.githubusercontent.com/BG7TVF/dx-compass/main/bootstrap.sh
 wget -qO- https://raw.githubusercontent.com/BG7TVF/dx-compass/main/bootstrap.sh | sudo bash
 ```
 
+服务器访问 GitHub 困难时，改用 **Gitee 镜像**（国内下载更快）：
+
+```bash
+curl -fsSL https://gitee.com/fatman985KG/dx-compass/raw/main/bootstrap-gitee.sh | sudo bash
+```
+
+> Gitee 仓库 `https://gitee.com/fatman985KG/dx-compass.git` 是 GitHub 的**自动镜像**：所有开发与更新只提交到 GitHub（`https://github.com/BG7TVF/dx-compass`），Gitee 会自动同步，两个源的代码始终一致。请勿直接在 Gitee 上提交改动（会被同步覆盖），也无需向 Gitee 推送；镜像同步可能有短暂延迟。`bootstrap-gitee.sh` 与 `bootstrap.sh` 功能完全相同，只是下载源指向 Gitee。
+
 脚本会将代码安装到 `/opt/dx-compass`，注册并启动开机自启服务 `dx-compass`（端口 **5758**）。完成后访问：
 
 - 监测大屏：`http://<服务器IP>:5758/`
@@ -29,6 +37,9 @@ wget -qO- https://raw.githubusercontent.com/BG7TVF/dx-compass/main/bootstrap.sh 
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/BG7TVF/dx-compass/main/bootstrap.sh | bash
+
+# 或使用 Gitee 镜像源
+curl -fsSL https://gitee.com/fatman985KG/dx-compass/raw/main/bootstrap-gitee.sh | bash
 ```
 
 ## 功能特性
@@ -83,6 +94,7 @@ dx-compass/
 ├── flow_cred.json     # 凭据文件（为空）
 ├── install.sh         # Ubuntu 一键安装脚本（依赖 + systemd 服务）
 ├── bootstrap.sh       # 引导脚本：一行命令从 GitHub 下载并调用 install.sh
+├── bootstrap-gitee.sh # 同上，下载源改为 Gitee 镜像（GitHub 自动同步）
 ├── public/            # 前端大屏
 │   ├── index.html
 │   ├── css/style.css
@@ -127,12 +139,21 @@ curl -fsSL https://raw.githubusercontent.com/BG7TVF/dx-compass/main/bootstrap.sh
 
 引导脚本会自动安装 git/curl、克隆代码到 `/opt/dx-compass`（已安装则更新到最新版），随后调用 `install.sh` 完成全部部署。
 
+访问 GitHub 受限时，把上面的 `bootstrap.sh` 换成 Gitee 镜像脚本即可（参数、目录与服务完全相同）：
+
+```bash
+curl -fsSL https://gitee.com/fatman985KG/dx-compass/raw/main/bootstrap-gitee.sh | sudo bash
+```
+
+> Gitee 是 GitHub 的自动镜像，更新只需推送到 GitHub，Gitee 会自动同步。
+
 ### 方式二：手动下载代码后安装
 
 ```bash
 # 直接在服务器上克隆
 cd /opt
 sudo git clone https://github.com/BG7TVF/dx-compass.git
+# 或使用 Gitee 镜像：sudo git clone https://gitee.com/fatman985KG/dx-compass.git
 cd dx-compass
 
 # 或用 scp 上传本项目后进入目录，然后执行：
@@ -158,6 +179,9 @@ sudo bash install.sh
 ```bash
 # 一行安装（不带 sudo）
 curl -fsSL https://raw.githubusercontent.com/BG7TVF/dx-compass/main/bootstrap.sh | bash
+
+# 或使用 Gitee 镜像源（不带 sudo）
+curl -fsSL https://gitee.com/fatman985KG/dx-compass/raw/main/bootstrap-gitee.sh | bash
 
 # 或指定目录 / 分支
 DX_COMPASS_DIR=$HOME/dx-compass DX_COMPASS_BRANCH=main bash bootstrap.sh
@@ -259,7 +283,7 @@ git -C /opt/dx-compass pull
 **地图**
 
 - **投影**：Mercator / 方位投影（以本台网格为中心）/ Robinson，三者均按 cover 语义铺满画布（无信箱黑边），可随时切换并保存到浏览器设置
-- **背景层**：**传播预测**（按全球电离层台站 foF2/MUF3000 插值的 MUF 色块）/ **天气**（Open-Meteo 全球温度网格）/ **极光**（NOAA OVATION 极光概率）
+- **背景层**：**传播预测**（全球电离层台站 foF2/MUF3000 实测 + 纬度/季节气候学回填生成的连续 MUF 色洗，海洋区域同样着色，双线性插值平滑、无网格块）/ **天气**（Open-Meteo 全球温度网格）/ **极光**（NOAA OVATION 极光概率）
 - **晨昏线**：与 Spot/QSO 地图同一套太阳赤纬算法，夜半球半透明黑罩 + 灰色分界线，每分钟刷新；春分/秋分附近（|赤纬| < 0.6°）自动切换为经线模式，避免极点抖动
 - **交互**：鼠标悬停显示经纬度；点击地图设置 DX 位置（持久化到浏览器设置，用于点对点路径与 DX 天气）
 - 本台位置（DE）取自 Settings 中的 Maidenhead 网格
@@ -287,6 +311,7 @@ git -C /opt/dx-compass pull
 - 前端每 60 秒请求 `GET /api/prop`（`Cache-Control: no-store`），接口直接返回缓存，失败源保留上一次的值并在面板标注
 - 各级缓存有效期：太阳风 / 极光 / X 射线等大文件 20 分钟，小数据集 4 分钟，天气 10 分钟（避免对公开接口造成压力）
 - **点对点矩阵与可用性为近似模型**（依据 MUF、DRAP 吸收、路径昼夜太阳高度角与距离的启发式计算，面板标注「approximate forecast」），不是 VOACAP 的输出；需要精确预测时请以专业软件为准
+- 无台站覆盖的路径不再使用单一全球标量：MUF 估值为「SFI 基准 × 该纬度正午太阳高度」的气候学值，再按该点当时的太阳天顶角恢复昼夜变化，因此会随纬度（赤道高、极区低）与季节（冬季低、夏季高）自然变化；有实测台站时按距离加权混合
 
 ## 服务管理
 
@@ -341,6 +366,12 @@ sudo https_proxy=http://127.0.0.1:7890 http_proxy=http://127.0.0.1:7890 bash /tm
 ```
 
 代理变量会被后续的 git / npm 步骤继承；npm 部分还会自动切换国内镜像重试。
+
+如果服务器完全无法访问 GitHub，可直接使用 Gitee 镜像脚本（无需代理）：
+
+```bash
+curl -fsSL https://gitee.com/fatman985KG/dx-compass/raw/main/bootstrap-gitee.sh | sudo bash
+```
 
 **0b. 更新时报 `detected dubious ownership in repository`？**
 
