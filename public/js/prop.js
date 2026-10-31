@@ -895,20 +895,23 @@ function estBandConds() {
 }
 
 function renderPropPanel() {
-    const side = $('#propSide'), foot = $('#propFoot');
-    if (!side || !foot) return;
+    const side = $('#propSide'), foot = $('#propFoot'), armL = $('#propArmL');
+    if (!side || !foot || !armL) return;
     const d = propState.data;
     if (!d) {
         side.innerHTML = '<div class="prop-empty">' + t('propNoData') +
             (propState.err ? '<br><span class="prop-dim">' + propState.err + '</span>' : '') +
             '</div>';
         foot.innerHTML = '';
+        armL.innerHTML = '';
         return;
     }
     const ham = d.ham || {};
-    /* The inverted-L places the space-weather cards in the column right of
-     * the map and the tables/readouts in the strip underneath it. */
-    const html = [];   // right-hand column
+    /* The U places band conditions and the SDO image in the left arm,
+     * space-weather cards in the right arm and the tables/readouts in the
+     * strip that closes the bottom. */
+    const html = [];   // right arm
+    const left = [];   // left arm
     const low = [];    // bottom strip
 
     /* ---- NOAA R / S / G (placed above the cards so the card grid can
@@ -946,28 +949,28 @@ function renderPropPanel() {
      * groups are only used as a fallback when SFI is unavailable. ---- */
     const est = estBandConds();
     if (est) {
-        low.push('<div class="prop-sec sec-bands"><div class="prop-sec-title">' + t('propBands') +
+        left.push('<div class="prop-sec sec-bands"><div class="prop-sec-title">' + t('propBands') +
             '<span class="prop-upd">' + t('propApprox') + '</span></div><div class="prop-bandgrid">');
         for (const b of PROP_BANDS) {
             const e = est[b.name];
-            low.push('<div class="band-card"><div class="bc-name">' + b.name + '</div>' +
+            left.push('<div class="band-card"><div class="bc-name">' + b.name + '</div>' +
                 '<div class="bc-row"><span class="bc-time">' + t('propDay') +
                 '</span><b class="bc-cond ' + bandCondClass(e.day) + '">' + condText(e.day) + '</b></div>' +
                 '<div class="bc-row"><span class="bc-time">' + t('propNight') +
                 '</span><b class="bc-cond ' + bandCondClass(e.night) + '">' + condText(e.night) + '</b></div></div>');
         }
-        low.push('</div>');
+        left.push('</div>');
         if (ham.geomag) {
-            low.push('<div class="prop-note">Geomag: ' + ham.geomag +
+            left.push('<div class="prop-note">Geomag: ' + ham.geomag +
                 ' · Noise: ' + (ham.noise || '—') + '</div>');
         }
-        low.push('</div>');
+        left.push('</div>');
     } else {
         const bands = ham.bands || [];
         if (bands.length) {
             const day = bands.filter(b => b.time === 'day');
             const night = bands.filter(b => b.time === 'night');
-            low.push('<div class="prop-sec sec-bands"><div class="prop-sec-title">' + t('propBands') +
+            left.push('<div class="prop-sec sec-bands"><div class="prop-sec-title">' + t('propBands') +
                 '</div><div class="prop-bandgrid">');
             for (const b of day) {
                 const nb = night.find(x => x.name === b.name);
@@ -975,15 +978,15 @@ function renderPropPanel() {
                     ? '<div class="bc-row"><span class="bc-time">' + label +
                       '</span><b class="bc-cond ' + bandCondClass(o.cond) + '">' + condText(o.cond) + '</b></div>'
                     : '';
-                low.push('<div class="band-card"><div class="bc-name">' + b.name + '</div>' +
+                left.push('<div class="band-card"><div class="bc-name">' + b.name + '</div>' +
                     condRow(t('propDay'), b) + condRow(t('propNight'), nb) + '</div>');
             }
-            low.push('</div>');
+            left.push('</div>');
             if (ham.geomag) {
-                low.push('<div class="prop-note">Geomag: ' + ham.geomag +
+                left.push('<div class="prop-note">Geomag: ' + ham.geomag +
                     ' · Noise: ' + (ham.noise || '—') + '</div>');
             }
-            low.push('</div>');
+            left.push('</div>');
         }
     }
 
@@ -1026,7 +1029,7 @@ function renderPropPanel() {
 
     /* ---- SDO latest solar image (NASA GSFC "latest" mirror, ~1/min) ---- */
     const sdoCap = new Date().toISOString().slice(11, 16) + 'Z';
-    low.push('<div class="prop-sec sec-sdo"><div class="prop-sec-title">' + t('propSdo') +
+    left.push('<div class="prop-sec sec-sdo"><div class="prop-sec-title">' + t('propSdo') +
         '</div><div class="prop-sdo">' +
         '<img src="https://sdo.gsfc.nasa.gov/assets/img/latest/latest_512_0193.jpg?t=' + Date.now() +
         '" alt="SDO AIA 193" onerror="this.parentElement.classList.add(\'sdo-fail\')">' +
@@ -1057,6 +1060,7 @@ function renderPropPanel() {
     low.push(read(t('propWeatherDx'), wx ? (propNum(wx[2], 1) + '°C · WMO ' + (wx[3] === null ? '—' : wx[3])) : '—'));
     low.push('</div></div>');
 
+    armL.innerHTML = left.join('');
     side.innerHTML = html.join('');
     foot.innerHTML = low.join('');
 

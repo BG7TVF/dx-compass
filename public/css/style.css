@@ -1481,22 +1481,26 @@ body[data-theme="amber"] {
 .prop-sel:focus { outline: none; border-color: var(--accent); }
 .prop-hint { margin-left: auto; color: var(--text-dim); font-size: 11px; }
 
-/* Inverted-L layout: the map occupies the top-left cell, a narrow column of
- * space-weather cards runs down its right edge, and a full-width strip of
- * tables/readouts closes the bottom -- the charts wrap the map on two sides.
+/* U-shaped layout: two narrow arms of chart cards (band conditions + SDO on
+ * the left, space weather on the right) flank the map, and a full-width
+ * strip of tables/readouts closes the bottom. The map keeps the full
+ * Robinson aspect in the centre column, so the arms are exactly the space
+ * the projection used to leave empty on either side of the disc.
  * The whole view is one grid, so it always fits without page scrolling. */
 .prop-layout {
     flex: 1;
     min-height: 0;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 350px;
+    /* The arms shrink with the viewport so the map always keeps at least half
+     * of the width; on a 1920 desk they settle at 252 / 340 px. */
+    grid-template-columns: clamp(196px, 15vw, 252px) minmax(0, 1fr) clamp(252px, 19vw, 340px);
     grid-template-rows: minmax(0, 1fr) auto;
     gap: 8px;
     padding: 8px;
 }
 
 .prop-map-wrap {
-    grid-column: 1;
+    grid-column: 2;
     grid-row: 1;
     position: relative;
     min-width: 0;
@@ -1507,8 +1511,10 @@ body[data-theme="amber"] {
     overflow: hidden;
 }
 
+/* Both arms scroll on their own if a theme/language makes the cards taller
+ * than the map, so the map itself is never squeezed. */
+.prop-arm,
 .prop-side {
-    grid-column: 2;
     grid-row: 1;
     min-height: 0;
     overflow-y: auto;
@@ -1516,12 +1522,16 @@ body[data-theme="amber"] {
     flex-direction: column;
     gap: 8px;
 }
+.prop-arm { grid-column: 1; }
+.prop-side { grid-column: 3; }
 
 .prop-foot {
     grid-column: 1 / -1;
     grid-row: 2;
     display: grid;
-    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.05fr) minmax(0, .6fr) minmax(0, .6fr);
+    /* The 24-hour matrix needs ~420px; everything else in the strip belongs
+     * to the readout tiles, which spread out to fill it. */
+    grid-template-columns: 430px minmax(0, 1fr);
     align-items: start;
     gap: 0 18px;
 }
@@ -1541,8 +1551,8 @@ body[data-theme="amber"] {
     z-index: 2;
 }
 
-/* Sections carry their own titles; sizing depends on which arm of the L
- * they belong to. The space-weather section in the side column stretches
+/* Sections carry their own titles; sizing depends on which arm of the U
+ * they belong to. The space-weather section in the right arm stretches
  * to match the map height so the card grid stays flush with the map at
  * every resolution. */
 .prop-sec { margin-bottom: 4px; min-width: 0; }
@@ -1553,10 +1563,9 @@ body[data-theme="amber"] {
     flex-direction: column;
     min-height: 0;
 }
-.prop-foot .sec-bands { grid-column: 1; }
-.prop-foot .sec-path { grid-column: 2; min-width: 0; }
-.prop-foot .sec-sdo { grid-column: 3; min-width: 0; }
-.prop-foot .sec-read { grid-column: 4; min-width: 0; }
+.prop-arm .prop-sec { margin-bottom: 0; }
+.prop-foot .sec-path { grid-column: 1; min-width: 0; }
+.prop-foot .sec-read { grid-column: 2; min-width: 0; }
 .prop-sec-title {
     display: flex;
     align-items: baseline;
@@ -1746,7 +1755,9 @@ body[data-theme="amber"] {
 
 /* Global readouts: rendered as small cards sharing the space-weather
  * card visual language (panel-2 fill, border, dim label + strong value). */
-.prop-read { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+/* Auto-fit so the eight readout tiles spread across the wide half of the
+ * bottom strip instead of stacking two-by-two. */
+.prop-read { display: grid; grid-template-columns: repeat(auto-fit, minmax(124px, 1fr)); gap: 5px; }
 .pr-card {
     padding: 6px 7px;
     background: var(--panel-2);
