@@ -1491,9 +1491,8 @@ body[data-theme="amber"] {
     flex: 1;
     min-height: 0;
     display: grid;
-    /* The arms shrink with the viewport so the map always keeps at least half
-     * of the width; on a 1920 desk they settle at 252 / 340 px. */
-    grid-template-columns: clamp(196px, 15vw, 252px) minmax(0, 1fr) clamp(252px, 19vw, 340px);
+    /* Fixed arms: the map keeps whatever is left between them. */
+    grid-template-columns: 272px minmax(0, 1fr) 348px;
     grid-template-rows: minmax(0, 1fr) auto;
     gap: 8px;
     padding: 8px;
