@@ -303,14 +303,15 @@ function sunFactor(lat, lon, d) {
  * Data lookups against the last collector snapshot
  * ------------------------------------------------------------- */
 /* Interpolated ionosphere at a point from the kc2g sonde snapshot: MUF(3000)
- * and foF2, inverse-square weighted over stations within 4000 km.
+ * and foF2, inverse-square weighted over stations within 2500 km.
  * The soundings are not simultaneous -- each station value belongs to its own
  * observation time, and kc2g can serve a sounding that is hours or years old.
  * So every value is first divided by the day factor at its station for its
  * own measured instant (a common "noon-equivalent" reference), interpolated,
  * and then multiplied by the day factor at the target for `when`. Without
  * this, a daytime sounding and a night-time sounding were averaged as if they
- * described the same ionosphere. */
+ * described the same ionosphere. Soundings older than a month are dropped and
+ * older ones fade (propSondeAgeWeight). */
 function propStationHourFactor(s) {
     if (typeof s[5] !== 'string' || !s[5]) return 1;
     /* kc2g timestamps carry no zone suffix; they are UTC, so pin them --
@@ -321,15 +322,36 @@ function propStationHourFactor(s) {
     return Math.max(0.55, propMufDayFactor(sunFactor(s[0], s[1], t)));
 }
 
+/* Sounding age weight. Most kc2g rows are not fresh -- on a typical snapshot
+ * only about a third are younger than a day, the rest go back weeks, months
+ * or years -- so a stale sounding must not outweigh a fresh one nearby, and
+ * anything older than a month is dropped outright (a 2023 measurement has no
+ * business shaping today's forecast). */
+function propSondeAgeWeight(s, nowMs) {
+    if (typeof s[5] !== 'string' || !s[5]) return 0.3;    // unknown age
+    const iso = /Z|[+-]\d{2}:?\d{2}$/.test(s[5]) ? s[5] : s[5] + 'Z';
+    const t = new Date(iso);
+    if (isNaN(t)) return 0.3;
+    const ageH = (nowMs - t.getTime()) / 3600e3;
+    if (ageH <= 1) return 1;
+    return clamp(1 - (ageH - 1) / 720, 0, 1);             // fades out by 30 d
+}
+
 function propIonoAt(lat, lon, when) {
     const st = propState.data && propState.data.muf && propState.data.muf.stations;
     if (!st || !st.length) return null;
+    const nowMs = Date.now();
     let num = 0, den = 0, numF = 0;
     for (const s of st) {
         if (typeof s[2] !== 'number') continue;
         const d = propDistance({lat, lon}, {lat: s[0], lon: s[1]});
-        if (d > 4000) continue;
-        const wgt = 1 / Math.pow(d + 40, 2);
+        /* 2500 km: a sounding farther away describes a different F2 region,
+         * not the one over the hop -- the caller then uses the SFI fallback
+         * instead of extrapolating, e.g. a tropical sonde 4000 km north. */
+        if (d > 2500) continue;
+        const ageW = propSondeAgeWeight(s, nowMs);
+        if (!ageW) continue;
+        const wgt = ageW / Math.pow(d + 40, 2);
         const kM = propStationHourFactor(s);
         num += (s[2] / kM) * wgt;
         den += wgt;
@@ -1201,37 +1223,57 @@ function condText(cond) {
 /* ---------------------------------------------------------------
  * Per-band HF conditions.
  *
- * HamQSL's solarxml.php only ships four combined groups (80m-40m /
- * 30m-20m / 17m-15m / 12m-10m), so individual band values are estimated
- * from the measured SFI and Kp with a simple MUF/LUF model. These are
- * approximations, not measured band openings (labelled as such in the UI).
+ * Same model as the DE->DX matrix, evaluated at the home station itself:
+ * one 3000 km hop with the station as its midpoint, at the home station's
+ * own local solar noon and local solar midnight (solved from the sun's
+ * longitude, so the equation of time and the season are included). The
+ * window comes from the sonde snapshot (each sounding normalised by its
+ * own observation time) plus the DRAP absorption grid, so the cards follow
+ * the actual ionosphere instead of a global SFI lookup table.
+ * HamQSL's four combined groups are only a fallback when no home station
+ * is set.
  * ------------------------------------------------------------- */
-function estBandCond(freq, muf, luf, degrade) {
-    if (freq > muf) return 'Closed';          // above MUF: penetrates the ionosphere
-    if (freq < luf) return 'Poor';            // below LUF: absorbed by the D layer
-    const head = (muf - freq) / Math.max(1, muf - luf);
-    let c = head > 0.55 ? 'Good' : head > 0.25 ? 'Fair' : 'Poor';
-    if (degrade) c = c === 'Good' ? 'Fair' : 'Poor';   // geomagnetic storm penalty
-    return c;
+
+/* UTC hour (0..23.75) at which the sun is over `lon` -- local solar noon. */
+function propNoonHour(lon) {
+    const now = new Date();
+    const base = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+    let best = 0, bestD = 999;
+    for (let h = 0; h < 24; h += 0.25) {
+        const d = Math.abs(propLonRel(lon - propTerminator(new Date(base + h * 3600e3)).lonSun, 0));
+        if (d < bestD) { bestD = d; best = h; }
+    }
+    return best;
 }
 
-function estBandConds() {
-    const sfi = cardValue('sfi');
-    if (sfi === null || !isFinite(sfi)) return null;
-    const kp = cardValue('kp');
-    const mufDay = 7 + 0.17 * sfi;                 // ~27 MHz at SFI 120
-    const mufNight = Math.max(4, 0.52 * mufDay);
-    const lufDay = 2.2 + 0.035 * sfi;              // strong D-layer absorption by day
-    const lufNight = 0.7 + 0.006 * sfi;            // night absorption is low
-    const degrade = kp !== null && kp >= 5;
-    const out = {};
+/* A single 3000 km hop whose midpoint is the home station: the reference
+ * path used for "which bands are workable from here". */
+function propHomeProfile(de) {
+    return {dist: PROP_HOP_KM, hops: 1, hopLen: PROP_HOP_KM,
+        mids: [{lat: de.lat, lon: de.lon}]};
+}
+
+function bandCondOf(f, win) {
+    if (f > 0.97 * win.muf) return 'Closed';     // above the MUF
+    if (f < win.luf) return 'Poor';              // below the LUF: absorbed
+    const head = (win.muf - f) / Math.max(1, win.muf - win.luf);
+    return head > 0.55 ? 'Good' : head > 0.25 ? 'Fair' : 'Poor';
+}
+
+function propBandConds() {
+    const de = propState.de, data = propState.data;
+    if (!de || !data) return null;
+    const now = new Date();
+    const base = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+    const noon = propNoonHour(de.lon);
+    const prof = propHomeProfile(de);
+    const day = propPathWindow(prof, new Date(base + noon * 3600e3));
+    const night = propPathWindow(prof, new Date(base + ((noon + 12) % 24) * 3600e3));
+    const bands = {};
     for (const b of PROP_BANDS) {
-        out[b.name] = {
-            day: estBandCond(b.f, mufDay, lufDay, degrade),
-            night: estBandCond(b.f, mufNight, lufNight, degrade)
-        };
+        bands[b.name] = {day: bandCondOf(b.f, day), night: bandCondOf(b.f, night)};
     }
-    return out;
+    return {bands, day, night, noon};
 }
 
 function renderPropPanel() {
@@ -1285,14 +1327,15 @@ function renderPropPanel() {
 
     /* ---- HF band conditions (card grid, same language as the
      * space-weather cards and the global readouts).
-     * Per-band values are estimated from SFI/Kp; HamQSL's four combined
-     * groups are only used as a fallback when SFI is unavailable. ---- */
-    const est = estBandConds();
-    if (est) {
+     * Per-band values come from the same hop/DRAP model as the path matrix,
+     * sampled at the home station's local solar noon and midnight; HamQSL's
+     * four combined groups are only used when no home station is set. ---- */
+    const bc = propBandConds();
+    if (bc) {
         left.push('<div class="prop-sec sec-bands"><div class="prop-sec-title">' + t('propBands') +
             '<span class="prop-upd">' + t('propApprox') + '</span></div><div class="prop-bandgrid">');
         for (const b of PROP_BANDS) {
-            const e = est[b.name];
+            const e = bc.bands[b.name];
             left.push('<div class="band-card"><div class="bc-name">' + b.name + '</div>' +
                 '<div class="bc-row"><span class="bc-time">' + t('propDay') +
                 '</span><b class="bc-cond ' + bandCondClass(e.day) + '">' + condText(e.day) + '</b></div>' +
@@ -1300,6 +1343,12 @@ function renderPropPanel() {
                 '</span><b class="bc-cond ' + bandCondClass(e.night) + '">' + condText(e.night) + '</b></div></div>');
         }
         left.push('</div>');
+        const nowD = new Date();
+        const noonIso = new Date(Date.UTC(nowD.getUTCFullYear(), nowD.getUTCMonth(),
+            nowD.getUTCDate()) + bc.noon * 3600e3).toISOString().slice(11, 16);
+        left.push('<div class="prop-note">MUF3000 ' + propNum(bc.day.muf, 1) + ' / ' +
+            propNum(bc.night.muf, 1) + ' MHz · LUF ' + propNum(bc.day.luf, 1) + ' / ' +
+            propNum(bc.night.luf, 1) + ' MHz · local noon ' + noonIso + 'Z</div>');
         if (ham.geomag) {
             left.push('<div class="prop-note">Geomag: ' + ham.geomag +
                 ' · Noise: ' + (ham.noise || '—') + '</div>');
