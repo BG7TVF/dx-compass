@@ -45,6 +45,12 @@ const propRad = d => d * Math.PI / 180;
 const propDeg = r => r * 180 / Math.PI;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
+/* Every map on this page is centred on the home station's meridian: the flat
+ * projections work in longitudes relative to it, propLonRel() folds a true
+ * longitude into [-180,180] around that centre and propLonAbs() unfolds it. */
+const propLonRel = (lon, lonC) => ((lon - lonC + 540) % 360) - 180;
+const propLonAbs = (d, lonC) => ((d + lonC + 540) % 360) - 180;
+
 function propNum(v, digits) {
     if (v === null || v === undefined || !isFinite(v)) return '—';
     return digits === undefined ? String(v) : Number(v).toFixed(digits);
@@ -124,6 +130,7 @@ function makeProjection(kind, w, h, de) {
         const cx = w / 2, cy = h / 2;
         return {
             kind: 'azimuthal',
+            lon0: propDeg(lon0),
             fwd(lon, lat) {
                 const f = propRad(lat), dl = propRad(lon) - lon0;
                 const cosc = Math.sin(lat0) * Math.sin(f) +
@@ -157,21 +164,26 @@ function makeProjection(kind, w, h, de) {
         const fit = propFit(w, h, 2 * xMax, yMax, yOf, robLatFromY, 90);
         const sc = fit.sc, cx = w / 2;
         const cy = fit.centered ? h / 2 : yOf(fit.north) * sc;
+        const lonC = de ? de.lon : 0;
+        /* d is a longitude offset from the home meridian, never wrapped, so
+         * ring copies shifted by +/-360 project outside the canvas instead of
+         * folding back across it. */
+        const fwdRaw = (d, lat) => {
+            const a = Math.abs(lat), sg = lat < 0 ? -1 : 1;
+            return [cx + 0.8487 * robinsonTable(a, ROB_X) * propRad(d) * sc,
+                cy - 1.3523 * robinsonTable(a, ROB_Y) * sg * sc];
+        };
         return {
-            kind: 'robinson',
-            fwd(lon, lat) {
-                const a = Math.abs(lat), sg = lat < 0 ? -1 : 1;
-                return [cx + 0.8487 * robinsonTable(a, ROB_X) * propRad(lon) * sc,
-                    cy - 1.3523 * robinsonTable(a, ROB_Y) * sg * sc];
-            },
+            kind: 'robinson', lon0: lonC,
+            fwd(lon, lat) { return fwdRaw(propLonRel(lon, lonC), lat); },
+            fwdRaw,
             inv(px, py) {
                 const x = (px - cx) / sc, y = (cy - py) / sc;
                 const absLat = robLatFromY(y);
                 const lat = y < 0 ? -absLat : absLat;
                 const xs = 0.8487 * robinsonTable(absLat, ROB_X);
                 if (!xs) return null;
-                const lon = ((propDeg(x / (xs * sc)) + 540) % 360) - 180;
-                return [lat, lon];
+                return [lat, propLonAbs(propDeg(x / (xs * sc)), lonC)];
             }
         };
     }
@@ -184,14 +196,16 @@ function makeProjection(kind, w, h, de) {
     const fit = propFit(w, h, 2 * Math.PI, MY(northLimit), yOf, latFromY, northLimit);
     const sc = fit.sc, cx = w / 2;
     const cy = fit.centered ? h / 2 : yOf(fit.north) * sc;
+    const lonC = de ? de.lon : 0;
+    const fwdRaw = (d, lat) => [cx + propRad(d) * sc, cy - MY(lat) * sc];
     return {
-        kind: 'mercator',
-        fwd(lon, lat) { return [cx + propRad(lon) * sc, cy - MY(lat) * sc]; },
+        kind: 'mercator', lon0: lonC,
+        fwd(lon, lat) { return fwdRaw(propLonRel(lon, lonC), lat); },
+        fwdRaw,
         inv(px, py) {
             const x = (px - cx) / sc, y = (cy - py) / sc;
             const lat = latFromY(y);
-            const lon = ((propDeg(x) + 540) % 360) - 180;
-            return [clamp(lat, -85, 85), lon];
+            return [clamp(lat, -85, 85), propLonAbs(propDeg(x), lonC)];
         }
     };
 }
@@ -199,7 +213,11 @@ function makeProjection(kind, w, h, de) {
 /* ---------------------------------------------------------------
  * Solar geometry (identical math to the Leaflet gray line)
  * ------------------------------------------------------------- */
-function propTerminator(now) {
+/* lonC = longitude the result is relative to (0 = true longitudes, used by
+ * the azimuthal disc); the flat maps sweep their own home-centred range so
+ * the terminator never jumps at the seam. */
+function propTerminator(now, lonC) {
+    lonC = lonC || 0;
     const start = Date.UTC(now.getUTCFullYear(), 0, 0);
     const doy = (now - start) / 86400000;
     const decDeg = -23.44 * Math.cos(2 * Math.PI * (doy + 10) / 365.25);
@@ -209,11 +227,11 @@ function propTerminator(now) {
     const lonSun = 180 - utcH * 15;
     const base = [];
     let prev = 0;
-    for (let lon = -180; lon <= 180; lon += 2) {
-        const H = propRad(lon - lonSun);
+    for (let d = -180; d <= 180; d += 2) {
+        const H = propRad(d + lonC - lonSun);
         let lat = Math.atan(-Math.cos(H) / Math.tan(dec)) * 180 / Math.PI;
         if (!isFinite(lat)) lat = prev;   // singular only at the exact equinox
-        base.push([lat, lon]);
+        base.push([lat, d]);
         prev = lat;
     }
     return {
@@ -353,11 +371,48 @@ function mapColors() {
     return PROP_MAP_COLORS;
 }
 
+/* Project one ring for a home-centred flat map: the longitudes are unwrapped
+ * around lonC and returned as up to three continuous copies (centre, -360,
+ * +360). Each copy is projected raw, so whatever falls past the silhouette
+ * simply leaves the canvas and is clipped away -- no ring is ever closed with
+ * a chord across the map. */
+function propRingCopies(ring, lonC, proj) {
+    const flat = typeof ring[0] === 'number';
+    const n = flat ? ring.length / 2 : ring.length;
+    if (!n) return [];
+    const rels = new Float64Array(n), lats = new Float64Array(n);
+    let prev = 0, min = Infinity, max = -Infinity;
+    for (let i = 0; i < n; i++) {
+        const lon = flat ? ring[i * 2] : ring[i][0];
+        const lat = flat ? ring[i * 2 + 1] : ring[i][1];
+        let d = propLonRel(lon, lonC);
+        if (i > 0) {
+            while (d - prev > 180) d -= 360;
+            while (prev - d > 180) d += 360;
+        }
+        rels[i] = d; lats[i] = lat; prev = d;
+        if (d < min) min = d;
+        if (d > max) max = d;
+    }
+    const out = [];
+    for (let k = -1; k <= 1; k++) {
+        if (max + 360 * k < -180 || min + 360 * k > 180) continue;
+        const pts = new Float64Array(n * 2);
+        for (let i = 0; i < n; i++) {
+            const q = proj.fwdRaw(rels[i] + 360 * k, lats[i]);
+            pts[i * 2] = q[0]; pts[i * 2 + 1] = q[1];
+        }
+        out.push(pts);
+    }
+    return out;
+}
+
 function drawProp() {
     const s = propState;
     if (!s.ctx || !s.w || !s.h) return;
     const ctx = s.ctx, w = s.w, h = s.h, C = mapColors();
     const proj = makeProjection(s.proj, w, h, s.de);
+    const lonC = proj.lon0 || 0;
     const now = new Date();
     /* The azimuthal view is a disc: everything is clipped to it, otherwise a
      * land ring or graticule line crossing the antipode (where fwd() returns
@@ -400,8 +455,27 @@ function drawProp() {
             else ctx.lineTo(p[0], p[1]);
         }
     };
+    /* Flat maps are centred on the home meridian, so every ring is unwrapped
+     * around it and painted in up to three copies (+/-360). Each copy stays
+     * continuous, and the canvas clip hides the seam -- drawing a single
+     * wrapped copy would close a land mass with a chord right across the map. */
+    const paintRing = (ring, mode) => {
+        if (disc) {
+            trace(ring);
+            ctx.closePath();
+            if (mode === 'fill') ctx.fill(); else ctx.stroke();
+            return;
+        }
+        for (const pts of propRingCopies(ring, lonC, proj)) {
+            ctx.beginPath();
+            ctx.moveTo(pts[0], pts[1]);
+            for (let i = 2; i < pts.length; i += 2) ctx.lineTo(pts[i], pts[i + 1]);
+            ctx.closePath();
+            if (mode === 'fill') ctx.fill(); else ctx.stroke();
+        }
+    };
     ctx.fillStyle = C.land;
-    for (const ring of land) { trace(ring); ctx.closePath(); ctx.fill(); }
+    for (const ring of land) paintRing(ring, 'fill');
 
     /* Background layer: painted over the land fill but *under* the graticule
      * and the coastline. Drawing it on top (the old order) at 0.55 alpha hid
@@ -436,8 +510,9 @@ function drawProp() {
     for (let lat = -60; lat <= 60; lat += 30) {
         ctx.beginPath();
         let started = false;
+        /* sweep the home-centred range so the parallel never jumps at the seam */
         for (let lon = -180; lon <= 180; lon += 3) {
-            const p = proj.fwd(lon, lat);
+            const p = disc ? proj.fwd(lon + lonC, lat) : proj.fwdRaw(lon, lat);
             if (!p) { started = false; continue; }
             if (!started) { ctx.moveTo(p[0], p[1]); started = true; }
             else ctx.lineTo(p[0], p[1]);
@@ -451,13 +526,13 @@ function drawProp() {
         ctx.strokeStyle = C.line;
         ctx.globalAlpha = 0.4;
         ctx.lineWidth = 0.7;
-        for (const seg of (window.BORDERS || [])) { trace(seg); ctx.stroke(); }
+        for (const seg of (window.BORDERS || [])) paintRing(seg, 'stroke');
     }
     /* coastline last, at full strength: this is what makes the land legible */
     ctx.strokeStyle = C.line;
     ctx.globalAlpha = 1;
     ctx.lineWidth = 1;
-    for (const ring of land) { trace(ring); ctx.stroke(); }
+    for (const ring of land) paintRing(ring, 'stroke');
 
     /* gray line: night shading + terminator, refreshed every minute */
     drawGrayline(ctx, proj, w, h, now, C);
@@ -506,14 +581,18 @@ function drawMufLayer(ctx, proj, C) {
     ctx.save();
     ctx.filter = 'blur(4px)';
     ctx.globalAlpha = 0.30;
+    /* The grid is walked in home-centred offsets so no cell straddles the seam
+     * of the shifted maps; the disc maps the offset back to a true longitude. */
+    const lonC = proj.lon0 || 0;
+    const raw = proj.fwdRaw || ((d, lat) => proj.fwd(propLonAbs(d, lonC), lat));
     for (let lat = -85; lat < 85; lat += 5) {
-        for (let lon = -180; lon < 180; lon += 10) {
-            const muf = has ? propMufAt(lat + 2.5, lon + 5) : null;
+        for (let dl = -180; dl < 180; dl += 10) {
+            const muf = has ? propMufAt(lat + 2.5, propLonAbs(dl + 5, lonC)) : null;
             if (muf === null) continue;
             const col = mufColor(muf);
             ctx.fillStyle = 'rgb(' + col.join(',') + ')';
-            const a = proj.fwd(lon, lat), b = proj.fwd(lon + 10, lat);
-            const c = proj.fwd(lon + 10, lat + 5), d = proj.fwd(lon, lat + 5);
+            const a = raw(dl, lat), b = raw(dl + 10, lat);
+            const c = raw(dl + 10, lat + 5), d = raw(dl, lat + 5);
             if (!a || !b || !c || !d) continue;
             ctx.beginPath();
             ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]);
@@ -587,7 +666,9 @@ function propTraceLonLat(ctx, proj, pts) {
 }
 
 function drawGrayline(ctx, proj, w, h, now, C) {
-    const t = propTerminator(now);
+    const lonC = proj.lon0 || 0;
+    /* the disc works in true longitudes, the flat maps in home-centred ones */
+    const t = propTerminator(now, proj.kind === 'azimuthal' ? 0 : lonC);
     ctx.globalAlpha = 1;
     /* The azimuthal disc needs the opposite fill: its terminator circle is a
      * simple closed loop around the DAY hemisphere (a 90-degree disc centred
@@ -643,7 +724,7 @@ function drawGrayline(ctx, proj, w, h, now, C) {
     ctx.beginPath();
     let started = false;
     for (const p of night) {
-        const q = proj.fwd(p[1], p[0]);
+        const q = proj.fwdRaw(p[1], p[0]);   // p[1] is a home-centred offset
         if (!q) { started = false; continue; }
         if (!started) { ctx.moveTo(q[0], q[1]); started = true; }
         else ctx.lineTo(q[0], q[1]);
@@ -657,7 +738,7 @@ function drawGrayline(ctx, proj, w, h, now, C) {
     ctx.beginPath();
     started = false;
     for (const p of t.base) {
-        const q = proj.fwd(p[1], p[0]);
+        const q = proj.fwdRaw(p[1], p[0]);
         if (!q) { started = false; continue; }
         if (!started) { ctx.moveTo(q[0], q[1]); started = true; }
         else ctx.lineTo(q[0], q[1]);
@@ -673,9 +754,11 @@ function drawGrayline(ctx, proj, w, h, now, C) {
  * re-entering from the opposite edge. Split it where it crosses 180 and
  * shift each piece back into [-180, 180]: the stroke then stops on one edge
  * and restarts on the other, with both endpoints on the main world. */
-function propPathSegments(lat1, lon1, lat2, lon2, samples) {
+function propPathSegments(lat1, lon1, lat2, lon2, samples, lonC) {
     const pts = greatCirclePoints(lat1, lon1, lat2, lon2, samples);
-    const worldOf = lon => Math.floor((lon + 180) / 360);
+    /* cut at the seam of the home-centred map, not at Greenwich */
+    const center = lonC || 0;
+    const worldOf = lon => Math.floor((lon - center + 180) / 360);
     const segs = [];
     let copy = worldOf(pts[0][1]);
     let seg = [[pts[0][0], pts[0][1] - 360 * copy]];
@@ -687,7 +770,8 @@ function propPathSegments(lat1, lon1, lat2, lon2, samples) {
         }
         const [la, lo] = pts[i - 1];
         const [lb, ln] = pts[i];
-        const boundary = c > copy ? 180 + 360 * copy : -180 + 360 * copy;
+        const boundary = c > copy ? center + 180 + 360 * copy
+            : center - 180 + 360 * copy;
         const crossLat = la + (lb - la) * ((boundary - lo) / (ln - lo));
         seg.push([crossLat, boundary - 360 * copy]);   // close at the edge
         segs.push(seg);
@@ -702,7 +786,8 @@ function propPathSegments(lat1, lon1, lat2, lon2, samples) {
 function drawPath(ctx, proj, C) {
     const de = propState.de, dx = propState.dx;
     if (de && dx) {
-        const segs = propPathSegments(de.lat, de.lon, dx.lat, dx.lon, 64);
+        const segs = propPathSegments(de.lat, de.lon, dx.lat, dx.lon, 64,
+            proj.lon0 || 0);
         ctx.strokeStyle = C.yellow;
         ctx.lineWidth = 1.6;
         ctx.globalAlpha = 0.9;
