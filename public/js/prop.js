@@ -237,6 +237,10 @@ function makeProjection(kind, w, h, de) {
  * the terminator never jumps at the seam. */
 function propTerminator(now, lonC) {
     lonC = lonC || 0;
+    /* Pure function of (minute, lonC) that allocates a 181-point curve, and the
+     * MUF field asks for it thousands of times per redraw -- cache the latest. */
+    const key = String(Math.floor(now.getTime() / 60000)) + '|' + lonC;
+    if (propTermMemo && propTermMemo.key === key) return propTermMemo.val;
     const start = Date.UTC(now.getUTCFullYear(), 0, 0);
     const doy = (now - start) / 86400000;
     const decDeg = -23.44 * Math.cos(2 * Math.PI * (doy + 10) / 365.25);
@@ -253,12 +257,15 @@ function propTerminator(now, lonC) {
         base.push([lat, d]);
         prev = lat;
     }
-    return {
+    const val = {
         dec: decDeg, lonSun, base,
         nightPole: decDeg > 0 ? -89.99 : 89.99,
         equinox: Math.abs(decDeg) < 0.6
     };
+    propTermMemo = {key, val};
+    return val;
 }
+let propTermMemo = null;
 
 /* ---------------------------------------------------------------
  * Geodesy helpers
@@ -312,14 +319,24 @@ function sunFactor(lat, lon, d) {
  * this, a daytime sounding and a night-time sounding were averaged as if they
  * described the same ionosphere. Soundings older than a month are dropped and
  * older ones fade (propSondeAgeWeight). */
+/* Parsing the ISO string and evaluating the sun angle per station per query
+ * dominated the MUF lattice build; the factor only depends on the station's
+ * own observation instant, so keep it. */
+const propHourFactorCache = new Map();
+
 function propStationHourFactor(s) {
     if (typeof s[5] !== 'string' || !s[5]) return 1;
     /* kc2g timestamps carry no zone suffix; they are UTC, so pin them --
      * otherwise Date() reads them in the viewer's local zone. */
+    const key = s[5] + '@' + s[0] + ',' + s[1];
+    const hit = propHourFactorCache.get(key);
+    if (hit !== undefined) return hit;
     const iso = /Z|[+-]\d{2}:?\d{2}$/.test(s[5]) ? s[5] : s[5] + 'Z';
     const t = new Date(iso);
-    if (isNaN(t)) return 1;
-    return Math.max(0.55, propMufDayFactor(sunFactor(s[0], s[1], t)));
+    const v = isNaN(t) ? 1 : Math.max(0.55, propMufDayFactor(sunFactor(s[0], s[1], t)));
+    if (propHourFactorCache.size > 600) propHourFactorCache.clear();
+    propHourFactorCache.set(key, v);
+    return v;
 }
 
 /* Sounding age weight. Most kc2g rows are not fresh -- on a typical snapshot
@@ -341,10 +358,11 @@ function propIonoAt(lat, lon, when) {
     const st = propState.data && propState.data.muf && propState.data.muf.stations;
     if (!st || !st.length) return null;
     const nowMs = Date.now();
-    let num = 0, den = 0, numF = 0;
+    let num = 0, den = 0, numF = 0, dMin = Infinity;
     for (const s of st) {
         if (typeof s[2] !== 'number') continue;
         const d = propDistance({lat, lon}, {lat: s[0], lon: s[1]});
+        if (d < dMin) dMin = d;
         /* 2500 km: a sounding farther away describes a different F2 region,
          * not the one over the hop -- the caller then uses the SFI fallback
          * instead of extrapolating, e.g. a tropical sonde 4000 km north. */
@@ -361,7 +379,9 @@ function propIonoAt(lat, lon, when) {
     const base = num / den;
     const baseF = (numF ? numF / den : 0.62 * base);
     const kAt = propMufDayFactor(sunFactor(lat, lon, when));
-    return {muf: base * kAt, fof2: baseF * kAt};
+    /* dMin lets the map cross-fade into climatology near the trust radius;
+     * the other callers ignore it. */
+    return {muf: base * kAt, fof2: baseF * kAt, dMin};
 }
 
 function propMufAt(lat, lon, when) {
@@ -834,50 +854,100 @@ function drawProp() {
 }
 
 /* MUF heat grid: inverse-distance weighted ionosonde MUF3000 per cell */
+const MUF_STOPS = [
+    [20, 60, 180], [40, 150, 220], [60, 190, 140],
+    [220, 200, 60], [240, 120, 40], [220, 40, 60]
+];
+
 function mufColor(muf) {
     const t = clamp((muf - 3) / 27, 0, 1);          // 3..30 MHz
-    const stops = [
-        [20, 60, 180], [40, 150, 220], [60, 190, 140],
-        [220, 200, 60], [240, 120, 40], [220, 40, 60]
-    ];
-    const i = clamp(Math.floor(t * (stops.length - 1)), 0, stops.length - 2);
-    const f = t * (stops.length - 1) - i;
-    const a = stops[i], b = stops[i + 1];
+    const i = clamp(Math.floor(t * (MUF_STOPS.length - 1)), 0, MUF_STOPS.length - 2);
+    const f = t * (MUF_STOPS.length - 1) - i;
+    const a = MUF_STOPS[i], b = MUF_STOPS[i + 1];
     return [Math.round(a[0] + (b[0] - a[0]) * f),
         Math.round(a[1] + (b[1] - a[1]) * f),
         Math.round(a[2] + (b[2] - a[2]) * f)];
 }
 
-function drawMufLayer(ctx, proj, C) {
-    const data = propState.data;
-    if (!data) return;
-    const has = data.muf && data.muf.stations && data.muf.stations.length;
-    /* HamClock paints its MUF field as a soft colour wash, not a checkerboard.
-     * A blurred 5x10 degree grid, drawn at low alpha under the coastline,
-     * gives the same smooth gradient while the coast stays readable. */
-    ctx.save();
-    ctx.filter = 'blur(4px)';
-    ctx.globalAlpha = 0.30;
-    /* The grid is walked in home-centred offsets so no cell straddles the seam
-     * of the shifted maps; the disc maps the offset back to a true longitude. */
-    const lonC = proj.lon0 || 0;
-    const raw = proj.fwdRaw || ((d, lat) => proj.fwd(propLonAbs(d, lonC), lat));
-    for (let lat = -85; lat < 85; lat += 5) {
-        for (let dl = -180; dl < 180; dl += 10) {
-            const muf = has ? propMufAt(lat + 2.5, propLonAbs(dl + 5, lonC)) : null;
-            if (muf === null) continue;
-            const col = mufColor(muf);
-            ctx.fillStyle = 'rgb(' + col.join(',') + ')';
-            const a = raw(dl, lat), b = raw(dl + 10, lat);
-            const c = raw(dl + 10, lat + 5), d = raw(dl, lat + 5);
-            if (!a || !b || !c || !d) continue;
-            ctx.beginPath();
-            ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]);
-            ctx.lineTo(c[0], c[1]); ctx.lineTo(d[0], d[1]);
-            ctx.closePath();
-            ctx.fill();
+/* MUF field lattice for the current snapshot. Sondes only cover a 2500 km
+ * disc around each station, so most of the ocean used to stay unpainted; every
+ * node now gets a value -- the sonde interpolation where it applies and the
+ * latitude/season climatology elsewhere -- and the two sources are cross-faded
+ * across the outer 700 km of the trust radius so their boundary is a gradient,
+ * not a ring. 6 x 10 degree nodes are fine because the caller bilinearly
+ * interpolates between them per pixel. */
+const PROP_MUF_LAT_STEP = 6;
+const PROP_MUF_LON_STEP = 10;
+
+function propMufField() {
+    const now = new Date();
+    const nLat = 180 / PROP_MUF_LAT_STEP + 1;       // -90 .. 90
+    const nLon = 360 / PROP_MUF_LON_STEP;           // -180 .. 170
+    const vals = new Float32Array(nLat * nLon);
+    for (let i = 0; i < nLat; i++) {
+        const lat = -90 + i * PROP_MUF_LAT_STEP;
+        for (let j = 0; j < nLon; j++) {
+            const lon = -180 + j * PROP_MUF_LON_STEP;
+            const clim = propClimatMuf(lat, lon, now);
+            const iono = propIonoAt(lat, lon, now);
+            let muf = clim;
+            if (iono) {
+                const w = clamp((2500 - iono.dMin) / 700, 0, 1);
+                muf = w * iono.muf + (1 - w) * clim;
+            }
+            vals[i * nLon + j] = muf;
         }
     }
+    return {vals, nLat, nLon};
+}
+
+/* Bilinear sample of the lattice at a true lat/lon (longitude wraps). */
+function mufFieldAt(f, lat, lon) {
+    const y = clamp((lat + 90) / PROP_MUF_LAT_STEP, 0, f.nLat - 1 - 1e-6);
+    const i = Math.floor(y), ty = y - i;
+    let x = (((lon + 180) / PROP_MUF_LON_STEP) % f.nLon + f.nLon) % f.nLon;
+    const j = Math.floor(x), tx = x - j;
+    const j2 = (j + 1) % f.nLon;
+    const r0 = i * f.nLon, r1 = Math.min(i + 1, f.nLat - 1) * f.nLon;
+    const v00 = f.vals[r0 + j], v01 = f.vals[r0 + j2];
+    const v10 = f.vals[r1 + j], v11 = f.vals[r1 + j2];
+    return (v00 * (1 - tx) + v01 * tx) * (1 - ty) +
+        (v10 * (1 - tx) + v11 * tx) * ty;
+}
+
+function drawMufLayer(ctx, proj, C) {
+    const w = propState.w, h = propState.h;
+    if (!propState.data || !w || !h) return;
+    const field = propMufField();
+    /* The field is low-frequency, so it is rasterised at a coarse step and
+     * upscaled with the canvas' own bilinear filter: per-pixel inverse
+     * projection (which is what keeps the wash rectangular-free on curved
+     * projections) stays cheap, and the result is a continuous gradient
+     * instead of the old blurred 5x10 degree checkerboard. */
+    const step = Math.max(2, Math.ceil(Math.sqrt(w * h / 80000)));
+    const W = Math.max(2, Math.round(w / step));
+    const H = Math.max(2, Math.round(h / step));
+    const cv = propState.mufCv || (propState.mufCv = document.createElement('canvas'));
+    if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
+    const off = cv.getContext('2d');
+    const img = off.createImageData(W, H);
+    const px = img.data;
+    for (let y = 0; y < H; y++) {
+        const py = y * step + step / 2;
+        for (let x = 0; x < W; x++) {
+            const p = proj.inv(x * step + step / 2, py);
+            if (!p) continue;
+            const col = mufColor(mufFieldAt(field, p[0], p[1]));
+            const o = (y * W + x) * 4;
+            px[o] = col[0]; px[o + 1] = col[1]; px[o + 2] = col[2];
+            px[o + 3] = 255;
+        }
+    }
+    off.putImageData(img, 0, 0);
+    ctx.save();
+    ctx.globalAlpha = 0.30;
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(cv, 0, 0, w, h);
     ctx.restore();
 }
 
