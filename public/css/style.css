@@ -1529,10 +1529,11 @@ body[data-theme="amber"] {
     grid-row: 2;
     display: grid;
     /* Fixed matrix column (it never rescales with the viewport), the SDO
-     * image next to it, and the readout tiles taking the rest. */
+     * image next to it, the continent band table, and the readout tiles
+     * taking the rest. */
     /* The SDO column is auto: it is exactly as wide as the square frame that
      * prop.js sizes to the matrix height. */
-    grid-template-columns: 430px auto minmax(0, 1fr);
+    grid-template-columns: 430px auto 216px minmax(0, 1fr);
     align-items: stretch;
     gap: 0 18px;
 }
@@ -1592,7 +1593,25 @@ body[data-theme="amber"] {
 /* Strictly square: prop.js sets width and height to the matrix content
  * height, so the frame stays 1:1 and flush with the matrix above/below. */
 .prop-foot .sec-sdo .prop-sdo { flex: 0 0 auto; min-height: 0; aspect-ratio: 1 / 1; }
-.prop-foot .sec-read { grid-column: 3; min-width: 0; }
+.prop-foot .sec-cty { grid-column: 3; min-width: 0; }
+.prop-foot .sec-read { grid-column: 4; min-width: 0; }
+
+/* Best band per continent: a plain table, values come straight from the same
+ * availability model as the path matrix. */
+.prop-cty {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+}
+.prop-cty th, .prop-cty td {
+    padding: 3px 6px;
+    border-bottom: 1px solid var(--border);
+    text-align: left;
+    white-space: nowrap;
+}
+.prop-cty th { color: var(--text-dim); font-weight: 600; }
+.prop-cty th.num, .prop-cty td.num { text-align: right; }
 .prop-sec-title {
     display: flex;
     align-items: baseline;

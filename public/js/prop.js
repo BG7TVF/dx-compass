@@ -23,6 +23,20 @@ const PROP_BANDS = [
     {name: '10M', f: 28.5}
 ];
 
+/* Sampling points per continent, as [lat, lon]. Each point is evaluated as its
+ * own path from the home station and the band scores are averaged, so the row
+ * is a plain mean of the same model that drives the DE->DX matrix -- nothing
+ * is smoothed, floored or otherwise polished afterwards. */
+const PROP_CONTINENTS = [
+    {key: 'af', pts: [[6, 20], [-5, 25], [12, 0], [-18, 25]]},
+    {key: 'as', pts: [[45, 90], [30, 75], [20, 105], [10, 80], [50, 100]]},
+    {key: 'eu', pts: [[50, 15], [60, 10], [45, 0], [40, 20]]},
+    {key: 'na', pts: [[40, -100], [30, -90], [50, -110], [20, -100]]},
+    {key: 'sa', pts: [[-10, -60], [-20, -50], [-30, -60], [0, -70]]},
+    {key: 'oc', pts: [[-25, 135], [-35, 145], [-10, 145]]},
+    {key: 'an', pts: [[-80, 0], [-80, 120], [-80, -120]]}
+];
+
 const PROP_PROJECTIONS = ['mercator', 'azimuthal', 'robinson'];
 const PROP_LAYERS = ['muf', 'weather', 'aurora'];
 /* Mainland-safe limits used when filling the width: only land beyond these
@@ -315,7 +329,22 @@ function propWxAt(lat, lon) {
 
 /* Approximate DE->DX availability per hour (no VOACAP):
  * MUF at the path midpoint scaled by the local solar elevation, lower bound
- * from the DRAP absorption grid, then a smooth band-pass per frequency. */
+ * from the DRAP absorption grid, then a smooth band-pass per frequency.
+ * Availability (0-100) of one band on a path of `dist` km whose midpoint sits
+ * at midLat/midLon, for the snapshot `when`. Shared by the DE->DX matrix and
+ * the continent table so both columns come from the same model. */
+function propBandScore(b, midLat, midLon, baseMuf, baseDrap, dist, when) {
+    const sf = sunFactor(midLat, midLon, when);       // -1..1
+    const day = clamp((sf + 0.15) / 0.85, 0, 1);      // 0 night .. 1 day
+    const muf = baseMuf * (0.58 + 0.55 * day);
+    const luf = Math.max(2.0, 1.1 + 1.35 * (baseDrap || 0));
+    const hi = 1 / (1 + Math.exp((b.f - 0.95 * muf) / (0.12 * muf || 1)));
+    const lo = 1 / (1 + Math.exp((luf - b.f) / 1.1));
+    // long paths need more than a single 3000 km hop
+    const hop = dist > 3500 ? clamp(1 - (dist - 3500) / 9000, 0.55, 1) : 1;
+    return Math.round(100 * hi * lo * hop);
+}
+
 function propPathMatrix() {
     const data = propState.data;
     if (!data) return null;
@@ -333,20 +362,50 @@ function propPathMatrix() {
         for (let h = 0; h < 24; h++) {
             const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(),
                 now.getUTCDate(), h, 0, 0));
-            const sf = sunFactor(mid.lat, mid.lon, d);       // -1..1
-            const day = clamp((sf + 0.15) / 0.85, 0, 1);     // 0 night .. 1 day
-            const muf = baseMuf * (0.58 + 0.55 * day);
-            const luf = Math.max(2.0, 1.1 + 1.35 * (baseDrap || 0));
-            const hi = 1 / (1 + Math.exp((b.f - 0.95 * muf) / (0.12 * muf || 1)));
-            const lo = 1 / (1 + Math.exp((luf - b.f) / 1.1));
-            // long paths need more than a single 3000 km hop
-            const hop = dist > 3500 ? clamp(1 - (dist - 3500) / 9000, 0.55, 1) : 1;
-            cells.push(Math.round(100 * hi * lo * hop));
+            cells.push(propBandScore(b, mid.lat, mid.lon, baseMuf, baseDrap, dist, d));
         }
         return {name: b.name, f: b.f, cells};
     });
     return {rows, mid, dist, baseMuf, hourNow,
         bearing: propBearing(de, dx)};
+}
+
+/* Best band from the home station to every other continent, for this instant.
+ * The continent the station sits in is left out (nearest sampling point
+ * decides it); the rest report their raw best-band score, even when it is
+ * close to zero. */
+function propContinentTable() {
+    const de = propState.de, data = propState.data;
+    if (!de || !data) return null;
+    const when = new Date();
+    const sfi = data.ham && data.ham.sfi;
+    let own = null, ownDist = Infinity;
+    for (const c of PROP_CONTINENTS) {
+        for (const p of c.pts) {
+            const d = propDistance(de, {lat: p[0], lon: p[1]});
+            if (d < ownDist) { ownDist = d; own = c.key; }
+        }
+    }
+    const rows = [];
+    for (const c of PROP_CONTINENTS) {
+        if (c.key === own) continue;
+        let best = null;
+        for (const b of PROP_BANDS) {
+            let sum = 0;
+            for (const p of c.pts) {
+                const tgt = {lat: p[0], lon: p[1]};
+                const mid = propMidpoint(de, tgt);
+                const dist = propDistance(de, tgt);
+                const muf = propMufAt(mid.lat, mid.lon) || (sfi ? 1.5 + 0.22 * sfi : 8);
+                const drap = propDrapAt(mid.lat, mid.lon);
+                sum += propBandScore(b, mid.lat, mid.lon, muf, drap, dist, when);
+            }
+            const score = Math.round(sum / c.pts.length);
+            if (!best || score > best.score) best = {band: b.name, score};
+        }
+        rows.push({key: c.key, band: best.band, score: best.score});
+    }
+    return {rows, own};
 }
 
 /* ---------------------------------------------------------------
@@ -1121,6 +1180,20 @@ function renderPropPanel() {
         '" alt="SDO AIA 193" onerror="this.parentElement.classList.add(\'sdo-fail\')">' +
         '<div class="prop-sdo-cap">AIA 193 Å · ' + sdoCap + '</div>' +
         '</div></div>');
+
+    /* ---- best band to every other continent right now (same model as the
+     * DE->DX matrix, plain averages, no rounding of the underlying scores) ---- */
+    const cty = propContinentTable();
+    if (cty) {
+        low.push('<div class="prop-sec sec-cty"><div class="prop-sec-title">' +
+            t('propCtyTitle') + '</div><table class="prop-cty"><thead><tr><th>' +
+            t('propCtyCol') + '</th><th>' + t('propBandCol') + '</th><th class="num">' +
+            t('propScoreCol') + '</th></tr></thead><tbody>' +
+            cty.rows.map(r => '<tr><td>' +
+                t('propCty' + r.key.charAt(0).toUpperCase() + r.key.slice(1)) +
+                '</td><td>' + r.band + '</td><td class="num">' + r.score + '%</td></tr>').join('') +
+            '</tbody></table></div>');
+    }
 
     /* ---- global readouts (card tiles, same visual language as space-weather cards) ---- */
     const st = (d.muf && d.muf.stations) || [];

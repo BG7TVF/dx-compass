@@ -681,6 +681,9 @@ const PROP_I18N = {
         propDay: '白天', propNight: '夜间',
         propClickDx: '点击地图设置 DX', propSetGrid: '请先在设置中填写本机网格',
         propNoData: '暂无传播数据', propUpdated: '更新', propBestBand: '当前最佳波段',
+        propCtyTitle: '大洲最优频段', propCtyCol: '大洲', propBandCol: '频段', propScoreCol: '可用度',
+        propCtyAf: '非洲', propCtyAs: '亚洲', propCtyEu: '欧洲', propCtyNa: '北美洲',
+        propCtySa: '南美洲', propCtyOc: '大洋洲', propCtyAn: '南极洲',
         propWeatherDx: 'DX 天气'
     },
     en: {
@@ -692,6 +695,10 @@ const PROP_I18N = {
         propDay: 'Day', propNight: 'Night',
         propClickDx: 'Click the map to set DX', propSetGrid: 'Set your grid in Settings first',
         propNoData: 'No propagation data yet', propUpdated: 'Updated', propBestBand: 'Best band now',
+        propCtyTitle: 'Best band per continent', propCtyCol: 'Continent',
+        propBandCol: 'Band', propScoreCol: 'Availability',
+        propCtyAf: 'Africa', propCtyAs: 'Asia', propCtyEu: 'Europe', propCtyNa: 'North America',
+        propCtySa: 'South America', propCtyOc: 'Oceania', propCtyAn: 'Antarctica',
         propWeatherDx: 'DX weather'
     },
     de: {
@@ -703,6 +710,10 @@ const PROP_I18N = {
         propDay: 'Tag', propNight: 'Nacht',
         propClickDx: 'Karte anklicken, um DX zu setzen', propSetGrid: 'Eigenes Raster in den Einstellungen eintragen',
         propNoData: 'Keine Ausbreitungsdaten', propUpdated: 'Aktualisiert', propBestBand: 'Bestes Band',
+        propCtyTitle: 'Bestes Band je Kontinent', propCtyCol: 'Kontinent',
+        propBandCol: 'Band', propScoreCol: 'Verfügbarkeit',
+        propCtyAf: 'Afrika', propCtyAs: 'Asien', propCtyEu: 'Europa', propCtyNa: 'Nordamerika',
+        propCtySa: 'Südamerika', propCtyOc: 'Ozeanien', propCtyAn: 'Antarktis',
         propWeatherDx: 'DX-Wetter'
     },
     fr: {
@@ -714,6 +725,10 @@ const PROP_I18N = {
         propDay: 'Jour', propNight: 'Nuit',
         propClickDx: 'Cliquez sur la carte pour définir le DX', propSetGrid: 'Renseignez votre grille dans les paramètres',
         propNoData: 'Aucune donnée de propagation', propUpdated: 'Mis à jour', propBestBand: 'Meilleure bande',
+        propCtyTitle: 'Meilleure bande par continent', propCtyCol: 'Continent',
+        propBandCol: 'Bande', propScoreCol: 'Disponibilité',
+        propCtyAf: 'Afrique', propCtyAs: 'Asie', propCtyEu: 'Europe', propCtyNa: 'Amérique du Nord',
+        propCtySa: 'Amérique du Sud', propCtyOc: 'Océanie', propCtyAn: 'Antarctique',
         propWeatherDx: 'Météo à DX'
     },
     es: {
@@ -725,6 +740,10 @@ const PROP_I18N = {
         propDay: 'Día', propNight: 'Noche',
         propClickDx: 'Haz clic en el mapa para fijar DX', propSetGrid: 'Configura tu cuadrícula en ajustes',
         propNoData: 'Sin datos de propagación', propUpdated: 'Actualizado', propBestBand: 'Mejor banda',
+        propCtyTitle: 'Mejor banda por continente', propCtyCol: 'Continente',
+        propBandCol: 'Banda', propScoreCol: 'Disponibilidad',
+        propCtyAf: 'África', propCtyAs: 'Asia', propCtyEu: 'Europa', propCtyNa: 'América del Norte',
+        propCtySa: 'América del Sur', propCtyOc: 'Oceanía', propCtyAn: 'Antártida',
         propWeatherDx: 'Tiempo en DX'
     },
     pt: {
@@ -736,6 +755,10 @@ const PROP_I18N = {
         propDay: 'Dia', propNight: 'Noite',
         propClickDx: 'Clique no mapa para definir o DX', propSetGrid: 'Informe sua grade nas configurações',
         propNoData: 'Sem dados de propagação', propUpdated: 'Atualizado', propBestBand: 'Melhor banda',
+        propCtyTitle: 'Melhor banda por continente', propCtyCol: 'Continente',
+        propBandCol: 'Banda', propScoreCol: 'Disponibilidade',
+        propCtyAf: 'África', propCtyAs: 'Ásia', propCtyEu: 'Europa', propCtyNa: 'América do Norte',
+        propCtySa: 'América do Sul', propCtyOc: 'Oceania', propCtyAn: 'Antártida',
         propWeatherDx: 'Clima em DX'
     },
     ru: {
@@ -747,6 +770,10 @@ const PROP_I18N = {
         propDay: 'День', propNight: 'Ночь',
         propClickDx: 'Нажмите на карту, чтобы задать DX', propSetGrid: 'Укажите свой квадрат в настройках',
         propNoData: 'Нет данных о распространении', propUpdated: 'Обновлено', propBestBand: 'Лучший диапазон',
+        propCtyTitle: 'Лучший диапазон по континентам', propCtyCol: 'Континент',
+        propBandCol: 'Диапазон', propScoreCol: 'Доступность',
+        propCtyAf: 'Африка', propCtyAs: 'Азия', propCtyEu: 'Европа', propCtyNa: 'Северная Америка',
+        propCtySa: 'Южная Америка', propCtyOc: 'Океания', propCtyAn: 'Антарктида',
         propWeatherDx: 'Погода в DX'
     },
     it: {
@@ -758,6 +785,10 @@ const PROP_I18N = {
         propDay: 'Giorno', propNight: 'Notte',
         propClickDx: 'Clicca sulla mappa per impostare il DX', propSetGrid: 'Imposta il tuo reticolo nelle impostazioni',
         propNoData: 'Nessun dato di propagazione', propUpdated: 'Aggiornato', propBestBand: 'Banda migliore',
+        propCtyTitle: 'Banda migliore per continente', propCtyCol: 'Continente',
+        propBandCol: 'Banda', propScoreCol: 'Disponibilità',
+        propCtyAf: 'Africa', propCtyAs: 'Asia', propCtyEu: 'Europa', propCtyNa: 'America del Nord',
+        propCtySa: 'America del Sud', propCtyOc: 'Oceania', propCtyAn: 'Antartide',
         propWeatherDx: 'Meteo a DX'
     },
     ar: {
@@ -769,6 +800,10 @@ const PROP_I18N = {
         propDay: 'نهار', propNight: 'ليل',
         propClickDx: 'انقر على الخريطة لتحديد DX', propSetGrid: 'أدخل مربعك في الإعدادات',
         propNoData: 'لا توجد بيانات انتشار', propUpdated: 'تم التحديث', propBestBand: 'أفضل نطاق',
+        propCtyTitle: 'أفضل نطاق لكل قارة', propCtyCol: 'القارة', propBandCol: 'النطاق',
+        propScoreCol: 'الإتاحة', propCtyAf: 'أفريقيا', propCtyAs: 'آسيا', propCtyEu: 'أوروبا',
+        propCtyNa: 'أمريكا الشمالية', propCtySa: 'أمريكا الجنوبية', propCtyOc: 'أوقيانوسيا',
+        propCtyAn: 'القارة القطبية الجنوبية',
         propWeatherDx: 'طقس DX'
     },
     ko: {
@@ -780,6 +815,9 @@ const PROP_I18N = {
         propDay: '주간', propNight: '야간',
         propClickDx: '지도를 클릭하여 DX 설정', propSetGrid: '설정에서 그리드를 입력하세요',
         propNoData: '전파 데이터 없음', propUpdated: '업데이트', propBestBand: '최적 밴드',
+        propCtyTitle: '대륙별 최적 밴드', propCtyCol: '대륙', propBandCol: '밴드', propScoreCol: '가용도',
+        propCtyAf: '아프리카', propCtyAs: '아시아', propCtyEu: '유럽', propCtyNa: '북아메리카',
+        propCtySa: '남아메리카', propCtyOc: '오세아니아', propCtyAn: '남극',
         propWeatherDx: 'DX 날씨'
     },
     ja: {
@@ -791,6 +829,9 @@ const PROP_I18N = {
         propDay: '昼', propNight: '夜',
         propClickDx: '地図をクリックして DX を設定', propSetGrid: '設定でグリッドを入力してください',
         propNoData: '伝播データなし', propUpdated: '更新', propBestBand: '最適バンド',
+        propCtyTitle: '大陸別の最適バンド', propCtyCol: '大陸', propBandCol: 'バンド', propScoreCol: '可用度',
+        propCtyAf: 'アフリカ', propCtyAs: 'アジア', propCtyEu: 'ヨーロッパ', propCtyNa: '北アメリカ',
+        propCtySa: '南アメリカ', propCtyOc: 'オセアニア', propCtyAn: '南極',
         propWeatherDx: 'DX の天気'
     }
 };
