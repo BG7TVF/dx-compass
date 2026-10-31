@@ -1,4 +1,4 @@
-﻿/* ============================================================
+/* ============================================================
  * DX-Compass - Propagation page
  *
  * A dedicated page ("Propagation Map") combining:
@@ -567,22 +567,55 @@ function drawGrayline(ctx, proj, w, h, now, C) {
     ctx.globalAlpha = 1;
 }
 
+/* Great-circle DE -> DX path cut at the antimeridian, in canonical
+ * longitudes. greatCirclePoints() (app.js) unwraps the longitudes, so a path
+ * crossing the date line keeps advancing past +/-180 and is projected off
+ * the canvas -- the line runs into the empty area beside the map instead of
+ * re-entering from the opposite edge. Split it where it crosses 180 and
+ * shift each piece back into [-180, 180]: the stroke then stops on one edge
+ * and restarts on the other, with both endpoints on the main world. */
+function propPathSegments(lat1, lon1, lat2, lon2, samples) {
+    const pts = greatCirclePoints(lat1, lon1, lat2, lon2, samples);
+    const worldOf = lon => Math.floor((lon + 180) / 360);
+    const segs = [];
+    let copy = worldOf(pts[0][1]);
+    let seg = [[pts[0][0], pts[0][1] - 360 * copy]];
+    for (let i = 1; i < pts.length; i++) {
+        const c = worldOf(pts[i][1]);
+        if (c === copy) {
+            seg.push([pts[i][0], pts[i][1] - 360 * copy]);
+            continue;
+        }
+        const [la, lo] = pts[i - 1];
+        const [lb, ln] = pts[i];
+        const boundary = c > copy ? 180 + 360 * copy : -180 + 360 * copy;
+        const crossLat = la + (lb - la) * ((boundary - lo) / (ln - lo));
+        seg.push([crossLat, boundary - 360 * copy]);   // close at the edge
+        segs.push(seg);
+        seg = [[crossLat, boundary - 360 * c]];        // re-enter the other edge
+        seg.push([pts[i][0], pts[i][1] - 360 * c]);
+        copy = c;
+    }
+    segs.push(seg);
+    return segs;
+}
+
 function drawPath(ctx, proj, C) {
     const de = propState.de, dx = propState.dx;
     if (de && dx) {
-        const pts = greatCirclePoints(de.lat, de.lon, dx.lat, dx.lon, 64);
+        const segs = propPathSegments(de.lat, de.lon, dx.lat, dx.lon, 64);
         ctx.strokeStyle = C.yellow;
         ctx.lineWidth = 1.6;
         ctx.globalAlpha = 0.9;
         ctx.beginPath();
-        let started = false, prevLon = null;
-        for (const p of pts) {
-            if (prevLon !== null && Math.abs(p[1] - prevLon) > 180) started = false;
-            prevLon = p[1];
-            const q = proj.fwd(p[1], p[0]);
-            if (!q) { started = false; continue; }
-            if (!started) { ctx.moveTo(q[0], q[1]); started = true; }
-            else ctx.lineTo(q[0], q[1]);
+        for (const seg of segs) {
+            let started = false;
+            for (const p of seg) {
+                const q = proj.fwd(p[1], p[0]);
+                if (!q) { started = false; continue; }
+                if (!started) { ctx.moveTo(q[0], q[1]); started = true; }
+                else ctx.lineTo(q[0], q[1]);
+            }
         }
         ctx.stroke();
         ctx.globalAlpha = 1;
