@@ -1528,9 +1528,9 @@ body[data-theme="amber"] {
     grid-column: 1 / -1;
     grid-row: 2;
     display: grid;
-    /* The 24-hour matrix needs ~420px; everything else in the strip belongs
-     * to the readout tiles, which spread out to fill it. */
-    grid-template-columns: 430px minmax(0, 1fr);
+    /* Fixed matrix column (it never rescales with the viewport), the SDO
+     * image next to it, and the readout tiles taking the rest. */
+    grid-template-columns: 430px 190px minmax(0, 1fr);
     align-items: start;
     gap: 0 18px;
 }
@@ -1562,9 +1562,27 @@ body[data-theme="amber"] {
     flex-direction: column;
     min-height: 0;
 }
+/* Band conditions are the only section left in the arm, so their card grid
+ * stretches to fill the whole column height. */
 .prop-arm .prop-sec { margin-bottom: 0; }
-.prop-foot .sec-path { grid-column: 1; min-width: 0; }
-.prop-foot .sec-read { grid-column: 2; min-width: 0; }
+.prop-arm .sec-bands {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+.prop-arm .prop-bandgrid {
+    flex: 1;
+    min-height: 0;
+    /* Two wide columns keep all ten bands in five even rows (no orphan
+     * card) and the rows stretch to fill the arm. */
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-auto-rows: minmax(0, 1fr);
+}
+.prop-arm .band-card { display: flex; flex-direction: column; justify-content: center; }
+.prop-foot .sec-path { grid-column: 1; min-width: 0; width: 430px; }
+.prop-foot .sec-sdo { grid-column: 2; min-width: 0; }
+.prop-foot .sec-read { grid-column: 3; min-width: 0; }
 .prop-sec-title {
     display: flex;
     align-items: baseline;
@@ -1754,9 +1772,8 @@ body[data-theme="amber"] {
 
 /* Global readouts: rendered as small cards sharing the space-weather
  * card visual language (panel-2 fill, border, dim label + strong value). */
-/* Auto-fit so the eight readout tiles spread across the wide half of the
- * bottom strip instead of stacking two-by-two. */
-.prop-read { display: grid; grid-template-columns: repeat(auto-fit, minmax(124px, 1fr)); gap: 5px; }
+/* Fixed 4 x 2 tile grid for the eight readouts. */
+.prop-read { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; }
 .pr-card {
     padding: 6px 7px;
     background: var(--panel-2);

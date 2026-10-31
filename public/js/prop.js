@@ -1027,9 +1027,10 @@ function renderPropPanel() {
             '</div></div>');
     }
 
-    /* ---- SDO latest solar image (NASA GSFC "latest" mirror, ~1/min) ---- */
+    /* ---- SDO latest solar image (NASA GSFC "latest" mirror, ~1/min), in
+     * the bottom strip between the path matrix and the readouts ---- */
     const sdoCap = new Date().toISOString().slice(11, 16) + 'Z';
-    left.push('<div class="prop-sec sec-sdo"><div class="prop-sec-title">' + t('propSdo') +
+    low.push('<div class="prop-sec sec-sdo"><div class="prop-sec-title">' + t('propSdo') +
         '</div><div class="prop-sdo">' +
         '<img src="https://sdo.gsfc.nasa.gov/assets/img/latest/latest_512_0193.jpg?t=' + Date.now() +
         '" alt="SDO AIA 193" onerror="this.parentElement.classList.add(\'sdo-fail\')">' +
