@@ -334,27 +334,29 @@ function propPathMatrix() {
 /* ---------------------------------------------------------------
  * Canvas rendering
  * ------------------------------------------------------------- */
-function themeColors() {
-    const cs = getComputedStyle(document.body);
-    const get = n => cs.getPropertyValue(n).trim();
-    return {
-        bg: get('--map-bg') || '#0a1929',
-        land: get('--map-land') || get('--panel-2') || '#1c232c',
-        line: get('--map-line') || get('--text-dim') || '#8a97a5',
-        border: get('--border') || '#2a333d',
-        text: get('--text') || '#d6dde4',
-        dim: get('--text-dim') || '#8a97a5',
-        accent: get('--accent') || '#00e5ff',
-        green: get('--green') || '#2ecc71',
-        yellow: get('--yellow') || '#f1c40f',
-        red: get('--red') || '#e74c3c'
-    };
+/* The propagation canvas always uses HamClock's console palette -- a near
+ * black ocean, dark grey land and a thin bright coastline. Keeping it fixed
+ * (instead of following --map-bg / --map-land) means the coast and the
+ * colour-coded MUF/weather field keep the same contrast under every UI
+ * theme; in the light theme the old pastel land washed out completely. */
+const PROP_MAP_COLORS = {
+    bg: '#050b11',
+    land: '#1b2932',
+    line: '#7fb0c4',
+    border: '#23404e',
+    accent: '#00e5ff',
+    orange: '#ff9f43',
+    yellow: '#ffd166'
+};
+
+function mapColors() {
+    return PROP_MAP_COLORS;
 }
 
 function drawProp() {
     const s = propState;
     if (!s.ctx || !s.w || !s.h) return;
-    const ctx = s.ctx, w = s.w, h = s.h, C = themeColors();
+    const ctx = s.ctx, w = s.w, h = s.h, C = mapColors();
     const proj = makeProjection(s.proj, w, h, s.de);
     const now = new Date();
     /* The azimuthal view is a disc: everything is clipped to it, otherwise a
@@ -366,13 +368,18 @@ function drawProp() {
 
     ctx.clearRect(0, 0, w, h);
     ctx.fillStyle = C.bg;
-    ctx.fillRect(0, 0, w, h);
-
     if (disc) {
+        /* paint the disc only: the corners stay transparent so the panel
+         * background shows through instead of a black slab */
+        ctx.beginPath();
+        ctx.arc(w / 2, h / 2, discR, 0, Math.PI * 2);
+        ctx.fill();
         ctx.save();
         ctx.beginPath();
         ctx.arc(w / 2, h / 2, discR, 0, Math.PI * 2);
         ctx.clip();
+    } else {
+        ctx.fillRect(0, 0, w, h);
     }
 
     /* land: filled polygons, then country borders, then coastlines.
@@ -589,7 +596,7 @@ function drawGrayline(ctx, proj, w, h, now, C) {
      * Fill the canvas and punch the day loop out of it with the even-odd
      * rule -- orientation-independent and correct for any centre. */
     if (proj.kind === 'azimuthal') {
-        ctx.fillStyle = 'rgba(0,0,0,0.24)';
+        ctx.fillStyle = 'rgba(0,0,0,0.42)';
         ctx.beginPath();
         ctx.rect(0, 0, w, h);
         let loop;
@@ -619,7 +626,7 @@ function drawGrayline(ctx, proj, w, h, now, C) {
         const a = proj.fwd(t.lonSun - 90, -85), b = proj.fwd(t.lonSun - 90, 85);
         const c = proj.fwd(t.lonSun + 90, 85), d = proj.fwd(t.lonSun + 90, -85);
         if (a && b && c && d) {
-            ctx.fillStyle = 'rgba(0,0,0,0.24)';
+            ctx.fillStyle = 'rgba(0,0,0,0.42)';
             ctx.beginPath();
             ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]);
             ctx.lineTo(c[0], c[1]); ctx.lineTo(d[0], d[1]);
@@ -632,7 +639,7 @@ function drawGrayline(ctx, proj, w, h, now, C) {
     for (const p of t.base) night.push(p);
     night.push([t.nightPole, 180]);
     night.push([t.nightPole, -180]);
-    ctx.fillStyle = 'rgba(0,0,0,0.24)';
+    ctx.fillStyle = 'rgba(0,0,0,0.42)';
     ctx.beginPath();
     let started = false;
     for (const p of night) {
@@ -717,7 +724,7 @@ function drawPath(ctx, proj, C) {
         if (!q) return;
         ctx.fillStyle = color;
         ctx.beginPath(); ctx.arc(q[0], q[1], 5, 0, Math.PI * 2); ctx.fill();
-        ctx.strokeStyle = 'rgba(0,0,0,.6)'; ctx.lineWidth = 1;
+        ctx.strokeStyle = 'rgba(255,255,255,.45)'; ctx.lineWidth = 1;
         ctx.beginPath(); ctx.arc(q[0], q[1], 6.5, 0, Math.PI * 2); ctx.stroke();
         ctx.fillStyle = color;
         ctx.font = '600 11px "Segoe UI", sans-serif';
