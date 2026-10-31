@@ -1186,15 +1186,20 @@ function renderPropPanel() {
 
     /* ---- best band to every other continent right now (same model as the
      * DE->DX matrix, plain averages, no rounding of the underlying scores).
-     * Laid out as readout tiles so both sections share one card language. ---- */
+     * Drawn as R/S/G-style tiles, filled on the same red->green score ramp. ---- */
     const cty = propContinentTable();
     if (cty) {
         low.push('<div class="prop-sec sec-cty"><div class="prop-sec-title">' +
-            t('propCtyTitle') + '</div><div class="prop-read prop-cty">' +
-            cty.rows.map(r => '<div class="pr-card"><div class="pr-label">' +
-                t('propCty' + r.key.charAt(0).toUpperCase() + r.key.slice(1)) +
-                '</div><div class="pr-val">' + r.band + ' · ' + r.score + '%</div></div>').join('') +
-            '</div></div>');
+            t('propCtyTitle') + '</div><div class="prop-cty">' +
+            cty.rows.map(r => {
+                const hue = Math.round(r.score * 1.2);
+                const light = 32 + r.score * 0.14;
+                return '<div class="prop-scale" style="--sev:hsl(' + hue + ',66%,' +
+                    (light - 14).toFixed(1) + '%);background:hsl(' + hue + ',66%,' +
+                    light.toFixed(1) + '%)"><b>' + r.band + '</b><span>' +
+                    t('propCty' + r.key.charAt(0).toUpperCase() + r.key.slice(1)) +
+                    '</span><i>' + r.score + '%</i></div>';
+            }).join('') + '</div></div>');
     }
 
     /* ---- global readouts (card tiles, same visual language as space-weather cards) ---- */

@@ -1599,6 +1599,17 @@ body[data-theme="amber"] {
  * height, so the frame stays 1:1 and flush with the matrix above/below. */
 .prop-foot .sec-sdo .prop-sdo { flex: 0 0 auto; min-height: 0; aspect-ratio: 1 / 1; }
 .prop-foot .sec-cty { grid-column: 3; min-width: 0; }
+/* Best band per continent, using the R/S/G tile chrome and filled on the
+ * same red->green availability ramp as the path matrix (0 % red, 100 % green). */
+.prop-cty {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 5px;
+}
+.prop-cty .prop-scale { padding: 4px 7px; }
+.prop-cty .prop-scale b,
+.prop-cty .prop-scale i { color: #08120c; }
+.prop-cty .prop-scale span { color: rgba(8, 18, 12, .72); }
 .prop-foot .sec-read { grid-column: 4; min-width: 0; }
 .prop-sec-title {
     display: flex;
