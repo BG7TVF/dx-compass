@@ -1788,12 +1788,14 @@ body[data-theme="amber"] {
     height: 16px;
     padding: 0;
     border: 1px solid var(--border);
-    color: var(--text-strong);
+    /* The score fill runs red -> green, so the availability dot is dark. */
+    color: #08120c;
     font-size: 9px;
     text-align: center;
 }
 .prop-matrix td.now { outline: 1px solid var(--accent); }
-.prop-matrix td.best { box-shadow: inset 0 0 0 1px var(--green); }
+/* A white inset ring stays visible on every red->green fill. */
+.prop-matrix td.best { box-shadow: inset 0 0 0 1px rgba(255,255,255,.85); }
 
 /* Global readouts: rendered as small cards sharing the space-weather
  * card visual language (panel-2 fill, border, dim label + strong value). */

@@ -1151,10 +1151,13 @@ function renderPropPanel() {
         for (const r of mat.rows) {
             const best = Math.max(...r.cells);
             low.push('<tr><th>' + r.name + '</th>' + r.cells.map((p, h) => {
-                const alpha = p < 10 ? 0 : 0.12 + (p / 100) * 0.62;
+                /* 0 % is red, 100 % is green: the hue sweeps 0 -> 120 deg with
+                 * the raw score, no clamping or quantising of the value. */
+                const hue = Math.round(p * 1.2);
+                const light = (32 + p * 0.14).toFixed(1);
                 const cls = (h === mat.hourNow ? 'now' : '') + (p === best ? ' best' : '');
-                return '<td class="' + cls + '" style="background:rgba(46,204,113,' +
-                    alpha.toFixed(3) + ')" title="' + p + '%">' +
+                return '<td class="' + cls + '" style="background:hsl(' + hue +
+                    ',66%,' + light + '%)" title="' + p + '%">' +
                     (p >= 55 ? '•' : '') + '</td>';
             }).join('') + '</tr>');
         }
