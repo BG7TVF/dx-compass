@@ -1064,8 +1064,27 @@ function renderPropPanel() {
     armL.innerHTML = left.join('');
     side.innerHTML = html.join('');
     foot.innerHTML = low.join('');
+    sizePropSdo();
 
     redrawPropSparks();
+}
+
+/* The SDO frame must be strictly 1:1 and end flush with the path matrix, so
+ * its size is taken from the matrix content height instead of CSS. */
+function sizePropSdo() {
+    const foot = $('#propFoot');
+    const sec = foot && foot.querySelector('.sec-sdo');
+    const box = sec && sec.querySelector('.prop-sdo');
+    if (!sec || !box) return;
+    const ref = foot.querySelector('.sec-path') || sec;
+    /* Use the last child so a stretched grid cell does not inflate the size. */
+    const last = ref.lastElementChild || ref;
+    const side = Math.floor(last.getBoundingClientRect().bottom -
+        box.getBoundingClientRect().top);
+    if (side > 40) {
+        box.style.width = side + 'px';
+        box.style.height = side + 'px';
+    }
 }
 
 /* Redraw every space-weather sparkline against its current canvas size.
@@ -1141,6 +1160,7 @@ function propResize() {
     propState.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     drawProp();
     redrawPropSparks();
+    sizePropSdo();
 }
 
 /* ---------------------------------------------------------------
