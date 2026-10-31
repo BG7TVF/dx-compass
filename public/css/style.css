@@ -1606,11 +1606,17 @@ body[data-theme="amber"] {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 5px;
 }
-.prop-cty .prop-scale { padding: 4px 7px; }
+.prop-cty .prop-scale { padding: 4px 7px; justify-content: center; }
 .prop-cty .prop-scale b,
 .prop-cty .prop-scale i { color: #08120c; }
 .prop-cty .prop-scale span { color: rgba(8, 18, 12, .72); }
 .prop-foot .sec-read { grid-column: 4; min-width: 0; }
+/* The continent tiles and the global readouts stretch their rows to the
+ * bottom strip height, so both bottom edges line up with the SDO frame. */
+.prop-foot .sec-cty,
+.prop-foot .sec-read { display: flex; flex-direction: column; }
+.prop-foot .sec-cty .prop-cty,
+.prop-foot .sec-read .prop-read { flex: 1; grid-auto-rows: minmax(0, 1fr); }
 .prop-sec-title {
     display: flex;
     align-items: baseline;
