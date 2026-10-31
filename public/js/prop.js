@@ -710,17 +710,24 @@ function renderPropPanel() {
     }
     html.push('</div></div>');
 
-    /* ---- HamQSL band conditions ---- */
+    /* ---- HamQSL band conditions (card grid, same language as the
+     * space-weather cards and the global readouts) ---- */
     const bands = ham.bands || [];
     if (bands.length) {
         const day = bands.filter(b => b.time === 'day');
         const night = bands.filter(b => b.time === 'night');
-        const row = (title, list) => '<tr><th>' + title + '</th>' + list.map(b =>
-            '<td class="' + bandCondClass(b.cond) + '">' + b.cond + '</td>').join('') + '</tr>';
         low.push('<div class="prop-sec sec-bands"><div class="prop-sec-title">' + t('propBands') +
-            '</div><table class="prop-bandtab"><thead><tr><th></th>' +
-            day.map(b => '<th>' + b.name + '</th>').join('') + '</tr></thead><tbody>' +
-            row(t('propDay'), day) + row(t('propNight'), night) + '</tbody></table>');
+            '</div><div class="prop-bandgrid">');
+        for (const b of day) {
+            const nb = night.find(x => x.name === b.name);
+            const condRow = (label, o) => o
+                ? '<div class="bc-row"><span class="bc-time">' + label +
+                  '</span><b class="bc-cond ' + bandCondClass(o.cond) + '">' + o.cond + '</b></div>'
+                : '';
+            low.push('<div class="band-card"><div class="bc-name">' + b.name + '</div>' +
+                condRow(t('propDay'), b) + condRow(t('propNight'), nb) + '</div>');
+        }
+        low.push('</div>');
         if (ham.geomag) {
             low.push('<div class="prop-note">Geomag: ' + ham.geomag +
                 ' · Noise: ' + (ham.noise || '—') + '</div>');

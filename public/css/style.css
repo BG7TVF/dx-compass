@@ -1557,7 +1557,6 @@ body[data-theme="amber"] {
 .prop-foot .sec-path { grid-column: 2; min-width: 0; }
 .prop-foot .sec-sdo { grid-column: 3; min-width: 0; }
 .prop-foot .sec-read { grid-column: 4; min-width: 0; }
-.prop-foot .sec-bands .prop-bandtab { font-size: 11px; }
 .prop-sec-title {
     display: flex;
     align-items: baseline;
@@ -1657,44 +1656,44 @@ body[data-theme="amber"] {
 .prop-scale.s4 { --sev: #e74c3c; }
 .prop-scale.s5 { --sev: #a855f7; }
 
-/* HamQSL day / night band conditions */
-.prop-bandtab {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 10px;
-    table-layout: fixed;
+/* HamQSL day / night band conditions: card grid sharing the visual
+ * language of the space-weather cards and global readouts
+ * (panel-2 fill, border, 4px radius, small dim label + bold value). */
+.prop-bandgrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(78px, 1fr));
+    gap: 5px;
 }
-.prop-bandtab thead th {
-    padding: 2px;
-    color: var(--text-dim);
-    font-size: 9px;
-    font-weight: 600;
-    text-align: center;
-    letter-spacing: .3px;
+.band-card {
+    min-width: 0;
+    padding: 4px 7px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
 }
-.prop-bandtab tbody th {
-    width: 46px;
-    padding-right: 4px;
-    color: var(--text-dim);
-    font-size: 9px;
-    font-weight: 600;
+.bc-name {
+    margin-bottom: 2px;
+    color: var(--accent);
+    font-size: 11px;
+    font-weight: 700;
     letter-spacing: .5px;
-    text-align: left;
 }
-.prop-bandtab td {
-    padding: 3px 1px;
-    border-radius: 3px;
-    text-align: center;
-    font-size: 9px;
-    color: var(--text);
+.bc-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 4px;
+}
+.bc-time { color: var(--text-dim); font-size: 9px; }
+.bc-cond {
+    font-size: 10px;
+    font-weight: 700;
     white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
 }
-.prop-bandtab td.good { background: rgba(46,204,113,.18); color: var(--green); }
-.prop-bandtab td.fair { background: rgba(241,196,15,.16); color: var(--yellow); }
-.prop-bandtab td.poor { background: rgba(231,76,60,.16); color: var(--red); }
-.prop-bandtab td.closed { color: var(--text-dim); }
+.bc-cond.good { color: var(--green); }
+.bc-cond.fair { color: var(--yellow); }
+.bc-cond.poor { color: var(--red); }
+.bc-cond.closed { color: var(--text-dim); font-weight: 400; }
 
 /* DE -> DX 24 h availability matrix, one row per band */
 .prop-path-head { color: var(--text); font-size: 11px; font-variant-numeric: tabular-nums; }
