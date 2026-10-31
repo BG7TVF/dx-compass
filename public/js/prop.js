@@ -123,6 +123,7 @@ function makeProjection(kind, w, h, de) {
         const sc = Math.min(w, h) / (2 * Math.PI);
         const cx = w / 2, cy = h / 2;
         return {
+            kind: 'azimuthal',
             fwd(lon, lat) {
                 const f = propRad(lat), dl = propRad(lon) - lon0;
                 const cosc = Math.sin(lat0) * Math.sin(f) +
@@ -157,6 +158,7 @@ function makeProjection(kind, w, h, de) {
         const sc = fit.sc, cx = w / 2;
         const cy = fit.centered ? h / 2 : yOf(fit.north) * sc;
         return {
+            kind: 'robinson',
             fwd(lon, lat) {
                 const a = Math.abs(lat), sg = lat < 0 ? -1 : 1;
                 return [cx + 0.8487 * robinsonTable(a, ROB_X) * propRad(lon) * sc,
@@ -183,6 +185,7 @@ function makeProjection(kind, w, h, de) {
     const sc = fit.sc, cx = w / 2;
     const cy = fit.centered ? h / 2 : yOf(fit.north) * sc;
     return {
+        kind: 'mercator',
         fwd(lon, lat) { return [cx + propRad(lon) * sc, cy - MY(lat) * sc]; },
         inv(px, py) {
             const x = (px - cx) / sc, y = (cy - py) / sc;
@@ -518,9 +521,51 @@ function drawAuroraLayer(ctx, proj, C) {
     ctx.globalAlpha = 1;
 }
 
+/* Stroke a lon/lat polyline through a projection, skipping invisible points. */
+function propTraceLonLat(ctx, proj, pts) {
+    let started = false;
+    for (const p of pts) {
+        const q = proj.fwd(p[1], p[0]);
+        if (!q) { started = false; continue; }
+        if (!started) { ctx.moveTo(q[0], q[1]); started = true; }
+        else ctx.lineTo(q[0], q[1]);
+    }
+}
+
 function drawGrayline(ctx, proj, w, h, now, C) {
     const t = propTerminator(now);
     ctx.globalAlpha = 1;
+    /* The azimuthal disc needs the opposite fill: its terminator circle is a
+     * simple closed loop around the DAY hemisphere (a 90-degree disc centred
+     * on the sun's image), so the lon-sweep polygon + pole spike used by the
+     * flat projections would shade the daylight half instead of the night.
+     * Fill the canvas and punch the day loop out of it with the even-odd
+     * rule -- orientation-independent and correct for any centre. */
+    if (proj.kind === 'azimuthal') {
+        ctx.fillStyle = 'rgba(0,0,0,0.28)';
+        ctx.beginPath();
+        ctx.rect(0, 0, w, h);
+        let loop;
+        if (t.equinox) {
+            loop = [];
+            for (let lat = -89; lat <= 89; lat += 2) loop.push([lat, t.lonSun - 90]);
+            for (let lat = 89; lat >= -89; lat -= 2) loop.push([lat, t.lonSun + 90]);
+        } else {
+            loop = t.base;
+        }
+        propTraceLonLat(ctx, proj, loop);
+        ctx.closePath();
+        ctx.fill('evenodd');
+
+        ctx.strokeStyle = '#aaa';
+        ctx.globalAlpha = 0.85;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        propTraceLonLat(ctx, proj, loop);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+        return;
+    }
     if (t.equinox) {
         /* near the equinox the terminator degenerates to a meridian:
          * shading the whole night half avoids the pole singularity */
