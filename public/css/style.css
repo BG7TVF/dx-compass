@@ -1521,7 +1521,7 @@ body[data-theme="amber"] {
     grid-column: 1 / -1;
     grid-row: 2;
     display: grid;
-    grid-template-columns: minmax(0, .95fr) minmax(0, 1.25fr) minmax(0, .58fr) minmax(0, .6fr);
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.05fr) minmax(0, .6fr) minmax(0, .6fr);
     align-items: start;
     gap: 0 18px;
 }
@@ -1688,7 +1688,7 @@ body[data-theme="amber"] {
 .prop-matrix { overflow-x: auto; }
 .prop-matrix table { border-collapse: collapse; font-size: 10px; }
 .prop-matrix th {
-    min-width: 15px;
+    min-width: 14px;
     padding: 1px;
     color: var(--text-dim);
     font-size: 9px;
@@ -1704,7 +1704,7 @@ body[data-theme="amber"] {
 }
 .prop-matrix thead th.now { color: var(--accent); font-weight: 700; }
 .prop-matrix td {
-    width: 15px;
+    width: 14px;
     height: 16px;
     padding: 0;
     border: 1px solid var(--border);
