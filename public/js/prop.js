@@ -198,7 +198,11 @@ function makeProjection(kind, w, h, de) {
                 const lat = y < 0 ? -absLat : absLat;
                 const xs = 0.8487 * robinsonTable(absLat, ROB_X);
                 if (!xs) return null;
-                return [lat, propLonAbs(propDeg(x / (xs * sc)), lonC)];
+                /* x is already in projection units (pixels/sc), so the offset
+                 * in radians is x/xs -- dividing by sc again shrank the
+                 * longitude to ~1/sc of the truth and clicks always landed on
+                 * the home meridian. */
+                return [lat, propLonAbs(propDeg(x / xs), lonC)];
             }
         };
     }
