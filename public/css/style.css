@@ -1524,9 +1524,10 @@ body[data-theme="amber"] {
 .prop-arm { grid-column: 1; }
 .prop-side { grid-column: 3; }
 /* The space-weather title and update stamp are raised together with the card
- * type so the whole right arm reads at one scale. */
+ * type so the whole right arm reads at one scale; the band arm follows. */
 .prop-side .prop-sec-title { font-size: 13px; }
 .prop-side .prop-upd { font-size: 11px; }
+.prop-arm .prop-sec-title { font-size: 13px; }
 
 .prop-foot {
     grid-column: 1 / -1;
@@ -1733,7 +1734,7 @@ body[data-theme="amber"] {
 .bc-name {
     margin-bottom: 2px;
     color: var(--accent);
-    font-size: clamp(11px, 9cqh, 20px);
+    font-size: clamp(14px, 11cqh, 24px);
     font-weight: 700;
     letter-spacing: .5px;
 }
@@ -1743,9 +1744,9 @@ body[data-theme="amber"] {
     justify-content: space-between;
     gap: 4px;
 }
-.bc-time { color: var(--text-dim); font-size: clamp(9px, 6.5cqh, 15px); }
+.bc-time { color: var(--text-dim); font-size: clamp(11px, 7.5cqh, 17px); }
 .bc-cond {
-    font-size: clamp(10px, 7.5cqh, 18px);
+    font-size: clamp(12px, 9cqh, 20px);
     font-weight: 700;
     white-space: nowrap;
 }
