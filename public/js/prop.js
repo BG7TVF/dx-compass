@@ -666,6 +666,13 @@ function bandCondClass(cond) {
     return 'closed';
 }
 
+/* Condition identifiers stay English internally (they drive the CSS class);
+ * only the visible text is localised. */
+function condText(cond) {
+    const key = {Good: 'condGood', Fair: 'condFair', Poor: 'condPoor', Closed: 'condClosed'}[cond];
+    return key ? t(key) : (cond || '—');
+}
+
 /* ---------------------------------------------------------------
  * Per-band HF conditions.
  *
@@ -760,9 +767,9 @@ function renderPropPanel() {
             const e = est[b.name];
             low.push('<div class="band-card"><div class="bc-name">' + b.name + '</div>' +
                 '<div class="bc-row"><span class="bc-time">' + t('propDay') +
-                '</span><b class="bc-cond ' + bandCondClass(e.day) + '">' + e.day + '</b></div>' +
+                '</span><b class="bc-cond ' + bandCondClass(e.day) + '">' + condText(e.day) + '</b></div>' +
                 '<div class="bc-row"><span class="bc-time">' + t('propNight') +
-                '</span><b class="bc-cond ' + bandCondClass(e.night) + '">' + e.night + '</b></div></div>');
+                '</span><b class="bc-cond ' + bandCondClass(e.night) + '">' + condText(e.night) + '</b></div></div>');
         }
         low.push('</div>');
         if (ham.geomag) {
@@ -781,7 +788,7 @@ function renderPropPanel() {
                 const nb = night.find(x => x.name === b.name);
                 const condRow = (label, o) => o
                     ? '<div class="bc-row"><span class="bc-time">' + label +
-                      '</span><b class="bc-cond ' + bandCondClass(o.cond) + '">' + o.cond + '</b></div>'
+                      '</span><b class="bc-cond ' + bandCondClass(o.cond) + '">' + condText(o.cond) + '</b></div>'
                     : '';
                 low.push('<div class="band-card"><div class="bc-name">' + b.name + '</div>' +
                     condRow(t('propDay'), b) + condRow(t('propNight'), nb) + '</div>');
@@ -853,13 +860,13 @@ function renderPropPanel() {
         '</div><div class="prop-read">');
     const read = (k, v) => '<div class="pr-card"><div class="pr-label">' + k +
         '</div><div class="pr-val">' + v + '</div></div>';
-    low.push(read('MUF @ DE', propNum(propState.de ? propMufAt(propState.de.lat, propState.de.lon) : null, 1) + ' MHz'));
-    low.push(read('MUF max', maxSt ? propNum(maxSt[2], 1) + ' MHz · ' + maxSt[4] : '—'));
-    low.push(read('MUF @ DX', propNum(propMufAt(propState.dx.lat, propState.dx.lon), 1) + ' MHz'));
-    low.push(read('Aurora (OVATION)', auMax ? auMax + '%' : '—'));
-    low.push(read('DRAP @ DE', propNum(cardValue('drap'), 1) + ' MHz'));
-    low.push(read('DRAP @ DX', propNum(propDrapAt(propState.dx.lat, propState.dx.lon), 1) + ' MHz'));
-    low.push(read('TOA', propState.de
+    low.push(read(t('rdMufDe'), propNum(propState.de ? propMufAt(propState.de.lat, propState.de.lon) : null, 1) + ' MHz'));
+    low.push(read(t('rdMufMax'), maxSt ? propNum(maxSt[2], 1) + ' MHz · ' + maxSt[4] : '—'));
+    low.push(read(t('rdMufDx'), propNum(propMufAt(propState.dx.lat, propState.dx.lon), 1) + ' MHz'));
+    low.push(read(t('rdAurora'), auMax ? auMax + '%' : '—'));
+    low.push(read(t('rdDrapDe'), propNum(cardValue('drap'), 1) + ' MHz'));
+    low.push(read(t('rdDrapDx'), propNum(propDrapAt(propState.dx.lat, propState.dx.lon), 1) + ' MHz'));
+    low.push(read(t('rdToa'), propState.de
         ? Math.round(propDeg(Math.atan(300 / Math.max(1, propDistance(propState.de, propState.dx) / 2)))) + '°'
         : '—'));
     low.push(read(t('propWeatherDx'), wx ? (propNum(wx[2], 1) + '°C · WMO ' + (wx[3] === null ? '—' : wx[3])) : '—'));
