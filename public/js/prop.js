@@ -25,9 +25,12 @@ const PROP_BANDS = [
 
 const PROP_PROJECTIONS = ['mercator', 'azimuthal', 'robinson'];
 const PROP_LAYERS = ['muf', 'weather', 'aurora'];
-/* Southern edge kept when filling the width would otherwise crop the map
- * north of this latitude: only the Antarctic cap below it is sacrificed. */
-const PROP_CUT_LAT = -70;
+/* Mainland-safe limits used when filling the width: only land beyond these
+ * may be clipped (Arctic islands above 78N, Antarctica below 56S). Cape
+ * Chelyuskin (77.7N) and Cape Horn (56S), the outermost mainland tips, stay
+ * inside the map. */
+const PROP_NORTH_MIN = 78;
+const PROP_SOUTH_MIN = -56;
 
 const propState = {
     data: null, err: null, loading: false,
@@ -55,13 +58,13 @@ function propShortTime(iso) {
 
 /* ---------------------------------------------------------------
  * Projections. Each returns {fwd(lon,lat), inv(x,y)} in CSS pixels,
- * fitted width-first: the map always spans the full canvas width, the
- * northern edge sits on the top border, and any southern overflow is
- * clipped by the canvas. The clip never reaches further north than
- * PROP_CUT_LAT, so only the polar cap (Antarctica) can be lost. The map
- * is static: no wheel zoom and no panning. The azimuthal disc is an
- * exception -- it is centred and fitted with "contain" so the circular
- * view stays whole.
+ * fitted width-first (see fitWorld): the map always spans the full canvas
+ * width, the northern edge sits on the top border, and the polar caps are
+ * clipped -- Antarctica first, then the Arctic islands -- but never beyond
+ * PROP_SOUTH_MIN / PROP_NORTH_MIN, so no mainland is ever cut. The map is
+ * static: no wheel zoom and no panning. The azimuthal disc is an exception
+ * -- it is centred and fitted with "contain" so the circular view stays
+ * whole.
  * ------------------------------------------------------------- */
 const ROB_X = [1, 0.9986, 0.9954, 0.99, 0.9822, 0.973, 0.96, 0.9427, 0.9216,
     0.8962, 0.8679, 0.835, 0.7986, 0.7597, 0.7186, 0.6732, 0.6213, 0.5722, 0.5322];
@@ -72,6 +75,45 @@ function robinsonTable(absLat, table) {
     const i = clamp(Math.floor(absLat / 5), 0, 17);
     const t = absLat / 5 - i;
     return table[i] + (table[i + 1] - table[i]) * t;
+}
+
+/* Robinson Y table -> latitude (degrees, positive), by binary search on the
+ * 5-degree rows. */
+function robLatFromY(y) {
+    const ay = Math.min(Math.abs(y / 1.3523), 1);
+    let lo = 0, hi = 18;
+    for (let i = 0; i < 24; i++) {
+        const mid = (lo + hi) / 2;
+        if (robinsonTable(mid * 5, ROB_Y) < ay) lo = mid; else hi = mid;
+    }
+    return clamp(((lo + hi) / 2) * 5, 0, 90);
+}
+
+/* Width-first fit. Returns {sc, north, south, centered}:
+ *  - the whole world when the canvas is tall enough (centred, vertical margins),
+ *  - otherwise the latitude window that fills the width: give up the Antarctic
+ *    first, then the Arctic islands, stopping at the mainland-safe limits,
+ *  - and if even that window is too tall, shrink so side margins remain.
+ * yOf(lat) must return the (positive) projected distance from the equator and
+ * latFromY(y) its inverse, so the same logic serves every projection. */
+function fitWorld(w, h, worldWidth, yNorth, yOf, latFromY, northLimit) {
+    const scW = w / worldWidth;
+    const need = h / scW;                       // vertical span at full width
+    const yS = yOf(Math.abs(PROP_SOUTH_MIN));   // deepest allowed southern crop
+    const yN = yOf(PROP_NORTH_MIN);             // deepest allowed northern crop
+    if (need >= 2 * yNorth) {
+        return {sc: scW, north: northLimit, south: -northLimit, centered: true};
+    }
+    const yS1 = need - yNorth;
+    if (yS1 >= yS) {
+        return {sc: scW, north: northLimit, south: -latFromY(yS1), centered: false};
+    }
+    const yN1 = need - yS;
+    if (yN1 >= yN) {
+        return {sc: scW, north: latFromY(yN1), south: PROP_SOUTH_MIN, centered: false};
+    }
+    return {sc: Math.min(scW, h / (yN + yS)), north: PROP_NORTH_MIN,
+        south: PROP_SOUTH_MIN, centered: false};
 }
 
 function makeProjection(kind, w, h, de) {
@@ -110,9 +152,10 @@ function makeProjection(kind, w, h, de) {
     }
     if (kind === 'robinson') {
         const xMax = 0.8487 * Math.PI, yMax = 1.3523;
-        const ySouth = 1.3523 * robinsonTable(Math.abs(PROP_CUT_LAT), ROB_Y);
-        const sc = Math.min(w / (2 * xMax), h / (yMax + ySouth));
-        const cx = w / 2, cy = yMax * sc;
+        const yOf = lat => 1.3523 * robinsonTable(Math.abs(lat), ROB_Y);
+        const fit = fitWorld(w, h, 2 * xMax, yMax, yOf, robLatFromY, 90);
+        const sc = fit.sc, cx = w / 2;
+        const cy = fit.centered ? h / 2 : yOf(fit.north) * sc;
         return {
             fwd(lon, lat) {
                 const a = Math.abs(lat), sg = lat < 0 ? -1 : 1;
@@ -121,15 +164,7 @@ function makeProjection(kind, w, h, de) {
             },
             inv(px, py) {
                 const x = (px - cx) / sc, y = (cy - py) / sc;
-                const ay = Math.min(Math.abs(y / 1.3523), 1);
-                // invert the Y table by binary search on the 5-degree rows
-                let lo = 0, hi = 18;
-                for (let i = 0; i < 24; i++) {
-                    const mid = (lo + hi) / 2;
-                    const v = robinsonTable(mid * 5, ROB_Y);
-                    if (v < ay) lo = mid; else hi = mid;
-                }
-                const absLat = clamp(((lo + hi) / 2) * 5, 0, 90);
+                const absLat = robLatFromY(y);
                 const lat = y < 0 ? -absLat : absLat;
                 const xs = 0.8487 * robinsonTable(absLat, ROB_X);
                 if (!xs) return null;
@@ -138,18 +173,20 @@ function makeProjection(kind, w, h, de) {
             }
         };
     }
-    // Mercator: full longitudes always fit the width, the southern cap may be cut
+    // Mercator: same width-first fit, latitudes clamped at the Leaflet world bounds
+    const northLimit = 85.06;
     const MY = lat => Math.log(Math.tan(Math.PI / 4 +
-        clamp(lat, -85.06, 85.06) * Math.PI / 360));
-    const myMax = MY(85.06);
-    const mySouth = MY(PROP_CUT_LAT);
-    const sc = Math.min(w / (2 * Math.PI), h / (myMax - mySouth));
-    const cx = w / 2, cy = myMax * sc;
+        clamp(lat, -northLimit, northLimit) * Math.PI / 360));
+    const yOf = lat => MY(Math.abs(lat));
+    const latFromY = y => propDeg(2 * Math.atan(Math.exp(y)) - Math.PI / 2);
+    const fit = fitWorld(w, h, 2 * Math.PI, MY(northLimit), yOf, latFromY, northLimit);
+    const sc = fit.sc, cx = w / 2;
+    const cy = fit.centered ? h / 2 : yOf(fit.north) * sc;
     return {
         fwd(lon, lat) { return [cx + propRad(lon) * sc, cy - MY(lat) * sc]; },
         inv(px, py) {
             const x = (px - cx) / sc, y = (cy - py) / sc;
-            const lat = propDeg(2 * Math.atan(Math.exp(y)) - Math.PI / 2);
+            const lat = latFromY(y);
             const lon = ((propDeg(x) + 540) % 360) - 180;
             return [clamp(lat, -85, 85), lon];
         }
