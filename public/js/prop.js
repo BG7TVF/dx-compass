@@ -420,9 +420,37 @@ function propPathProfile(a, b) {
 
 /* Measured MUF/foF2 already sit at the snapshot's local solar elevation;
  * normalise them to "noon-equivalent" first, then apply the forecast hour's
- * elevation. Day factor: ~0.58 at night, ~1.13 with the sun overhead. */
+ * elevation. Day factor: ~0.55 through the night, 1.17 with the sun overhead.
+ * The exponent keeps the curve rising past sf~0.7 instead of flattening there
+ * -- a saturating linear ramp made the midday sun at 40N and at the equator
+ * score the same factor, which erased the latitude contrast. */
 function propMufDayFactor(sf) {
-    return 0.58 + 0.55 * clamp((sf + 0.15) / 0.85, 0, 1);
+    return 0.55 + 0.62 * Math.pow(clamp((sf + 0.12) / 1.12, 0, 1), 0.65);
+}
+
+/* Climatological MUF(3000) for a hop where no fresh sonde covers the point.
+ * The SFI term alone is one global scalar, so latitude and season have to
+ * enter separately:
+ *  - dec is the subsolar latitude on the forecast date, so |lat - dec| is the
+ *    noon zenith distance at that latitude: 0 at the subsolar point, ~90 in
+ *    polar night. noonSf = cos(lat - dec) is the noon solar elevation.
+ *  - the peak is the SFI scale shaped by that noon elevation (0.30 base for a
+ *    sun that never rises, up to 1.0 at the subsolar point), i.e. the seasonal
+ *    and latitudinal ceiling for that day.
+ *  - the day factor then moves that peak from local noon to the forecast
+ *    hour, so a night-time sample is scaled down by the usual day/night ratio
+ *    rather than by an elevation that already had no latitude in it.
+ * Order of magnitude with SFI=90 (21.3 MHz base): equator ~21/11, 23N ~19/10,
+ * 60N ~12/8, 75N in late October ~7/5 MHz (day/night). */
+function propClimatMuf(lat, lon, when) {
+    const sfi = propState.data && propState.data.ham && propState.data.ham.sfi;
+    const base = sfi ? 1.5 + 0.22 * sfi : 8;
+    const dec = propTerminator(when).dec;
+    const noonSf = Math.max(0, Math.cos(propRad(Math.abs(lat - dec))));
+    const peak = base * (0.30 + 0.70 * Math.pow(noonSf, 0.7));
+    const kAt = propMufDayFactor(sunFactor(lat, lon, when));
+    const kNoon = propMufDayFactor(noonSf);
+    return peak * clamp(kAt / (kNoon || 1), 0.35, 1.15);
 }
 
 /* Relative D-region absorption: ~0.1 at night, 1.0 with the sun overhead. */
@@ -464,8 +492,10 @@ function propPathWindow(prof, when) {
         if (iono) {
             base = iono.fof2 + (iono.muf - iono.fof2) * span;
         } else {
-            const eq = (sfi ? 1.5 + 0.22 * sfi : 8) *
-                propMufDayFactor(sunFactor(m.lat, m.lon, when));
+            /* no sonde within 2500 km: climatological MUF with the day's
+             * latitude/season correction (propClimatMuf), not the bare SFI
+             * scalar that ignored both. */
+            const eq = propClimatMuf(m.lat, m.lon, when);
             base = 0.62 * eq + 0.38 * eq * span;
         }
         if (base < mufMin) mufMin = base;
