@@ -1606,10 +1606,12 @@ body[data-theme="amber"] {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 5px;
 }
+/* Best band per continent: score as a left-to-right progress-bar fill over
+ * the dark panel base, so the text stays light. */
 .prop-cty .prop-scale { padding: 4px 7px; justify-content: center; }
-.prop-cty .prop-scale b,
-.prop-cty .prop-scale i { color: #08120c; }
-.prop-cty .prop-scale span { color: rgba(8, 18, 12, .72); }
+.prop-cty .prop-scale span { color: var(--text); font-weight: 700; }
+.prop-cty .prop-scale b { color: #fff; font-size: 20px; }
+.prop-cty .prop-scale i { color: var(--text); }
 .prop-foot .sec-read { grid-column: 4; min-width: 0; }
 /* The continent tiles and the global readouts stretch their rows to the
  * bottom strip height, so both bottom edges line up with the SDO frame. */
