@@ -998,7 +998,12 @@ function bindPropMap() {
         if (!hover) return;
         if (!ll) { hover.classList.add('hidden'); return; }
         hover.classList.remove('hidden');
-        hover.textContent = ll[0].toFixed(1) + '°, ' + ll[1].toFixed(1) + '°';
+        /* Bearing from the DE (own) station to the pointer: the useful readout
+         * when picking a DX point. Falls back to a dash when no grid is set. */
+        const de = propState.de;
+        hover.textContent = de
+            ? 'Az ' + (Math.round(propBearing(de, {lat: ll[0], lon: ll[1]})) % 360) + '°'
+            : '—';
         const r = propState.wrap.getBoundingClientRect();
         hover.style.left = (ev.clientX - r.left + 14) + 'px';
         hover.style.top = (ev.clientY - r.top + 14) + 'px';
