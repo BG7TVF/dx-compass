@@ -1661,7 +1661,10 @@ body[data-theme="amber"] {
  * (panel-2 fill, border, 4px radius, small dim label + bold value). */
 .prop-bandgrid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(78px, 1fr));
+    /* auto-fit collapses the unused track so a short band list (HamQSL
+     * currently ships 4 combined groups) still fills the full column
+     * width instead of leaving a blank slot on the right. */
+    grid-template-columns: repeat(auto-fit, minmax(78px, 1fr));
     gap: 5px;
 }
 .band-card {
