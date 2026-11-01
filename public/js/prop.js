@@ -203,10 +203,15 @@ function makeProjection(kind, w, h, de) {
             fwdRaw,
             inv(px, py) {
                 const x = (px - cx) / sc, y = (cy - py) / sc;
+                /* Past the poles or outside the elliptical edge there is no
+                 * coordinate -- same phantom-position guard as Mercator. */
+                if (Math.abs(y) > yMax + 0.02) return null;
                 const absLat = robLatFromY(y);
                 const lat = y < 0 ? -absLat : absLat;
+                if (lat > fit.north + 0.3 || lat < fit.south - 0.3) return null;
                 const xs = 0.8487 * robinsonTable(absLat, ROB_X);
                 if (!xs) return null;
+                if (Math.abs(x / xs) > Math.PI + 0.02) return null;
                 /* x is already in projection units (pixels/sc), so the offset
                  * in radians is x/xs -- dividing by sc again shrank the
                  * longitude to ~1/sc of the truth and clicks always landed on
@@ -232,7 +237,12 @@ function makeProjection(kind, w, h, de) {
         fwdRaw,
         inv(px, py) {
             const x = (px - cx) / sc, y = (cy - py) / sc;
+            /* Outside the world silhouette there is no coordinate: the margins
+             * (or the cropped latitudes) must not yield phantom clamped
+             * positions for clicks and the hover readout. */
+            if (Math.abs(propDeg(x)) > 180.5) return null;
             const lat = latFromY(y);
+            if (lat > fit.north + 0.3 || lat < fit.south - 0.3) return null;
             return [clamp(lat, -85, 85), propLonAbs(propDeg(x), lonC)];
         }
     };
@@ -985,29 +995,29 @@ function drawProp() {
     else if (s.layer === 'weather') drawWeatherLayer(ctx, proj, C);
     else if (s.layer === 'aurora') drawAuroraLayer(ctx, proj, C);
 
-    /* graticule every 30 degrees */
+    /* graticule every 30 degrees. Meridians are sampled point by point on
+     * every projection: on Robinson they are curves that bulge toward the
+     * centre meridian, and the old straight (lon,-85)->(lon,85) chord cut
+     * across the map near the equator -- the graticule no longer lies about
+     * the projection. */
     ctx.strokeStyle = C.border;
-    ctx.globalAlpha = 0.55;
-    ctx.lineWidth = 1;
     for (let lon = -180; lon < 180; lon += 30) {
-        if (disc) {
-            /* meridians are curves on the disc, never straight chords */
-            ctx.beginPath();
-            let started = false;
-            for (let lat = -85; lat <= 85; lat += 3) {
-                const p = proj.fwd(lon, lat);
-                if (!p) { started = false; continue; }
-                if (!started) { ctx.moveTo(p[0], p[1]); started = true; }
-                else ctx.lineTo(p[0], p[1]);
-            }
-            ctx.stroke();
-            continue;
+        ctx.globalAlpha = 0.55;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        let started = false;
+        for (let lat = -90; lat <= 90; lat += 3) {
+            const p = proj.fwd(lon, lat);
+            if (!p) { started = false; continue; }
+            if (!started) { ctx.moveTo(p[0], p[1]); started = true; }
+            else ctx.lineTo(p[0], p[1]);
         }
-        const a = proj.fwd(lon, -85), b = proj.fwd(lon, 85);
-        if (!a || !b) continue;
-        ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+        ctx.stroke();
     }
     for (let lat = -60; lat <= 60; lat += 30) {
+        /* the equator carries a little more weight than the other parallels */
+        ctx.globalAlpha = lat === 0 ? 0.8 : 0.55;
+        ctx.lineWidth = lat === 0 ? 1.3 : 1;
         ctx.beginPath();
         let started = false;
         /* sweep the home-centred range so the parallel never jumps at the seam */
@@ -1019,6 +1029,8 @@ function drawProp() {
         }
         ctx.stroke();
     }
+    ctx.globalAlpha = 1;
+    ctx.lineWidth = 1;
 
     /* Country borders stay on the flat projections only: the coarse 110m
      * outlines are stretched badly by the disc and read as noise. */
@@ -1053,7 +1065,56 @@ function drawProp() {
         ctx.strokeRect(0.5, 0.5, w - 1, h - 1);
     }
 
+    drawPropLegend(ctx, w, h);
+
     propState.lastDraw = Date.now();
+}
+
+/* Layer legend chip in the lower-left corner: a gradient strip with the two
+ * scale ends. Units only (MHz / deg C / %), so it stays language-neutral. */
+function drawPropLegend(ctx, w, h) {
+    const d = propState.data;
+    if (!d) return;
+    let stops = null, lo = '', hi = '';
+    if (propState.layer === 'muf') {
+        stops = [3, 9, 15, 21, 27, 30].map(v => mufColor(v));
+        lo = '3'; hi = '30 MHz';
+    } else if (propState.layer === 'weather') {
+        if (!d.wx || !d.wx.pts || !d.wx.pts.length) return;
+        stops = [-30, -16, -2, 12, 26, 40].map(v => wxColor(v));
+        lo = '-30°'; hi = '+40°C';
+    } else if (propState.layer === 'aurora') {
+        if (!d.aurora || !d.aurora.grid) return;
+        stops = [[46, 204, 113], [241, 196, 15], [255, 77, 109]];
+        lo = '0'; hi = '100%';
+    }
+    if (!stops) return;
+    const bw = 120, bh = 7, x0 = 12, y0 = h - 22;
+    ctx.save();
+    ctx.fillStyle = 'rgba(5,11,17,.72)';
+    ctx.strokeStyle = 'rgba(127,176,196,.35)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(x0 - 7, y0 - 12, bw + 14, bh + 22, 4);
+    else ctx.rect(x0 - 7, y0 - 12, bw + 14, bh + 22);
+    ctx.fill();
+    ctx.stroke();
+    const g = ctx.createLinearGradient(x0, 0, x0 + bw, 0);
+    for (let i = 0; i < stops.length; i++) {
+        g.addColorStop(i / (stops.length - 1), 'rgb(' + stops[i].join(',') + ')');
+    }
+    ctx.fillStyle = g;
+    ctx.fillRect(x0, y0, bw, bh);
+    ctx.strokeStyle = 'rgba(255,255,255,.25)';
+    ctx.strokeRect(x0 + 0.5, y0 + 0.5, bw - 1, bh - 1);
+    ctx.fillStyle = '#c8d6de';
+    ctx.font = '9px "Segoe UI", sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText(lo, x0, y0 - 2);
+    ctx.textAlign = 'right';
+    ctx.fillText(hi, x0 + bw, y0 - 2);
+    ctx.restore();
 }
 
 /* MUF heat grid: inverse-distance weighted ionosonde MUF3000 per cell */
@@ -1205,17 +1266,21 @@ function drawAuroraLayer(ctx, proj, C) {
 }
 
 /* Terminator on the azimuthal disc as a radial boundary around the screen
- * centre. For every bearing there is exactly one crossing of the great circle
- * 90 degrees from the sun, so the loop is continuous everywhere -- sweeping
- * the terminator latitude by longitude (the old approach) put consecutive
- * samples on opposite sides of the antipode and drew chords across the map.
- * Day/night is decided by A = sun . centre-vector: with A > 0 the centre is
- * lit and the day region is the star around it. */
-function propDiscBoundary(proj, w, h, t) {
+ * centre. For every bearing there is exactly one crossing of the target sun
+ * elevation (0 for the terminator, -6 for the twilight edge), so the loop is
+ * continuous everywhere -- sweeping the terminator latitude by longitude (the
+ * old approach) put consecutive samples on opposite sides of the antipode and
+ * drew chords across the map. sinH is the sine of the target elevation; the
+ * filled side is decided by A (sun elevation at the centre) vs sinH. Returns
+ * null when the centre itself sits inside the twilight band -- the -6 contour
+ * then wraps around the centre instead of forming a clean star, and the
+ * caller falls back to the single night fill. */
+function propDiscBoundary(proj, w, h, t, sinH) {
     const lat0 = propRad(proj.lat0 || 0), lon0 = propRad(proj.lon0 || 0);
     const dec = propRad(t.dec), sun = propRad(t.lonSun);
     const A = Math.sin(dec) * Math.sin(lat0) +
         Math.cos(dec) * Math.cos(lat0) * Math.cos(sun - lon0);
+    if (sinH && Math.abs(A) < Math.abs(sinH)) return null;
     /* sun components along the local north and east directions at the centre */
     const sN = Math.sin(dec) * Math.cos(lat0) -
         Math.sin(lat0) * Math.cos(dec) * Math.cos(sun - lon0);
@@ -1226,105 +1291,198 @@ function propDiscBoundary(proj, w, h, t) {
     for (let deg = 0; deg < 360; deg += 2) {
         const th = propRad(deg);
         const B = sN * Math.cos(th) + sE * Math.sin(th);
-        /* first root of A cos c + B sin c = 0 in [0, pi) */
-        let c = Math.atan2(-A, B);
-        c = ((c % Math.PI) + Math.PI) % Math.PI;
+        /* elevation along this bearing: sin(el(c)) = A cos c + B sin c.
+         * h = 0 reduces to the plain terminator root; h = -6 picks the root
+         * on the night side, clamped to the rim when the contour leaves the
+         * disc before closing. */
+        let c;
+        if (!sinH) {
+            c = Math.atan2(-A, B);
+            c = ((c % Math.PI) + Math.PI) % Math.PI;
+        } else {
+            c = Math.atan2(B, A) + (A >= 0 ? 1 : -1) *
+                Math.acos(clamp(sinH / Math.hypot(A, B), -1, 1));
+            /* the raw root can land negative (the crossing then lies in the
+             * opposite bearing); fold into [0, 2*pi) first, then clamp to the
+             * rim -- plain clamping dropped those roots onto the centre. */
+            c = ((c % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+            c = clamp(c, 0, Math.PI);
+        }
         pts.push([cx + cpx * c * Math.sin(th), cy - cpx * c * Math.cos(th)]);
     }
-    return {pts, day: A > 0};
+    return {pts, day: A > sinH};
+}
+
+/* Fill the region below a disc boundary (day side punched out when the
+ * centre is above the threshold). */
+function propDiscShade(ctx, w, h, b, alpha) {
+    ctx.fillStyle = 'rgba(0,0,0,' + alpha + ')';
+    ctx.beginPath();
+    if (b.day) ctx.rect(0, 0, w, h);
+    ctx.moveTo(w / 2, h / 2);
+    for (const p of b.pts) ctx.lineTo(p[0], p[1]);
+    ctx.closePath();
+    ctx.fill(b.day ? 'evenodd' : 'nonzero');
+}
+
+function propDiscStroke(ctx, b, alpha, width) {
+    ctx.strokeStyle = '#aaa';
+    ctx.globalAlpha = alpha;
+    ctx.lineWidth = width;
+    ctx.beginPath();
+    ctx.moveTo(b.pts[0][0], b.pts[0][1]);
+    for (let i = 1; i < b.pts.length; i++) ctx.lineTo(b.pts[i][0], b.pts[i][1]);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+}
+
+/* Terminator latitude for a target sun elevation hDeg at hour angle H,
+ * declination dec. sin(el) = sin(dec) sin(lat) + cos(dec) cos(lat) cos(H)
+ * solved for lat; reduces to the classic atan(-cos(H)/tan(dec)) at h = 0.
+ * Null where the sun never reaches that elevation on this meridian. */
+function propTermLat(hDeg, H, dec) {
+    const sH = Math.sin(propRad(hDeg));
+    const A = Math.sin(dec), B = Math.cos(dec) * Math.cos(H);
+    const R = Math.hypot(A, B);
+    if (R < Math.abs(sH)) return null;
+    const phi = Math.atan2(B, A);
+    const a = Math.asin(clamp(sH / R, -1, 1));
+    /* asin has a second branch (pi - a): the twilight contour must stay
+     * continuous with the plain terminator, so pick whichever branch lands
+     * closer to it -- the principal branch alone jumps to the far side of
+     * the pole on the midnight meridian. The reference is the classic
+     * atan(-cos(H)/tan(dec)) curve, a genuine latitude in [-90, 90]; folding
+     * -phi instead would alias it to 180 degrees when dec is negative. */
+    const lat0 = Math.atan(-Math.cos(H) / (Math.tan(dec) || 1e-12));
+    const l1 = a - phi, l2 = (Math.PI - a) - phi;
+    const fold = x => Math.atan2(Math.sin(x), Math.cos(x));
+    const l1f = fold(l1), l2f = fold(l2);
+    const d1 = Math.abs(fold(l1f - lat0)), d2 = Math.abs(fold(l2f - lat0));
+    return propDeg(d1 <= d2 ? l1f : l2f);
 }
 
 function drawGrayline(ctx, proj, w, h, now, C) {
     const lonC = proj.lon0 || 0;
     /* the disc works in true longitudes, the flat maps in home-centred ones */
     const t = propTerminator(now, proj.kind === 'azimuthal' ? 0 : lonC);
+    const sinTwi = Math.sin(propRad(-6));
     ctx.globalAlpha = 1;
     if (proj.kind === 'azimuthal') {
-        const b = propDiscBoundary(proj, w, h, t);
+        const b0 = propDiscBoundary(proj, w, h, t, 0);
+        /* Civil-twilight edge: a second, deeper fill inside the night, so the
+         * band between the two curves reads as dusk/dawn. Absent while the
+         * home station itself is inside the twilight (contour wraps it). */
+        const b6 = propDiscBoundary(proj, w, h, t, sinTwi);
+        propDiscShade(ctx, w, h, b0, b6 ? 0.18 : 0.42);
+        if (b6) {
+            propDiscShade(ctx, w, h, b6, 0.26);
+            propDiscStroke(ctx, b6, 0.3, 1);
+        }
+        propDiscStroke(ctx, b0, 0.85, 1.5);
+        return;
+    }
+    if (t.equinox) {
+        /* Near the equinox the terminator degenerates to the two meridians
+         * lonSun +/- 90. Trace the day strip point by point along both of
+         * them and punch it out of the shading: on Robinson the meridians
+         * are curves, and the old fillRect band cut straight across the
+         * elliptical edge of the map. */
+        const dE = propLonRel(t.lonSun + 90, lonC);
+        const dW = propLonRel(t.lonSun - 90, lonC);
         ctx.fillStyle = 'rgba(0,0,0,0.42)';
         ctx.beginPath();
-        /* Night is the disc minus the day star when the centre is lit; fill
-         * the whole clip rect and punch the star out with even-odd. */
-        if (b.day) ctx.rect(0, 0, w, h);
-        ctx.moveTo(w / 2, h / 2);
-        for (const p of b.pts) ctx.lineTo(p[0], p[1]);
+        ctx.rect(0, 0, w, h);
+        for (let lat = -90; lat <= 90; lat += 2) {
+            const q = proj.fwdRaw(dE, lat);
+            if (lat === -90) ctx.moveTo(q[0], q[1]); else ctx.lineTo(q[0], q[1]);
+        }
+        for (let lat = 90; lat >= -90; lat -= 2) {
+            const q = proj.fwdRaw(dW, lat);
+            ctx.lineTo(q[0], q[1]);
+        }
         ctx.closePath();
-        ctx.fill(b.day ? 'evenodd' : 'nonzero');
+        ctx.fill('evenodd');
 
         ctx.strokeStyle = '#aaa';
         ctx.globalAlpha = 0.85;
         ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.moveTo(b.pts[0][0], b.pts[0][1]);
-        for (let i = 1; i < b.pts.length; i++) ctx.lineTo(b.pts[i][0], b.pts[i][1]);
-        ctx.closePath();
-        ctx.stroke();
+        for (const d of [dE, dW]) {
+            ctx.beginPath();
+            for (let lat = -90; lat <= 90; lat += 2) {
+                const q = proj.fwdRaw(d, lat);
+                if (lat === -90) ctx.moveTo(q[0], q[1]); else ctx.lineTo(q[0], q[1]);
+            }
+            ctx.stroke();
+        }
         ctx.globalAlpha = 1;
         return;
     }
-    const west = proj.fwdRaw(-180, 0)[0];
-    const east = proj.fwdRaw(180, 0)[0];
-    if (t.equinox) {
-        /* Near the equinox the terminator degenerates to a meridian: the day
-         * half is the arc between lonSun +/- 90 that contains the subsolar
-         * meridian; shade the other half (both pieces when it wraps around
-         * the edges of the home-centred map). */
-        const xA = proj.fwdRaw(propLonRel(t.lonSun + 90, lonC), 0)[0];
-        const xB = proj.fwdRaw(propLonRel(t.lonSun - 90, lonC), 0)[0];
-        const xSun = proj.fwdRaw(propLonRel(t.lonSun, lonC), 0)[0];
-        const lo = Math.min(xA, xB), hi = Math.max(xA, xB);
-        ctx.fillStyle = 'rgba(0,0,0,0.42)';
-        if (xSun >= lo && xSun <= hi) {
-            ctx.fillRect(west, 0, lo - west, h);
-            ctx.fillRect(hi, 0, east - hi, h);
-        } else {
-            ctx.fillRect(lo, 0, hi - lo, h);
+    /* A night-region polygon: the boundary curve plus the closure down both
+     * edge meridians and through the night pole. Sampling every 2 degrees
+     * keeps the curved Robinson edge meridians honest (the old single chord
+     * cut the shading off the map's upper/lower corners). */
+    const fillNight = (curve, alpha) => {
+        const night = curve.slice();
+        const edgeTo = (fromLat, toLat, d) => {
+            const steps = Math.max(1, Math.ceil(Math.abs(toLat - fromLat) / 2));
+            for (let i = 1; i <= steps; i++) {
+                night.push([fromLat + (toLat - fromLat) * i / steps, d]);
+            }
+        };
+        const latEnd = curve[curve.length - 1][0], latStart = curve[0][0];
+        edgeTo(latEnd, t.nightPole, 180);
+        night.push([t.nightPole, -180]);
+        edgeTo(t.nightPole, latStart, -180);
+        ctx.fillStyle = 'rgba(0,0,0,' + alpha + ')';
+        ctx.beginPath();
+        let started = false;
+        for (const p of night) {
+            const q = proj.fwdRaw(p[1], p[0]);   // p[1] is a home-centred offset
+            if (!q) { started = false; continue; }
+            if (!started) { ctx.moveTo(q[0], q[1]); started = true; }
+            else ctx.lineTo(q[0], q[1]);
         }
-        return;
-    }
-    const base = t.base;
-    const night = [];
-    for (let i = 0; i < base.length; i++) night.push(base[i]);
-    /* Close the night polygon down the two edge meridians, sampling every
-     * 2 degrees. On Robinson those meridians are curves, and the old single
-     * chord from the last terminator point straight to the pole cut the
-     * shading off the map's upper/lower corners. */
-    const edgeTo = (fromLat, toLat, d) => {
-        const steps = Math.max(1, Math.ceil(Math.abs(toLat - fromLat) / 2));
-        for (let i = 1; i <= steps; i++) {
-            night.push([fromLat + (toLat - fromLat) * i / steps, d]);
-        }
+        ctx.closePath();
+        ctx.fill();
     };
-    const latEnd = base[base.length - 1][0], latStart = base[0][0];
-    edgeTo(latEnd, t.nightPole, 180);
-    night.push([t.nightPole, -180]);
-    edgeTo(t.nightPole, latStart, -180);
-
-    ctx.fillStyle = 'rgba(0,0,0,0.42)';
-    ctx.beginPath();
-    let started = false;
-    for (const p of night) {
-        const q = proj.fwdRaw(p[1], p[0]);   // p[1] is a home-centred offset
-        if (!q) { started = false; continue; }
-        if (!started) { ctx.moveTo(q[0], q[1]); started = true; }
-        else ctx.lineTo(q[0], q[1]);
+    const strokeCurve = (curve, alpha, width) => {
+        ctx.strokeStyle = '#aaa';
+        ctx.globalAlpha = alpha;
+        ctx.lineWidth = width;
+        ctx.beginPath();
+        let started = false;
+        for (const p of curve) {
+            const q = proj.fwdRaw(p[1], p[0]);
+            if (!q) { started = false; continue; }
+            if (!started) { ctx.moveTo(q[0], q[1]); started = true; }
+            else ctx.lineTo(q[0], q[1]);
+        }
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+    };
+    const base = t.base;
+    /* Civil-twilight curve (sun at -6). It is a clean latitude-per-longitude
+     * line only away from the equinox: within +/-6 degrees of declination the
+     * -6 contour loops around a pole instead, and the single night fill keeps
+     * the map honest there. */
+    const dec = propRad(t.dec);
+    let twi = null;
+    if (Math.abs(Math.sin(dec)) >= Math.abs(sinTwi)) {
+        twi = [];
+        for (let d = -180; d <= 180; d += 2) {
+            const lat6 = propTermLat(-6, propRad(d + lonC - t.lonSun), dec);
+            if (lat6 === null) { twi = null; break; }
+            twi.push([clamp(lat6, -89.99, 89.99), d]);
+        }
     }
-    ctx.closePath();
-    ctx.fill();
 
-    ctx.strokeStyle = '#aaa';
-    ctx.globalAlpha = 0.85;
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    started = false;
-    for (const p of base) {
-        const q = proj.fwdRaw(p[1], p[0]);
-        if (!q) { started = false; continue; }
-        if (!started) { ctx.moveTo(q[0], q[1]); started = true; }
-        else ctx.lineTo(q[0], q[1]);
+    fillNight(base, twi ? 0.18 : 0.42);
+    if (twi) {
+        fillNight(twi, 0.26);
+        strokeCurve(twi, 0.3, 1);
     }
-    ctx.stroke();
-    ctx.globalAlpha = 1;
+    strokeCurve(base, 0.85, 1.5);
 }
 
 /* Great-circle DE -> DX path cut at the antimeridian, in canonical
@@ -1368,9 +1526,14 @@ function drawPath(ctx, proj, C) {
     if (de && dx) {
         const segs = propPathSegments(de.lat, de.lon, dx.lat, dx.lon, 64,
             proj.lon0 || 0);
+        /* soft glow under the line so the path stays readable over the MUF
+         * wash and the night shading */
+        ctx.save();
         ctx.strokeStyle = C.yellow;
-        ctx.lineWidth = 1.6;
-        ctx.globalAlpha = 0.9;
+        ctx.lineWidth = 1.8;
+        ctx.globalAlpha = 0.92;
+        ctx.shadowColor = 'rgba(255,209,102,.6)';
+        ctx.shadowBlur = 5;
         ctx.beginPath();
         for (const seg of segs) {
             let started = false;
@@ -1382,7 +1545,26 @@ function drawPath(ctx, proj, C) {
             }
         }
         ctx.stroke();
-        ctx.globalAlpha = 1;
+        ctx.restore();
+        /* direction arrow at the midpoint of the longest segment, oriented
+         * along the projected line (DE -> DX) */
+        const seg = segs.reduce((a, b) => (b.length > a.length ? b : a), segs[0]);
+        if (seg && seg.length > 2) {
+            const i = seg.length >> 1;
+            const p1 = proj.fwd(seg[i - 1][1], seg[i - 1][0]);
+            const p2 = proj.fwd(seg[i + 1][1], seg[i + 1][0]);
+            if (p1 && p2) {
+                const ang = Math.atan2(p2[1] - p1[1], p2[0] - p1[0]);
+                const mx = (p1[0] + p2[0]) / 2, my = (p1[1] + p2[1]) / 2;
+                ctx.fillStyle = C.yellow;
+                ctx.beginPath();
+                ctx.moveTo(mx + 7 * Math.cos(ang), my + 7 * Math.sin(ang));
+                ctx.lineTo(mx + 5 * Math.cos(ang + 2.5), my + 5 * Math.sin(ang + 2.5));
+                ctx.lineTo(mx + 5 * Math.cos(ang - 2.5), my + 5 * Math.sin(ang - 2.5));
+                ctx.closePath();
+                ctx.fill();
+            }
+        }
     }
     const dot = (lat, lon, color, label) => {
         const q = proj.fwd(lon, lat);
@@ -1933,12 +2115,22 @@ function bindPropMap() {
         if (!hover) return;
         if (!ll) { hover.classList.add('hidden'); return; }
         hover.classList.remove('hidden');
-        /* Bearing from the DE (own) station to the pointer: the useful readout
-         * when picking a DX point. Falls back to a dash when no grid is set. */
+        /* Pointer readout: coordinates, and with a home station also the
+         * bearing and distance -- the useful numbers when picking a DX point.
+         * On the MUF layer the interpolated field at the pointer joins in. */
         const de = propState.de;
-        hover.textContent = de
-            ? 'Az ' + (Math.round(propBearing(de, {lat: ll[0], lon: ll[1]})) % 360) + '°'
-            : '—';
+        const pt = {lat: ll[0], lon: ll[1]};
+        const parts = [Math.abs(ll[0]).toFixed(1) + '°' + (ll[0] >= 0 ? 'N' : 'S') +
+            ' ' + Math.abs(ll[1]).toFixed(1) + '°' + (ll[1] >= 0 ? 'E' : 'W')];
+        if (de) {
+            parts.push('Az ' + (Math.round(propBearing(de, pt)) % 360) + '°');
+            parts.push(Math.round(propDistance(de, pt)).toLocaleString('en-US') + ' km');
+        }
+        if (propState.layer === 'muf' && propState.data) {
+            const m = propMufAt(pt.lat, pt.lon);
+            if (m !== null) parts.push('MUF ' + m.toFixed(1));
+        }
+        hover.textContent = parts.join(' · ');
         const r = propState.wrap.getBoundingClientRect();
         hover.style.left = (ev.clientX - r.left + 14) + 'px';
         hover.style.top = (ev.clientY - r.top + 14) + 'px';
