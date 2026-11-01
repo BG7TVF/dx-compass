@@ -1444,9 +1444,17 @@ function renderPropPanel() {
      * flex-fill all the way down to the map's bottom edge) ---- */
     const sc = d.scales || {};
     const scaleBox = (k, o) => {
+        /* NOAA leaves Scale/Text null when nothing is in progress (S is
+         * almost always null outside a proton event); fall back to the
+         * forecast probability, then to a dash, so the box never looks
+         * empty. The level suffix must carry its own letter -- it used to
+         * print "G0" for all three boxes. */
         const lvl = o && o.scale !== null ? o.scale : 0;
-        return '<div class="prop-scale s' + lvl + '"><b>' + k + '</b><span>' +
-            (o ? (o.text || '') : '—') + '</span><i>G' + lvl + '</i></div>';
+        let note = '—';
+        if (o && o.text) note = o.text;
+        else if (o && o.prob !== null && o.prob !== undefined) note = o.prob + '%';
+        return '<div class="prop-scale s' + lvl + '"><b>' + k + '</b><span>' + note +
+            '</span><i>' + k + lvl + '</i></div>';
     };
     html.push('<div class="prop-sec sec-wx"><div class="prop-sec-title">' + t('propSpaceWx') +
         '<span class="prop-upd">' + t('propUpdated') + ' ' +
