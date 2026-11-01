@@ -52,7 +52,8 @@ const propState = {
     dx: {lat: 40, lon: -100}, de: null,
     canvas: null, wrap: null, ctx: null, w: 0, h: 0,
     hover: null, timer: null, poll: null, ro: null, view: false,
-    lastDraw: 0, calc: null, sig: null, lastHour: -1
+    lastDraw: 0, calc: null, sig: null, lastHour: -1,
+    geo: null, geoAt: 0
 };
 
 const propRad = d => d * Math.PI / 180;
@@ -470,7 +471,7 @@ function propClimatMuf(lat, lon, when) {
     const peak = base * (0.30 + 0.70 * Math.pow(noonSf, 0.7));
     const kAt = propMufDayFactor(sunFactor(lat, lon, when));
     const kNoon = propMufDayFactor(noonSf);
-    return peak * clamp(kAt / (kNoon || 1), 0.35, 1.15);
+    return peak * clamp(kAt / (kNoon || 1), 0.35, 1.15) * propGeoMufFactor();
 }
 
 /* Relative D-region absorption: ~0.1 at night, 1.0 with the sun overhead. */
@@ -515,7 +516,100 @@ function propLufClim(lat, lon, when) {
     if (sf <= -0.05) return 0;
     const x = propXrayNow();
     const xScale = clamp(Math.pow(x / 3e-7, 0.25), 0.5, 4);
-    return 5.2 * xScale * Math.pow(clamp(sf, 0, 1), 0.75);
+    return 5.2 * xScale * Math.pow(clamp(sf, 0, 1), 0.75) * propGeoAbsFactor();
+}
+
+/* ---------------------------------------------------------------
+ * Local geomagnetic activity (USGS / INTERMAGNET observatories).
+ * The nearest reporting observatory's H trace gives a local K estimate from
+ * the 3-hour amplitude using the standard K ranges (18/30/50/70/100/140/
+ * 200/300/500 nT -> K1..K9). Storms depress foF2 and thicken the D layer:
+ * the MUF factor removes up to ~20% from climatology, the absorption factor
+ * adds up to ~25% to the LUF. Measured ionosonde data is left untouched --
+ * it already contains the storm.
+ * ------------------------------------------------------------- */
+const PROP_GEO_STATIONS = [
+    ['SHU', 31.1, 121.2], ['BDT', 40.0, 116.3], ['GUA', 13.6, 144.9],
+    ['HON', 21.3, -157.0], ['BOU', 40.1, -105.2], ['NEW', 48.3, -117.1],
+    ['TUC', 32.2, -110.7], ['BSL', 30.4, -89.6], ['SIT', 57.1, -135.3],
+    ['CMO', 64.9, -147.9], ['SJG', 18.1, -66.2], ['BRW', 71.3, -156.6],
+    ['FRN', 37.1, -118.7], ['DED', 70.0, -145.0]
+];
+
+function propGeomagDistance(a, b) {
+    const dLat = propRad(a[1] - b.lat);
+    const dLon = propRad(a[2] - b.lon);
+    const k = Math.sin(dLat / 2) ** 2 +
+        Math.cos(propRad(b.lat)) * Math.cos(propRad(a[1])) * Math.sin(dLon / 2) ** 2;
+    return 2 * 6371 * Math.asin(Math.sqrt(k));
+}
+
+function propKFromAmp(a) {
+    if (a >= 500) return 9;
+    if (a >= 300) return 8;
+    if (a >= 200) return 7;
+    if (a >= 140) return 6;
+    if (a >= 100) return 5;
+    if (a >= 70) return 4;
+    if (a >= 50) return 3;
+    if (a >= 30) return 2;
+    if (a >= 18) return 1;
+    return 0;
+}
+
+/* foF2 depression: none below K4, then -1.2%/K^1.6 (K5 -4%, K7 -15%, K9 -20%). */
+function propGeoMufFactor() {
+    const k = propState.geo ? propState.geo.k : null;
+    if (k === null || k < 4) return 1;
+    return clamp(1 - 0.012 * Math.pow(k - 3, 1.6), 0.75, 1);
+}
+
+/* Extra D-layer / auroral absorption, much weaker than the MUF loss. */
+function propGeoAbsFactor() {
+    const k = propState.geo ? propState.geo.k : null;
+    if (k === null || k < 4) return 1;
+    return clamp(1 + 0.008 * Math.pow(k - 3, 1.5), 1, 1.25);
+}
+
+/* Nearest observatory that actually reports today; USGS data is CC0 and
+ * serves Access-Control-Allow-Origin: *, so this runs straight from the
+ * browser. Failures leave the whole correction neutral. */
+async function propFetchGeo() {
+    const de = propState.de;
+    if (!de) return;
+    const now = Date.now();
+    if (propState.geoAt && now - propState.geoAt < 10 * 60000) return;
+    const near = PROP_GEO_STATIONS
+        .map(s => ({s, d: propGeomagDistance(s, de)}))
+        .sort((a, b) => a.d - b.d)
+        .slice(0, 3);
+    for (const c of near) {
+        const code = c.s[0];
+        const end = new Date(now);
+        const start = new Date(now - 4 * 3600 * 1000);
+        const url = 'https://geomag.usgs.gov/ws/data/?id=' + code +
+            '&elements=H&format=json&sampling_period=60' +
+            '&starttime=' + start.toISOString() + '&endtime=' + end.toISOString();
+        try {
+            const r = await fetch(url, {cache: 'no-store'});
+            if (!r.ok) continue;
+            const o = await r.json();
+            const vals = o && o.values && o.values[0] && o.values[0].values;
+            if (!Array.isArray(vals)) continue;
+            const h = vals.filter(v => typeof v === 'number' && isFinite(v));
+            if (h.length < 30) continue;
+            const win = h.slice(-180);           // last ~3 hours
+            const amp = Math.max(...win) - Math.min(...win);
+            const k = propKFromAmp(amp);
+            propState.geo = {code, k, amp: Math.round(amp), distance: Math.round(c.d)};
+            propState.geoAt = now;
+            propRecalc();
+            return;
+        } catch (e) {
+            /* try the next observatory */
+        }
+    }
+    propState.geoAt = now;      // do not hammer the service when all fail
 }
 
 /* Sonde snapshot instant (kc2g refreshes every few minutes, so the fetch
@@ -1837,6 +1931,9 @@ async function propFetch() {
         const sig = propDataSig(d);
         propState.data = d;
         propState.err = null;
+        /* Local geomagnetic activity runs on its own 10-minute cache and
+         * recalculates the paths itself when a new reading lands. */
+        propFetchGeo();
         /* Space weather changed -> recompute immediately, without touching
          * the independent 30-minute recalculation timer. */
         if (sig !== propState.sig) {
@@ -1854,7 +1951,13 @@ async function propFetch() {
 /* Recompute the DE position from the shared Maidenhead grid setting. */
 function propSyncDe() {
     const ll = gridToLatLon(settings.grid);
-    propState.de = ll ? {lat: ll[0], lon: ll[1]} : null;
+    const de = ll ? {lat: ll[0], lon: ll[1]} : null;
+    /* A different home station means a different nearest observatory. */
+    if (de && (!propState.de || propState.de.lat !== de.lat || propState.de.lon !== de.lon)) {
+        propState.geo = null;
+        propState.geoAt = 0;
+    }
+    propState.de = de;
 }
 
 function initProp() {
