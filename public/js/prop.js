@@ -77,6 +77,14 @@ function propShortTime(iso) {
     return d.toISOString().slice(11, 16) + 'Z';
 }
 
+/* Free text from an external feed (ICAO advisories) is injected as HTML, so
+ * it must be escaped first. */
+function propEsc(s) {
+    return String(s === null || s === undefined ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
 /* ---------------------------------------------------------------
  * Projections. Each returns {fwd(lon,lat), inv(x,y)} in CSS pixels,
  * fitted width-first (see propFit): the map always spans the full canvas
@@ -1636,6 +1644,20 @@ function renderPropPanel() {
         propShortTime(d.ts) + '</span></div>');
     html.push('<div class="prop-scales">' + scaleBox('R', sc.r) + scaleBox('S', sc.s) +
         scaleBox('G', sc.g) + '</div>');
+
+    /* ---- ICAO space weather advisories: event driven, so the block is
+     * absent unless one is actually in force ---- */
+    const icao = (d.icao && d.icao.list) || [];
+    if (icao.length) {
+        html.push('<div class="prop-icao">');
+        for (const a of icao.slice(0, 3)) {
+            const head = ['ICAO', a.phenomenon, a.severity].filter(Boolean).join(' · ');
+            html.push('<div class="prop-note"><b>' + propEsc(head) + '</b>' +
+                (a.issued ? ' · ' + propEsc(propShortTime(a.issued)) : '') +
+                '<br>' + propEsc(a.text) + '</div>');
+        }
+        html.push('</div>');
+    }
 
     /* ---- space weather cards (flex-fill the remaining height) ---- */
     html.push('<div class="prop-cards">');

@@ -1897,6 +1897,15 @@ body[data-theme="amber"] {
 }
 
 .prop-note { margin-top: 6px; color: var(--text-dim); font-size: 10px; }
+/* ICAO space weather advisories: long free text that only exists while an
+ * advisory is in force, capped so the card grid keeps its height. */
+.prop-icao { max-height: 34%; overflow: auto; }
+.prop-icao .prop-note {
+    border-left: 3px solid var(--orange);
+    padding-left: 6px;
+    line-height: 1.35;
+    white-space: pre-wrap;
+}
 .prop-dim { color: var(--text-dim); }
 .prop-empty { padding: 24px 8px; color: var(--text-dim); font-size: 12px; text-align: center; }
 
