@@ -1350,6 +1350,7 @@ function sparkValues(key) {
     case 'wind': return col(d.wind && d.wind.list, 1);
     case 'dens': return col(d.wind && d.wind.list, 2);
     case 'xray': return col(d.xray && d.xray.list, 1);
+    case 'elec': return col(d.electron && d.electron.list, 1);
     case 'dst': return col(d.dst && d.dst.list, 1);
     }
     return [];
@@ -1402,6 +1403,7 @@ const PROP_CARDS = [
     {key: 'wind', label: 'Wind', i18n: 'pcWind', unit: 'km/s'},
     {key: 'dens', label: 'Dens', i18n: 'pcDens', unit: 'p/cm³'},
     {key: 'xray', label: 'X-ray', i18n: 'pcXray', unit: ''},
+    {key: 'elec', label: 'E-', i18n: 'pcElec', unit: 'pfu'},
     {key: 'dst', label: 'Dst', i18n: 'pcDst', unit: 'nT'},
     {key: 'aur', label: 'Aurora', i18n: 'pcAur', unit: '%'},
     {key: 'drap', label: 'DRAP', i18n: 'pcDrap', unit: 'MHz'}
@@ -1491,6 +1493,7 @@ function cardValue(key) {
     case 'wind': return last(d.wind && d.wind.list, 1);
     case 'dens': return last(d.wind && d.wind.list, 2);
     case 'xray': return propXrayClass(last(d.xray && d.xray.list, 1)) || ham.xray || '';
+    case 'elec': return last(d.electron && d.electron.list, 1);
     case 'dst': return last(d.dst && d.dst.list, 1);
     case 'aur': return ham.aurora;
     case 'drap': return propState.de ? propDrapAt(propState.de.lat, propState.de.lon) : null;
@@ -1639,7 +1642,7 @@ function renderPropPanel() {
         html.push('<div class="prop-card ' + cls + '" data-card="' + c.key + '">' +
             '<div class="pc-head"><span class="pc-label">' +
             (c.i18n ? t(c.i18n) : c.label) +
-            '</span><span class="pc-val">' + (typeof v === 'number' ? propNum(v, c.key === 'xray' ? 0 : 1) : (v || '—')) +
+            '</span><span class="pc-val">' + (typeof v === 'number' ? propNum(v, (c.key === 'xray' || c.key === 'elec') ? 0 : 1) : (v || '—')) +
             '</span></div>' +
             '<div class="pc-unit">' + (c.unit || '') + '</div>' +
             '<canvas class="pc-spark"></canvas></div>');
@@ -1831,8 +1834,9 @@ function redrawPropSparks() {
         const vals = sparkValues(key);
         if (!vals.length) return;
         const cv = el.querySelector('.pc-spark');
-        const color = key === 'bz' ? '#e74c3c' : key === 'kp' ? '#f1c40f' : '#00e5ff';
-        drawSpark(cv, vals, color, key === 'xray');
+        const color = key === 'bz' ? '#e74c3c' : key === 'kp' ? '#f1c40f' :
+            key === 'elec' ? '#b07cff' : '#00e5ff';
+        drawSpark(cv, vals, color, key === 'xray' || key === 'elec');
     });
 }
 
