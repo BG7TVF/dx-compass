@@ -1330,6 +1330,48 @@ function propScaleS() {
     return null;
 }
 
+/* R scale from the GOES 0.1-0.8 nm flux (M1 = 1e-5, M5 = 5e-5, X1 = 1e-4,
+ * X10 = 1e-3, X20 = 5e-3 W/m2). */
+function propScaleR() {
+    const list = (propState.data && propState.data.xray && propState.data.xray.list) || [];
+    for (let i = list.length - 1; i >= 0; i--) {
+        const f = list[i][1];
+        if (typeof f !== 'number' || !isFinite(f) || f <= 0) continue;
+        if (f >= 5e-3) return 5;
+        if (f >= 1e-3) return 4;
+        if (f >= 1e-4) return 3;
+        if (f >= 5e-5) return 2;
+        if (f >= 1e-5) return 1;
+        return 0;
+    }
+    return null;
+}
+
+/* G scale from the observed planetary Kp (G1 = Kp5 ... G5 = Kp9). */
+function propScaleG() {
+    const list = (propState.data && propState.data.kp && propState.data.kp.list) || [];
+    for (let i = list.length - 1; i >= 0; i--) {
+        const k = list[i][1];
+        if (typeof k !== 'number' || !isFinite(k)) continue;
+        if (k >= 9) return 5;
+        if (k >= 8) return 4;
+        if (k >= 7) return 3;
+        if (k >= 6) return 2;
+        if (k >= 5) return 1;
+        return 0;
+    }
+    return null;
+}
+
+/* GOES flux -> A1.0 / B3.2 / C5.4 / M2.1 / X1.0 notation. */
+function propXrayClass(f) {
+    if (typeof f !== 'number' || !isFinite(f) || f <= 0) return null;
+    const dec = Math.floor(Math.log10(f));
+    const letter = dec <= -8 ? 'A' : dec === -7 ? 'B' : dec === -6 ? 'C' : dec === -5 ? 'M' : 'X';
+    const n = f / Math.pow(10, dec);
+    return letter + (n >= 10 ? Math.round(n) : n.toFixed(1));
+}
+
 function cardValue(key) {
     const d = propState.data || {};
     const ham = d.ham || {};
@@ -1342,16 +1384,19 @@ function cardValue(key) {
         return null;
     };
     switch (key) {
-    case 'sfi': return ham.sfi !== null ? ham.sfi : last(d.sfi && d.sfi.list, 1);
-    case 'ssn': return ham.ssn !== null ? ham.ssn : last(d.ssn && d.ssn.list, 1);
-    case 'kp': return ham.kp !== null ? ham.kp : last(d.kp && d.kp.list, 1);
-    case 'a': return ham.aindex !== null && ham.aindex !== undefined ? ham.aindex :
-        last(d.a && d.a.list, 1);
+    /* SWPC observations first; HamQSL only fills the gaps. */
+    case 'sfi': return last(d.sfi && d.sfi.list, 1) !== null ? last(d.sfi && d.sfi.list, 1) :
+        ham.sfi !== null ? ham.sfi : null;
+    case 'ssn': return last(d.ssn && d.ssn.list, 1) !== null ? last(d.ssn && d.ssn.list, 1) :
+        ham.ssn !== null ? ham.ssn : null;
+    case 'kp': return last(d.kp && d.kp.list, 1) !== null ? last(d.kp && d.kp.list, 1) :
+        ham.kp !== null ? ham.kp : null;
+    case 'a': return last(d.a && d.a.list, 1) !== null ? last(d.a && d.a.list, 1) : ham.aindex;
     case 'bz': return last(d.mag && d.mag.list, 2);
     case 'bt': return last(d.mag && d.mag.list, 1);
     case 'wind': return last(d.wind && d.wind.list, 1);
     case 'dens': return last(d.wind && d.wind.list, 2);
-    case 'xray': return ham.xray || '';
+    case 'xray': return propXrayClass(last(d.xray && d.xray.list, 1)) || ham.xray || '';
     case 'dst': return last(d.dst && d.dst.list, 1);
     case 'aur': return ham.aurora;
     case 'drap': return propState.de ? propDrapAt(propState.de.lat, propState.de.lon) : null;
@@ -1474,10 +1519,11 @@ function renderPropPanel() {
          * otherwise the forecast probability if NOAA publishes one; otherwise
          * "none". Never an em dash: an empty box reads as broken data. */
         const lvl0 = o && o.scale !== null ? clamp(o.scale, 0, 5) : 0;
-        /* scales.json often leaves S null; GOES >=10 MeV protons define it
-         * (10/100/1e3/1e4/1e5 pfu = S1..S5), so take the stronger reading. */
-        const meas = k === 'S' ? propScaleS() : null;
-        const lvl = meas !== null && meas > lvl0 ? meas : lvl0;
+        /* scales.json often lags or leaves S null; the GOES/Kp measurements
+         * just added are authoritative, so prefer them when available. */
+        const meas = k === 'R' ? propScaleR() : k === 'S' ? propScaleS() :
+            k === 'G' ? propScaleG() : null;
+        const lvl = meas !== null ? meas : lvl0;
         let note;
         if (lvl > 0) note = t(SC_STATE[lvl]);
         else if (o && o.prob !== null && o.prob !== undefined) note = o.prob + '%';
