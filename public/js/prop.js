@@ -1250,6 +1250,7 @@ function sparkValues(key) {
     case 'sfi': return col(d.sfi && d.sfi.list, 1);
     case 'ssn': return col(d.ssn && d.ssn.list, 1);
     case 'kp': return col(d.kp && d.kp.list, 1);
+    case 'a': return col(d.a && d.a.list, 1);
     case 'bz': return col(d.mag && d.mag.list, 2);
     case 'bt': return col(d.mag && d.mag.list, 1);
     case 'wind': return col(d.wind && d.wind.list, 1);
@@ -1327,7 +1328,8 @@ function cardValue(key) {
     case 'sfi': return ham.sfi !== null ? ham.sfi : last(d.sfi && d.sfi.list, 1);
     case 'ssn': return ham.ssn !== null ? ham.ssn : last(d.ssn && d.ssn.list, 1);
     case 'kp': return ham.kp !== null ? ham.kp : last(d.kp && d.kp.list, 1);
-    case 'a': return ham.aindex;
+    case 'a': return ham.aindex !== null && ham.aindex !== undefined ? ham.aindex :
+        last(d.a && d.a.list, 1);
     case 'bz': return last(d.mag && d.mag.list, 2);
     case 'bt': return last(d.mag && d.mag.list, 1);
     case 'wind': return last(d.wind && d.wind.list, 1);
