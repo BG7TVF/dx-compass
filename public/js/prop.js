@@ -1462,8 +1462,8 @@ function renderPropPanel() {
         if (st) note = t(st);
         else if (o && o.text) note = o.text;
         else if (o && o.prob !== null && o.prob !== undefined) note = o.prob + '%';
-        return '<div class="prop-scale s' + lvl + '" title="' + t(SC_NAME[k]) + '"><b>' + k +
-            '</b><span>' + note + '</span><i>' + k + lvl + '</i></div>';
+        return '<div class="prop-scale s' + lvl + '" title="' + t(SC_NAME[k]) + ' · ' + note +
+            '"><b>' + t(SC_NAME[k]) + '</b><span>' + note + '</span><i>' + k + lvl + '</i></div>';
     };
     html.push('<div class="prop-sec sec-wx"><div class="prop-sec-title">' + t('propSpaceWx') +
         '<span class="prop-upd">' + t('propUpdated') + ' ' +

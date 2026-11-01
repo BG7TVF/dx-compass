@@ -1713,7 +1713,18 @@ body[data-theme="amber"] {
     border-left: 3px solid var(--sev, var(--green));
     border-radius: 4px;
 }
-.prop-scale b { color: var(--sev, var(--green)); font-size: 16px; }
+/* The bold line is now the LOCALIZED scale name (Radio blackout /
+ * Solar radiation storm / Geomagnetic storm), not just "R" -- the bare
+ * letters meant nothing to most operators. Long translations wrap, and
+ * the "R0" style code stays visible underneath as the NOAA reference. */
+.prop-scale b {
+    color: var(--sev, var(--green));
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.25;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
 .prop-scale span {
     color: var(--text-dim);
     font-size: 12px;
