@@ -528,6 +528,41 @@ function propLufClim(lat, lon, when) {
 }
 
 /* ---------------------------------------------------------------
+ * Polar cap absorption (PCA) from GOES >=10 MeV protons.
+ * During an S-level radiation storm, energetic protons funnel down the open
+ * field lines into the polar cap D layer and absorb HF over the whole cap --
+ * this is exactly what the DRAP grid tries to show, but SWPC ships an
+ * all-zero "no estimates" grid most of the time, so without this term the
+ * model keeps trans-polar 80M/40M paths open during real proton events.
+ * Cutoff: >=10 MeV protons precipitate poleward of roughly 60 deg magnetic
+ * latitude; absorption scales with the S level and, like all D-layer
+ * absorption, is strongest on the sunlit side.
+ * ------------------------------------------------------------- */
+const PROP_MAG_POLE = {lat: 80.6, lon: -72.7};   // IGRF dipole north pole ~2025
+
+/* Magnetic (dipole) latitude -- enough for a PCA cutoff, not for field work. */
+function propMagLat(lat, lon) {
+    const p = propRad(PROP_MAG_POLE.lat);
+    const s = Math.sin(propRad(lat)) * Math.sin(p) +
+        Math.cos(propRad(lat)) * Math.cos(p) * Math.cos(propRad(lon - PROP_MAG_POLE.lon));
+    return propDeg(Math.asin(clamp(s, -1, 1)));
+}
+
+/* LUF floor (MHz) contributed by polar cap absorption at a hop midpoint:
+ * 0 outside the cap or at S0, up to ~10 MHz at S5 deep in the cap by day. */
+function propPcaLuf(lat, lon, when) {
+    const s = propScaleS();
+    if (!s) return 0;
+    const m = Math.abs(propMagLat(lat, lon));
+    const cutoff = 60;
+    if (m <= cutoff) return 0;
+    const depth = clamp((m - cutoff) / 12, 0.25, 1);
+    const day = propAbsWeight(sunFactor(lat, lon, when));
+    const base = [0, 2.5, 4, 6, 8, 10][clamp(s, 0, 5)];
+    return base * depth * day;
+}
+
+/* ---------------------------------------------------------------
  * Local geomagnetic activity (USGS / INTERMAGNET observatories).
  * The nearest reporting observatory's H trace gives a local K estimate from
  * the 3-hour amplitude using the standard K ranges (18/30/50/70/100/140/
@@ -566,15 +601,33 @@ function propKFromAmp(a) {
 }
 
 /* foF2 depression: none below K4, then -1.2%/K^1.6 (K5 -4%, K7 -15%, K9 -20%). */
+/* Local K from the nearest USGS observatory, falling back to the global Kp
+ * when no observatory answer is available (offline, CORS failure, station
+ * outage). Kp is planetary 3-hour and smoother than a local K, but far
+ * better than treating a failed fetch as quiet conditions. */
+function propGeoK() {
+    if (propState.geo && propState.geo.k !== null && propState.geo.k !== undefined) {
+        return propState.geo.k;
+    }
+    const list = propState.data && propState.data.kp && propState.data.kp.list;
+    if (list) {
+        for (let i = list.length - 1; i >= 0; i--) {
+            const v = list[i][1];
+            if (typeof v === 'number' && isFinite(v)) return v;
+        }
+    }
+    return null;
+}
+
 function propGeoMufFactor() {
-    const k = propState.geo ? propState.geo.k : null;
+    const k = propGeoK();
     if (k === null || k < 4) return 1;
     return clamp(1 - 0.012 * Math.pow(k - 3, 1.6), 0.75, 1);
 }
 
 /* Extra D-layer / auroral absorption, much weaker than the MUF loss. */
 function propGeoAbsFactor() {
-    const k = propState.geo ? propState.geo.k : null;
+    const k = propGeoK();
     if (k === null || k < 4) return 1;
     return clamp(1 + 0.008 * Math.pow(k - 3, 1.5), 1, 1.25);
 }
@@ -674,6 +727,10 @@ function propPathWindow(prof, when) {
             lufHop = Math.max(lufHop, Math.max(2.0,
                 1.55 * drap * Math.sqrt(prof.hops) * scale));
         }
+        /* Polar cap absorption floor from the GOES proton flux (S level):
+         * independent of DRAP, which is all-zero in most proton storms. */
+        const pca = propPcaLuf(m.lat, m.lon, when);
+        if (pca > lufHop) lufHop = pca;
         if (lufHop > lufMax) lufMax = lufHop;
     }
     if (!isFinite(mufMin)) mufMin = sfi ? 1.5 + 0.22 * sfi : 8;
@@ -1937,6 +1994,7 @@ function propDataSig(d) {
     if (!d) return null;
     const f = d.fetched || {};
     return [d.ts, f.ham, f.muf, f.drap, f.xray, f.kp, f.dst, f.sfi, f.scales,
+        f.proton,   /* S-level change drives the PCA floor: recalc at once */
         d.drap && d.drap.noData ? 1 : 0].join('|');
 }
 
