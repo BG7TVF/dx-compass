@@ -408,9 +408,22 @@ function propMufAt(lat, lon, when) {
     return p ? p.muf : null;
 }
 
+/* MUF readout value: fresh-sonde interpolation first; where no sounding
+ * survives the age/distance gate (e.g. East Asia -- the Chinese sondes went
+ * silent in 2021 and the Japanese ones in 2023), fall back to the same
+ * climatological estimate the path matrix and the map cross-fade use, so
+ * the readout never disagrees with what is painted underneath. */
+function propMufShown(lat, lon) {
+    const m = propMufAt(lat, lon);
+    return m !== null ? m : propClimatMuf(lat, lon, new Date());
+}
+
 function propDrapAt(lat, lon) {
     const d = propState.data && propState.data.drap;
     if (!d || !d.lats || !d.lats.length) return null;
+    /* SWPC's chronic "NO INPUT DATA AVAILABLE" grid is all zeros -- treat it
+     * as absent so the card/readouts show -- instead of a fake 0.0 MHz. */
+    if (d.noData) return null;
     const li = clamp(Math.round((d.lats[0] - lat) / 2), 0, d.lats.length - 1);
     const lo = clamp(Math.round((lon + 178) / 4), 0, d.lons.length - 1);
     const row = d.vals[li];
@@ -1820,7 +1833,17 @@ function cardValue(key) {
     case 'dens': return last(d.wind && d.wind.list, 2);
     case 'xray': return propXrayClass(last(d.xray && d.xray.list, 1)) || ham.xray || '';
     case 'dst': return last(d.dst && d.dst.list, 1);
-    case 'aur': return ham.aurora;
+    /* Aurora card shows the OVATION peak probability -- the same source as
+     * the map layer and the rdAurora readout, and a true percentage. The
+     * HamQSL "aurora" field is a 1-10 activity index, which displayed as
+     * "n %" was simply wrong. */
+    case 'aur': {
+        const g = d.aurora && d.aurora.grid;
+        if (!g || !g.length) return null;
+        let mx = 0;
+        for (const p of g) if (p[2] > mx) mx = p[2];
+        return mx;
+    }
     case 'drap': return propState.de ? propDrapAt(propState.de.lat, propState.de.lon) : null;
     }
     return null;
@@ -1978,7 +2001,10 @@ function renderPropPanel() {
     for (const c of PROP_CARDS) {
         const v = cardValue(c.key);
         const cls = cardClass(c.key, v);
-        html.push('<div class="prop-card ' + cls + '" data-card="' + c.key + '">' +
+        /* aur/drap have no history series (single-look products) -- collapse
+         * the blank sparkline canvas instead of framing an empty plot. */
+        const noSpark = sparkValues(c.key).length ? '' : ' no-spark';
+        html.push('<div class="prop-card ' + cls + noSpark + '" data-card="' + c.key + '">' +
             '<div class="pc-head"><span class="pc-label">' +
             (c.i18n ? t(c.i18n) : c.label) +
             '</span><span class="pc-val">' + (typeof v === 'number' ? propNum(v, c.key === 'xray' ? 0 : 1) : (v || '—')) +
@@ -2124,9 +2150,9 @@ function renderPropPanel() {
         '</div><div class="prop-read">');
     const read = (k, v) => '<div class="pr-card"><div class="pr-label">' + k +
         '</div><div class="pr-val">' + v + '</div></div>';
-    low.push(read(t('rdMufDe'), propNum(propState.de ? propMufAt(propState.de.lat, propState.de.lon) : null, 1) + ' MHz'));
+    low.push(read(t('rdMufDe'), propNum(propState.de ? propMufShown(propState.de.lat, propState.de.lon) : null, 1) + ' MHz'));
     low.push(read(t('rdMufMax'), maxSt ? propNum(maxSt[2], 1) + ' MHz · ' + maxSt[4] : '—'));
-    low.push(read(t('rdMufDx'), propNum(propMufAt(propState.dx.lat, propState.dx.lon), 1) + ' MHz'));
+    low.push(read(t('rdMufDx'), propNum(propMufShown(propState.dx.lat, propState.dx.lon), 1) + ' MHz'));
     low.push(read(t('rdAurora'), auMax ? auMax + '%' : '—'));
     low.push(read(t('rdDrapDe'), propNum(cardValue('drap'), 1) + ' MHz'));
     low.push(read(t('rdDrapDx'), propNum(propDrapAt(propState.dx.lat, propState.dx.lon), 1) + ' MHz'));

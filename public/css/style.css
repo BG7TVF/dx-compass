@@ -1725,6 +1725,8 @@ body[data-theme="amber"] {
 .prop-card.alert .pc-val { color: var(--red); }
 .pc-unit { color: var(--text-dim); font-size: clamp(10px, 6.5cqh, 16px); }
 .pc-spark { display: block; width: 100%; flex: 1; min-height: 18px; }
+/* Cards without a history series (aurora, DRAP) drop the empty plot area */
+.prop-card.no-spark .pc-spark { display: none; }
 
 /* NOAA R / S / G scales */
 .prop-scales {
