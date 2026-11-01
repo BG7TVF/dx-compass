@@ -684,7 +684,10 @@ const PROP_I18N = {
         propCtyTitle: '大洲最优频段', propCtyCol: '大洲', propBandCol: '频段', propScoreCol: '可用度',
         propCtyAf: '非洲', propCtyAs: '亚洲', propCtyEu: '欧洲', propCtyNa: '北美洲',
         propCtySa: '南美洲', propCtyOc: '大洋洲', propCtyAn: '南极洲',
-        propWeatherDx: 'DX 天气'
+        propWeatherDx: 'DX 天气',
+        propScR: '无线电中断', propScS: '太阳辐射暴', propScG: '地磁暴',
+        propScNone: '无', propScMinor: '轻微', propScModerate: '中等',
+        propScStrong: '强', propScSevere: '严重', propScExtreme: '极端'
     },
     en: {
         propView: 'Propagation', propProjection: 'Projection', propLayer: 'Background',
@@ -699,7 +702,10 @@ const PROP_I18N = {
         propBandCol: 'Band', propScoreCol: 'Availability',
         propCtyAf: 'Africa', propCtyAs: 'Asia', propCtyEu: 'Europe', propCtyNa: 'North America',
         propCtySa: 'South America', propCtyOc: 'Oceania', propCtyAn: 'Antarctica',
-        propWeatherDx: 'DX weather'
+        propWeatherDx: 'DX weather',
+        propScR: 'Radio blackout', propScS: 'Solar radiation storm', propScG: 'Geomagnetic storm',
+        propScNone: 'None', propScMinor: 'Minor', propScModerate: 'Moderate',
+        propScStrong: 'Strong', propScSevere: 'Severe', propScExtreme: 'Extreme'
     },
     de: {
         propView: 'Ausbreitungskarte', propProjection: 'Projektion', propLayer: 'Hintergrund',
@@ -714,7 +720,10 @@ const PROP_I18N = {
         propBandCol: 'Band', propScoreCol: 'Verfügbarkeit',
         propCtyAf: 'Afrika', propCtyAs: 'Asien', propCtyEu: 'Europa', propCtyNa: 'Nordamerika',
         propCtySa: 'Südamerika', propCtyOc: 'Ozeanien', propCtyAn: 'Antarktis',
-        propWeatherDx: 'DX-Wetter'
+        propWeatherDx: 'DX-Wetter',
+        propScR: 'Radioblackout', propScS: 'Solarer Strahlungssturm', propScG: 'Geomagnetischer Sturm',
+        propScNone: 'Keine', propScMinor: 'Gering', propScModerate: 'Mäßig',
+        propScStrong: 'Stark', propScSevere: 'Schwer', propScExtreme: 'Extrem'
     },
     fr: {
         propView: 'Carte de propagation', propProjection: 'Projection', propLayer: 'Fond',
@@ -729,7 +738,10 @@ const PROP_I18N = {
         propBandCol: 'Bande', propScoreCol: 'Disponibilité',
         propCtyAf: 'Afrique', propCtyAs: 'Asie', propCtyEu: 'Europe', propCtyNa: 'Amérique du Nord',
         propCtySa: 'Amérique du Sud', propCtyOc: 'Océanie', propCtyAn: 'Antarctique',
-        propWeatherDx: 'Météo à DX'
+        propWeatherDx: 'Météo à DX',
+        propScR: 'Panne radio', propScS: 'Tempête de rayonnement solaire', propScG: 'Tempête géomagnétique',
+        propScNone: 'Aucune', propScMinor: 'Mineure', propScModerate: 'Modérée',
+        propScStrong: 'Forte', propScSevere: 'Sévère', propScExtreme: 'Extrême'
     },
     es: {
         propView: 'Mapa de propagación', propProjection: 'Proyección', propLayer: 'Capa',
@@ -744,7 +756,10 @@ const PROP_I18N = {
         propBandCol: 'Banda', propScoreCol: 'Disponibilidad',
         propCtyAf: 'África', propCtyAs: 'Asia', propCtyEu: 'Europa', propCtyNa: 'América del Norte',
         propCtySa: 'América del Sur', propCtyOc: 'Oceanía', propCtyAn: 'Antártida',
-        propWeatherDx: 'Tiempo en DX'
+        propWeatherDx: 'Tiempo en DX',
+        propScR: 'Apagón de radio', propScS: 'Tormenta de radiación solar', propScG: 'Tormenta geomagnética',
+        propScNone: 'Ninguna', propScMinor: 'Menor', propScModerate: 'Moderada',
+        propScStrong: 'Fuerte', propScSevere: 'Severa', propScExtreme: 'Extrema'
     },
     pt: {
         propView: 'Mapa de propagação', propProjection: 'Projeção', propLayer: 'Camada',
@@ -759,7 +774,10 @@ const PROP_I18N = {
         propBandCol: 'Banda', propScoreCol: 'Disponibilidade',
         propCtyAf: 'África', propCtyAs: 'Ásia', propCtyEu: 'Europa', propCtyNa: 'América do Norte',
         propCtySa: 'América do Sul', propCtyOc: 'Oceania', propCtyAn: 'Antártida',
-        propWeatherDx: 'Clima em DX'
+        propWeatherDx: 'Clima em DX',
+        propScR: 'Apagão de rádio', propScS: 'Tempestade de radiação solar', propScG: 'Tempestade geomagnética',
+        propScNone: 'Nenhuma', propScMinor: 'Menor', propScModerate: 'Moderada',
+        propScStrong: 'Forte', propScSevere: 'Severa', propScExtreme: 'Extrema'
     },
     ru: {
         propView: 'Карта распространения', propProjection: 'Проекция', propLayer: 'Слой',
@@ -774,7 +792,10 @@ const PROP_I18N = {
         propBandCol: 'Диапазон', propScoreCol: 'Доступность',
         propCtyAf: 'Африка', propCtyAs: 'Азия', propCtyEu: 'Европа', propCtyNa: 'Северная Америка',
         propCtySa: 'Южная Америка', propCtyOc: 'Океания', propCtyAn: 'Антарктида',
-        propWeatherDx: 'Погода в DX'
+        propWeatherDx: 'Погода в DX',
+        propScR: 'Радиозатмение', propScS: 'Солнечная радиационная буря', propScG: 'Геомагнитная буря',
+        propScNone: 'Нет', propScMinor: 'Слабая', propScModerate: 'Умеренная',
+        propScStrong: 'Сильная', propScSevere: 'Серьёзная', propScExtreme: 'Экстремальная'
     },
     it: {
         propView: 'Mappa di propagazione', propProjection: 'Proiezione', propLayer: 'Livello',
@@ -789,7 +810,10 @@ const PROP_I18N = {
         propBandCol: 'Banda', propScoreCol: 'Disponibilità',
         propCtyAf: 'Africa', propCtyAs: 'Asia', propCtyEu: 'Europa', propCtyNa: 'America del Nord',
         propCtySa: 'America del Sud', propCtyOc: 'Oceania', propCtyAn: 'Antartide',
-        propWeatherDx: 'Meteo a DX'
+        propWeatherDx: 'Meteo a DX',
+        propScR: 'Blackout radio', propScS: 'Tempesta di radiazione solare', propScG: 'Tempesta geomagnetica',
+        propScNone: 'Nessuna', propScMinor: 'Minore', propScModerate: 'Moderata',
+        propScStrong: 'Forte', propScSevere: 'Severa', propScExtreme: 'Estrema'
     },
     ar: {
         propView: 'خريطة الانتشار', propProjection: 'الإسقاط', propLayer: 'الطبقة',
@@ -804,7 +828,10 @@ const PROP_I18N = {
         propScoreCol: 'الإتاحة', propCtyAf: 'أفريقيا', propCtyAs: 'آسيا', propCtyEu: 'أوروبا',
         propCtyNa: 'أمريكا الشمالية', propCtySa: 'أمريكا الجنوبية', propCtyOc: 'أوقيانوسيا',
         propCtyAn: 'القارة القطبية الجنوبية',
-        propWeatherDx: 'طقس DX'
+        propWeatherDx: 'طقس DX',
+        propScR: 'انقطاع راديوي', propScS: 'عاصفة إشعاع شمسي', propScG: 'عاصفة مغناطيسية أرضية',
+        propScNone: 'لا شيء', propScMinor: 'خفيف', propScModerate: 'متوسط',
+        propScStrong: 'قوي', propScSevere: 'شديد', propScExtreme: 'بالغ الشدة'
     },
     ko: {
         propView: '전파 지도', propProjection: '투영', propLayer: '배경',
@@ -818,7 +845,10 @@ const PROP_I18N = {
         propCtyTitle: '대륙별 최적 밴드', propCtyCol: '대륙', propBandCol: '밴드', propScoreCol: '가용도',
         propCtyAf: '아프리카', propCtyAs: '아시아', propCtyEu: '유럽', propCtyNa: '북아메리카',
         propCtySa: '남아메리카', propCtyOc: '오세아니아', propCtyAn: '남극',
-        propWeatherDx: 'DX 날씨'
+        propWeatherDx: 'DX 날씨',
+        propScR: '전파 장애', propScS: '태양 복사 폭풍', propScG: '지자기 폭풍',
+        propScNone: '없음', propScMinor: '약함', propScModerate: '보통',
+        propScStrong: '강함', propScSevere: '심각', propScExtreme: '극심'
     },
     ja: {
         propView: '伝播マップ', propProjection: '投影法', propLayer: '背景',
@@ -832,7 +862,10 @@ const PROP_I18N = {
         propCtyTitle: '大陸別の最適バンド', propCtyCol: '大陸', propBandCol: 'バンド', propScoreCol: '可用度',
         propCtyAf: 'アフリカ', propCtyAs: 'アジア', propCtyEu: 'ヨーロッパ', propCtyNa: '北アメリカ',
         propCtySa: '南アメリカ', propCtyOc: 'オセアニア', propCtyAn: '南極',
-        propWeatherDx: 'DX の天気'
+        propWeatherDx: 'DX の天気',
+        propScR: '電波障害', propScS: '太陽放射線ストーム', propScG: '地磁気嵐',
+        propScNone: 'なし', propScMinor: '軽微', propScModerate: '中程度',
+        propScStrong: '強い', propScSevere: '深刻', propScExtreme: '極端'
     }
 };
 
