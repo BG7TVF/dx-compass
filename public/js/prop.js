@@ -1446,22 +1446,19 @@ function renderPropPanel() {
     /* NOAA ships "none/minor/moderate/strong/severe/extreme"; translate the
      * state text and put the scale's own name in the tooltip. */
     const SC_NAME = {R: 'propScR', S: 'propScS', G: 'propScG'};
-    const SC_STATE = {
-        none: 'propScNone', minor: 'propScMinor', moderate: 'propScModerate',
-        strong: 'propScStrong', severe: 'propScSevere', extreme: 'propScExtreme'
-    };
+    const SC_STATE = [
+        'propScNone', 'propScMinor', 'propScModerate',
+        'propScStrong', 'propScSevere', 'propScExtreme'
+    ];
     const scaleBox = (k, o) => {
-        /* NOAA leaves Scale/Text null when nothing is in progress (S is
-         * almost always null outside a proton event); fall back to the
-         * forecast probability, then to a dash, so the box never looks
-         * empty. The level suffix must carry its own letter -- it used to
-         * print "G0" for all three boxes. */
-        const lvl = o && o.scale !== null ? o.scale : 0;
-        const st = o && o.text ? SC_STATE[o.text.toLowerCase()] : null;
-        let note = '—';
-        if (st) note = t(st);
-        else if (o && o.text) note = o.text;
+        /* In-progress event -> its level word (minor/moderate/.../extreme);
+         * otherwise the forecast probability if NOAA publishes one; otherwise
+         * "none". Never an em dash: an empty box reads as broken data. */
+        const lvl = o && o.scale !== null ? clamp(o.scale, 0, 5) : 0;
+        let note;
+        if (lvl > 0) note = t(SC_STATE[lvl]);
         else if (o && o.prob !== null && o.prob !== undefined) note = o.prob + '%';
+        else note = t('propScNone');
         return '<div class="prop-scale s' + lvl + '" title="' + t(SC_NAME[k]) + ' · ' + note +
             '"><b>' + t(SC_NAME[k]) + '</b><span>' + note + '</span><i>' + k + lvl + '</i></div>';
     };
