@@ -1179,19 +1179,18 @@ function mufFieldAt(f, lat, lon) {
         (v10 * (1 - tx) + v11 * tx) * ty;
 }
 
-function drawMufLayer(ctx, proj, C) {
+/* Shared field painter: rasterise a low-frequency field at a coarse step and
+ * upscale with the canvas' own bilinear filter. Per-pixel inverse projection
+ * (which is what keeps the wash rectangular-free on curved projections) stays
+ * cheap, and the result is a continuous gradient instead of a checkerboard.
+ * colorAt(lat, lon) returns [r, g, b, a] or null for transparent. */
+function propPaintField(ctx, proj, cvKey, colorAt) {
     const w = propState.w, h = propState.h;
-    if (!propState.data || !w || !h) return;
-    const field = propMufField();
-    /* The field is low-frequency, so it is rasterised at a coarse step and
-     * upscaled with the canvas' own bilinear filter: per-pixel inverse
-     * projection (which is what keeps the wash rectangular-free on curved
-     * projections) stays cheap, and the result is a continuous gradient
-     * instead of the old blurred 5x10 degree checkerboard. */
+    if (!w || !h) return;
     const step = Math.max(2, Math.ceil(Math.sqrt(w * h / 80000)));
     const W = Math.max(2, Math.round(w / step));
     const H = Math.max(2, Math.round(h / step));
-    const cv = propState.mufCv || (propState.mufCv = document.createElement('canvas'));
+    const cv = propState[cvKey] || (propState[cvKey] = document.createElement('canvas'));
     if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
     const off = cv.getContext('2d');
     const img = off.createImageData(W, H);
@@ -1201,18 +1200,27 @@ function drawMufLayer(ctx, proj, C) {
         for (let x = 0; x < W; x++) {
             const p = proj.inv(x * step + step / 2, py);
             if (!p) continue;
-            const col = mufColor(mufFieldAt(field, p[0], p[1]));
+            const col = colorAt(p[0], p[1]);
+            if (!col) continue;
             const o = (y * W + x) * 4;
             px[o] = col[0]; px[o + 1] = col[1]; px[o + 2] = col[2];
-            px[o + 3] = 255;
+            px[o + 3] = col[3];
         }
     }
     off.putImageData(img, 0, 0);
     ctx.save();
-    ctx.globalAlpha = 0.30;
     ctx.imageSmoothingEnabled = true;
     ctx.drawImage(cv, 0, 0, w, h);
     ctx.restore();
+}
+
+function drawMufLayer(ctx, proj, C) {
+    if (!propState.data) return;
+    const field = propMufField();
+    propPaintField(ctx, proj, 'mufCv', (lat, lon) => {
+        const col = mufColor(mufFieldAt(field, lat, lon));
+        return [col[0], col[1], col[2], 77];   // uniform ~0.30 wash
+    });
 }
 
 function wxColor(t) {
@@ -1234,35 +1242,108 @@ function drawWeatherLayer(ctx, proj, C) {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.font = '600 11px "Segoe UI", sans-serif';
+    /* Soft temperature tint under every reading first: overlapping stations
+     * blend into each other instead of stacking the old opaque squares that
+     * hid the map. Values stay the stations' own, nothing is interpolated. */
     for (const p of wx.pts) {
         const q = proj.fwd(p[1], p[0]);
         if (!q) continue;
         const col = wxColor(p[2]);
-        ctx.globalAlpha = 0.75;
-        ctx.fillStyle = 'rgb(' + col.join(',') + ')';
-        ctx.fillRect(q[0] - size / 2, q[1] - size / 2, size, size);
-        ctx.globalAlpha = 1;
-        ctx.fillStyle = '#fff';
-        ctx.fillText(Math.round(p[2]) + '°', q[0], q[1]);
-    }
-    ctx.textAlign = 'start';
-}
-
-function drawAuroraLayer(ctx, proj, C) {
-    const au = propState.data && propState.data.aurora;
-    if (!au || !au.grid) return;
-    const r = Math.max(2.5, Math.min(7, propState.w / 160));
-    for (const p of au.grid) {
-        const q = proj.fwd(p[0], p[1]);
-        if (!q) continue;
-        const a = clamp(p[2] / 100, 0, 1);
-        ctx.globalAlpha = 0.25 + a * 0.6;
-        ctx.fillStyle = a > 0.6 ? '#ff4d6d' : a > 0.3 ? '#f1c40f' : '#2ecc71';
+        const r = size * 1.4;
+        const g = ctx.createRadialGradient(q[0], q[1], 0, q[0], q[1], r);
+        g.addColorStop(0, 'rgba(' + col.join(',') + ',.30)');
+        g.addColorStop(1, 'rgba(' + col.join(',') + ',0)');
+        ctx.fillStyle = g;
         ctx.beginPath();
         ctx.arc(q[0], q[1], r, 0, Math.PI * 2);
         ctx.fill();
     }
-    ctx.globalAlpha = 1;
+    /* then the readings themselves, as compact chips with a temperature-tinted
+     * border -- readable over land, wash and night shading alike */
+    for (const p of wx.pts) {
+        const q = proj.fwd(p[1], p[0]);
+        if (!q) continue;
+        const col = wxColor(p[2]);
+        const label = Math.round(p[2]) + '°';
+        const bw = ctx.measureText(label).width + 10, bh = 16;
+        ctx.fillStyle = 'rgba(5,11,17,.78)';
+        ctx.strokeStyle = 'rgba(' + col.join(',') + ',.55)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        if (ctx.roundRect) ctx.roundRect(q[0] - bw / 2, q[1] - bh / 2, bw, bh, 4);
+        else ctx.rect(q[0] - bw / 2, q[1] - bh / 2, bw, bh);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = 'rgb(' + col.join(',') + ')';
+        ctx.fillText(label, q[0], q[1] + 0.5);
+    }
+    ctx.textAlign = 'start';
+}
+
+/* OVATION points arrive on a regular 4x4 degree lattice with the <8% nodes
+ * filtered out. Re-expanding them into the full lattice with implicit zeros
+ * lets the field be bilinearly interpolated into a continuous auroral oval
+ * instead of polka dots; missing nodes genuinely mean "below 8%" (server-side
+ * filter), so zero-padding invents nothing. */
+const PROP_AU_STEP = 4;
+
+function propAuroraField(grid) {
+    const nLat = 180 / PROP_AU_STEP + 1;        // -90 .. 90
+    const nLon = 360 / PROP_AU_STEP;            // -180 .. 176
+    const vals = new Float32Array(nLat * nLon);
+    for (const p of grid) {
+        const i = Math.round((p[1] + 90) / PROP_AU_STEP);
+        let j = Math.round((p[0] + 180) / PROP_AU_STEP) % nLon;
+        if (j < 0) j += nLon;
+        if (i < 0 || i >= nLat) continue;
+        vals[i * nLon + j] = p[2];
+    }
+    return {vals, nLat, nLon};
+}
+
+/* Bilinear sample of the aurora lattice at a true lat/lon (longitude wraps). */
+function auroraFieldAt(f, lat, lon) {
+    const y = clamp((lat + 90) / PROP_AU_STEP, 0, f.nLat - 1 - 1e-6);
+    const i = Math.floor(y), ty = y - i;
+    let x = (((lon + 180) / PROP_AU_STEP) % f.nLon + f.nLon) % f.nLon;
+    const j = Math.floor(x), tx = x - j;
+    const j2 = (j + 1) % f.nLon;
+    const r0 = i * f.nLon, r1 = Math.min(i + 1, f.nLat - 1) * f.nLon;
+    const v00 = f.vals[r0 + j], v01 = f.vals[r0 + j2];
+    const v10 = f.vals[r1 + j], v11 = f.vals[r1 + j2];
+    return (v00 * (1 - tx) + v01 * tx) * (1 - ty) +
+        (v10 * (1 - tx) + v11 * tx) * ty;
+}
+
+/* Continuous intensity ramp: the aurora stays green at low probability and
+ * turns yellow, then red, only where the oval is genuinely strong. */
+const AU_STOPS = [
+    [8, [24, 120, 70]], [25, [46, 204, 113]], [50, [241, 196, 15]],
+    [75, [230, 110, 50]], [100, [255, 77, 109]]
+];
+
+function auroraColor(p) {
+    const x = clamp(p, AU_STOPS[0][0], AU_STOPS[AU_STOPS.length - 1][0]);
+    let i = 0;
+    while (i < AU_STOPS.length - 2 && AU_STOPS[i + 1][0] < x) i++;
+    const a = AU_STOPS[i], b = AU_STOPS[i + 1];
+    const f = (x - a[0]) / (b[0] - a[0]);
+    return [Math.round(a[1][0] + (b[1][0] - a[1][0]) * f),
+        Math.round(a[1][1] + (b[1][1] - a[1][1]) * f),
+        Math.round(a[1][2] + (b[1][2] - a[1][2]) * f)];
+}
+
+function drawAuroraLayer(ctx, proj, C) {
+    const au = propState.data && propState.data.aurora;
+    if (!au || !au.grid || !au.grid.length) return;
+    const field = propAuroraField(au.grid);
+    propPaintField(ctx, proj, 'auCv', (lat, lon) => {
+        const p = auroraFieldAt(field, lat, lon);
+        if (p < 6) return null;                // fade out below the noise
+        const col = auroraColor(p);
+        const a = Math.round(clamp((p - 6) / 60, 0, 1) * 150);
+        return [col[0], col[1], col[2], a];
+    });
 }
 
 /* Terminator on the azimuthal disc as a radial boundary around the screen
