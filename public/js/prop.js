@@ -52,7 +52,7 @@ const propState = {
     dx: {lat: 40, lon: -100}, de: null,
     canvas: null, wrap: null, ctx: null, w: 0, h: 0,
     hover: null, timer: null, poll: null, ro: null, view: false,
-    lastDraw: 0
+    lastDraw: 0, calc: null, sig: null, lastHour: -1
 };
 
 const propRad = d => d * Math.PI / 180;
@@ -478,6 +478,46 @@ function propAbsWeight(sf) {
     return clamp((sf + 0.15) / 1.15, 0.1, 1);
 }
 
+/* Latest GOES X-ray flux in W/m^2 (0.1-0.8 nm long channel). Drives the
+ * climatological D-region absorption below; hamqsl's "A5.4"-style letter
+ * class is the fallback when the GOES feed is stale. */
+function propXrayNow() {
+    const d = propState.data;
+    const list = d && d.xray && d.xray.list;
+    if (list && list.length) {
+        const last = list[list.length - 1];
+        const f = Array.isArray(last) ? last[1] : null;
+        if (f > 0) return f;
+    }
+    const hx = d && d.ham && d.ham.xray;
+    if (hx) {
+        const m = /^([ABCMX])([\d.]+)/i.exec(String(hx).trim());
+        if (m) {
+            const scale = {A: 1e-8, B: 1e-7, C: 1e-6, M: 1e-5, X: 1e-4}[m[1].toUpperCase()];
+            const v = scale * parseFloat(m[2]);
+            if (v > 0) return v;   // hamqsl sometimes reports "A0.0"
+        }
+    }
+    return 3e-7;   // quiet-Sun mid-B background
+}
+
+/* Climatological one-hop LUF (MHz) from solar zenith + X-ray flux. This is
+ * the fallback for the DRAP grid, which is event-driven: outside solar
+ * proton events SWPC regularly ships an all-zero "no estimates" grid, and
+ * trusting those zeros made 80M/160M look open at local noon.
+ * Calibration: quiet Sun (xray ~3e-7) gives ~5.2 MHz at the subsolar point,
+ * so 80M is absorbed by day and open by night while 40M stays usable --
+ * matching the classic daytime LUF for a 3000 km F2 hop. M-class flares
+ * scale it up by ~1.8x, X-class by ~3.2x. At night (sun below the
+ * terminator) the D layer vanishes and only a small residual is kept. */
+function propLufClim(lat, lon, when) {
+    const sf = sunFactor(lat, lon, when);
+    if (sf <= -0.05) return 0;
+    const x = propXrayNow();
+    const xScale = clamp(Math.pow(x / 3e-7, 0.25), 0.5, 4);
+    return 5.2 * xScale * Math.pow(clamp(sf, 0, 1), 0.75);
+}
+
 /* Sonde snapshot instant (kc2g refreshes every few minutes, so the fetch
  * time is a good stand-in for the observation time). */
 function propSnapshotTime() {
@@ -521,14 +561,18 @@ function propPathWindow(prof, when) {
         if (base < mufMin) mufMin = base;
 
         const drap = propDrapAt(m.lat, m.lon);
-        if (drap !== null) {
+        /* Climatological D-region LUF always applies; the DRAP grid (when it
+         * carries real estimates) can only make things worse, never better. */
+        const lufClim = propLufClim(m.lat, m.lon, when) * Math.sqrt(prof.hops);
+        let lufHop = lufClim;
+        if (drap !== null && !(data.drap && data.drap.noData)) {
             const wAt = propAbsWeight(sunFactor(m.lat, m.lon, when));
             const wNow = propAbsWeight(sunFactor(m.lat, m.lon, drapAt));
             const scale = clamp(wAt / wNow, 0.3, 4);
-            const lufHop = Math.max(2.0,
-                1.55 * drap * Math.sqrt(prof.hops) * scale);
-            if (lufHop > lufMax) lufMax = lufHop;
+            lufHop = Math.max(lufHop, Math.max(2.0,
+                1.55 * drap * Math.sqrt(prof.hops) * scale));
         }
+        if (lufHop > lufMax) lufMax = lufHop;
     }
     if (!isFinite(mufMin)) mufMin = sfi ? 1.5 + 0.22 * sfi : 8;
     return {muf: mufMin, luf: lufMax};
@@ -1678,6 +1722,27 @@ function propResize() {
 /* ---------------------------------------------------------------
  * Data + lifecycle
  * ------------------------------------------------------------- */
+/* Signature of the space-weather inputs that drive the propagation model.
+ * Every source carries its own fetch timestamp (see lib/prop.js), so a new
+ * value in any of them means the space weather changed and the band
+ * conditions / path matrix / continent table must be recomputed at once,
+ * instead of waiting for the 30-minute background recalculation. */
+function propDataSig(d) {
+    if (!d) return null;
+    const f = d.fetched || {};
+    return [d.ts, f.ham, f.muf, f.drap, f.xray, f.kp, f.dst, f.sfi, f.scales,
+        d.drap && d.drap.noData ? 1 : 0].join('|');
+}
+
+/* Recompute every derived view (band conditions, DE->DX matrix, continent
+ * best-band) from the cached data and redraw the map. */
+function propRecalc() {
+    if (!propState.view || !propState.data) return;
+    propState.lastHour = new Date().getUTCHours();
+    renderPropPanel();
+    drawProp();
+}
+
 async function propFetch() {
     if (propState.loading) return;
     propState.loading = true;
@@ -1686,11 +1751,14 @@ async function propFetch() {
         if (!r.ok) throw new Error('HTTP ' + r.status);
         const d = await r.json();
         if (!d || d.error) throw new Error((d && d.error) || 'no data');
+        const sig = propDataSig(d);
         propState.data = d;
         propState.err = null;
-        if (propState.view) {
-            renderPropPanel();
-            drawProp();
+        /* Space weather changed -> recompute immediately, without touching
+         * the independent 30-minute recalculation timer. */
+        if (sig !== propState.sig) {
+            propState.sig = sig;
+            propRecalc();
         }
     } catch (e) {
         propState.err = e.message;
@@ -1751,9 +1819,18 @@ function initProp() {
         propState.ro.observe(propState.wrap);
     }
 
-    /* gray line / solar position: redraw once a minute */
-    propState.timer = setInterval(() => { if (propState.view) drawProp(); }, 60000);
+    /* gray line / solar position: redraw once a minute. The same tick also
+     * catches UTC hour rollovers, which shift the "current hour" column of
+     * the path matrix even when the space weather itself is quiet. */
+    propState.timer = setInterval(() => {
+        if (!propState.view) return;
+        if (new Date().getUTCHours() !== propState.lastHour) propRecalc();
+        else drawProp();
+    }, 60000);
     propState.poll = setInterval(propFetch, 60000);
+    /* Space weather unchanged: full recalculation every 30 minutes so the
+     * forecast windows keep tracking the clock. */
+    propState.calc = setInterval(propRecalc, 30 * 60000);
     propFetch();
 }
 

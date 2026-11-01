@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -6,12 +6,12 @@
     <title>DX-Compass</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%230b1220'/%3E%3Ccircle cx='8' cy='8' r='4' fill='%2300e08a'/%3E%3C/svg%3E">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <link rel="stylesheet" href="css/style.css?v=2.2.36">
+    <link rel="stylesheet" href="css/style.css?v=2.2.37">
 </head>
 <body>
     <div class="toolbar">
         <div class="menu-wrap" id="menuWrap">
-            <button class="action-btn menu-btn" id="btnMenu" title="Menu" aria-expanded="false" aria-controls="appMenu">☰</button>
+            <button class="action-btn menu-btn" id="btnMenu" title="Menu" aria-expanded="false" aria-controls="appMenu">?</button>
             <div class="app-menu hidden" id="appMenu">
                 <button class="menu-item view-btn" id="btnSpotView" title="Spot grid">Spot</button>
                 <button class="menu-item view-btn" id="btnQsoView" title="QSO map">QSO</button>
@@ -42,7 +42,7 @@
                 </div>
                 <div class="qt-box qt-call">
                     <label id="qtLCall">CALL</label>
-                    <b id="qtCall">—</b>
+                    <b id="qtCall">?</b>
                 </div>
                 <div class="qt-box qt-rst">
                     <label id="qtLRst">RST</label>
@@ -50,19 +50,19 @@
                 </div>
                 <div class="qt-box qt-exch">
                     <label id="qtLExch">EXCH</label>
-                    <b id="qtExch">—</b>
+                    <b id="qtExch">?</b>
                 </div>
                 <div class="qt-box qt-band">
                     <label id="qtLBand">BAND</label>
-                    <b id="qtBand">—</b>
+                    <b id="qtBand">?</b>
                 </div>
                 <div class="qt-box qt-mode">
                     <label id="qtLMode">MODE</label>
-                    <b id="qtMode">—</b>
+                    <b id="qtMode">?</b>
                 </div>
                 <div class="qt-box qt-op">
                     <label id="qtLOp">OP</label>
-                    <b id="qtOp">—</b>
+                    <b id="qtOp">?</b>
                 </div>
                 <div class="qt-box qt-age">
                     <label id="qtLAge">AGO</label>
@@ -111,17 +111,17 @@
                         <span class="sep">|</span>
                         <span class="stat" id="spotCount">0 spots</span>
                     </div>
-                    <button class="action-btn monitor-btn" id="btnMonitor" disabled>▶ 开始监控</button>
+                    <button class="action-btn monitor-btn" id="btnMonitor" disabled>? ????</button>
                 </div>
                 <div class="panel-controls-row view-controls">
                     <div class="layout-group" id="layoutGroup">
-                        <button class="layout-btn active" data-layout="1x1">1 × 1</button>
-                        <button class="layout-btn" data-layout="2x2">2 × 2</button>
-                        <button class="layout-btn" data-layout="3x3">3 × 3</button>
+                        <button class="layout-btn active" data-layout="1x1">1 ? 1</button>
+                        <button class="layout-btn" data-layout="2x2">2 ? 2</button>
+                        <button class="layout-btn" data-layout="3x3">3 ? 3</button>
                     </div>
                     <div class="rotate-group" id="rotateGroup" title="Page through callsigns when there are more than visible cells">
-                        <button class="action-btn rotate-btn" id="btnRotate" disabled>🔁 开始轮询</button>
-                        <button class="action-btn" id="btnRotateNext" disabled title="Next page">⏭</button>
+                        <button class="action-btn rotate-btn" id="btnRotate" disabled>?? ????</button>
+                        <button class="action-btn" id="btnRotateNext" disabled title="Next page">?</button>
                         <input type="number" id="rotSec" class="rot-sec" min="3" max="600" step="1" value="15" title="Rotation interval (seconds)">
                         <span class="rot-unit">s</span>
                         <span class="rot-page" id="rotPage"></span>
@@ -191,7 +191,7 @@
                 <div class="qso-last-box">
                     <div class="qso-last-title" id="qLastTitle">Last QSO</div>
                     <div class="qso-last-row">
-                        <span class="qso-last-call" id="qLastCall">—</span>
+                        <span class="qso-last-call" id="qLastCall">?</span>
                         <span class="qso-last-info" id="qLastInfo"></span>
                     </div>
                 </div>
@@ -249,7 +249,7 @@
                     <!-- Global settings -->
                     <div class="cfg-pane active" id="paneGlobal">
                         <div class="form-row">
-                            <label id="langLabel" for="setLang">Language / 语言</label>
+                            <label id="langLabel" for="setLang">Language / ??</label>
                             <select id="setLang" class="set-input"></select>
                         </div>
                         <div class="form-row">
@@ -388,7 +388,7 @@
     <!-- Single new-spot alert (QSO view): a newer spot overwrites this one -->
     <div class="spot-alert hidden" id="spotAlert">
         <div class="sa-row1">
-            <span class="sa-call" id="saCall">—</span>
+            <span class="sa-call" id="saCall">?</span>
             <span class="sa-band" id="saBand"></span>
             <span class="sa-mode" id="saMode"></span>
             <button class="sa-close" id="saClose" title="Close">&times;</button>
@@ -415,11 +415,11 @@
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="vendor/leaflet-heat.js"></script>
-    <script src="js/i18n.js?v=2.2.36"></script>
-    <script src="data/land.js?v=2.2.36"></script>
-    <script src="data/borders.js?v=2.2.36"></script>
-    <script src="js/app.js?v=2.2.36"></script>
-    <script src="js/prop.js?v=2.2.36"></script>
+    <script src="js/i18n.js?v=2.2.37"></script>
+    <script src="data/land.js?v=2.2.37"></script>
+    <script src="data/borders.js?v=2.2.37"></script>
+    <script src="js/app.js?v=2.2.37"></script>
+    <script src="js/prop.js?v=2.2.37"></script>
 </body>
 </html>
 
