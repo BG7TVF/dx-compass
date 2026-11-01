@@ -1572,6 +1572,35 @@ body[data-theme="amber"] {
     align-items: stretch;
     gap: 0 18px;
 }
+/* Data-source attribution closing the propagation page: one chip per provider
+ * with the licence its data ships under. GIRO's Rules of the Road and the
+ * CC BY-NC-SA terms of the LGDC products require this to stay visible. */
+.prop-credit {
+    padding: 8px 8px 10px;
+    border-top: 1px solid var(--border);
+}
+.prop-credit-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.prop-credit-item {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
+    padding: 3px 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    background: var(--panel-2);
+    color: var(--text);
+    font-size: 11px;
+    text-decoration: none;
+}
+.prop-credit-item b { font-weight: 600; }
+.prop-credit-item i { color: var(--text-dim); font-style: normal; font-size: 10px; }
+.prop-credit-item:hover { border-color: var(--accent); color: var(--accent); }
+.prop-credit-note {
+    margin-top: 6px;
+    color: var(--text-dim);
+    font-size: 11px;
+    line-height: 1.45;
+}
 #propCanvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
 .prop-hover {
     position: absolute;

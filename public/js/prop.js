@@ -39,6 +39,23 @@ const PROP_CONTINENTS = [
 
 const PROP_PROJECTIONS = ['mercator', 'azimuthal', 'robinson'];
 const PROP_LAYERS = ['muf', 'weather', 'aurora'];
+
+/* Every provider feeding this page, with the licence its data ships under.
+ * GIRO's Rules of the Road and the CC BY-NC-SA terms of the LGDC products
+ * both require the attribution to be visible, so the list is drawn under the
+ * page unconditionally -- not only once a payload arrives. `lic` is a key into
+ * the licence table in renderPropCredits(); provider names stay untranslated
+ * because they are proper nouns. */
+const PROP_SOURCES = [
+    {name: 'NOAA SWPC', url: 'https://www.swpc.noaa.gov/', lic: 'pd'},
+    {name: 'HamQSL', url: 'https://www.hamqsl.com/solar.html', lic: 'courtesy'},
+    {name: 'prop.kc2g.com', url: 'https://prop.kc2g.com/', lic: 'MIT'},
+    {name: 'GIRO / DIDBase', url: 'https://lgdc.uml.edu/', lic: 'ccbyncsa'},
+    {name: 'LGDC GAMBIT', url: 'https://lgdc.uml.edu/rix/', lic: 'ccbyncsa'},
+    {name: 'Open-Meteo', url: 'https://open-meteo.com/', lic: 'ccby'},
+    {name: 'NASA SDO', url: 'https://sdo.gsfc.nasa.gov/', lic: 'pd'}
+];
+
 /* Mainland-safe limits used when filling the width: only land beyond these
  * may be clipped (Arctic islands above 78N, Antarctica below 56S). Cape
  * Chelyuskin (77.7N) and Cape Horn (56S), the outermost mainland tips, stay
@@ -480,7 +497,89 @@ function propMufDayFactor(sf) {
     return 0.55 + 0.62 * Math.pow(clamp((sf + 0.12) / 1.12, 0, 1), 0.65);
 }
 
+/* ---------- IRTAM (GAMBIT) assimilative field ---------- */
+
+/* Bilinear sample of one GAMBIT universal-time slice. The grid is 10 x 20
+ * degrees over the whole globe, so it resolves the equatorial anomaly but not
+ * individual fronts -- which is exactly the resolution this MUF picture is
+ * drawn at. */
+function propGambitSliceAt(g, slice, lat, lon) {
+    const nLat = g.lats.length, nLon = g.lons.length;
+    const dLat = g.lats[1] - g.lats[0] || 1;
+    const dLon = g.lons[1] - g.lons[0] || 1;
+    const y = clamp((lat - g.lats[0]) / dLat, 0, nLat - 1 - 1e-6);
+    const i = Math.floor(y), ty = y - i;
+    let x = (((lon - g.lons[0]) / dLon) % nLon + nLon) % nLon;
+    const j = Math.floor(x), tx = x - j;
+    const j2 = (j + 1) % nLon;
+    const r0 = slice[i] || [], r1 = slice[Math.min(i + 1, nLat - 1)] || [];
+    const v00 = r0[j], v01 = r0[j2], v10 = r1[j], v11 = r1[j2];
+    if (typeof v00 !== 'number' || typeof v10 !== 'number') return null;
+    return (v00 * (1 - tx) + v01 * tx) * (1 - ty) +
+        (v10 * (1 - tx) + v11 * tx) * ty;
+}
+
+/* foF2 at a point and a time. The collector publishes eight universal-time
+ * slices of the same assimilated state, so the diurnal phase is interpolated
+ * in UT and the 24-hour band matrix keeps its shape instead of repeating one
+ * snapshot. */
+function propGambitFof2At(lat, lon, when) {
+    const g = propState.data && propState.data.gambit;
+    if (!g || !g.lats || !g.lats.length || !g.values || !g.uts) return null;
+    const t = when || new Date();
+    const ut = t.getUTCHours() + t.getUTCMinutes() / 60;
+    const uts = g.uts, n = uts.length;
+    let a = 0;
+    for (let i = 0; i < n; i++) if (uts[i] <= ut) a = i;
+    const b = (a + 1) % n;
+    const f = (((ut - uts[a]) + 24) % 24) / ((24 / n) || 1);
+    const va = propGambitSliceAt(g, g.values[a], lat, lon);
+    if (va === null) return null;
+    const vb = propGambitSliceAt(g, g.values[b], lat, lon);
+    return vb === null ? va : va * (1 - f) + vb * f;
+}
+
+/* Regional bias: what the sounding network says about the model, expressed as
+ * a ratio (measured foF2 / GAMBIT foF2). Each station is re-phased to "now"
+ * with the same day factor propIonoAt uses, then blended by inverse-square
+ * distance inside the same 2500 km trust radius; the result is clamped so one
+ * outlier cannot repaint half a continent. 1.0 means "the model is right". */
+function propRegionBias(lat, lon, when) {
+    const st = propState.data && propState.data.muf && propState.data.muf.stations;
+    if (!st || !st.length || !propState.data.gambit) return 1;
+    const nowMs = Date.now();
+    const kAt = propMufDayFactor(sunFactor(lat, lon, when));
+    let num = 0, den = 0;
+    for (const s of st) {
+        if (typeof s[3] !== 'number' || s[3] <= 0) continue;    // no foF2 row
+        const d = propDistance({lat, lon}, {lat: s[0], lon: s[1]});
+        if (d > 2500) continue;
+        const ageW = propSondeAgeWeight(s, nowMs);
+        if (!ageW) continue;
+        const model = propGambitFof2At(s[0], s[1], when);
+        if (model === null || model < 1) continue;
+        const kM = propStationHourFactor(s) || 1;
+        const wgt = ageW / Math.pow(d + 40, 2);
+        num += ((s[3] / kM) * kAt / model) * wgt;
+        den += wgt;
+    }
+    if (!den) return 1;
+    return clamp(num / den, 0.75, 1.35);
+}
+
+/* MUF from the assimilative foF2: the model supplies the density (anomaly
+ * crests, storm depletions, real diurnal phase), the hop still needs an
+ * M(3000)F2 factor, which runs ~2.45 at night and ~3.0 with the sun up. */
+function propIrtamMuf(lat, lon, when) {
+    const fof2 = propGambitFof2At(lat, lon, when);
+    if (fof2 === null) return null;
+    const sf = clamp(sunFactor(lat, lon, when), 0, 1);
+    return fof2 * propRegionBias(lat, lon, when) * (2.45 + 0.55 * sf);
+}
+
 /* Climatological MUF(3000) for a hop where no fresh sonde covers the point.
+ * When the collector has a GAMBIT/IRTAM foF2 field the assimilated model
+ * takes over (propIrtamMuf); the SFI curve below is then only the fallback.
  * The SFI term alone is one global scalar, so latitude and season have to
  * enter separately:
  *  - dec is the subsolar latitude on the forecast date, so |lat - dec| is the
@@ -495,6 +594,8 @@ function propMufDayFactor(sf) {
  * Order of magnitude with SFI=90 (21.3 MHz base): equator ~21/11, 23N ~19/10,
  * 60N ~12/8, 75N in late October ~7/5 MHz (day/night). */
 function propClimatMuf(lat, lon, when) {
+    const irtam = propIrtamMuf(lat, lon, when);
+    if (irtam !== null) return irtam;
     const sfi = propState.data && propState.data.ham && propState.data.ham.sfi;
     const base = sfi ? 1.5 + 0.22 * sfi : 8;
     const dec = propTerminator(when).dec;
@@ -1929,9 +2030,31 @@ function propBandConds() {
     return {bands, day, night, noon};
 }
 
+/* One chip per provider, licence next to the name, then a single note that
+ * says which part of the page each licensed product feeds. Redrawn on every
+ * panel render so a language switch updates it together with the rest. */
+function renderPropCredits() {
+    const box = $('#propCredit');
+    if (!box) return;
+    const lic = {
+        pd: t('propLicPd'),
+        courtesy: t('propLicCourtesy'),
+        MIT: 'MIT',
+        ccbyncsa: 'CC BY-NC-SA 4.0',
+        ccby: 'CC BY 4.0'
+    };
+    box.innerHTML = '<div class="prop-sec-title">' + propEsc(t('propCredits')) + '</div>' +
+        '<div class="prop-credit-list">' + PROP_SOURCES.map(s =>
+            '<a class="prop-credit-item" href="' + s.url +
+            '" target="_blank" rel="noopener">' + '<b>' + propEsc(s.name) + '</b><i>' +
+            propEsc(lic[s.lic] || s.lic) + '</i></a>').join('') + '</div>' +
+        '<div class="prop-credit-note">' + propEsc(t('propCreditsNote')) + '</div>';
+}
+
 function renderPropPanel() {
     const side = $('#propSide'), foot = $('#propFoot'), armL = $('#propArmL');
     if (!side || !foot || !armL) return;
+    renderPropCredits();
     const d = propState.data;
     if (!d) {
         side.innerHTML = '<div class="prop-empty">' + t('propNoData') +

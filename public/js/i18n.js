@@ -687,7 +687,9 @@ const PROP_I18N = {
         propWeatherDx: 'DX 天气',
         propScR: '无线电中断', propScS: '太阳辐射暴', propScG: '地磁暴',
         propScNone: '无', propScMinor: '轻微', propScModerate: '中等',
-        propScStrong: '强', propScSevere: '严重', propScExtreme: '极端'
+        propScStrong: '强', propScSevere: '严重', propScExtreme: '极端',
+        propCredits: '数据来源与许可', propLicPd: '公有领域', propLicCourtesy: '免费公开',
+        propCreditsNote: '台站探空由 prop.kc2g.com 汇总，原始数据来自 GIRO/DIDBase（CC BY-NC-SA 4.0 + Lowell GIRO Rules of the Road）；实测值用于区域偏差校正，LGDC GAMBIT 系数提供同化背景场。'
     },
     en: {
         propView: 'Propagation', propProjection: 'Projection', propLayer: 'Background',
@@ -705,7 +707,10 @@ const PROP_I18N = {
         propWeatherDx: 'DX weather',
         propScR: 'Radio blackout', propScS: 'Solar radiation storm', propScG: 'Geomagnetic storm',
         propScNone: 'None', propScMinor: 'Minor', propScModerate: 'Moderate',
-        propScStrong: 'Strong', propScSevere: 'Severe', propScExtreme: 'Extreme'
+        propScStrong: 'Strong', propScSevere: 'Severe', propScExtreme: 'Extreme',
+        propCredits: 'Data sources & licences', propLicPd: 'public domain',
+        propLicCourtesy: 'free public feed',
+        propCreditsNote: 'Station soundings are aggregated by prop.kc2g.com from GIRO/DIDBase (CC BY-NC-SA 4.0 + Lowell GIRO Rules of the Road); measured values drive the regional bias correction and the LGDC GAMBIT coefficients supply the assimilative background field.'
     },
     de: {
         propView: 'Ausbreitungskarte', propProjection: 'Projektion', propLayer: 'Hintergrund',
@@ -723,7 +728,10 @@ const PROP_I18N = {
         propWeatherDx: 'DX-Wetter',
         propScR: 'Radioblackout', propScS: 'Solarer Strahlungssturm', propScG: 'Geomagnetischer Sturm',
         propScNone: 'Keine', propScMinor: 'Gering', propScModerate: 'Mäßig',
-        propScStrong: 'Stark', propScSevere: 'Schwer', propScExtreme: 'Extrem'
+        propScStrong: 'Stark', propScSevere: 'Schwer', propScExtreme: 'Extrem',
+        propCredits: 'Datenquellen & Lizenzen', propLicPd: 'gemeinfrei',
+        propLicCourtesy: 'frei zugänglich',
+        propCreditsNote: 'Die Stationslotungen werden von prop.kc2g.com aus GIRO/DIDBase zusammengeführt (CC BY-NC-SA 4.0 + Lowell GIRO Rules of the Road); die Messwerte treiben die regionale Bias-Korrektur, die LGDC-GAMBIT-Koeffizienten liefern das assimilierte Hintergrundfeld.'
     },
     fr: {
         propView: 'Carte de propagation', propProjection: 'Projection', propLayer: 'Fond',
@@ -741,7 +749,10 @@ const PROP_I18N = {
         propWeatherDx: 'Météo à DX',
         propScR: 'Panne radio', propScS: 'Tempête de rayonnement solaire', propScG: 'Tempête géomagnétique',
         propScNone: 'Aucune', propScMinor: 'Mineure', propScModerate: 'Modérée',
-        propScStrong: 'Forte', propScSevere: 'Sévère', propScExtreme: 'Extrême'
+        propScStrong: 'Forte', propScSevere: 'Sévère', propScExtreme: 'Extrême',
+        propCredits: 'Sources & licences', propLicPd: 'domaine public',
+        propLicCourtesy: 'flux public gratuit',
+        propCreditsNote: 'Les sondages des stations sont agrégés par prop.kc2g.com à partir de GIRO/DIDBase (CC BY-NC-SA 4.0 + Lowell GIRO Rules of the Road) ; les valeurs mesurées alimentent la correction de biais régionale et les coefficients LGDC GAMBIT fournissent le champ de fond assimilé.'
     },
     es: {
         propView: 'Mapa de propagación', propProjection: 'Proyección', propLayer: 'Capa',
@@ -759,7 +770,10 @@ const PROP_I18N = {
         propWeatherDx: 'Tiempo en DX',
         propScR: 'Apagón de radio', propScS: 'Tormenta de radiación solar', propScG: 'Tormenta geomagnética',
         propScNone: 'Ninguna', propScMinor: 'Menor', propScModerate: 'Moderada',
-        propScStrong: 'Fuerte', propScSevere: 'Severa', propScExtreme: 'Extrema'
+        propScStrong: 'Fuerte', propScSevere: 'Severa', propScExtreme: 'Extrema',
+        propCredits: 'Fuentes y licencias', propLicPd: 'dominio público',
+        propLicCourtesy: 'fuente pública gratuita',
+        propCreditsNote: 'Los sondeos de las estaciones los agrega prop.kc2g.com a partir de GIRO/DIDBase (CC BY-NC-SA 4.0 + Lowell GIRO Rules of the Road); los valores medidos alimentan la corrección de sesgo regional y los coeficientes LGDC GAMBIT aportan el campo de fondo asimilado.'
     },
     pt: {
         propView: 'Mapa de propagação', propProjection: 'Projeção', propLayer: 'Camada',
@@ -777,7 +791,10 @@ const PROP_I18N = {
         propWeatherDx: 'Clima em DX',
         propScR: 'Apagão de rádio', propScS: 'Tempestade de radiação solar', propScG: 'Tempestade geomagnética',
         propScNone: 'Nenhuma', propScMinor: 'Menor', propScModerate: 'Moderada',
-        propScStrong: 'Forte', propScSevere: 'Severa', propScExtreme: 'Extrema'
+        propScStrong: 'Forte', propScSevere: 'Severa', propScExtreme: 'Extrema',
+        propCredits: 'Fontes e licenças', propLicPd: 'domínio público',
+        propLicCourtesy: 'fonte pública gratuita',
+        propCreditsNote: 'As sondagens das estações são agregadas pelo prop.kc2g.com a partir do GIRO/DIDBase (CC BY-NC-SA 4.0 + Lowell GIRO Rules of the Road); os valores medidos alimentam a correção de viés regional e os coeficientes LGDC GAMBIT fornecem o campo de fundo assimilado.'
     },
     ru: {
         propView: 'Карта распространения', propProjection: 'Проекция', propLayer: 'Слой',
@@ -795,7 +812,10 @@ const PROP_I18N = {
         propWeatherDx: 'Погода в DX',
         propScR: 'Радиозатмение', propScS: 'Солнечная радиационная буря', propScG: 'Геомагнитная буря',
         propScNone: 'Нет', propScMinor: 'Слабая', propScModerate: 'Умеренная',
-        propScStrong: 'Сильная', propScSevere: 'Серьёзная', propScExtreme: 'Экстремальная'
+        propScStrong: 'Сильная', propScSevere: 'Серьёзная', propScExtreme: 'Экстремальная',
+        propCredits: 'Источники данных и лицензии', propLicPd: 'общественное достояние',
+        propLicCourtesy: 'свободно доступный',
+        propCreditsNote: 'Зондирования станций собирает prop.kc2g.com из GIRO/DIDBase (CC BY-NC-SA 4.0 + Lowell GIRO Rules of the Road); измеренные значения используются для региональной коррекции смещения, а коэффициенты LGDC GAMBIT дают ассимилированное фоновое поле.'
     },
     it: {
         propView: 'Mappa di propagazione', propProjection: 'Proiezione', propLayer: 'Livello',
@@ -813,7 +833,10 @@ const PROP_I18N = {
         propWeatherDx: 'Meteo a DX',
         propScR: 'Blackout radio', propScS: 'Tempesta di radiazione solare', propScG: 'Tempesta geomagnetica',
         propScNone: 'Nessuna', propScMinor: 'Minore', propScModerate: 'Moderata',
-        propScStrong: 'Forte', propScSevere: 'Severa', propScExtreme: 'Estrema'
+        propScStrong: 'Forte', propScSevere: 'Severa', propScExtreme: 'Estrema',
+        propCredits: 'Fonti e licenze', propLicPd: 'pubblico dominio',
+        propLicCourtesy: 'fonte pubblica gratuita',
+        propCreditsNote: 'Le sondaggi delle stazioni sono aggregati da prop.kc2g.com a partire da GIRO/DIDBase (CC BY-NC-SA 4.0 + Lowell GIRO Rules of the Road); i valori misurati alimentano la correzione di bias regionale e i coefficienti LGDC GAMBIT forniscono il campo di fondo assimilato.'
     },
     ar: {
         propView: 'خريطة الانتشار', propProjection: 'الإسقاط', propLayer: 'الطبقة',
@@ -831,7 +854,10 @@ const PROP_I18N = {
         propWeatherDx: 'طقس DX',
         propScR: 'انقطاع راديوي', propScS: 'عاصفة إشعاع شمسي', propScG: 'عاصفة مغناطيسية أرضية',
         propScNone: 'لا شيء', propScMinor: 'خفيف', propScModerate: 'متوسط',
-        propScStrong: 'قوي', propScSevere: 'شديد', propScExtreme: 'بالغ الشدة'
+        propScStrong: 'قوي', propScSevere: 'شديد', propScExtreme: 'بالغ الشدة',
+        propCredits: 'مصادر البيانات والتراخيص', propLicPd: 'ملك عام',
+        propLicCourtesy: 'مصدر عام مجاني',
+        propCreditsNote: 'تُجمَّع مسابر المحطات عبر prop.kc2g.com من GIRO/DIDBase (CC BY-NC-SA 4.0 + Lowell GIRO Rules of the Road)؛ تُستخدم القيم المقيسة لتصحيح الانحياز الإقليمي، وتوفّر معاملات LGDC GAMBIT حقل الخلفية المستوعب.'
     },
     ko: {
         propView: '전파 지도', propProjection: '투영', propLayer: '배경',
@@ -848,7 +874,10 @@ const PROP_I18N = {
         propWeatherDx: 'DX 날씨',
         propScR: '전파 장애', propScS: '태양 복사 폭풍', propScG: '지자기 폭풍',
         propScNone: '없음', propScMinor: '약함', propScModerate: '보통',
-        propScStrong: '강함', propScSevere: '심각', propScExtreme: '극심'
+        propScStrong: '강함', propScSevere: '심각', propScExtreme: '극심',
+        propCredits: '데이터 출처 및 라이선스', propLicPd: '퍼블릭 도메인',
+        propLicCourtesy: '무료 공개 데이터',
+        propCreditsNote: '관측소 전리층 관측값은 prop.kc2g.com이 GIRO/DIDBase에서 수집합니다(CC BY-NC-SA 4.0 + Lowell GIRO Rules of the Road). 측정값은 지역 편향 보정에 쓰이고, LGDC GAMBIT 계수는 동화 배경장을 제공합니다.'
     },
     ja: {
         propView: '伝播マップ', propProjection: '投影法', propLayer: '背景',
@@ -865,7 +894,10 @@ const PROP_I18N = {
         propWeatherDx: 'DX の天気',
         propScR: '電波障害', propScS: '太陽放射線ストーム', propScG: '地磁気嵐',
         propScNone: 'なし', propScMinor: '軽微', propScModerate: '中程度',
-        propScStrong: '強い', propScSevere: '深刻', propScExtreme: '極端'
+        propScStrong: '強い', propScSevere: '深刻', propScExtreme: '極端',
+        propCredits: 'データ出典とライセンス', propLicPd: 'パブリックドメイン',
+        propLicCourtesy: '無償公開データ',
+        propCreditsNote: '観測所のイオノゾンデ観測は prop.kc2g.com が GIRO/DIDBase から集約しています（CC BY-NC-SA 4.0 + Lowell GIRO Rules of the Road）。実測値は地域バイアス補正に、LGDC GAMBIT 係数は同化バックグラウンド場に使われます。'
     }
 };
 
