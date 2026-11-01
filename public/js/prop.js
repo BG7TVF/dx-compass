@@ -1313,6 +1313,23 @@ const PROP_CARDS = [
     {key: 'drap', label: 'DRAP', i18n: 'pcDrap', unit: 'MHz'}
 ];
 
+/* S scale from the latest GOES >=10 MeV integral proton measurement, or null
+ * when the feed has no usable row (then scales.json / probability decides). */
+function propScaleS() {
+    const list = (propState.data && propState.data.proton && propState.data.proton.list) || [];
+    for (let i = list.length - 1; i >= 0; i--) {
+        const f = list[i][1];
+        if (typeof f !== 'number' || !isFinite(f)) continue;
+        if (f >= 1e5) return 5;
+        if (f >= 1e4) return 4;
+        if (f >= 1e3) return 3;
+        if (f >= 100) return 2;
+        if (f >= 10) return 1;
+        return 0;
+    }
+    return null;
+}
+
 function cardValue(key) {
     const d = propState.data || {};
     const ham = d.ham || {};
@@ -1456,7 +1473,11 @@ function renderPropPanel() {
         /* In-progress event -> its level word (minor/moderate/.../extreme);
          * otherwise the forecast probability if NOAA publishes one; otherwise
          * "none". Never an em dash: an empty box reads as broken data. */
-        const lvl = o && o.scale !== null ? clamp(o.scale, 0, 5) : 0;
+        const lvl0 = o && o.scale !== null ? clamp(o.scale, 0, 5) : 0;
+        /* scales.json often leaves S null; GOES >=10 MeV protons define it
+         * (10/100/1e3/1e4/1e5 pfu = S1..S5), so take the stronger reading. */
+        const meas = k === 'S' ? propScaleS() : null;
+        const lvl = meas !== null && meas > lvl0 ? meas : lvl0;
         let note;
         if (lvl > 0) note = t(SC_STATE[lvl]);
         else if (o && o.prob !== null && o.prob !== undefined) note = o.prob + '%';
