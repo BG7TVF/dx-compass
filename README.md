@@ -28,11 +28,11 @@ curl -fsSL https://gitee.com/fatman985KG/dx-compass/raw/main/bootstrap-gitee.sh 
 
 - 监测大屏：`http://<服务器IP>:5758/`
 - Node-RED 编辑器：`http://<服务器IP>:5758/red`
-- 只读竞赛大屏（可选，需单独启动，见[只读大屏](#只读大屏wall-display)）：`http://<服务器IP>:5859/`
+- 只读竞赛大屏（`install.sh` 一并部署，见[只读大屏](#只读大屏wall-display)）：`http://<服务器IP>:5859/`
 
 > 该命令可**重复执行**：已安装时会自动更新代码到最新版本后重新部署。
 > 服务器通过代理访问 GitHub 时：先下载脚本再带代理变量运行，见文末[常见问题](#常见问题)。
-> 云服务器记得在安全组放行 **TCP 5758**。
+> 云服务器记得在安全组放行 **TCP 5758** 与 **TCP 5859**（大屏）。
 
 **没有 root 权限？** 去掉 `sudo` 即可按当前用户安装到自己的家目录（见[方式三：普通用户免 root 安装](#方式三普通用户免-root安装)）：
 
@@ -239,7 +239,7 @@ git -C /opt/dx-compass pull
 
 - **监测大屏**：`http://<服务器IP>:5758/`
 - **Node-RED 编辑器**：`http://<服务器IP>:5758/red`
-- **只读竞赛大屏**（可选）：`http://<服务器IP>:5859/`，需另行启动 `npm run wall`，见[只读大屏](#只读大屏wall-display)
+- **只读竞赛大屏**：`http://<服务器IP>:5859/`，安装脚本已部署为 `dx-compass-wall.service`，见[只读大屏](#只读大屏wall-display)
 
 > 云服务器请在安全组 / 防火墙放行 TCP 5758 端口：
 > `sudo ufw allow 5758/tcp`
@@ -327,13 +327,15 @@ git -C /opt/dx-compass pull
 
 **启动**
 
+`install.sh` 会把它部署成独立服务 **`dx-compass-wall.service`**（开机自启、跟随 `dx-compass` 启动），装好后直接访问 `http://<服务器IP>:5859/` 即可；手动运行或自定义端口时：
+
 ```bash
 npm run wall                 # 默认监听 5859，上游 http://127.0.0.1:5758
 # 自定义端口 / 上游（Node-RED 在别的机器或端口时）
 BIGSCREEN_PORT=5860 BIGSCREEN_UPSTREAM=http://127.0.0.1:5758 node bigscreen/server.js
 ```
 
-上游 Node-RED 需先在 5758 正常运行，再访问 `http://<服务器IP>:5859/`。
+上游 Node-RED 需先在 5758 正常运行。云服务器除 `ufw` / `firewalld` 外，还需要在云厂商**安全组**放行 TCP 5859，否则外网访问会连接超时。
 
 **只读边界**
 
@@ -461,10 +463,12 @@ npm install --omit=dev --registry=https://registry.npmmirror.com
 
 **6. 只读大屏 5859 打不开或一直空白？**
 
-- 5859 是**独立进程**，不随 5758 一起启动：先确保 Node-RED 在 5758 正常运行，再执行 `npm run wall`
-- 端口 / 上游可用环境变量调整：`BIGSCREEN_PORT=5860 BIGSCREEN_UPSTREAM=http://127.0.0.1:5758 node bigscreen/server.js`
-- 一并放行防火墙：`sudo ufw allow 5859/tcp`；服务端如需常驻，可自行写 systemd 单元或 `nohup npm run wall &`
-- 大屏只代理 6 个只读接口，若页面有界面无数据，先在 5758 的监测页确认 spot / QSO 数据是否正常
+- 5859 是**独立服务**（`dx-compass-wall.service`），与 5758 的 `dx-compass` 分开管理：
+  `sudo systemctl status dx-compass-wall` / `sudo systemctl restart dx-compass-wall` / `sudo journalctl -u dx-compass-wall -f`
+- 老版本安装没有这个服务：到 `/opt/dx-compass` 执行 `git pull` 后重新运行 `sudo bash install.sh` 即可补装
+- 云服务器外网访问超时，多半是**安全组未放行 TCP 5859**（`ufw` 放行只能解决本机防火墙）：`sudo ufw allow 5859/tcp` 之后仍需在云控制台放行入方向 5859
+- 页面能打开但没有数据：先在 5758 的监测页确认 spot / QSO 正常；大屏只代理 6 个只读接口，上游 Node-RED 未运行时所有数据请求都会返回 502
+- 端口 / 上游可用环境变量调整：`BIGSCREEN_PORT=5860 BIGSCREEN_UPSTREAM=http://127.0.0.1:5758 node bigscreen/server.js`（systemd 部署时改单元的 `Environment=`）
 
 ## 本地开发 / 手动运行（不使用 systemd）
 

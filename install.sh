@@ -27,6 +27,8 @@ set -euo pipefail
 # --------------------------------------------------------------------------- #
 APP_NAME="dx-compass"
 APP_PORT="5758"
+WALL_PORT="${BIGSCREEN_PORT:-5859}"
+WALL_SERVICE_NAME="${APP_NAME}-wall"
 SERVICE_NAME="dx-compass"
 REQUIRED_NODE_MAJOR=18
 NPM_MIRROR="https://registry.npmmirror.com"
@@ -36,6 +38,7 @@ SETTINGS_FILE="${APP_DIR}/settings.js"
 FLOW_FILE="${APP_DIR}/flow.json"
 PACKAGE_FILE="${APP_DIR}/package.json"
 RED_JS="${APP_DIR}/node_modules/node-red/red.js"
+WALL_JS="${APP_DIR}/bigscreen/server.js"
 
 # All steps (especially npm install) must run inside the app directory,
 # regardless of where this script was invoked from (e.g. curl | sudo bash
@@ -435,12 +438,82 @@ else
     warn "/api/spots did not respond - the database layer may be broken. Check: ${LOG_CMD}"
 fi
 
+# --------------------------------------------------------------------------- #
+# 7b. Read-only wall display service (port 5859)
+#     The wall is a separate process, so the Node-RED unit alone leaves 5859
+#     closed - visiting http://<server-ip>:5859/ would just be "connection
+#     refused". Deploy it as its own unit that starts after Node-RED.
+# --------------------------------------------------------------------------- #
+if [[ -f "${WALL_JS}" ]]; then
+    WALL_UNIT_FILE="/etc/systemd/system/${WALL_SERVICE_NAME}.service"
+    if [[ ${MODE} == "user" ]]; then
+        WALL_UNIT_FILE="${HOME}/.config/systemd/user/${WALL_SERVICE_NAME}.service"
+        WALL_LOG_CMD="journalctl --user -u ${WALL_SERVICE_NAME} -f"
+    else
+        WALL_LOG_CMD="journalctl -u ${WALL_SERVICE_NAME} -f"
+    fi
+    info "Writing systemd unit ${WALL_UNIT_FILE} ..."
+    ${SUDO} tee "${WALL_UNIT_FILE}" >/dev/null <<EOF
+[Unit]
+Description=DX-Compass - Read-only wall display (port ${WALL_PORT})
+Documentation=https://github.com/
+After=network-online.target ${SERVICE_NAME}.service
+Wants=network-online.target ${SERVICE_NAME}.service
+
+[Service]
+Type=simple
+User=${RUN_USER}
+Group=${RUN_GROUP}
+WorkingDirectory=${APP_DIR}
+Environment=NODE_ENV=production
+Environment=BIGSCREEN_PORT=${WALL_PORT}
+Environment=BIGSCREEN_UPSTREAM=http://127.0.0.1:${APP_PORT}
+ExecStart=${NODE_BIN} ${WALL_JS}
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=${WALL_SERVICE_NAME}
+
+[Install]
+WantedBy=${WANTED_BY}
+EOF
+    ${SUDO} ${CTL} daemon-reload
+    ${SUDO} ${CTL} enable "${WALL_SERVICE_NAME}.service" >/dev/null 2>&1
+    ${SUDO} ${CTL} restart "${WALL_SERVICE_NAME}.service"
+
+    wall_ok=0
+    for i in $(seq 1 10); do
+        if curl -fsS --max-time 5 "http://127.0.0.1:${WALL_PORT}/" >/dev/null 2>&1; then
+            wall_ok=1
+            break
+        fi
+        sleep 1
+    done
+    if [[ ${wall_ok} -eq 1 ]]; then
+        ok "Wall display running on port ${WALL_PORT}"
+    else
+        warn "Wall display did not answer on port ${WALL_PORT}. Check: ${WALL_LOG_CMD}"
+    fi
+
+    # Open the port locally when ufw is actually enforcing rules. Cloud hosts
+    # additionally need the same port allowed in their security group.
+    if [[ ${MODE} == "system" ]] && command -v ufw >/dev/null 2>&1 \
+        && ${SUDO} ufw status 2>/dev/null | grep -q 'Status: active'; then
+        ${SUDO} ufw allow "${WALL_PORT}/tcp" >/dev/null 2>&1 \
+            && ok "ufw: allowed tcp ${WALL_PORT}"
+    fi
+else
+    warn "bigscreen/server.js not found - skipping the read-only wall display service."
+fi
+
 echo
 echo "------------------------------------------------------------------------"
 echo -e "${_c_green}  DX-Compass installed successfully${_c_reset}"
 echo "------------------------------------------------------------------------"
 echo "  Dashboard      : http://${PRIMARY_IP}:${APP_PORT}/"
 echo "  Node-RED editor: http://${PRIMARY_IP}:${APP_PORT}/red"
+echo "  Wall display   : http://${PRIMARY_IP}:${WALL_PORT}/   (read-only, own service)"
 echo ""
 echo "  Manage the service${MODE:+ (${MODE} mode)}:"
 if [[ ${MODE} == "user" ]]; then
@@ -453,6 +526,16 @@ else
     echo "    sudo systemctl stop    ${SERVICE_NAME}"
 fi
 echo "    ${LOG_CMD}"
+echo ""
+echo "  Wall display service:"
+if [[ ${MODE} == "user" ]]; then
+    echo "    systemctl --user restart ${WALL_SERVICE_NAME}"
+    echo "    journalctl --user -u ${WALL_SERVICE_NAME} -f"
+else
+    echo "    sudo systemctl restart ${WALL_SERVICE_NAME}"
+    echo "    sudo journalctl -u ${WALL_SERVICE_NAME} -f"
+fi
+echo "    (cloud hosts: allow TCP ${WALL_PORT} in the security group as well)"
 echo ""
 echo "  Coexistence: an existing Node-RED (e.g. port 1880 / nodered service)"
 echo "  and ~/.node-red were not modified. Both instances run independently."
