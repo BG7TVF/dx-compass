@@ -1,6 +1,6 @@
 # DX-Compass
 
-基于 Node-RED 的 DX Spot 与竞赛实时监测大屏。通过 **dxwatch.com**（FT8/SSB/DIGI 等）、**reversebeacon.net RBN**（CW，含 dB 信号强度）与 **PSKReporter MQTT v2**（DIGI 实时流）三路公开数据同时监测最多 **9 个呼号**收到的 spot，在地图上实时打点；可选接入 **N1MM+**，显示本台 QSO 地图、竞赛分数与速率。支持多分屏（DVR 风格）、4 套主题、11 种界面语言，所有 spot 与 QSO 记录到 SQLite 用于赛后分析。
+基于 Node-RED 的 DX Spot 与竞赛实时监测大屏。通过 **dxwatch.com**（FT8/SSB/DIGI 等）、**reversebeacon.net RBN**（CW，含 dB 信号强度）与 **PSKReporter MQTT v2**（DIGI 实时流）三路公开数据同时监测最多 **9 个呼号**收到的 spot，在地图上实时打点；可选接入 **N1MM+**，显示本台 QSO 地图、竞赛分数与速率。支持多分屏（DVR 风格）、4 套主题、11 种界面语言，所有 spot 与 QSO 记录到 SQLite 用于赛后分析。另提供独立的**只读竞赛大屏**（端口 **5859**），适合现场投屏。
 
 ## 一键安装（复制即用）
 
@@ -28,6 +28,7 @@ curl -fsSL https://gitee.com/fatman985KG/dx-compass/raw/main/bootstrap-gitee.sh 
 
 - 监测大屏：`http://<服务器IP>:5758/`
 - Node-RED 编辑器：`http://<服务器IP>:5758/red`
+- 只读竞赛大屏（可选，需单独启动，见[只读大屏](#只读大屏wall-display)）：`http://<服务器IP>:5859/`
 
 > 该命令可**重复执行**：已安装时会自动更新代码到最新版本后重新部署。
 > 服务器通过代理访问 GitHub 时：先下载脚本再带代理变量运行，见文末[常见问题](#常见问题)。
@@ -45,6 +46,7 @@ curl -fsSL https://gitee.com/fatman985KG/dx-compass/raw/main/bootstrap-gitee.sh 
 ## 功能特性
 
 - **多分屏布局**：`1×1` / `2×2` / `3×3` 自由切换，一个呼号对应一张地图，最多同时监测 9 个呼号；呼号多于可见窗口时支持自动轮询翻页
+- **只读竞赛大屏**：`npm run wall` 在端口 **5859** 独立渲染一块竞赛墙（单张地图 + 环境 / 成绩 / 对手 / 趋势四组卡片，页眉带 UTC 时钟与倒计时），只代理 6 个只读接口、不提供任何写操作；标题、图层、叠加方式与倒计时在 Settings → 大屏 配置，所有浏览器共享
 - **实时打点**：每 30 秒从 dxwatch.com 拉取全球聚合 spot（FT8/SSB/DIGI 等），每 10 秒从 reversebeacon.net RBN 拉取 CW skimmer spot（含真实 SNR dB），DIGI 另有 PSKReporter MQTT 实时流，解析报告人（DE）位置后在地图上标点，数据自动流入，无需任何连接配置
 - **历史回溯**：新添加被监测呼号时，自动回溯该呼号最近 7 天（最多 150 条）的 spot
 - **标点存活时间可配置**：标记按模式（CW / SSB / DIGI）分别设置存活时间（默认各 30 分钟），随存活时间线性淡出直至消失；标记颜色按频段区分，均可在 Settings 中自定义
@@ -77,6 +79,7 @@ N1MM+           (UDP 12060-12062, 本台 QSO/电台/记分) ──────�
 ```
 
 - **后端**：Node-RED（HTTPS 轮询、HTTP REST API、WebSocket、SQLite）
+- **只读大屏**：`bigscreen/server.js` 为独立 HTTP 服务（默认 5859），只代理 6 个 GET 接口与 3 个前端文件，无写操作
 - **数据源**：
   - dxwatch.com 公开 spot 接口 `/dxsd1/s.php`（聚合全球 DX Cluster，30 秒轮询）
   - reversebeacon.net RBN 接口 `/spots.php`（全球 CW skimmer 网络，10 秒轮询，每条含 SNR dB 与 WPM；启动时自动从 `main.php` 提取版本参数，失效自动重取）
@@ -95,8 +98,11 @@ dx-compass/
 ├── install.sh         # Ubuntu 一键安装脚本（依赖 + systemd 服务）
 ├── bootstrap.sh       # 引导脚本：一行命令从 GitHub 下载并调用 install.sh
 ├── bootstrap-gitee.sh # 同上，下载源改为 Gitee 镜像（GitHub 自动同步）
+├── bigscreen/
+│   └── server.js      # 只读大屏服务（5859）：静态白名单 + 代理 6 个只读接口
 ├── public/            # 前端大屏
 │   ├── index.html
+│   ├── bigscreen/     # 只读竞赛大屏页（index.html / bigscreen.css / bigscreen.js）
 │   ├── css/style.css
 │   ├── data/land.js    # 离线陆地轮廓（世界地图海岸线，供传播地图 Canvas 绘制）
 │   ├── data/borders.js # 离线国家边界线（Natural Earth 110m，供传播地图 Canvas 绘制）
@@ -233,9 +239,11 @@ git -C /opt/dx-compass pull
 
 - **监测大屏**：`http://<服务器IP>:5758/`
 - **Node-RED 编辑器**：`http://<服务器IP>:5758/red`
+- **只读竞赛大屏**（可选）：`http://<服务器IP>:5859/`，需另行启动 `npm run wall`，见[只读大屏](#只读大屏wall-display)
 
 > 云服务器请在安全组 / 防火墙放行 TCP 5758 端口：
 > `sudo ufw allow 5758/tcp`
+> 使用 5859 大屏时同样放行：`sudo ufw allow 5859/tcp`
 
 ## 首次使用配置
 
@@ -246,7 +254,7 @@ git -C /opt/dx-compass pull
    - 同时自动从数据源回溯该呼号最近 7 天的历史 spot，地图和 Records 面板很快就会有数据
 4. 无需任何集群地址、登录呼号或 Connect 操作——数据源开箱即用
 
-> Settings 为整页三标签：**全局**（界面语言 11 种、主题 4 套、底图源 OSM/高德、本台呼号、一键清除）、**Spot 地图**（监测呼号、各模式标记存活时间、各频段颜色）、**QSO 地图**（本台梅登海德网格、竞赛组别 SO1R/SO2R/MS/MM、自动缩放、本台 Spot 提醒与连线、QSO 标记上限、QRZ 凭据）。设置保存在服务器端并实时同步给所有浏览器，仅分屏布局保存在本机。
+> Settings 为整页四标签：**全局**（界面语言 11 种、主题 4 套、底图源 OSM/高德、本台呼号、一键清除）、**Spot 地图**（监测呼号、各模式标记存活时间、各频段颜色）、**QSO 地图**（本台梅登海德网格、竞赛组别 SO1R/SO2R/MS/MM、自动缩放、本台 Spot 提醒与连线、QSO 标记上限、QRZ 凭据）、**大屏**（名称、图层、叠加方式、倒计时开关与起止时间）。设置保存在服务器端并实时同步给所有浏览器（含 5859 只读大屏），仅分屏布局保存在本机。
 
 > 数据来自 dxwatch.com 与 reversebeacon.net 的公开接口。CW spot 由 RBN skimmer 网络提供，带真实 SNR（dB）与发报速度（WPM）；FT8/FT4 的 SNR 来自 dxwatch；普通 SSB spot 本身不携带信号强度，对应列为空属正常。
 
@@ -262,7 +270,7 @@ git -C /opt/dx-compass pull
 - **语音提醒（Web Speech API）**：与弹窗同时播报——首次出现为「{呼号} 新 Spot」；与上一条同呼号 Spot 相比频段变化为「{呼号} 换频段」（此时不再播报新频率）；仅频率变化为「{呼号} 新频率」；新的播报会打断上一条，绝不排队；可在 Settings → QSO 地图 中独立开关
 - **本台 Spot 提醒**：本台呼号被别人 spot 时，QSO 地图以红点标出（有本台网格时同时画红色大圆线）；可独立开启弹窗与语音「you get a new spot」，语音随当前界面语言播报；标记存活时间与最多显示数量可调，与普通 Spot 的提醒互不影响
 - **QSO 视图右侧面板**：按电台动态显示频率/模式/TX 卡片、当前分数（QSO/乘数/点数/Score）、上一个 QSO，以及最近 60 分钟的 QSO 速率柱状图（5 分钟一根柱，按墙钟整点对齐不抖动）、QSO/分钟图、按操作员与按频段统计条形图；Spot Records 面板仅在 Spot 视图显示
-- **设置分页**：Settings 面板分为 **全局**（语言、主题、底图源、本台呼号）/ **Spot 地图**（监测呼号、标记存活时间、频段颜色）/ **QSO 地图**（本台网格、竞赛组别、自动缩放、本台 Spot 提醒、标记上限、QRZ 凭据）三页
+- **设置分页**：Settings 面板分为 **全局**（语言、主题、底图源、本台呼号）/ **Spot 地图**（监测呼号、标记存活时间、频段颜色）/ **QSO 地图**（本台网格、竞赛组别、自动缩放、本台 Spot 提醒、标记上限、QRZ 凭据）/ **大屏**（名称、图层、叠加方式、倒计时）四页
 - QSO 坐标**优先从 QRZ.com 查询**（与原 n1mm_dashboard 项目一致，需在 Settings 中配置 QRZ 用户名/密码，需 QRZ XML 订阅）；未配置或查询失败时依次回退到通联中的 gridsquare 字段、已积累的 spot 坐标库
 
 配置方法：
@@ -312,6 +320,50 @@ git -C /opt/dx-compass pull
 - 各级缓存有效期：太阳风 / 极光 / X 射线等大文件 20 分钟，小数据集 4 分钟，天气 10 分钟（避免对公开接口造成压力）
 - **点对点矩阵与可用性为近似模型**（依据 MUF、DRAP 吸收、路径昼夜太阳高度角与距离的启发式计算，面板标注「approximate forecast」），不是 VOACAP 的输出；需要精确预测时请以专业软件为准
 - 无台站覆盖的路径不再使用单一全球标量：MUF 估值为「SFI 基准 × 该纬度正午太阳高度」的气候学值，再按该点当时的太阳天顶角恢复昼夜变化，因此会随纬度（赤道高、极区低）与季节（冬季低、夏季高）自然变化；有实测台站时按距离加权混合
+
+## 只读大屏（Wall Display）
+
+面向竞赛现场的第三块屏，与 5758 的监测界面并行运行：只订阅数据，不提供任何操作。
+
+**启动**
+
+```bash
+npm run wall                 # 默认监听 5859，上游 http://127.0.0.1:5758
+# 自定义端口 / 上游（Node-RED 在别的机器或端口时）
+BIGSCREEN_PORT=5860 BIGSCREEN_UPSTREAM=http://127.0.0.1:5758 node bigscreen/server.js
+```
+
+上游 Node-RED 需先在 5758 正常运行，再访问 `http://<服务器IP>:5859/`。
+
+**只读边界**
+
+- 只接受 `GET` / `HEAD`，其它方法一律 405
+- 只代理 `/api/settings`、`/api/callsigns`、`/api/spots`、`/api/qsos`、`/api/station/state`、`/api/prop` 六个读接口；其它路径在大屏服务上直接 404，不会透传到 Node-RED
+- 静态文件按固定文件名提供（页面、样式、脚本、陆地轮廓），不做目录遍历
+- 不写数据库、不改流程、不动全局上下文，适合长期挂在场边
+
+**版面**
+
+- **页眉**：大屏名称、倒计时（可选）、UTC 时钟与日期
+- **地图**：单张 Mercator 世界地图，离线海岸线底图 + 深海底色，叠加 MUF 色洗、晨昏线、极光 / 天气底图，以及 QSO / 我方 SPOT / 对手 SPOT 三个矢量层（大圆航线 + 频段配色）
+- **左栏**：空间天气指数（含 SFI 30 日曲线）与放大的频段条件
+- **右栏**：各操作员 / 各频段 QSO 横向条形图；对手表（呼号、spot 数量、主攻方向、频段）
+- **底部**：电台频率卡、QSO 速率（最近 12 小时）、QSO 与 SPOT 每分钟趋势（各 60 分钟）
+
+**设置（Settings → 大屏）**
+
+- 大屏名称（最多 24 字符）
+- 倒计时：开关 + 开始时间 + 结束时间，均按 **UTC** 解释（与页眉时钟一致）；只填结束时间时直接从当前倒计时到结束，结束后显示「已结束」
+- 1 级图层：传播渲染图 / 极光 / 天气；2 级图层：QSO 地图 / 我方 SPOT / 对手 SPOT
+- 叠加方式：全部叠加，或自动轮播（逐层轮换）
+
+**说明**
+
+- 地图固定 Mercator 且不可交互，适配纬度带为 **-62°～85°**：完整保留各大洲，只裁掉南极极冠；左右留白与海洋同色，肉眼不可见
+- 底图只画海岸线（不画国界），避免大屏上出现细碎杂线
+- 航线按大圆绘制：跨越换日线时在边缘断开并从另一侧续画；跨极区航线在 85°（地图上边缘）截断，避免被投影钳制后压成贴顶横线
+- 对手栏按「呼号 + 频段」聚合：同一台站在多个频段同时被 spot 时显示多个频段芯片（超过 3 个显示 `+N`），单频段时仍显示精确 kHz
+- 大屏每 60 秒拉取一次共享设置，在主界面改完设置无需刷新大屏即可生效
 
 ## 服务管理
 
@@ -407,12 +459,23 @@ npm install --omit=dev --registry=https://registry.npmmirror.com
 
 编辑 `settings.js` 的 `uiPort`，同时更新 systemd 单元中引用（重新运行 `sudo bash install.sh` 即可），再放行对应防火墙端口。
 
+**6. 只读大屏 5859 打不开或一直空白？**
+
+- 5859 是**独立进程**，不随 5758 一起启动：先确保 Node-RED 在 5758 正常运行，再执行 `npm run wall`
+- 端口 / 上游可用环境变量调整：`BIGSCREEN_PORT=5860 BIGSCREEN_UPSTREAM=http://127.0.0.1:5758 node bigscreen/server.js`
+- 一并放行防火墙：`sudo ufw allow 5859/tcp`；服务端如需常驻，可自行写 systemd 单元或 `nohup npm run wall &`
+- 大屏只代理 6 个只读接口，若页面有界面无数据，先在 5758 的监测页确认 spot / QSO 数据是否正常
+
 ## 本地开发 / 手动运行（不使用 systemd）
 
 ```bash
 npm install
 npx node-red -u . -s settings.js
 # 访问 http://localhost:5758/
+
+# 另开一个终端启动只读大屏（需 5758 已在运行）
+npm run wall
+# 访问 http://localhost:5859/
 ```
 
 ## 许可证
