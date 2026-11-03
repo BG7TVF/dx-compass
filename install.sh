@@ -121,16 +121,21 @@ fi
 
 # Port 5758 must be free (unless it is already our own service)
 if command -v ss >/dev/null 2>&1 && ss -ltn 2>/dev/null | awk '{print $4}' | grep -qE "[:.]${APP_PORT}$"; then
-    if systemctl list-units --type=service --all 2>/dev/null | grep -q "^${SERVICE_NAME}.service"; then
+    # `systemctl list-units` prints indented rows (and marks failed units with
+    # "*"), so anchoring the unit name to the start of the line never matched
+    # and a healthy re-install aborted here. Ask systemd directly instead.
+    if systemctl list-unit-files --type=service 2>/dev/null | awk '{print $1}' | grep -qx "${SERVICE_NAME}.service" \
+        || systemctl is-active --quiet "${SERVICE_NAME}.service" 2>/dev/null; then
         warn "Port ${APP_PORT} is in use by the existing ${SERVICE_NAME} service - it will be restarted."
     else
+        ss -ltnp 2>/dev/null | grep -E "[:.]${APP_PORT}\b" | sed 's/^/    /' || true
         die "Port ${APP_PORT} is already in use by another program. Free it or edit uiPort in settings.js."
     fi
 fi
 
 # Explicitly report that any pre-existing Node-RED will NOT be touched
 for existing in nodered node-red; do
-    if systemctl list-units --type=service --all 2>/dev/null | grep -qE "^${existing}\.service"; then
+    if systemctl list-unit-files --type=service 2>/dev/null | awk '{print $1}' | grep -qx "${existing}.service"; then
         state="$(systemctl is-active "${existing}.service" 2>/dev/null || true)"
         warn "Existing service '${existing}.service' (${state}) detected - it will be left completely untouched."
     fi
