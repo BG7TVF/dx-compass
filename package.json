@@ -14,6 +14,7 @@
     },
     "scripts": {
         "start": "node-red -s settings.js",
-        "dev": "node-red -s settings.js"
+        "dev": "node-red -s settings.js",
+        "wall": "node bigscreen/server.js"
     }
 }

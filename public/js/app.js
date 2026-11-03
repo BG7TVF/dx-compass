@@ -59,9 +59,20 @@ function renderThemeOptions() {
     sel.value = settings.theme;
 }
 
+/* Wall-display overlays (bigscreen page, port 5859): level-1 backgrounds and
+ * level-2 vector layers. Shared through /api/settings like the rest. */
+const WALL_LAYERS = ['prop', 'aurora', 'weather', 'qso', 'myspot', 'dxspot'];
+const WALL_CHECKS = {
+    prop: '#setWallProp', aurora: '#setWallAurora', weather: '#setWallWeather',
+    qso: '#setWallQso', myspot: '#setWallMySpot', dxspot: '#setWallDxSpot'
+};
+
 function defaultSettings() {
     return {
         lang: 'zh', theme: 'dark', tiles: 'osm', grid: '', layout: '1x1', myCall: '',
+        wallTitle: 'DX-COMPASS', wallMode: 'all',
+        wallLayers: ['prop', 'qso', 'myspot', 'dxspot'],
+        wallTimerOn: false, wallTimerStart: '', wallTimerEnd: '',
         category: 'SO1R', qsoMax: 1500, qsoLines: true, qsoAutoFit: true,
         qsoSpotAlert: true, qsoVoiceAlert: true,
         mySpotTtl: 30, mySpotMax: 300, mySpotPopup: true, mySpotVoice: true,
@@ -105,6 +116,21 @@ function sanitizeSettings(input) {
     d.cfgV = 2;
     if (parseInt(raw.cfgV, 10) !== 2 && d.propProj === 'mercator') d.propProj = 'robinson';
     if (['muf', 'weather', 'aurora'].includes(raw.propLayer)) d.propLayer = raw.propLayer;
+    /* Wall display: title, overlay selection and stacking mode. */
+    if (typeof raw.wallTitle === 'string') {
+        d.wallTitle = raw.wallTitle.trim().slice(0, 24) || 'DX-COMPASS';
+    }
+    if (Array.isArray(raw.wallLayers)) {
+        d.wallLayers = WALL_LAYERS.filter(k => raw.wallLayers.includes(k));
+    }
+    if (['all', 'cycle'].includes(raw.wallMode)) d.wallMode = raw.wallMode;
+    /* Wall countdown: a switch plus the two datetime-local values. The wall
+     * reads them as UTC — the same clock its header shows — so the suffix is
+     * spelled out on the labels below. */
+    if (typeof raw.wallTimerOn === 'boolean') d.wallTimerOn = raw.wallTimerOn;
+    const dt = v => /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(String(v || '')) ? v : '';
+    d.wallTimerStart = dt(raw.wallTimerStart);
+    d.wallTimerEnd = dt(raw.wallTimerEnd);
     const pdlat = parseFloat(raw.propDxLat), pdlon = parseFloat(raw.propDxLon);
     if (isFinite(pdlat) && Math.abs(pdlat) <= 85) d.propDxLat = pdlat;
     if (isFinite(pdlon) && Math.abs(pdlon) <= 180) d.propDxLon = pdlon;
@@ -217,6 +243,10 @@ function applyRemoteSettings(raw) {
         setVal('#setMySpotMax', settings.mySpotMax);
         setChk('#setMySpotPopup', settings.mySpotPopup);
         setChk('#setMySpotVoice', settings.mySpotVoice);
+        // Wall display form (no side effects in this dashboard)
+        setVal('#setWallTitle', settings.wallTitle);
+        WALL_LAYERS.forEach(k => setChk(WALL_CHECKS[k], settings.wallLayers.includes(k)));
+        setVal('#setWallMode', settings.wallMode);
         if (settings.mySpotTtl !== prev.mySpotTtl || settings.mySpotMax !== prev.mySpotMax) {
             applyMySpotLimits();
         }
@@ -1554,6 +1584,23 @@ function applyLang() {
     $('#qsoAutoFitLabel').textContent = t('qsoAutoFit');
     $('#qsoLinesLabel').textContent = t('qsoLines');
     $('#qsoDoubleLabel').textContent = t('qsoMaxMarkers');
+    $('#tabWall').textContent = t('setWall');
+    $('#wallSectionTitle').textContent = t('setWall');
+    $('#wallTitleLabel').textContent = t('wallTitle');
+    $('#wallLayer1Label').textContent = t('wallLayer1');
+    $('#wallLayer2Label').textContent = t('wallLayer2');
+    $('#wallPropLabel').textContent = t('wallProp');
+    $('#wallAuroraLabel').textContent = t('wallAurora');
+    $('#wallWeatherLabel').textContent = t('wallWeather');
+    $('#wallQsoLabel').textContent = t('wallQso');
+    $('#wallMySpotLabel').textContent = t('wallMySpot');
+    $('#wallDxSpotLabel').textContent = t('wallDxSpot');
+    $('#wallModeLabel').textContent = t('wallMode');
+    $('#wallModeAll').textContent = t('wallModeAll');
+    $('#wallModeCycle').textContent = t('wallModeCycle');
+    $('#wallTimerLabel').textContent = t('wallTimer');
+    $('#wallTimerStartLabel').textContent = t('wallTimerStart') + ' (UTC)';
+    $('#wallTimerEndLabel').textContent = t('wallTimerEnd') + ' (UTC)';
     $('#qsoSpotAlertLabel').textContent = t('qsoSpotAlert');
     $('#qsoVoiceLabel').textContent = t('qsoVoice');
     $('#resetAllLabel').textContent = t('resetAll');
@@ -2492,7 +2539,7 @@ async function init() {
             clearMySpots();
         }
     });
-    // Settings panes: Global / Spot map / QSO map
+    // Settings panes: Global / Spot map / QSO map / Wall display
     $all('.cfg-tab').forEach(btn => btn.addEventListener('click', () => {
         $all('.cfg-tab').forEach(b => b.classList.toggle('active', b === btn));
         $all('.cfg-pane').forEach(p => p.classList.toggle('active',
@@ -2580,6 +2627,47 @@ async function init() {
         settings.mySpotVoice = myVoiceChk.checked;
         saveSettings();
         if (!myVoiceChk.checked && 'speechSynthesis' in window) speechSynthesis.cancel();
+    });
+    // Wall display (bigscreen, port 5859): title, overlay layers, mode.
+    const wallTitle = $('#setWallTitle');
+    wallTitle.value = settings.wallTitle;
+    wallTitle.addEventListener('change', () => {
+        settings.wallTitle = wallTitle.value.trim().slice(0, 24) || 'DX-COMPASS';
+        wallTitle.value = settings.wallTitle;
+        saveSettings();
+    });
+    WALL_LAYERS.forEach(k => {
+        const el = $(WALL_CHECKS[k]);
+        el.checked = settings.wallLayers.includes(k);
+        el.addEventListener('change', () => {
+            settings.wallLayers = WALL_LAYERS.filter(x => $(WALL_CHECKS[x]).checked);
+            saveSettings();
+        });
+    });
+    const wallMode = $('#setWallMode');
+    wallMode.value = settings.wallMode;
+    wallMode.addEventListener('change', () => {
+        settings.wallMode = wallMode.value;
+        saveSettings();
+    });
+    // Wall countdown: switch plus start/end wall-clock times.
+    const wallTimerOn = $('#setWallTimerOn');
+    const wallTimerStart = $('#setWallTimerStart');
+    const wallTimerEnd = $('#setWallTimerEnd');
+    wallTimerOn.checked = settings.wallTimerOn;
+    wallTimerStart.value = settings.wallTimerStart;
+    wallTimerEnd.value = settings.wallTimerEnd;
+    wallTimerOn.addEventListener('change', () => {
+        settings.wallTimerOn = wallTimerOn.checked;
+        saveSettings();
+    });
+    wallTimerStart.addEventListener('change', () => {
+        settings.wallTimerStart = wallTimerStart.value || '';
+        saveSettings();
+    });
+    wallTimerEnd.addEventListener('change', () => {
+        settings.wallTimerEnd = wallTimerEnd.value || '';
+        saveSettings();
     });
     $('#saClose').addEventListener('click', hideSpotAlertAndVoice);
     // Spot grid <-> QSO map <-> propagation map switch (three buttons)

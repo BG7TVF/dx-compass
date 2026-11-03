@@ -1,0 +1,487 @@
+/* ============================================================
+ * DX-Compass - wall display (port 5859, read-only)
+ *
+ * One Mercator map using the propagation page's base (dark ocean,
+ * Natural Earth coastline outlines) plus a data rail: space weather,
+ * band conditions, radio cards, QSO rate, per-operator / per-band
+ * counts and the opponent table. No interactive controls.
+ * ============================================================ */
+
+:root {
+    --bg: #05080f;
+    --panel: #0a121d;
+    --panel-2: #0e1826;
+    --line: rgba(122, 168, 255, 0.16);
+    --text: #dbe6f5;
+    --dim: #7c8ca3;
+    --accent: #35d6a4;
+    --good: #35d6a4;
+    --fair: #e8c547;
+    --poor: #e4572e;
+    --qso: #35d6a4;
+    --my: #4cc9f0;
+    --dx: #ff6b6b;
+    --r: 8px;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+    height: 100%;
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    font-variant-numeric: tabular-nums;
+    overflow: hidden;
+}
+
+.wall {
+    height: 100vh;
+    display: grid;
+    grid-template-rows: 56px minmax(0, 1fr) 28px;
+    gap: 8px;
+    padding: 8px;
+}
+
+/* ---------- header ---------- */
+.wall-head {
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--r);
+}
+.brand { display: flex; flex-direction: column; line-height: 1.15; }
+.brand b {
+    font-size: 22px;
+    letter-spacing: 3px;
+    color: var(--accent);
+    white-space: nowrap;
+}
+.brand span { font-size: 10px; letter-spacing: 2px; color: var(--dim); }
+.clock { margin-left: 12px; display: flex; align-items: baseline; gap: 8px; }
+.clock b { font-size: 22px; letter-spacing: 1px; }
+.clock span { font-size: 11px; color: var(--dim); }
+.clock i { font-style: normal; font-size: 10px; letter-spacing: 1px; color: var(--accent); }
+
+/* contest countdown: framed figure between the brand and the UTC clock, fed
+ * by the start/end times set on the settings page */
+.timer {
+    margin-left: auto;
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 3px 12px;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+}
+.timer[hidden] { display: none; }
+.timer label { font-size: 10px; letter-spacing: 1.5px; color: var(--dim); }
+.timer b { font-size: 21px; font-weight: 600; letter-spacing: 1px; color: var(--accent); }
+.timer.ended b { color: var(--poor); }
+.timer.ended label { color: var(--poor); }
+
+/* ---------- body: U layout, map in the middle ---------- */
+/* Two full-height rails hug the map and the trend strip closes the U along
+ * the bottom of the centre column, so every card wraps the map on three
+ * sides. The rails match in width so the map stays centred on screen; the
+ * trend row takes roughly the bottom third so the charts stay legible from
+ * across a room. */
+.wall-body {
+    display: grid;
+    grid-template-columns: minmax(240px, 20%) minmax(0, 1fr) minmax(240px, 20%);
+    grid-template-rows: minmax(0, 1fr) minmax(190px, 33vh);
+    grid-template-areas:
+        "left map right"
+        "left trend right";
+    gap: 8px;
+    min-height: 0;
+}
+
+.map-panel {
+    grid-area: map;
+    position: relative;
+    min-width: 0;
+    min-height: 0;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--r);
+    overflow: hidden;
+}
+/* The fitted world is narrower than this panel, so the strips left and right
+ * of the raster must read as open ocean, not as a frame. */
+#map { position: absolute; inset: 0; background: #08111c; }
+
+.layer-tag {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 900;
+    padding: 3px 8px;
+    font-size: 11px;
+    letter-spacing: 1px;
+    color: var(--accent);
+    background: rgba(6, 13, 22, 0.82);
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    pointer-events: none;
+}
+.map-legend {
+    position: absolute;
+    left: 10px;
+    bottom: 10px;
+    z-index: 900;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    padding: 5px 9px;
+    font-size: 11px;
+    color: var(--dim);
+    background: rgba(6, 13, 22, 0.82);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    pointer-events: none;
+    max-width: 70%;
+}
+.map-legend .dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 4px;
+    vertical-align: middle;
+}
+.map-legend .grad { width: 84px; height: 7px; border-radius: 3px; }
+
+/* ---------- rail ---------- */
+.rail {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-height: 0;
+    min-width: 0;
+}
+.rail-left { grid-area: left; }
+.rail-right { grid-area: right; }
+
+/* A group is one category: a labelled rule plus the cards that belong to it.
+ * The labelled groups keep environment / station / score / opponents apart
+ * even though they share the two rails. */
+.group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-height: 0;
+    min-width: 0;
+}
+.group.grow { flex: 1 1 0; }
+.group-head {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    margin: 0;
+    padding: 0 2px 3px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    color: rgba(124, 140, 163, .9);
+    border-bottom: 1px solid var(--line);
+}
+.group-head span { font-size: 9px; letter-spacing: 1.5px; color: rgba(124, 140, 163, .45); }
+
+/* Trend strip: the base of the U, four cards under the map (station, rate,
+ * QSO and spot trends). The cards stretch to the row height and the canvas
+ * takes whatever is left, so the charts grow with the screen instead of
+ * sitting at a fixed 50px. */
+.trend {
+    grid-area: trend;
+    display: grid;
+    grid-template-columns: 1fr .95fr 1.15fr 1.15fr;
+    gap: 8px;
+    min-height: 0;
+}
+.card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--r);
+    padding: 7px 10px;
+    min-height: 0;
+    min-width: 0;
+}
+.card.grow { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.card h3 {
+    margin: 0 0 6px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    color: var(--dim);
+}
+.card h3 span { margin-left: 6px; font-size: 9.5px; letter-spacing: 1.2px; color: rgba(124, 140, 163, .55); }
+
+/* space weather */
+.sw-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1px;
+    background: var(--line);
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    overflow: hidden;
+}
+.sw-grid div {
+    display: flex;
+    flex-direction: column;
+    padding: 4px 6px;
+    background: var(--panel-2);
+}
+.sw-grid label { font-size: 9px; letter-spacing: 1px; color: var(--dim); }
+.sw-grid b { font-size: 19px; font-weight: 600; }
+.sw-grid b.warn { color: var(--fair); }
+.sw-grid b.bad { color: var(--poor); }
+
+/* band conditions: the card takes half the left rail, so the eight bands
+ * are laid out as two wide columns by four rows and the tiles stretch to
+ * fill the card instead of hugging a couple of text lines. Each tile also
+ * carries a three-step condition meter, which reads at a glance far better
+ * than the bare good/fair/poor word. */
+.card.bandcard { flex: 1.12; overflow: hidden; }
+.band-bar {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-auto-rows: minmax(0, 1fr);
+    gap: 5px;
+    flex: 1 1 0;
+    min-height: 0;
+}
+.band {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 1px;
+    padding: 5px 10px;
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    background: var(--panel-2);
+    min-width: 0;
+    overflow: hidden;
+}
+.band b { font-size: 16px; font-weight: 600; line-height: 1.1; }
+.band > span { font-size: 11px; letter-spacing: .5px; }
+.band .meter {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 3px;
+    margin-top: 3px;
+}
+.band .meter u {
+    height: 5px;
+    border-radius: 3px;
+    background: rgba(122, 168, 255, .13);
+}
+.band.good > span { color: var(--good); }
+.band.fair > span { color: var(--fair); }
+.band.poor > span { color: var(--poor); }
+.band.good .meter u.on { background: var(--good); }
+.band.fair .meter u.on { background: var(--fair); }
+.band.poor .meter u.on { background: var(--poor); }
+.band.closed { opacity: .4; }
+
+/* radio cards: the station card lives in the bottom strip now, so the grid
+ * fills its height and folds to one column when the card is narrow */
+.card.radios-card { display: flex; flex-direction: column; overflow: hidden; }
+.radios {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+    grid-auto-rows: minmax(0, 1fr);
+    gap: 5px;
+    flex: 1 1 0;
+    min-height: 0;
+}
+.radio {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 1px;
+    padding: 5px 8px;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--accent);
+    border-radius: 5px;
+    min-width: 0;
+    overflow: hidden;
+}
+.radio.tx { border-left-color: var(--poor); }
+.radio label { font-size: 9px; letter-spacing: 1px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.radio b { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.radio span { font-size: 10px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* QSO rate: the headline number stays, but the hourly history is drawn as a
+ * line so the card shows a shape instead of two bare figures. */
+.card.rate { display: flex; flex-direction: column; overflow: hidden; }
+.rate-nums { display: flex; align-items: baseline; gap: 8px; }
+.rate-nums b { font-size: 34px; font-weight: 600; color: var(--accent); line-height: 1; }
+.rate-nums span { font-size: 10px; color: var(--dim); white-space: nowrap; }
+.rate-nums i { font-style: normal; font-size: 15px; font-weight: 600; color: var(--text); }
+.card.rate canvas {
+    display: block;
+    width: 100%;
+    flex: 1 1 0;
+    height: 0;
+    min-height: 24px;
+    margin-top: 4px;
+}
+
+/* ---------- per-operator / per-band ranking ---------- */
+/* Horizontal bars instead of a number per row: the track gives a sense of
+ * ratio between operators (and bands keep their own colour). */
+.list h3 { margin-bottom: 5px; }
+.rows { display: flex; flex-direction: column; gap: 4px; }
+.hbar {
+    display: grid;
+    grid-template-columns: 58px minmax(0, 1fr) 32px;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+}
+.hbar .k { color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hbar .track {
+    display: block;
+    height: 8px;
+    border-radius: 4px;
+    background: rgba(122, 168, 255, .12);
+    overflow: hidden;
+}
+.hbar .track > i { display: block; height: 100%; border-radius: 4px; background: var(--accent); }
+.hbar em { font-style: normal; text-align: right; font-size: 13px; font-weight: 600; color: var(--text); }
+
+/* ---------- trend charts ---------- */
+.chart-head {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    font-size: 10px;
+    letter-spacing: .5px;
+    color: var(--dim);
+}
+.chart-head b { margin-left: auto; font-size: 16px; font-weight: 600; color: var(--text); }
+
+/* Both canvas kinds fill their card: the box keeps its own height (fixed
+ * spark, strip row) and the canvas absorbs the rest, so a wall screen gets
+ * large charts and the preview keeps them inside the cards. */
+.card.chart { display: flex; flex-direction: column; min-height: 0; }
+.card.chart canvas {
+    display: block;
+    width: 100%;
+    flex: 1 1 0;
+    height: 0;
+    min-height: 24px;
+    margin-top: 4px;
+}
+.spark {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 0;
+    min-height: 0;
+    margin-top: 6px;
+}
+.spark canvas {
+    display: block;
+    width: 100%;
+    flex: 1 1 0;
+    height: 0;
+    min-height: 40px;
+}
+
+/* opponent table */
+.opp-head, .opp-row {
+    display: grid;
+    grid-template-columns: .95fr .55fr .95fr 1.25fr;
+    gap: 5px;
+    font-size: 11px;
+    align-items: center;
+}
+.opp-head {
+    padding-bottom: 2px;
+    margin-bottom: 4px;
+    border-bottom: 1px solid var(--line);
+    font-size: 11px;
+    letter-spacing: .2px;
+    color: var(--dim);
+}
+.opp-rows { overflow: hidden; flex: 1; min-height: 0; }
+.opp-row { padding: 3px 0; }
+.opp-row b { font-size: 12px; font-weight: 600; }
+.opp-row .cnt { color: var(--my); font-weight: 600; }
+.opp-row .dir { color: var(--text); }
+.opp-row .freq { color: var(--dx); font-weight: 600; white-space: nowrap; }
+/* One chip per band this opponent is currently spotted on; the exact kHz is
+ * only printed for a single-band row, where it cannot be ambiguous. */
+.opp-row .freq i {
+    display: inline-block;
+    min-width: 14px;
+    margin-right: 3px;
+    padding: 0 2px;
+    border-radius: 3px;
+    font-style: normal;
+    font-size: 10px;
+    line-height: 14px;
+    text-align: center;
+    box-shadow: inset 0 0 0 1px currentColor;
+}
+.opp-row .freq em {
+    margin-right: 3px;
+    font-style: normal;
+    font-size: 10px;
+    color: var(--dim);
+}
+.opp-row .freq u { text-decoration: none; font-weight: 500; font-size: 10px; color: var(--dim); }
+.opp-empty { font-size: 11px; color: var(--dim); }
+
+/* ---------- footer ---------- */
+.wall-foot {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 0 12px;
+    font-size: 10px;
+    color: rgba(124, 140, 163, .8);
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--r);
+    overflow: hidden;
+    white-space: nowrap;
+}
+.wall-foot .foot-credit { letter-spacing: 1px; color: rgba(53, 214, 164, .78); }
+.wall-foot .foot-right { margin-left: auto; letter-spacing: 1px; color: var(--accent); }
+
+/* ---------- Leaflet ---------- */
+.leaflet-container {
+    background: #060d16;
+    font-family: inherit;
+    outline: none;
+    cursor: default;
+}
+.leaflet-control-attribution, .leaflet-control-zoom { display: none; }
+
+/* ---------- small screens ---------- */
+@media (max-width: 1200px) {
+    html, body { overflow: auto; }
+    .wall { height: auto; min-height: 100vh; grid-template-rows: 56px auto 28px; }
+    .wall-body {
+        grid-template-columns: 1fr;
+        grid-template-rows: minmax(320px, 44vh) auto auto minmax(200px, auto);
+        grid-template-areas: "map" "left" "right" "trend";
+    }
+    .rail { flex-direction: column; }
+    .rail .group,
+    .rail .group.grow { flex: 1 1 100%; flex-direction: row; flex-wrap: wrap; align-items: stretch; }
+    .rail .group .group-head { flex: 1 1 100%; }
+    .rail .group .card { flex: 1 1 240px; }
+    .rail .group .card.grow { flex-basis: 100%; min-height: 220px; }
+    .trend { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: minmax(150px, auto); }
+    .card.radios-card, .card.rate { min-height: 150px; }
+}

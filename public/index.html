@@ -248,6 +248,7 @@
                         <button type="button" class="cfg-tab active" data-pane="global" id="tabGlobal">Global</button>
                         <button type="button" class="cfg-tab" data-pane="spot" id="tabSpot">Spot Map</button>
                         <button type="button" class="cfg-tab" data-pane="qso" id="tabQso">QSO Map</button>
+                        <button type="button" class="cfg-tab" data-pane="wall" id="tabWall">Wall</button>
                     </div>
 
                     <!-- Global settings -->
@@ -376,6 +377,67 @@
                             </div>
                         </div>
                     </div>
+                    <!-- Wall display settings (bigscreen page on port 5859) -->
+                    <div class="cfg-pane" id="paneWall">
+                        <div class="form-section">
+                            <div class="section-title" id="wallSectionTitle">Wall display</div>
+                            <div class="form-row">
+                                <label id="wallTitleLabel" for="setWallTitle">Wall title</label>
+                                <input type="text" id="setWallTitle" class="set-input" maxlength="24" placeholder="DX-COMPASS">
+                            </div>
+                            <div class="form-row">
+                                <label id="wallTimerLabel" for="setWallTimerOn">Countdown</label>
+                                <input type="checkbox" id="setWallTimerOn" class="set-check">
+                            </div>
+                            <div class="form-row">
+                                <label id="wallTimerStartLabel" for="setWallTimerStart">Start time</label>
+                                <input type="datetime-local" id="setWallTimerStart" class="set-input">
+                            </div>
+                            <div class="form-row">
+                                <label id="wallTimerEndLabel" for="setWallTimerEnd">End time</label>
+                                <input type="datetime-local" id="setWallTimerEnd" class="set-input">
+                            </div>
+                            <div class="form-row">
+                                <label id="wallModeLabel" for="setWallMode">Overlay mode</label>
+                                <select id="setWallMode" class="set-input">
+                                    <option value="all" id="wallModeAll">All layers</option>
+                                    <option value="cycle" id="wallModeCycle">Auto rotate</option>
+                                </select>
+                            </div>
+                            <p class="hint">Wall page: http://&lt;host&gt;:5859/ · read-only, no controls.</p>
+                        </div>
+                        <div class="form-section">
+                            <div class="section-title" id="wallLayer1Label">Level 1 layers</div>
+                            <div class="form-row">
+                                <label id="wallPropLabel" for="setWallProp">Propagation field</label>
+                                <input type="checkbox" id="setWallProp" class="set-check">
+                            </div>
+                            <div class="form-row">
+                                <label id="wallAuroraLabel" for="setWallAurora">Aurora</label>
+                                <input type="checkbox" id="setWallAurora" class="set-check">
+                            </div>
+                            <div class="form-row">
+                                <label id="wallWeatherLabel" for="setWallWeather">Weather</label>
+                                <input type="checkbox" id="setWallWeather" class="set-check">
+                            </div>
+                        </div>
+                        <div class="form-section">
+                            <div class="section-title" id="wallLayer2Label">Level 2 layers</div>
+                            <div class="form-row">
+                                <label id="wallQsoLabel" for="setWallQso">QSO map</label>
+                                <input type="checkbox" id="setWallQso" class="set-check">
+                            </div>
+                            <div class="form-row">
+                                <label id="wallMySpotLabel" for="setWallMySpot">My spots</label>
+                                <input type="checkbox" id="setWallMySpot" class="set-check">
+                            </div>
+                            <div class="form-row">
+                                <label id="wallDxSpotLabel" for="setWallDxSpot">Opponent spots</label>
+                                <input type="checkbox" id="setWallDxSpot" class="set-check">
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="form-row">
                         <button type="submit" class="primary-btn" id="btnSaveCfg">Save</button>
                     </div>

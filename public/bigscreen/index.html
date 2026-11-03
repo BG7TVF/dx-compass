@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DX-Compass · Global Wall</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%23050a12'/%3E%3Ccircle cx='8' cy='8' r='4' fill='%2335d6a4'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="bigscreen.css">
+</head>
+<body>
+<div class="wall">
+
+    <header class="wall-head">
+        <div class="brand">
+            <b id="wallName">DX-COMPASS</b>
+            <span>GLOBAL OPERATIONS WALL</span>
+        </div>
+        <div class="timer" id="wallTimer" hidden>
+            <label id="timerLabel">距结束</label>
+            <b id="timerValue">--:--:--</b>
+        </div>
+        <div class="clock">
+            <b id="utcClock">--:--:--</b>
+            <span id="utcDate">----</span>
+            <i>UTC</i>
+        </div>
+    </header>
+
+    <main class="wall-body">
+        <!-- Single map, Mercator only, propagation-page base (dark ocean,
+             coastline outlines from public/data, MUF heat, gray line). -->
+        <section class="map-panel">
+            <div id="map"></div>
+            <div class="layer-tag" id="layerTag"></div>
+            <div class="map-legend" id="mapLegend"></div>
+        </section>
+
+        <!-- U layout: two full-height rails hug the map, and the station /
+             rate / trend strip closes the U along the bottom of the centre
+             column. The left rail carries only the environment (space
+             weather and the enlarged band conditions card); the right rail
+             carries the score bars and the opponent table. -->
+        <aside class="rail rail-left">
+            <div class="group grow">
+                <h4 class="group-head">环境 <span>ENVIRONMENT</span></h4>
+
+                <section class="card grow">
+                    <h3>空间天气 <span>SPACE WEATHER</span></h3>
+                    <div class="sw-grid" id="swGrid"></div>
+                    <div class="spark">
+                        <div class="chart-head"><label>SFI 30 日趋势</label><b id="sfiNow">—</b></div>
+                        <canvas id="swTrend"></canvas>
+                    </div>
+                </section>
+
+                <section class="card grow bandcard">
+                    <h3>频段条件 <span>BAND CONDITIONS</span></h3>
+                    <div class="band-bar" id="bandBar"></div>
+                </section>
+            </div>
+        </aside>
+
+        <aside class="rail rail-right">
+            <div class="group">
+                <h4 class="group-head">成绩 <span>SCORE</span></h4>
+
+                <section class="card list"><h3>各操作员 <span>BY OP</span></h3><div class="rows" id="opList"></div></section>
+                <section class="card list"><h3>各频段 <span>BY BAND</span></h3><div class="rows" id="bandList"></div></section>
+            </div>
+
+            <div class="group grow">
+                <h4 class="group-head">对手 <span>OPPONENTS</span></h4>
+
+                <section class="card grow">
+                    <div class="opp-head">
+                        <span>呼号</span><span>数量</span><span>主攻方向</span><span>频段 / 频率</span>
+                    </div>
+                    <div class="opp-rows" id="oppRows"></div>
+                </section>
+            </div>
+        </aside>
+
+        <section class="trend">
+            <section class="card radios-card">
+                <h3>电台 <span>STATION</span></h3>
+                <div class="radios" id="radioCards"></div>
+            </section>
+
+            <section class="card rate">
+                <h3>QSO 速率 <span>RATE / H</span></h3>
+                <div class="rate-nums">
+                    <b id="rateHour">0</b>
+                    <span>每分钟 <i id="rateMin">0.0</i></span>
+                </div>
+                <div class="chart-head"><label>最近 12 小时</label></div>
+                <canvas id="rateTrend"></canvas>
+            </section>
+
+            <section class="card chart">
+                <h3>QSO 趋势 <span>LAST 60 MIN</span></h3>
+                <div class="chart-head"><label>QSO / MIN</label><b id="qsoPeak">0</b></div>
+                <canvas id="qsoTrend"></canvas>
+            </section>
+            <section class="card chart">
+                <h3>SPOT 趋势 <span>LAST 60 MIN</span></h3>
+                <div class="chart-head"><label>SPOT / MIN</label><b id="spotPeak">0</b></div>
+                <canvas id="spotTrend"></canvas>
+            </section>
+        </section>
+    </main>
+
+    <footer class="wall-foot">
+        <span>DATA: NOAA SWPC · HamQSL · prop.kc2g.com · GIRO/DIDBase · LGDC GAMBIT · Open-Meteo</span>
+        <span>BASEMAP: Natural Earth</span>
+        <span class="foot-credit">POWERED BY DX-COMPASS</span>
+        <span class="foot-right">READ-ONLY · :5859</span>
+    </footer>
+
+</div>
+
+<script src="/data/land.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="bigscreen.js"></script>
+</body>
+</html>
