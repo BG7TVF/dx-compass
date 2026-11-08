@@ -61,7 +61,7 @@ curl -fsSL https://gitee.com/fatman985KG/dx-compass/raw/main/bootstrap-gitee.sh 
 - **4 套主题**：**黑暗**（默认）、**明亮**（浅色底，适合白天或投影）、**深海**、**琥珀**，在 Settings → 全局 即时切换；整套配色（工具栏、面板、表格、弹窗、地图底色）随主题变化
 - **多人协作**：监听呼号、标记存活时间、频段颜色、底图、主题、提醒开关等设置保存在服务器端，修改后经 WebSocket 实时同步到所有打开的浏览器；分屏布局（1×1/2×2/3×3）只保存在各自浏览器
 - **本台 Spot 提醒**：本台呼号出现在 spot 上时，QSO 地图以红色标记标出（可选），并可与弹窗（8 秒自动消失）和语音播报「you get a new spot」一起开启；提醒与普通 Spot 监控独立开关，标记存活时间与最多显示数量可调，语音按当前界面语言播报
-- **底图可切换**：OpenStreetMap 与高德地图（中国大陆网络环境可用），切换后所有地图显示约定保持不变；瓦片经服务器同源代理（`/api/tiles/...`，内存缓存）获取，且任一方不可达时自动改用另一家，浏览器只需能访问服务器本身，无需直连 OSM/高德。Leaflet 本体已内置在 `public/vendor/leaflet/`，页面不依赖任何外部 CDN
+- **底图可切换**：OpenStreetMap 与高德地图（中国大陆网络环境可用），切换后所有地图显示约定保持不变；Leaflet 本体已内置在 `public/vendor/leaflet/`，页面不依赖任何外部 CDN
 - **N1MM+ 本台集成**（可选）：接收 N1MM+ UDP 广播后，QSO 视图顶部条实时显示最新的 RUN/S&P、频率、对方呼号、RST 与交换信息，右侧面板显示当前电台频率/模式/TX、当前总分（QSO/乘数/点数/Score）、上一个 QSO 与 QSO 速率图表；一键切换全屏 **QSO 地图**，每个 QSO 按频段着色并从本台位置画大圆线，新乘数带 M 徽章，全部持久化到 `qsos` 表
 - **传播地图**：独立第三视图，Canvas 世界地图（Mercator / 方位投影 / Robinson）+ 传播预测 / 天气 / 极光 三种背景 + 实时晨昏线；右侧面板汇总空间天气指数（SFI、SSN、Kp、A、Bz、Bt、太阳风、X 射线、Dst、极光、DRAP，均带历史曲线）、NOAA R/S/G、HamQSL 频段条件、DE→DX 24 小时可用性矩阵与全球 MUF 读数
 
@@ -114,8 +114,7 @@ dx-compass/
 │       ├── prop.js      # 传播地图（投影 / 背景层 / 晨昏线 / 数据面板）
 │       └── app.js      # 应用逻辑
 ├── lib/
-│   ├── prop.js         # 传播数据采集器（NOAA SWPC / HamQSL / prop.kc2g / Open-Meteo）
-│   └── tileproxy.js    # 底图瓦片同源代理（/api/tiles/...，内存缓存 + 双源自动切换）
+│   └── prop.js         # 传播数据采集器（NOAA SWPC / HamQSL / prop.kc2g / Open-Meteo）
 └── LICENSE
 ```
 
@@ -458,14 +457,7 @@ npm install --omit=dev --registry=https://registry.npmmirror.com
 
 **4. 地图底图加载慢或无法加载？**
 
-默认底图为 OpenStreetMap，国内网络环境可在 **Settings → Base map** 切换为**高德地图**；切换即时生效，所有标记、连线、热力图与晨昏线保持不变。地图打点和记录功能本身不依赖底图加载。
-
-瓦片由**服务器**经 `/api/tiles/...` 代理获取（内存缓存），浏览器不需要能访问 OSM/高德；若服务器访问不了所选底图源，代理会自动改用另一家。可这样确认服务器侧的连通性：
-
-```bash
-curl -I http://127.0.0.1:5758/api/tiles/amap/4/12/6.png   # 200 = 代理和高德都正常
-curl -I http://127.0.0.1:5758/api/tiles/osm/4/12/6.png    # 200 或 502（502 = 服务器连不上 OSM）
-```
+默认底图为 OpenStreetMap，国内网络环境可在 **Settings → Base map** 切换为**高德地图**；切换即时生效，所有标记、连线、热力图与晨昏线保持不变。地图打点和记录功能本身不依赖底图加载。底图瓦片由浏览器直接从所选瓦片服务获取，因此浏览端需要能访问该瓦片服务（国内建议用高德）。
 
 页面所用的 Leaflet 已内置在 `public/vendor/leaflet/`，不再依赖 unpkg 等外部 CDN；若底图整块空白（连缩放按钮都没有），说明是静态文件没更新，重新 `git pull` 后重启服务即可。
 
