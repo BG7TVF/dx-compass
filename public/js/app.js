@@ -18,24 +18,27 @@ const DEFAULT_TTL_MIN = { CW: 30, SSB: 30, DIGI: 30 };
  * single-op one/two radio, multi-single, multi-multi. */
 const CONTESTS_CATEGORIES = ['SO1R', 'SO2R', 'MS', 'MM'];
 
-/* Base map tile providers. 'amap' (AutoNavi/高德) stays reachable from
- * mainland China where tile.openstreetmap.org is blocked. Note: AMap raster
- * tiles use the GCJ-02 datum, so WGS-84 spot coordinates can shift by up to
- * a few hundred meters - invisible at this app's zoom range (auto-fit caps
- * at zoom 7, where one pixel is ~1.2 km). */
+/* Base map tile providers. Tiles are fetched same-origin through the
+ * server's /api/tiles proxy (lib/tileproxy.js), so the viewing browser only
+ * needs access to the dashboard itself - no direct line to OSM/AMap is
+ * required on the client network. 'amap' (AutoNavi/高德) stays reachable
+ * from mainland China servers where tile.openstreetmap.org is blocked.
+ * Note: AMap raster tiles use the GCJ-02 datum, so WGS-84 spot coordinates
+ * can shift by up to a few hundred meters - invisible at this app's zoom
+ * range (auto-fit caps at zoom 7, where one pixel is ~1.2 km). */
 const TILE_PROVIDERS = {
     osm: {
         name: 'OpenStreetMap',
-        url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+        url: '/api/tiles/osm/{z}/{x}/{y}.png',
         options: { attribution: '&copy; OpenStreetMap', maxZoom: 18 }
     },
     amap: {
         name: '高德地图 (AMap)',
-        url: 'https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
+        url: '/api/tiles/amap/{z}/{x}/{y}.png',
         // AMap raster tiles only exist for z>=3; our world-cover minZoom can
         // go below that in small cells (2x2/3x3), which used to leave the map
         // blank. minNativeZoom makes Leaflet up-scale the z=3 tiles instead.
-        options: { attribution: '&copy; AutoNavi 高德地图', maxZoom: 18, minNativeZoom: 3, subdomains: ['1', '2', '3', '4'] }
+        options: { attribution: '&copy; AutoNavi 高德地图', maxZoom: 18, minNativeZoom: 3 }
     }
 };
 

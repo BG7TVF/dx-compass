@@ -24,6 +24,11 @@ module.exports = {
     // Root for HTTP-in nodes (REST API)
     httpNodeRoot: "/",
 
+    // Same-origin map tile proxy: browsers fetch /api/tiles/... from this
+    // server instead of touching OSM/AMap directly, so the dashboard still
+    // shows its base map on networks that can only reach this host.
+    httpNodeMiddleware: require("./lib/tileproxy.js"),
+
     // functionGlobalContext exposes the local propagation collector to
     // function nodes. NOTE: functionExternalModules is intentionally NOT
     // enabled here -- it spins up the runtime npm loader on startup, which
