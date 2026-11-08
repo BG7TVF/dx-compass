@@ -24,13 +24,13 @@ module.exports = {
     // Root for HTTP-in nodes (REST API)
     httpNodeRoot: "/",
 
-    // functionGlobalContext exposes the local propagation collector to
-    // function nodes. NOTE: functionExternalModules is intentionally NOT
-    // enabled here -- it spins up the runtime npm loader on startup, which
-    // can crash Node-RED if npm / the module cache has permission issues.
-    // functionGlobalContext works independently and is all we need.
+    // functionGlobalContext exposes the shared dx domain facade to function
+    // nodes. functionExternalModules is intentionally NOT enabled here -- it
+    // spins up the runtime npm loader on startup, which can crash Node-RED if
+    // npm / the module cache has permission issues. functionGlobalContext
+    // works independently and is all we need.
     functionGlobalContext: {
-        prop: require("./lib/prop.js")
+        dx: require("./lib")
     },
 
     // Persist context to disk so settings (callsigns, home lat/lon) survive restarts

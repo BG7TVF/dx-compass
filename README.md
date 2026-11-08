@@ -78,49 +78,80 @@ N1MM+           (UDP 12060-12062, 本台 QSO/电台/记分) ──────�
                                                                 └──► WebSocket 实时推送 ──► 前端多地图大屏
 ```
 
-- **后端**：Node-RED（HTTPS 轮询、HTTP REST API、WebSocket、SQLite）
-- **只读大屏**：`bigscreen/server.js` 为独立 HTTP 服务（默认 5859），只代理 6 个 GET 接口与 3 个前端文件，无写操作
+- **后端**：Node-RED 只保留流程与 HTTP/WS/SQLite 适配；业务统一由 `lib/index.js` 的 `dx` 入口导出，Spot/QSO、监控录制、设置、存储和传播分别位于 `lib/` 对应模块
+- **传播预测**：`lib/propagation/` 统一采集空间天气并计算 MUF 网格、频段条件、路径矩阵和读数；`/api/prop` 返回原始快照及同一 `forecast`，页面不再各自实现预测公式
+- **只读大屏**：`bigscreen/server.js` 为独立 HTTP 服务（默认 5859），只代理 6 个 GET 接口和精确白名单中的前端模块，无写操作
 - **数据源**：
   - dxwatch.com 公开 spot 接口 `/dxsd1/s.php`（聚合全球 DX Cluster，30 秒轮询）
   - reversebeacon.net RBN 接口 `/spots.php`（全球 CW skimmer 网络，10 秒轮询，每条含 SNR dB 与 WPM；启动时自动从 `main.php` 提取版本参数，失效自动重取）
   - 两者均为非官方公开接口，请保持内置的轻量轮询节奏；同一条 CW spot 若同时出现在两个源中会被自动去重
-- **前端**：原生 HTML/CSS/JS + Leaflet（`public/vendor/leaflet/`，本地内置、不依赖 CDN），由 Node-RED 静态托管
-- **数据库**：SQLite（`dxcompass.db`，运行时自动创建）
+- **前端**：原生 HTML/CSS/ES Module + Leaflet（`public/vendor/leaflet/`，本地内置、不依赖 CDN）；`public/shared/` 统一数据访问、监控、地理和地图能力，页面只负责交互与渲染
+- **数据库**：SQLite（`dxcompass.db`，运行时自动创建），schema 和 SQL 统一由 `lib/storage/` 管理
 
 ## 目录结构
 
 ```
 dx-compass/
-├── flow.json          # Node-RED 主流程（DX Cluster 接入、解析、定位、记录、API）
-├── settings.js        # Node-RED 配置（端口 5758、静态目录、上下文持久化）
-├── package.json       # 依赖（node-red、node-red-node-sqlite）
+├── flow.json          # Node-RED 流程与薄适配器（不再承载业务公式或 SQL）
+├── settings.js        # 端口、静态目录、context 持久化及统一 dx facade
+├── package.json       # 运行依赖与 npm test
 ├── flow_cred.json     # 凭据文件（为空）
 ├── install.sh         # Ubuntu 一键安装脚本（依赖 + systemd 服务）
-├── bootstrap.sh       # 引导脚本：一行命令从 GitHub 下载并调用 install.sh
-├── bootstrap-gitee.sh # 同上，下载源改为 Gitee 镜像（GitHub 自动同步）
+├── bootstrap.sh       # GitHub 一键引导脚本
+├── bootstrap-gitee.sh # Gitee 镜像引导脚本
 ├── bigscreen/
-│   └── server.js      # 只读大屏服务（5859）：静态白名单 + 代理 6 个只读接口
-├── public/            # 前端大屏
-│   ├── index.html
-│   ├── bigscreen/     # 只读竞赛大屏页（index.html / bigscreen.css / bigscreen.js）
-│   ├── css/style.css
-│   ├── data/land.js    # 离线陆地轮廓（世界地图海岸线，供传播地图 Canvas 绘制）
-│   ├── data/borders.js # 离线国家边界线（Natural Earth 110m，供传播地图 Canvas 绘制）
-│   ├── vendor/
-│   │   ├── leaflet/    # 内置 Leaflet 1.9.4（js / css / images），页面不依赖外部 CDN
-│   │   └── leaflet-heat.js
-│   └── js/
-│       ├── i18n.js     # 界面翻译（LANGS / LANG_NAMES / I18N），新增语言只改这个文件
-│       ├── prop.js      # 传播地图（投影 / 背景层 / 晨昏线 / 数据面板）
-│       └── app.js      # 应用逻辑
+│   └── server.js      # 5859 只读服务：精确静态白名单 + 6 个只读代理接口
 ├── lib/
-│   └── prop.js         # 传播数据采集器（NOAA SWPC / HamQSL / prop.kc2g / Open-Meteo）
+│   ├── index.js       # 后端统一 dx 入口
+│   ├── radio/         # 频段、距离方位、Maidenhead
+│   ├── spots/         # 三源 Spot 归一化、去重、订阅和游标
+│   ├── qsos/          # N1MM、QSO 坐标与 QRZ
+│   ├── monitoring/    # 多标签监控与 UTC 录制
+│   ├── settings/      # 设置、监测呼号、QRZ 配置与重置
+│   ├── storage/       # 唯一 schema 和 SQL 构造位置
+│   └── propagation/   # 采集器、USGS、统一预测模型和 forecast 缓存
+├── public/
+│   ├── index.html
+│   ├── js/
+│   │   ├── main.mjs    # 主面板启动入口
+│   │   ├── pages/      # Spot / QSO / Records / Settings / Propagation 页面控制器
+│   │   └── i18n.js     # 11 种界面语言
+│   ├── shared/
+│   │   ├── core/       # 唯一 HTTP / WS / Beacon、事件、UTC、I18N 适配
+│   │   ├── data/       # 设置、Spot、QSO、电台、传播 repositories / stores
+│   │   ├── monitoring/ # 监控心跳和统一轮询器
+│   │   ├── geo/        # 地理、大圆、换日线、Maidenhead
+│   │   ├── map/        # Leaflet、离线底图、投影、晨昏线、图层
+│   │   └── propagation/# 服务器 forecast 的插值与展示选择器
+│   ├── bigscreen/      # 大屏 module 入口、地图、卡片、图表、对手模块
+│   ├── data/           # 离线海岸线与国家边界
+│   └── vendor/         # 本地 Leaflet / leaflet-heat
+├── tests/             # node:test 单元、契约及架构约束测试
 └── LICENSE
 ```
 
+## 模块化边界与扩展规则
+
+后续改进必须扩展对应模块，不得在页面中另建数据来源或计算公式：
+
+- **新 Spot / QSO 数据源或字段**：在 `lib/spots` / `lib/qsos` 归一化；需要持久化时只修改 `lib/storage`。`flow.json` 仅做消息适配。
+- **监控、录制、设置**：分别使用 `lib/monitoring`、`lib/settings`；浏览器侧只能调用 `public/shared/monitoring` 和 `public/shared/data`。
+- **地图、大圆、网格、晨昏线**：使用 `public/shared/map` 与 `public/shared/geo`，这些模块不得访问网络。
+- **短波预测**：只修改 `lib/propagation/model.js`；原始采集在 `collector.js`，DTO 与缓存在 `service.js`。页面只能读取 `/api/prop` 的 `forecast` 并渲染。
+- **新页面**：从 `public/shared/data` 注入 repository，从共享 map/geo 获取绘制能力；禁止直接 `fetch`、`new WebSocket`、`sendBeacon`，禁止复制预测公式。
+- **5859**：只读边界不变；新增前端模块必须逐个加入 `bigscreen/server.js` 白名单并补测试。
+
+运行全部单元、契约和架构检查：
+
+```bash
+npm test
+```
+
+架构测试会拒绝页面直接传输、map 网络访问、data 操作 DOM、SQL 离开 `lib/storage`、预测公式离开 `lib/propagation/model.js`，以及 Node-RED function 节点重新包含业务公式。
+
 ## 添加新语言
 
-界面文案已独立到 [public/js/i18n.js](public/js/i18n.js)（在 `index.html` 中先于 `app.js` 加载），新增语言无需改动应用逻辑：
+界面文案已独立到 [public/js/i18n.js](public/js/i18n.js)（在 `index.html` 中先于 `main.mjs` 加载），新增语言无需改动应用逻辑：
 
 1. 在 `LANGS` 数组末尾追加语言代码（如 `'nl'`）
 2. 在 `LANG_NAMES` 中补充该语言的母语名称（会显示在 Settings 的语言下拉框中）
@@ -302,7 +333,7 @@ sudo chown -R root:root /opt/dx-compass
 
 - **空间天气卡片**（各带历史迷你曲线）：SFI、SSN、Kp、A、Bz、Bt、太阳风速度、质子密度、X 射线、Dst、极光概率、DRAP；Kp ≥ 4 / Bz ≤ −5 / Dst ≤ −50 等阈值以警示色标出
 - **NOAA R / S / G** 三级事件标度
-- **HamQSL 频段条件**：8 个 HF 频段的日间 / 夜间 Good / Fair / Poor
+- **统一模型频段条件**：10 个 HF 频段的日间 / 夜间 Good / Fair / Poor，由服务器传播模型计算
 - **DE → DX 点对点矩阵**：10 个 HF 频段 × 24 小时可用性（当前小时列高亮，每行最优小时描边），并按当前小时给出最佳频段
 - **全球读数**：MUF @ DE、全球最高 MUF 台站、MUF @ DX、极光最大值、DRAP @ DE / DX、TOA（最佳发射仰角）、DX 天气
 
@@ -317,8 +348,9 @@ sudo chown -R root:root /opt/dx-compass
 
 **实现与接口**
 
-- 采集器 `lib/prop.js` 通过 `settings.js` 的 `functionGlobalContext` 暴露为 `prop`，无需新增 Node-RED 节点类型；`flow.json` 中的 **Propagation** 标签页每 5 分钟采集一次，结果缓存在 global 上下文 `propData`
-- 前端每 60 秒请求 `GET /api/prop`（`Cache-Control: no-store`），接口直接返回缓存，失败源保留上一次的值并在面板标注
+- `lib/propagation/collector.js` 通过 `dx` facade 接入 Node-RED；**Propagation** 流程每 5 分钟采集一次，原始结果缓存在 global 上下文 `propData`
+- 前端每 60 秒经共享 propagation repository 请求 `GET /api/prop`（`Cache-Control: no-store`）；接口返回原始快照和服务器统一计算的 `forecast`（MUF 网格、频段条件、路径矩阵、各洲最佳频段及 DE/DX 读数），失败源保留上一次的值并在面板标注
+- 预测按各源 fetched 时间、HOME/DX、UTC 小时与地磁数据时间缓存；传播页和大屏只做插值、投影与着色，不再分别实现预测公式
 - 各级缓存有效期：太阳风 / 极光 / X 射线等大文件 20 分钟，小数据集 4 分钟，天气 10 分钟（避免对公开接口造成压力）
 - **点对点矩阵与可用性为近似模型**（依据 MUF、DRAP 吸收、路径昼夜太阳高度角与距离的启发式计算，面板标注「approximate forecast」），不是 VOACAP 的输出；需要精确预测时请以专业软件为准
 - 无台站覆盖的路径不再使用单一全球标量：MUF 估值为「SFI 基准 × 该纬度正午太阳高度」的气候学值，再按该点当时的太阳天顶角恢复昼夜变化，因此会随纬度（赤道高、极区低）与季节（冬季低、夏季高）自然变化；有实测台站时按距离加权混合

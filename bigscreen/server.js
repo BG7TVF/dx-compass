@@ -11,8 +11,8 @@
  *   - only GET/HEAD are accepted, every other method is answered 405;
  *   - only the six read endpoints below are proxied, everything else 404s
  *     here instead of reaching Node-RED;
- *   - only three static files are served, by exact name, so no path can escape
- *     the directory;
+ *   - only explicitly whitelisted static files are served, so no path can
+ *     escape their configured roots;
  *   - nothing writes to the database, the flow or the global context.
  *
  * Start it next to Node-RED:
@@ -43,11 +43,34 @@ const READ_API = new Set([
  * shared land/border outlines the propagation page also draws from, "leaflet"
  * at the vendored Leaflet build (served locally so the wall never depends on
  * an external CDN). No directory walking anywhere. */
+const JS = 'application/javascript; charset=utf-8';
 const STATIC = {
     '/': ['index.html', 'text/html; charset=utf-8'],
     '/index.html': ['index.html', 'text/html; charset=utf-8'],
     '/bigscreen.css': ['bigscreen.css', 'text/css; charset=utf-8'],
-    '/bigscreen.js': ['bigscreen.js', 'application/javascript; charset=utf-8'],
+    '/main.mjs': ['main.mjs', JS],
+    '/wall-page.mjs': ['wall-page.mjs', JS],
+    '/wall-map.mjs': ['wall-map.mjs', JS],
+    '/wall-cards.mjs': ['wall-cards.mjs', JS],
+    '/wall-charts.mjs': ['wall-charts.mjs', JS],
+    '/wall-opponents.mjs': ['wall-opponents.mjs', JS],
+    '/shared/core/clock.mjs': ['core/clock.mjs', JS, 'shared'],
+    '/shared/core/events.mjs': ['core/events.mjs', JS, 'shared'],
+    '/shared/core/transport.mjs': ['core/transport.mjs', JS, 'shared'],
+    '/shared/data/settings.mjs': ['data/settings.mjs', JS, 'shared'],
+    '/shared/data/propagation.mjs': ['data/propagation.mjs', JS, 'shared'],
+    '/shared/data/spots.mjs': ['data/spots.mjs', JS, 'shared'],
+    '/shared/data/qsos.mjs': ['data/qsos.mjs', JS, 'shared'],
+    '/shared/data/station.mjs': ['data/station.mjs', JS, 'shared'],
+    '/shared/geo/coordinates.mjs': ['geo/coordinates.mjs', JS, 'shared'],
+    '/shared/geo/great-circle.mjs': ['geo/great-circle.mjs', JS, 'shared'],
+    '/shared/geo/maidenhead.mjs': ['geo/maidenhead.mjs', JS, 'shared'],
+    '/shared/map/leaflet.mjs': ['map/leaflet.mjs', JS, 'shared'],
+    '/shared/map/base-map.mjs': ['map/base-map.mjs', JS, 'shared'],
+    '/shared/map/layers.mjs': ['map/layers.mjs', JS, 'shared'],
+    '/shared/map/terminator.mjs': ['map/terminator.mjs', JS, 'shared'],
+    '/shared/monitoring/poller.mjs': ['monitoring/poller.mjs', JS, 'shared'],
+    '/shared/propagation/forecast-view.mjs': ['propagation/forecast-view.mjs', JS, 'shared'],
     '/data/land.js': ['land.js', 'application/javascript; charset=utf-8', 'data'],
     '/data/borders.js': ['borders.js', 'application/javascript; charset=utf-8', 'data'],
     '/vendor/leaflet/leaflet.css': ['leaflet.css', 'text/css; charset=utf-8', 'leaflet'],
@@ -62,7 +85,8 @@ const STATIC = {
 const BASES = {
     leaflet: path.join(ROOT, '..', 'vendor', 'leaflet'),
     'leaflet-img': path.join(ROOT, '..', 'vendor', 'leaflet', 'images'),
-    data: path.join(ROOT, '..', 'data')
+    data: path.join(ROOT, '..', 'data'),
+    shared: path.join(ROOT, '..', 'shared')
 };
 
 function log(req, status) {
@@ -111,7 +135,12 @@ function proxy(req, res, url) {
             'cache-control': 'no-store'
         });
         log(req, r.statusCode || 502);
-        r.pipe(res);
+        if (req.method === 'HEAD') {
+            r.resume();
+            res.end();
+        } else {
+            r.pipe(res);
+        }
     });
     up.on('timeout', () => up.destroy(new Error('upstream timeout')));
     up.on('error', () => {
@@ -152,7 +181,11 @@ const server = http.createServer((req, res) => {
     sendJson(res, 404, {error: 'not found'});
 });
 
-server.listen(PORT, () => {
-    console.log('DX-Compass wall display: http://0.0.0.0:' + PORT +
-        '  (read-only, upstream ' + UPSTREAM.origin + ')');
-});
+if (require.main === module) {
+    server.listen(PORT, () => {
+        console.log('DX-Compass wall display: http://0.0.0.0:' + PORT +
+            '  (read-only, upstream ' + UPSTREAM.origin + ')');
+    });
+}
+
+module.exports = {server, READ_API, STATIC};

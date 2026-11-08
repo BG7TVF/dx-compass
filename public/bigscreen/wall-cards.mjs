@@ -1,0 +1,177 @@
+import {
+    formatDuration,
+    formatUtcDate,
+    formatUtcTime,
+    parseUtcDateTime
+} from '../shared/core/clock.mjs';
+import {WALL_BAND_COLORS} from './wall-opponents.mjs';
+
+const $ = selector => document.querySelector(selector);
+const COLORS = {qso: '#35d6a4'};
+const num = (value, digits) => value === null || value === undefined || !isFinite(value)
+    ? '—' : (digits === undefined ? String(value) : Number(value).toFixed(digits));
+const last = list => list && list.length ? list[list.length - 1] : null;
+const esc = value => String(value === null || value === undefined ? '' : value)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+export function tickClock(settings, now = new Date()) {
+    $('#utcClock').textContent = formatUtcTime(now);
+    $('#utcDate').textContent = formatUtcDate(now) + ' · ' +
+        ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][now.getUTCDay()];
+    renderTimer(settings, now);
+}
+
+function renderTimer(settings, now) {
+    const box = $('#wallTimer');
+    if (!box) return;
+    const start = parseUtcDateTime(settings.wallTimerStart);
+    const end = parseUtcDateTime(settings.wallTimerEnd);
+    const time = now.getTime();
+    let label = '', target = 0, ended = false;
+    if (settings.wallTimerOn) {
+        if (isFinite(start) && time < start) {
+            label = '距开始';
+            target = start;
+        } else if (isFinite(end) && time >= end) {
+            label = '已结束';
+            ended = true;
+        } else if (isFinite(end)) {
+            label = '距结束';
+            target = end;
+        }
+    }
+    box.hidden = !label;
+    box.classList.toggle('ended', ended);
+    if (!label) return;
+    $('#timerLabel').textContent = label;
+    $('#timerValue').textContent = formatDuration(ended ? 0 : target - time);
+}
+
+function xrayClass(flux) {
+    if (!flux || flux <= 0) return '—';
+    const order = ['A', 'B', 'C', 'M', 'X'];
+    const exponent = Math.floor(Math.log10(flux));
+    const mantissa = flux / Math.pow(10, exponent);
+    return order[Math.max(0, Math.min(4, exponent + 8))] +
+        (mantissa >= 1 ? mantissa.toFixed(1) : '1.0');
+}
+
+export function renderSpaceWeather(data) {
+    const sfi = last(data.sfi && data.sfi.list);
+    const kp = last(data.kp && data.kp.list);
+    const dst = last(data.dst && data.dst.list);
+    const xr = last(data.xray && data.xray.list);
+    const ssn = last(data.ssn && data.ssn.list);
+    const mag = last(data.mag && data.mag.list);
+    const wind = last(data.wind && data.wind.list);
+    const ham = data.ham || {};
+    const cells = [
+        ['SFI', sfi ? num(sfi[1]) : num(ham.sfi), ''],
+        ['SSN', ssn ? num(ssn[1]) : num(ham.ssn), ''],
+        ['KP', kp ? num(kp[1], 1) : num(ham.kp, 1), kp && kp[1] >= 5 ? 'bad' : ''],
+        ['DST', dst ? num(dst[1], 0) : '—', dst && dst[1] <= -50 ? 'bad' : ''],
+        ['BZ', mag && mag[2] !== null ? num(mag[2], 1) : num(ham.bz, 1),
+            mag && mag[2] <= -10 ? 'bad' : ''],
+        ['BT', mag && mag[1] !== null ? num(mag[1], 1) : '—', ''],
+        ['WIND', wind ? num(wind[1], 0) : '—', ''],
+        ['XRAY', xr ? xrayClass(xr[1]) : (ham.xray || '—'), '']
+    ];
+    $('#swGrid').innerHTML = cells.map(([key, value, className]) =>
+        '<div><label>' + key + '</label><b class="' + className + '">' + esc(value) +
+        '</b></div>').join('');
+}
+
+/** Render only the server forecast, selecting its HOME-local day or night table. */
+export function renderBands(forecast, now = new Date()) {
+    const conditions = forecast && forecast.bandConditions;
+    const bands = conditions && conditions.bands;
+    if (!bands || typeof bands !== 'object' || !Object.keys(bands).length) {
+        $('#bandBar').innerHTML = '<div class="band closed"><b>—</b></div>';
+        return;
+    }
+    const utcHour = now.getUTCHours() + now.getUTCMinutes() / 60;
+    const sinceNoon = ((utcHour - conditions.noon + 12) % 24 + 24) % 24 - 12;
+    const period = sinceNoon >= -6 && sinceNoon < 6 ? 'day' : 'night';
+    $('#bandBar').innerHTML = Object.entries(bands).map(([name, entry]) => {
+        const condition = entry && entry[period] || 'Closed';
+        const value = String(condition).toLowerCase();
+        const className = value === 'good' ? 'good' : value === 'fair' ? 'fair' :
+            value === 'poor' ? 'poor' : 'closed';
+        const level = className === 'good' ? 3 : className === 'fair' ? 2 :
+            className === 'poor' ? 1 : 0;
+        return '<div class="band ' + className + '"><b>' + esc(name.toUpperCase()) +
+            '</b><span>' + esc(condition) + '</span><div class="meter">' +
+            [0, 1, 2].map(index => '<u' + (index < level ? ' class="on"' : '') + '></u>').join('') +
+            '</div></div>';
+    }).join('');
+}
+
+function bandOf(freqKhz) {
+    const frequency = freqKhz / 1000;
+    if (!isFinite(frequency)) return '';
+    if (frequency < 2) return '160M';
+    if (frequency < 4.5) return '80M';
+    if (frequency < 6) return '60M';
+    if (frequency < 8.5) return '40M';
+    if (frequency < 11.5) return '30M';
+    if (frequency < 16) return '20M';
+    if (frequency < 19.5) return '17M';
+    if (frequency < 22.5) return '15M';
+    if (frequency < 26.5) return '12M';
+    if (frequency < 30) return '10M';
+    return 'VHF';
+}
+
+export function renderRadios(station) {
+    const radios = station && station.radios || {};
+    const ids = Object.keys(radios);
+    if (!ids.length) {
+        $('#radioCards').innerHTML = '<div class="opp-empty">等待电台数据…</div>';
+        return;
+    }
+    $('#radioCards').innerHTML = ids.map(id => {
+        const radio = radios[id] || {};
+        const tx = radio.isTransmitting ? ' tx' : '';
+        const mhz = radio.freqKhz ? num(radio.freqKhz / 1000, 3) + ' MHz' : '—';
+        const band = bandOf(radio.freqKhz);
+        const name = radio.radioName || ('RADIO ' + id);
+        return '<div class="radio' + tx + '"><label>' + esc(name) +
+            (tx ? ' · TX' : '') + '</label><b>' + esc(mhz) + '</b><span>' +
+            esc(band + (radio.mode ? ' · ' + radio.mode : '') +
+                (radio.opCall ? ' · ' + radio.opCall : '')) + '</span></div>';
+    }).join('');
+}
+
+export function renderQsoStats(rows) {
+    const now = Date.now();
+    const within = milliseconds => rows.filter(qso => {
+        const time = new Date(qso.timestamp).getTime();
+        return isFinite(time) && now - time <= milliseconds;
+    }).length;
+    const hour = within(60 * 60 * 1000);
+    const ten = within(10 * 60 * 1000);
+    $('#rateHour').textContent = hour;
+    $('#rateMin').textContent = (ten / 10).toFixed(1);
+
+    const byOperator = new Map();
+    const byBand = new Map();
+    rows.forEach(qso => {
+        const operator = qso.operator || qso.op || '—';
+        byOperator.set(operator, (byOperator.get(operator) || 0) + 1);
+        const band = String(qso.band || '').toUpperCase() || '—';
+        byBand.set(band, (byBand.get(band) || 0) + 1);
+    });
+    renderRank('#opList', byOperator, 6, false);
+    renderRank('#bandList', byBand, 8, true);
+}
+
+function renderRank(selector, values, limit, bandColor) {
+    const list = [...values.entries()].sort((a, b) => b[1] - a[1]).slice(0, limit);
+    const max = list.length ? list[0][1] : 0;
+    $(selector).innerHTML = list.length ? list.map(([key, value]) => {
+        const color = bandColor ? (WALL_BAND_COLORS[key] || '#35d6a4') : COLORS.qso;
+        return '<div class="hbar"><span class="k">' + esc(key) + '</span>' +
+            '<i class="track"><i style="width:' + Math.round(value / (max || 1) * 100) +
+            '%;background:' + color + '"></i></i><em>' + value + '</em></div>';
+    }).join('') : '<div class="opp-empty">—</div>';
+}

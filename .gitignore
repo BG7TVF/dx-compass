@@ -9,6 +9,9 @@ dxcompass.db
 dxcompass.db-journal
 .context/
 context/
+.config.*.json
+dxcompass
+dxcompass-journal
 flows_*.json
 *.log
 
@@ -17,3 +20,7 @@ flows_*.json
 
 # Leftover templates from the upstream project (not part of DX-Compass)
 .github/
+
+# IDE artifacts
+.trae/
+.trae-html-share-packages/
