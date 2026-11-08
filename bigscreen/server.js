@@ -40,15 +40,29 @@ const READ_API = new Set([
 ]);
 
 /* Static whitelist: name -> [file, content type, base]. "data" points at the
- * shared land/border outlines the propagation page also draws from. No
- * directory walking anywhere. */
+ * shared land/border outlines the propagation page also draws from, "leaflet"
+ * at the vendored Leaflet build (served locally so the wall never depends on
+ * an external CDN). No directory walking anywhere. */
 const STATIC = {
     '/': ['index.html', 'text/html; charset=utf-8'],
     '/index.html': ['index.html', 'text/html; charset=utf-8'],
     '/bigscreen.css': ['bigscreen.css', 'text/css; charset=utf-8'],
     '/bigscreen.js': ['bigscreen.js', 'application/javascript; charset=utf-8'],
     '/data/land.js': ['land.js', 'application/javascript; charset=utf-8', 'data'],
-    '/data/borders.js': ['borders.js', 'application/javascript; charset=utf-8', 'data']
+    '/data/borders.js': ['borders.js', 'application/javascript; charset=utf-8', 'data'],
+    '/vendor/leaflet/leaflet.css': ['leaflet.css', 'text/css; charset=utf-8', 'leaflet'],
+    '/vendor/leaflet/leaflet.js': ['leaflet.js', 'application/javascript; charset=utf-8', 'leaflet'],
+    '/vendor/leaflet/images/layers.png': ['layers.png', 'image/png', 'leaflet-img'],
+    '/vendor/leaflet/images/layers-2x.png': ['layers-2x.png', 'image/png', 'leaflet-img'],
+    '/vendor/leaflet/images/marker-icon.png': ['marker-icon.png', 'image/png', 'leaflet-img'],
+    '/vendor/leaflet/images/marker-icon-2x.png': ['marker-icon-2x.png', 'image/png', 'leaflet-img'],
+    '/vendor/leaflet/images/marker-shadow.png': ['marker-shadow.png', 'image/png', 'leaflet-img']
+};
+
+const BASES = {
+    leaflet: path.join(ROOT, '..', 'vendor', 'leaflet'),
+    'leaflet-img': path.join(ROOT, '..', 'vendor', 'leaflet', 'images'),
+    data: path.join(ROOT, '..', 'data')
 };
 
 function log(req, status) {
@@ -67,7 +81,7 @@ function sendJson(res, status, body) {
 
 function sendStatic(req, res, meta) {
     const [name, type, base] = meta;
-    const dir = base === 'data' ? path.join(ROOT, '..', 'data') : ROOT;
+    const dir = base ? BASES[base] : ROOT;
     fs.readFile(path.join(dir, name), (err, buf) => {
         if (err) {
             log(req, 500);
