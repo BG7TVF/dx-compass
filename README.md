@@ -213,26 +213,24 @@ journalctl --user -u dx-compass -f     # 日志
 
 ### 关于 git 目录属主（dubious ownership）
 
-git 默认拒绝操作"属主不是当前用户"的仓库，会报：
+安装目录归属于**执行安装脚本的账号**（`sudo` 安装即 root），服务也以同一账号运行，因此安装、更新、手动 `git pull` 都是同一个属主，不会触发 git 的属主检查。
+
+**2026-11 之前安装的旧实例**曾把目录 chown 给专用用户 `dxcompass`，导致 root 手动拉取时报：
 
 ```
 fatal: detected dubious ownership in repository at '/opt/dx-compass'
 ```
 
-`bootstrap.sh` 已内置处理，无需手动干预：
-
-- **以 root 运行时**：自动检测目录属主，并以该属主身份执行 `fetch` / `reset`，同时对属主登记 `safe.directory`
-- **以普通用户运行、且目录属于别人**：会明确提示改用属主账号，或执行 `sudo chown -R <你> /opt/dx-compass` 取得所有权
-
-若手动执行 git 命令遇到该错误，可任选其一：
+升级到新版即可自动修复——`bootstrap.sh` / `install.sh` 会把整个目录属主改回安装账号（root）：
 
 ```bash
-# 方案 A：以属主身份拉取（推荐，避免文件属主混乱）
-sudo -u <属主> git -C /opt/dx-compass pull
+curl -fsSL https://raw.githubusercontent.com/BG7TVF/dx-compass/main/bootstrap.sh | sudo bash
+```
 
-# 方案 B：把该目录加入当前用户的 safe.directory 白名单
-git config --global --add safe.directory /opt/dx-compass
-git -C /opt/dx-compass pull
+或只改属主、不重装：
+
+```bash
+sudo chown -R root:root /opt/dx-compass
 ```
 
 ### 访问
@@ -429,7 +427,7 @@ curl -fsSL https://gitee.com/fatman985KG/dx-compass/raw/main/bootstrap-gitee.sh 
 
 **0b. 更新时报 `detected dubious ownership in repository`？**
 
-见[关于 git 目录属主](#关于-git-目录属主dubious-ownership)。一键脚本已自动处理；手动拉取时用 `sudo -u <属主> git -C /opt/dx-compass pull`，或把目录加入 `safe.directory`。
+旧版安装把目录属主设成了专用用户 `dxcompass`。见[关于 git 目录属主](#关于-git-目录属主dubious-ownership)：重跑一次一键安装即可自动把属主改回 root，或手动 `sudo chown -R root:root /opt/dx-compass`。
 
 **1. 大屏打开正常但收不到 spot？**
 

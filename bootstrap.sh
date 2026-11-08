@@ -21,11 +21,10 @@
 #  Requirement for the no-sudo mode: Node.js >= 18, git and curl must
 #  already be installed (the script cannot apt-get without root).
 #
-#  Ownership: a repository directory owned by another user is handled
-#  automatically - when running as root the git commands are executed as
-#  the directory owner, and the path is registered in git's
-#  safe.directory list. This avoids the "detected dubious ownership"
-#  error that used to force every pull to be run as the original owner.
+#  Ownership: the install directory belongs to whichever account runs
+#  this script (root when used with sudo). A directory left by an older
+#  install (owned by the former 'dxcompass' service user) is chowned
+#  back automatically, so plain `git pull` keeps working.
 #
 ###############################################################################
 
@@ -90,29 +89,24 @@ command -v git  >/dev/null 2>&1 || die "git is required. Install it first:  sudo
 
 # --------------------------------------------------------------------------- #
 # Git ownership handling
-#   A repository created by root or by another user triggers git's
-#   "detected dubious ownership" refusal. Solve it without forcing the
-#   operator to switch accounts:
-#     * root        -> run the git commands as the directory owner
-#     * regular user-> register the path in this user's global safe.directory
+#   The install directory belongs to whichever account runs this script
+#   (root under sudo). Directories left by older installs may still be owned
+#   by the former 'dxcompass' service user, which makes git refuse with
+#   "detected dubious ownership": root simply takes the folder back, a
+#   regular user whitelists the path in git's safe.directory instead.
 # --------------------------------------------------------------------------- #
-GIT_AS=(git)
-build_git_runner() {
+fix_git_ownership() {
     local dir="$1" owner
     owner="$(stat -c '%U' "${dir}" 2>/dev/null || true)"
     if [[ -n "${owner}" && "${owner}" != "${CUR_USER}" ]]; then
         if [[ ${EUID} -eq 0 ]]; then
-            info "Repository is owned by '${owner}' - running git as that user."
-            GIT_AS=(sudo -u "${owner}" -H git)
+            info "Repository is owned by '${owner}' - taking ownership as ${CUR_USER}."
+            chown -R "${CUR_USER}:$(id -gn "${CUR_USER}")" "${dir}"
         else
-            err "Repository ${dir} is owned by '${owner}', current user is '${CUR_USER}'."
-            err "Run the update as the owner:  sudo -u ${owner} bash ${BASH_SOURCE[0]}"
-            err "Or take ownership:            sudo chown -R ${CUR_USER}:${CUR_USER} ${dir}"
-            exit 1
+            warn "Repository is owned by '${owner}' - adding it to git safe.directory."
+            git config --global --add safe.directory "${dir}" 2>/dev/null || true
         fi
     fi
-    # Register the path as safe for whichever identity runs git.
-    "${GIT_AS[@]}" config --global --add safe.directory "${dir}" 2>/dev/null || true
 }
 
 # --------------------------------------------------------------------------- #
@@ -120,9 +114,9 @@ build_git_runner() {
 # --------------------------------------------------------------------------- #
 if [[ -d "${INSTALL_DIR}/.git" ]]; then
     info "Existing installation found at ${INSTALL_DIR} - updating..."
-    build_git_runner "${INSTALL_DIR}"
-    "${GIT_AS[@]}" -C "${INSTALL_DIR}" fetch --depth 1 origin "${BRANCH}"
-    "${GIT_AS[@]}" -C "${INSTALL_DIR}" reset --hard "origin/${BRANCH}"
+    fix_git_ownership "${INSTALL_DIR}"
+    git -C "${INSTALL_DIR}" fetch --depth 1 origin "${BRANCH}"
+    git -C "${INSTALL_DIR}" reset --hard "origin/${BRANCH}"
     ok "Project updated to branch ${BRANCH}"
 
 elif [[ -f "${INSTALL_DIR}/install.sh" ]]; then

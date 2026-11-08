@@ -62,29 +62,18 @@ die()   { err "$*"; exit 1; }
 if [[ ${EUID} -eq 0 ]]; then
     MODE="system"
     SUDO=""
-    if [[ -n "${SUDO_USER:-}" && "${SUDO_USER}" != "root" ]]; then
-        RUN_USER="${SUDO_USER}"
-    else
-        RUN_USER="dxcompass"   # dedicated system user (created below)
-    fi
 else
     # Per-user install: no root privileges, no apt, no system service.
     # Everything runs from the current user's own directory and is managed
     # through systemctl --user.
     MODE="user"
     SUDO=""
-    RUN_USER="$(id -un)"
 fi
+# The service runs as whoever runs this script (root under sudo). The app
+# directory, database and git checkout then share one owner, so later
+# `git pull` calls never trip git's "dubious ownership" guard.
+RUN_USER="$(id -un)"
 RUN_GROUP="$(id -gn "${RUN_USER}" 2>/dev/null || echo "${RUN_USER}")"
-run_as_user() {
-    if [[ ${MODE} == "system" && ${EUID} -eq 0 ]]; then
-        local user_home
-        user_home="$(getent passwd "${RUN_USER}" | cut -d: -f6)"
-        sudo -u "${RUN_USER}" HOME="${user_home}" "$@"
-    else
-        "$@"
-    fi
-}
 
 info "DX-Compass installer"
 info "Install mode  : ${MODE}$([[ ${MODE} == "user" ]] && echo ' (systemctl --user, no root)')"
@@ -227,24 +216,18 @@ ok "Node.js $(node -v), npm $(npm -v)"
 NODE_BIN="$(command -v node)"
 
 # --------------------------------------------------------------------------- #
-# 4. Dedicated service user (only when running as root without SUDO_USER)
-# --------------------------------------------------------------------------- #
-if [[ "${RUN_USER}" == "dxcompass" ]] && ! id "dxcompass" >/dev/null 2>&1; then
-    info "Creating dedicated system user 'dxcompass'..."
-    ${SUDO} useradd --system --create-home \
-        --home-dir /var/lib/dx-compass --shell /usr/sbin/nologin dxcompass
-fi
-
-# --------------------------------------------------------------------------- #
-# 5. npm dependencies (local node_modules inside the app folder)
+# 4. npm dependencies (local node_modules inside the app folder)
 # --------------------------------------------------------------------------- #
 info "Installing npm dependencies locally (this can take a few minutes)..."
 if [[ ${MODE} == "system" ]]; then
+    # Repairs ownership left by older installs (which used a dedicated
+    # 'dxcompass' service user): the whole folder belongs to the account
+    # running this script, so plain `git pull` keeps working.
     info "Making ${RUN_USER} the owner of the application folder..."
     ${SUDO} chown -R "${RUN_USER}:${RUN_GROUP}" "${APP_DIR}"
 fi
 NPM_ARGS=(install --omit=dev --no-audit --no-fund)
-if ! run_as_user npm "${NPM_ARGS[@]}" ; then
+if ! npm "${NPM_ARGS[@]}" ; then
     warn "Default npm registry failed, retrying with mirror ${NPM_MIRROR} ..."
     # The npmmirror registry only mirrors npm packages. Native module
     # downloads need their own mirrors or the sqlite3 build keeps failing
@@ -254,7 +237,7 @@ if ! run_as_user npm "${NPM_ARGS[@]}" ; then
     # Newer Node versions are unknown to sqlite3's bundled prebuild-install
     # ("N-API version undefined"), so the source build with mirrored headers
     # is the path that actually has to work.
-    run_as_user env \
+    env \
         npm_config_dist_url="https://npmmirror.com/mirrors/node" \
         npm_config_disturl="https://npmmirror.com/mirrors/node" \
         npm_config_sqlite3_binary_host_mirror="https://npmmirror.com/mirrors/sqlite3/" \
@@ -267,7 +250,7 @@ fi
 # The sqlite3 native module is the only compile-at-install dependency and the
 # historical failure point - make sure it really loads before continuing.
 info "Verifying the sqlite3 native module loads ..."
-run_as_user "${NODE_BIN}" -e "require('sqlite3');" \
+"${NODE_BIN}" -e "require('sqlite3');" \
     || die "sqlite3 native module failed to load. Check that python3/make/g++ are installed and review the npm output above."
 ok "npm dependencies installed"
 
@@ -285,9 +268,10 @@ if ! grep -q '"mode"[[:space:]]*:[[:space:]]*"RWC"' "${FLOW_FILE}"; then
 fi
 
 info "Pre-initializing SQLite database schema (spots, recording_spots) ..."
-# Runs as the service user so the db file is created with correct ownership.
-# require('sqlite3') resolves to the local node_modules installed above.
-run_as_user "${NODE_BIN}" <<'DBEOF'
+# Runs as the installing account, which is also the service account, so the
+# db file is created with the right ownership. require('sqlite3') resolves
+# to the local node_modules installed above.
+"${NODE_BIN}" <<'DBEOF'
 const sqlite3 = require('sqlite3');
 const run = (db, sql) => new Promise((res, rej) => db.run(sql, e => e ? rej(e) : res()));
 const all = (db, sql) => new Promise((res, rej) => db.all(sql, (e, r) => e ? rej(e) : res(r)));
