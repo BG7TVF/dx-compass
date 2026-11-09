@@ -13,10 +13,10 @@ test('classic translations are explicitly bridged and render real localized text
     const i18n = createI18n({root: sandbox.window, lang: 'zh'});
     assert.equal(i18n.languages.length, 11);
     assert.equal(i18n.t('settings'), '设置');
-    assert.equal(i18n.t('startMon'), '▶ 开始监控');
+    assert.equal(i18n.t('startMon'), '▶ 开始监听');
     const translate = createLegacyTranslator(i18n, () => i18n.language);
     assert.equal(translate('mAgo')(2), '2分钟前');
-    assert.equal(translate('spotsN')(3), '3 spots');
+    assert.equal(translate('spotsN')(3), '3 条 SPOT');
     i18n.setLanguage('en');
     assert.equal(i18n.t('settings'), 'Settings');
     assert.notEqual(i18n.t('settings'), 'settings');
