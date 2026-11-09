@@ -508,6 +508,8 @@ html, body {
     border-color: rgba(122, 168, 255, .22);
     background: linear-gradient(180deg, rgba(122, 168, 255, .05), rgba(10, 18, 29, 0) 45%), var(--panel);
     padding: 7px;
+    /* the compact grid drops the compass word on narrow rails (see below) */
+    container-type: inline-size;
 }
 .opp-rows {
     display: flex;
@@ -649,6 +651,51 @@ html, body {
 .opp-rows.dense-2 .oc-head { padding-bottom: 1px; }
 .opp-rows.dense-2 .ob-bands { margin-top: 2px; gap: 2px; }
 .opp-rows.dense-2 .opp-band { padding: 1px 5px; }
+
+/* ---------- nine-rival compact grid ---------- */
+/* Five or more rivals switch to two columns of short cards so the full set
+ * (the system caps at nine) fits a 1080p panel without scrolling. Band cells
+ * turn into one inline row — band + frequency + direction — instead of two
+ * stacked lines, which is what buys the height; no font drops below the
+ * micro/tiny scale. */
+.opp-rows.compact {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-content: start;
+    gap: 5px;
+    padding-right: 0;
+}
+.opp-rows.compact .opp-call-card { padding: 3px 5px 4px; }
+.opp-rows.compact .oc-head { gap: 5px; padding-bottom: 2px; }
+.opp-rows.compact .oc-head b { padding: 0 6px; }
+/* Per-rival band/SPOT counts are the only thing dropped in this mode: the
+ * group header still totals them and each band has its own cell. */
+.opp-rows.compact .oc-head span { display: none; }
+.opp-rows.compact .ob-bands {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-top: 2px;
+}
+.opp-rows.compact .opp-band {
+    flex-direction: row;
+    align-items: baseline;
+    gap: 4px;
+    padding: 0 4px;
+}
+.opp-rows.compact .ob-line { flex: 0 0 auto; gap: 4px; }
+.opp-rows.compact .ob-line u { margin-left: 0; }
+.opp-rows.compact .ob-line u small { display: none; }
+.opp-rows.compact .ob-dir { flex: 1 1 auto; justify-content: flex-end; }
+/* Arrow + bearing stay; the compass word is dropped only when the card is too
+ * narrow to hold it (see the container query below). */
+@container (max-width: 360px) {
+    /* Narrow rail (e.g. 1366x768): tighten gaps and card padding instead of
+     * fonts, so the last card still lands inside the panel. */
+    .opp-rows.compact { gap: 4px; }
+    .opp-rows.compact .opp-call-card { padding: 2px 4px 3px; }
+    .opp-rows.compact .ob-compass { display: none; }
+}
 .opp-empty { font-size: var(--fs-small); color: var(--dim); }
 
 /* ---------- footer ---------- */

@@ -59,7 +59,9 @@ test('band cell shows frequency in MHz and the heading', () => {
     assert.match(html, /20M/);
     assert.match(html, /14\.026/);
     assert.match(html, /MHz/);
-    assert.match(html, /东 90°/);
+    /* The compass word is wrapped so the compact grid can hide it on a narrow
+     * rail; the full "东 90°" text is still rendered in the wide layout. */
+    assert.match(html, /<span class="ob-compass">东<\/span> 90°/);
 });
 
 test('call colours are deterministic and stay off the semantic palette', () => {

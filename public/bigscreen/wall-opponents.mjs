@@ -306,14 +306,18 @@ export function bandCellHtml(band) {
     if (band.dirSamples >= 2 && band.spread) {
         direction = '多向';
     } else if (band.dir !== null) {
-        direction = compass(band.dir) + ' ' + Math.round(band.dir) + '°';
+        /* The compass word is its own span so the compact grid can hide it and
+         * keep only the arrow + degrees when the card is narrow. */
+        direction = '<span class="ob-compass">' + compass(band.dir) + '</span> ' +
+            Math.round(band.dir) + '°';
         arrow = '<i class="ob-arrow">' + ARROWS[compassIndex(band.dir)] + '</i>';
     }
     const thin = band.dirSamples === 1;
     const frequency = band.freq ? num(band.freq / 1000, 3) : '—';
     const title = band.band + ' · ' + band.n + ' SPOT · ' +
         (band.dirSamples ? band.dirSamples + ' 个方向样本' : '无坐标样本') +
-        (thin ? '（仅 1 个，方向仅供参考）' : '');
+        (thin ? '（仅 1 个，方向仅供参考）' : '') +
+        (band.freq ? ' · ' + num(band.freq, 0) + ' kHz' : '');
     return '<div class="opp-band' + (thin ? ' thin' : '') + '" style="--band-color:' +
         band.color + '" title="' + esc(title) + '">' +
         '<div class="ob-line"><b>' + esc(band.band) + '</b><u>' + frequency +
@@ -343,7 +347,7 @@ export function createOpponentRenderer({bearing}) {
         if (!opponents.length) {
             box.innerHTML = '<div class="opp-empty">最近 ' + OPPONENT_WINDOW_MIN +
                 ' 分钟无对手 SPOT</div>';
-            box.classList.remove('dense');
+            box.classList.remove('dense', 'dense-2', 'compact');
             if (summary) summary.textContent = '';
             return;
         }
@@ -351,11 +355,16 @@ export function createOpponentRenderer({bearing}) {
         const bands = new Set();
         opponents.forEach(opponent => opponent.bands.forEach(band => bands.add(band.band)));
         if (summary) summary.textContent = opponents.length + ' 对手 · ' + bands.size + ' 频段';
-        /* If the cards are taller than the panel, tighten type/padding first and
-         * then, on short screens, squeeze the spacing only (same font sizes) so
-         * every rival stays fully visible before the list falls back to scroll. */
+        /* Up to nine rivals must fit on a 1080p wall without scrolling, so
+         * five or more switch to a two-column grid of short cards (band cells
+         * inline). Fewer rivals keep the roomier one-column cards. */
         box.classList.remove('dense');
         box.classList.remove('dense-2');
+        box.classList.remove('compact');
+        if (opponents.length >= 5) {
+            box.classList.add('compact');
+            return;
+        }
         if (box.scrollHeight > box.clientHeight + 1) {
             box.classList.add('dense');
             if (box.scrollHeight > box.clientHeight + 1) box.classList.add('dense-2');
