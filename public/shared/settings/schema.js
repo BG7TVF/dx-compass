@@ -327,55 +327,55 @@
 
         // ---- data / Data & Alerts
         field('pollDxwatchSec', 'data', 'int', 30, {
-            min: 5, max: 300, scope: 'server', restart: true, wired: false,
+            min: 5, max: 300, scope: 'server', wired: true,
             label: 'dxwatch poll (s)', zh: 'dxwatch 轮询（秒）',
-            desc: 'Placeholder: dxwatch ingest interval; applied by the flow timer.'
+            desc: 'dxwatch ingest interval; the 5s flow tick is gated by this value.'
         }),
         field('pollRbnSec', 'data', 'int', 10, {
-            min: 5, max: 300, scope: 'server', restart: true, wired: false,
+            min: 5, max: 300, scope: 'server', wired: true,
             label: 'RBN poll (s)', zh: 'RBN 轮询（秒）',
-            desc: 'Placeholder: reversebeacon ingest interval; keep >= 5s to avoid bans.'
+            desc: 'reversebeacon ingest interval; keep >= 5s to avoid bans.'
         }),
         field('pollPskrSyncSec', 'data', 'int', 120, {
-            min: 30, max: 900, scope: 'server', restart: true, wired: false,
+            min: 30, max: 900, scope: 'server', wired: true,
             label: 'PSKR sync (s)', zh: 'PSKR 订阅同步（秒）',
-            desc: 'Placeholder: MQTT subscription resync interval.'
+            desc: 'MQTT subscription resync interval.'
         }),
         field('sourceDxwatch', 'data', 'bool', true, {
-            scope: 'server', wired: false, label: 'Enable dxwatch', zh: '启用 dxwatch',
-            desc: 'Placeholder: master switch for the dxwatch source.'
+            scope: 'server', wired: true, label: 'Enable dxwatch', zh: '启用 dxwatch',
+            desc: 'Master switch for the dxwatch source.'
         }),
         field('sourceRbn', 'data', 'bool', true, {
-            scope: 'server', wired: false, label: 'Enable RBN', zh: '启用 RBN',
-            desc: 'Placeholder: master switch for reversebeacon.net.'
+            scope: 'server', wired: true, label: 'Enable RBN', zh: '启用 RBN',
+            desc: 'Master switch for reversebeacon.net.'
         }),
         field('sourcePskr', 'data', 'bool', true, {
-            scope: 'server', wired: false, label: 'Enable PSKReporter', zh: '启用 PSKReporter',
-            desc: 'Placeholder: master switch for the PSKReporter MQTT stream.'
+            scope: 'server', wired: true, label: 'Enable PSKReporter', zh: '启用 PSKReporter',
+            desc: 'Master switch for the PSKReporter MQTT stream.'
         }),
         field('freshSec', 'data', 'int', 3600, {
-            min: 300, max: 7200, scope: 'both', wired: false,
+            min: 300, max: 7200, scope: 'both', wired: true,
             label: 'Active spot window (s)', zh: '活跃窗口（秒）',
-            desc: 'Placeholder: server replay window; spots stay persisted beyond it.'
+            desc: 'Server replay window; spots stay persisted beyond it.'
         }),
         field('retentionSpotsDays', 'data', 'int', 0, {
-            min: 0, max: 3650, scope: 'server', wired: false,
+            min: 0, max: 3650, scope: 'server', wired: true,
             label: 'Spot retention (days, 0 = keep)', zh: 'SPOT 保留（天，0 永久）',
-            desc: 'Placeholder: automatic purge of the spots table.'
+            desc: 'Hourly purge of the spots table; 0 keeps everything.'
         }),
         field('retentionRecordingMonths', 'data', 'int', 2, {
-            min: 1, max: 120, scope: 'server', wired: false,
+            min: 1, max: 120, scope: 'server', wired: true,
             label: 'Recording retention (months)', zh: '录音保留（月）',
-            desc: 'Placeholder: currently hard-coded to two months.'
+            desc: 'Hourly purge of recording_spots older than this many months.'
         }),
         field('retentionQsoDays', 'data', 'int', 0, {
-            min: 0, max: 3650, scope: 'server', wired: false,
+            min: 0, max: 3650, scope: 'server', wired: true,
             label: 'QSO retention (days, 0 = keep)', zh: 'QSO 保留（天，0 永久）',
-            desc: 'Placeholder: automatic purge of the qsos table.'
+            desc: 'Hourly purge of the qsos table; 0 keeps everything.'
         }),
         field('autoPurge', 'data', 'bool', true, {
-            scope: 'server', wired: false, label: 'Automatic purge', zh: '自动清理',
-            desc: 'Placeholder: enable the hourly retention job.'
+            scope: 'server', wired: true, label: 'Automatic purge', zh: '自动清理',
+            desc: 'Enable the hourly retention job.'
         }),
         field('recordsRefreshSec', 'data', 'int', 15, {
             min: 5, max: 300, wired: false, label: 'Records refresh (s)', zh: '记录刷新（秒）',
@@ -386,34 +386,53 @@
             desc: 'Placeholder: propagation page polling interval.'
         }),
         field('maxCallsigns', 'data', 'int', 9, {
-            min: 1, max: 27, scope: 'server', wired: false,
+            min: 1, max: 27, scope: 'server', wired: true,
             label: 'Max monitored callsigns', zh: '被监控呼号上限',
-            desc: 'Placeholder: server still caps at nine slots and nine PSKR subscriptions.'
+            desc: 'Caps /api/callsigns and the PSKR subscription list.'
         }),
         field('logLevel', 'data', 'enum', 'info', {
             values: LOG_LEVELS, scope: 'server', restart: true, wired: false,
             label: 'Log level', zh: '日志级别',
-            desc: 'Placeholder: Node-RED logging level; debug can fill the disk fast.'
+            desc: 'Node-RED logging level; applied from settings.js on restart.'
         }),
         field('httpProxy', 'data', 'string', '', {
-            maxLen: 300, allowEmpty: true, scope: 'server', restart: true, wired: false,
+            maxLen: 300, allowEmpty: true, scope: 'server', wired: true,
             label: 'HTTP proxy', zh: 'HTTP 代理',
-            desc: 'Placeholder: outbound proxy for SWPC/RBN/dxwatch fetches.'
+            desc: 'Outbound proxy for the propagation collector; empty = direct.'
         }),
         field('fetchTimeoutMs', 'data', 'int', 25000, {
-            min: 5000, max: 60000, scope: 'server', wired: false,
+            min: 5000, max: 60000, scope: 'server', wired: true,
             label: 'Upstream timeout (ms)', zh: '上游超时（毫秒）',
-            desc: 'Placeholder: per-request timeout for upstream collectors.'
+            desc: 'Per-request timeout for the propagation collector.'
+        }),
+        field('upstreamBase', 'data', 'string', '', {
+            maxLen: 200, allowEmpty: true, scope: 'server', wired: true,
+            label: 'SWPC base URL', zh: 'SWPC 上游地址',
+            desc: 'Override for services.swpc.noaa.gov; empty = official endpoint.'
         }),
         field('n1mmPorts', 'data', 'string', '12060,12061,12062', {
             pattern: /^\d{2,5}(,\d{2,5}){0,5}$/, maxLen: 40, scope: 'server', restart: true, wired: false,
             label: 'N1MM UDP ports', zh: 'N1MM UDP 端口',
-            desc: 'Placeholder: UDP listen ports; changing them requires a restart.'
+            desc: 'UDP listen ports are node properties; changing them requires a flow redeploy.'
         }),
         field('recordingRepeat', 'data', 'enum', 'once', {
-            values: RECORDING_REPEATS, scope: 'server', wired: false,
+            values: RECORDING_REPEATS, scope: 'server', wired: true,
             label: 'Recording repeat', zh: '录音重复',
-            desc: 'Placeholder: once / daily / weekly scheduled recording.'
+            desc: 'once / daily / weekly scheduled recording.'
+        }),
+        field('diskWarnPct', 'data', 'int', 90, {
+            min: 50, max: 100, scope: 'server', wired: true,
+            label: 'Disk warn (%)', zh: '磁盘告警阈值（%）',
+            desc: 'Warn when the Node-RED working directory filesystem exceeds this usage percentage.'
+        }),
+        field('diskCheckSec', 'data', 'int', 300, {
+            min: 30, max: 3600, scope: 'server', wired: true,
+            label: 'Disk check (s)', zh: '磁盘检查间隔（秒）',
+            desc: 'Minimum interval between disk usage checks.'
+        }),
+        field('diskAlert', 'data', 'bool', true, {
+            scope: 'server', wired: true, label: 'Disk alert', zh: '磁盘告警',
+            desc: 'Emit a Node-RED warning when free space crosses the threshold.'
         }),
         field('monitoring', 'data', 'bool', false, {
             storage: 'external', scope: 'both', exportable: false, importable: false,
@@ -438,21 +457,21 @@
             desc: 'Point-to-point DX target longitude.'
         }),
         field('collectSec', 'prop', 'int', 300, {
-            min: 60, max: 3600, scope: 'server', restart: true, wired: false,
+            min: 60, max: 3600, scope: 'server', wired: true,
             label: 'Collector interval (s)', zh: '采集间隔（秒）',
-            desc: 'Placeholder: SWPC/GAMBIT collection interval.'
+            desc: 'SWPC/GAMBIT collection interval; the 30s flow tick is gated by this value.'
         }),
         field('condClosed', 'prop', 'number', 0.97, {
-            min: 0.5, max: 1, wired: false, label: 'Closed threshold', zh: '关闭阈值',
-            desc: 'Placeholder: frequency above this ratio of MUF is Closed.'
+            min: 0.5, max: 1, scope: 'server', wired: true, label: 'Closed threshold', zh: '关闭阈值',
+            desc: 'Frequency above this ratio of MUF is Closed.'
         }),
         field('condGood', 'prop', 'number', 0.55, {
-            min: 0, max: 1, wired: false, label: 'Good threshold', zh: '良好阈值',
-            desc: 'Placeholder: headroom ratio above this is Good.'
+            min: 0, max: 1, scope: 'server', wired: true, label: 'Good threshold', zh: '良好阈值',
+            desc: 'Headroom ratio above this is Good.'
         }),
         field('condFair', 'prop', 'number', 0.25, {
-            min: 0, max: 1, wired: false, label: 'Fair threshold', zh: '一般阈值',
-            desc: 'Placeholder: headroom ratio above this is Fair.'
+            min: 0, max: 1, scope: 'server', wired: true, label: 'Fair threshold', zh: '一般阈值',
+            desc: 'Headroom ratio above this is Fair.'
         }),
         field('mufOpacity', 'prop', 'int', 77, {
             min: 0, max: 255, wired: false, label: 'MUF opacity', zh: 'MUF 透明度',

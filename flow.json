@@ -268,13 +268,13 @@
         "id": "dxc0000000000036",
         "type": "inject",
         "z": "dxc0000000000001",
-        "name": "Poll dxwatch every 30s",
+        "name": "Poll dxwatch every 5s",
         "props": [
             {
                 "p": "payload"
             }
         ],
-        "repeat": "30",
+        "repeat": "5",
         "crontab": "",
         "once": true,
         "onceDelay": "2",
@@ -781,13 +781,13 @@
         "id": "dxc0000000000043",
         "type": "inject",
         "z": "dxc0000000000001",
-        "name": "Poll RBN every 10s",
+        "name": "Poll RBN every 5s",
         "props": [
             {
                 "p": "payload"
             }
         ],
-        "repeat": "10",
+        "repeat": "5",
         "crontab": "",
         "once": true,
         "onceDelay": "3",
@@ -964,13 +964,13 @@
         "id": "dxc0000000000064",
         "type": "inject",
         "z": "dxc0000000000001",
-        "name": "PSKR sub sync timer",
+        "name": "PSKR sub sync timer (10s tick)",
         "props": [
             {
                 "p": "payload"
             }
         ],
-        "repeat": "120",
+        "repeat": "10",
         "crontab": "",
         "once": true,
         "onceDelay": "5",
@@ -1069,7 +1069,7 @@
         "id": "dxc0000000000074",
         "type": "inject",
         "z": "dxc0000000000001",
-        "name": "Purge old recordings",
+        "name": "Retention purge (settings)",
         "props": [
             {
                 "p": "payload"
@@ -1094,8 +1094,8 @@
         "id": "dxc0000000000075",
         "type": "function",
         "z": "dxc0000000000001",
-        "name": "Build purge SQL",
-        "func": "const dx = global.get('dx');\nmsg.topic = dx.storage.recording.purge();\nreturn msg;",
+        "name": "Build retention SQL",
+        "func": "const dx = global.get('dx');\ntry {\n    const result = dx.maintenance.purge(global);\n    const statements = (result && result.statements) || [];\n    if (!statements.length) {\n        node.status({fill: 'grey', shape: 'dot', text: 'auto purge off'});\n        return null;\n    }\n    node.status({fill: 'green', shape: 'dot', text: 'purge ' + statements.map(s => s.scope).join(',')});\n    node.warn('retention purge: ' + statements.map(s => s.scope).join(', '));\n    return statements.map(s => ({topic: s.topic, payload: s.scope}));\n} catch (e) {\n    node.status({fill: 'red', shape: 'ring', text: e.message});\n    node.warn('retention purge failed: ' + e.message);\n    return null;\n}",
         "outputs": 1,
         "noerr": 0,
         "initialize": "",
@@ -1116,9 +1116,51 @@
         "mydb": "dxc0000000000027",
         "sqlquery": "msg.topic",
         "sql": "",
-        "name": "Recording maintenance",
+        "name": "Database maintenance",
         "x": 680,
         "y": 1100,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "dxc0000000000120",
+        "type": "inject",
+        "z": "dxc0000000000001",
+        "name": "Disk space check (60s tick)",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "60",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "30",
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 200,
+        "y": 1160,
+        "wires": [
+            [
+                "dxc0000000000121"
+            ]
+        ]
+    },
+    {
+        "id": "dxc0000000000121",
+        "type": "function",
+        "z": "dxc0000000000001",
+        "name": "Disk space alert",
+        "func": "const dx = global.get('dx');\ntry {\n    const r = dx.maintenance.diskCheck(global);\n    if (r && r.error) {\n        node.status({fill: 'red', shape: 'ring', text: 'disk: ' + r.error});\n        node.warn('disk check failed: ' + r.error);\n    } else if (r && r.enabled === false) {\n        node.status({fill: 'grey', shape: 'dot', text: 'disk alert off'});\n    } else if (r && !r.skipped) {\n        const text = 'disk ' + r.usedPct + '% used, ' + r.freeGb + ' GB free';\n        node.status({fill: r.warn ? 'yellow' : 'green', shape: 'dot', text});\n        if (r.transition === 'raised') node.warn('LOW DISK: ' + text + ' (threshold ' + r.threshold + '%)');\n        if (r.transition === 'cleared') node.warn('disk space OK again: ' + text);\n    }\n} catch (e) {\n    node.status({fill: 'red', shape: 'ring', text: e.message});\n    node.warn('disk check failed: ' + e.message);\n}\nreturn null;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 440,
+        "y": 1160,
         "wires": [
             []
         ]
@@ -2470,13 +2512,13 @@
         "id": "dxc0000000000101",
         "type": "inject",
         "z": "dxc0000000000100",
-        "name": "collector tick",
+        "name": "collector tick (30s)",
         "props": [
             {
                 "p": "payload"
             }
         ],
-        "repeat": "300",
+        "repeat": "30",
         "crontab": "",
         "once": true,
         "onceDelay": 10,

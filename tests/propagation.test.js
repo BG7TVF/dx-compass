@@ -232,3 +232,29 @@ test('Maidenhead and great-circle helpers retain the browser calculations', () =
     assert.ok(Math.abs(mid.lat) < 1e-10);
     assert.ok(Math.abs(mid.lon - 45) < 1e-10);
 });
+
+test('collector skips the network while collectSec has not elapsed', async () => {
+    const ctx = new Context({uiSettings: {collectSec: 300},
+        lastPropCollect: Date.now() - 1000, propData: {ts: '2026-11-08T12:00:00.000Z'}});
+    const data = await collector.collect(ctx);
+    assert.equal(data.ts, '2026-11-08T12:00:00.000Z');
+});
+
+test('upstream base override only rewrites SWPC feeds', () => {
+    assert.equal(api.swpcBase(''), 'https://services.swpc.noaa.gov');
+    assert.equal(api.swpcBase('ftp://mirror'), 'https://services.swpc.noaa.gov');
+    assert.equal(api.swpcBase('https://mirror.example/noaa/'), 'https://mirror.example/noaa');
+    const urls = api.urlsFor('https://mirror.example/noaa');
+    assert.equal(urls.kp, 'https://mirror.example/noaa/products/noaa-planetary-k-index.json');
+    assert.equal(urls.ham, 'https://www.hamqsl.com/solarxml.php');
+});
+
+test('band condition thresholds come from settings with safe fallbacks', () => {
+    const win = {muf: 10, luf: 1};
+    assert.equal(api.bandCondOf(9.8, win), 'Closed');
+    assert.equal(api.bandCondOf(9.8, win, {closed: 0.99, good: 0.55, fair: 0.25}), 'Poor');
+    assert.equal(api.bandCondOf(6, win, {closed: 0.97, good: 0.55, fair: 0.25}), 'Fair');
+    assert.equal(api.bandCondOf(3, win, {closed: 0.97, good: 0.55, fair: 0.25}), 'Good');
+    const env = environment({grid: 'PM95', condClosed: 'bad', condGood: 0.6, condFair: 0.2}, NOW);
+    assert.deepEqual(env.cond, {closed: 0.97, good: 0.6, fair: 0.2});
+});

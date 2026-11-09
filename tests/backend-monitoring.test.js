@@ -72,3 +72,20 @@ test('recording rows use UTC date/time and retain CW and DIGI detail', () => {
     assert.equal(digi.detail, 'FT8');
     assert.equal(recording.prepareSpot(base, {active: false}), null);
 });
+
+test('schedule repeat comes from the request or the recordingRepeat setting', () => {
+    const req = new Context();
+    recording.control(req, {action: 'schedule', start: '11-08 12:00', end: '11-08 13:00',
+        repeat: 'weekly'});
+    assert.equal(req.get('recording').schedule.repeat, 'weekly');
+    recording.tick(req, new Date('2026-11-08T13:01:00Z'));
+    assert.equal(req.get('recording').schedule.start, '11-15 12:00');
+    assert.equal(req.get('recording').schedule.end, '11-15 13:00');
+
+    const daily = new Context({uiSettings: {recordingRepeat: 'daily'}});
+    recording.control(daily, {action: 'schedule', start: '11-08 12:00', end: '11-08 13:00'});
+    recording.tick(daily, new Date('2026-11-08T13:01:00Z'));
+    assert.equal(daily.get('recording').schedule.start, '11-09 12:00');
+    recording.tick(daily, new Date('2026-11-09T12:30:00Z'));
+    assert.equal(daily.get('recording').active, true);
+});

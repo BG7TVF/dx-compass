@@ -114,3 +114,39 @@ test('PSKR subscriptions include own call and unsubscribe removed topics', () =>
     assert.deepEqual(result.actions[0], {action: 'unsubscribe', topic: 'pskr/filter/v2/+/+/OLD/#'});
     assert.ok(result.actions.some(a => a.topic === 'pskr/filter/v2/+/+/N0CALL/#'));
 });
+
+test('source switches and poll intervals gate requests and ingestion', () => {
+    const off = env();
+    off.global.set('uiSettings', {myCall: 'N0CALL', sourceDxwatch: false});
+    assert.equal(spots.liveRequest(off), null);
+    assert.equal(spots.ingest('dxwatch', dxwatchFixture(), off).records.length, 0);
+
+    const gate = env();
+    assert.ok(spots.liveRequest(gate).url.includes('dxwatch.com'));
+    assert.equal(spots.liveRequest(gate), null); // 30 s interval not elapsed
+    assert.ok(spots.liveRequest({...gate, now: NOW + 31000}));
+
+    const rbnOff = env();
+    rbnOff.flow.set('rbnH', 'abc');
+    rbnOff.global.set('uiSettings', {sourceRbn: false});
+    assert.equal(spots.rbnRequest(rbnOff), null);
+
+    const pskrOff = env();
+    pskrOff.global.set('uiSettings', {sourcePskr: false});
+    const raw = {sq: 1, f: 14074000, md: 'FT8', rp: -8,
+        t: Math.floor(NOW / 1000), sc: 'K1ABC', sl: 'PM95', rc: 'DE.1', rl: 'JN58'};
+    assert.equal(spots.ingest('pskr', raw, pskrOff).records.length, 0);
+});
+
+test('fresh window follows freshSec instead of the former one-hour constant', () => {
+    const stale = {s: {900: ['DE-X', '14074', 'K1ABC', 'CW', '', '3700']}, ci: {}};
+    const wide = env();
+    wide.global.set('uiSettings', {freshSec: 7200});
+    const wideResult = spots.ingest('dxwatch', stale, wide);
+    assert.equal(wideResult.records.length, 1);
+    assert.equal(wideResult.fresh.length, 1);
+
+    const narrow = env();
+    narrow.global.set('uiSettings', {freshSec: 600});
+    assert.equal(spots.ingest('dxwatch', stale, narrow).fresh.length, 0);
+});
