@@ -802,7 +802,15 @@ tbody tr:nth-child(even) { background: var(--row-alt); }
     color: var(--text);
     line-height: 1.35;
 }
-.set-label { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.set-label { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-width: 0; }
+/* Long labels (German compounds, Japanese) truncate instead of widening the
+ * flat row; the restart/risky flags stay visible next to the ellipsis. */
+.set-label-text {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
 .set-desc {
     margin: 0;
     font-size: 11.5px;
@@ -1600,6 +1608,19 @@ body.lang-ar .hint,
 body.lang-ar .cfg-tab,
 body.lang-ar .qt-box label,
 body.lang-ar .rec-tz { text-align: right; }
+
+/* Arabic settings pane: mirror the rows inside #configPanel only, so the map
+ * dashboard stays LTR. Callsign and numeric inputs keep LTR entry order. */
+#configPanel[dir="rtl"] .set-label,
+#configPanel[dir="rtl"] .set-desc,
+#configPanel[dir="rtl"] .form-row > label { text-align: right; }
+#configPanel .cfg-call,
+#configPanel #setMyCall,
+#configPanel #setGrid,
+#configPanel #setQrzUser,
+#configPanel #setQrzPass,
+#configPanel input[type="number"] { direction: ltr; }
+#configPanel[dir="rtl"] .cfg-call { text-align: left; }
 
 
 /* One-click factory reset row (Global settings) */

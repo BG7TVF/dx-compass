@@ -49,5 +49,5 @@ export function applyStatic(root = document) {
         element.hidden = lang !== 'zh';
     });
     document.documentElement.lang = lang;
-    document.documentElement.dir = 'ltr';
+    document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
 }

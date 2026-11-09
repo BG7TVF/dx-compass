@@ -165,21 +165,77 @@ test('the settings/wall merge never overwrites a legacy key', () => {
     );
 });
 
-test('forbidden machine-translation terms never appear', () => {
-    const forbidden = [
+/* Literal renderings of ham-radio jargon that no real operator uses; each one
+ * is the "obvious" machine translation we must never ship. */
+const FORBIDDEN = {
+    zh: [
         '蚂蚁', '钻机', '乐队', '斑点', '终结者', '夏令时',
         '噪声地板', '噪音地板', '登录簿', '个人资料', '梅登海德', '最大可用频率'
-    ];
+    ],
+    de: ['Ameise', 'Bohrer', 'Musikband', 'Sommerzeit', 'maximal nutzbare Frequenz'],
+    fr: ['fourmi', 'perceuse', 'groupe de musique', "heure d'été", 'heure d\u2019été', 'fréquence maximale utilisable'],
+    es: ['hormiga', 'taladro', 'banda de música', 'horario de verano', 'frecuencia máxima utilizable'],
+    pt: ['formiga', 'furadeira', 'banda de música', 'horário de verão', 'frequência máxima utilizável'],
+    ru: ['муравей', 'дрель', 'музыкальная группа', 'летнее время', 'максимально применимая частота'],
+    it: ['formica', 'trapano', 'banda musicale', 'ora legale', 'frequenza massima utilizzabile'],
+    ar: ['نملة', 'مثقاب', 'فرقة موسيقية', 'التوقيت الصيفي', 'التردد الأقصى القابل للاستخدام'],
+    ko: ['개미', '드릴', '밴드부', '서머타임', '최대 사용 가능 주파수'],
+    ja: ['アリ', 'ドリル', '楽団', 'サマータイム', '最大使用周波数']
+};
+
+test('forbidden machine-translation terms never appear', () => {
     for (const lang of LANGS) {
         for (const [key, value] of Object.entries(dict.I18N[lang])) {
             const text = textOf(value);
-            for (const word of forbidden) {
-                assert.ok(!text.includes(word), `${lang}.${key} contains forbidden term "${word}"`);
+            for (const word of FORBIDDEN[lang] || []) {
+                assert.ok(!text.includes(word),
+                    `${lang}.${key} contains forbidden term "${word}"`);
             }
         }
     }
-    /* DST stays an abbreviation; only the timezone expansion is banned. */
-    assert.ok(!Object.values(dict.I18N.zh).some(v => textOf(v).includes('夏令时')));
+});
+
+/* Non-Latin locales must really be translated: the target script has to show
+ * up in most strings, and the vast majority of values must differ from the
+ * English source. */
+const SCRIPT = {
+    ar: /[\u0600-\u06FF]/,
+    ja: /[\u3040-\u30FF\u4E00-\u9FFF]/,
+    ko: /[\uAC00-\uD7AF]/,
+    ru: /[\u0400-\u04FF]/
+};
+
+test('every locale translates the shared vocabulary instead of falling back', () => {
+    const keys = Object.keys(dict.I18N_EXTRA.en);
+    assert.ok(keys.length >= 400, `unexpected vocabulary size: ${keys.length}`);
+    for (const lang of LANGS) {
+        const block = dict.I18N_EXTRA[lang];
+        assert.ok(block, `${lang} dictionary block is missing`);
+        const missing = keys.filter(key => !Object.prototype.hasOwnProperty.call(block, key));
+        assert.deepEqual(missing, [], `${lang} falls back to English for ${missing.slice(0, 5)}`);
+        if (lang === 'en') continue;
+        const english = keys.filter(key => textOf(block[key]) === textOf(dict.I18N_EXTRA.en[key]));
+        assert.ok(english.length / keys.length <= 0.2,
+            `${lang} leaves ${english.length}/${keys.length} strings in English`);
+        if (SCRIPT[lang]) {
+            const scripted = keys.filter(key => SCRIPT[lang].test(textOf(block[key])));
+            assert.ok(scripted.length / keys.length >= 0.85,
+                `${lang} only scripts ${scripted.length}/${keys.length} strings`);
+        }
+    }
+});
+
+test('no locale mixes Chinese into a non-CJK translation', () => {
+    const cjk = /[\u3400-\u4DBF\u4E00-\u9FFF]/;
+    /* Language names are shown in their own script on purpose ("中文"). */
+    const ownName = /^settings\.field\.lang\.option\.(zh|ja)$/;
+    for (const lang of ['de', 'fr', 'es', 'pt', 'ru', 'it', 'ar']) {
+        for (const [key, value] of Object.entries(dict.I18N_EXTRA[lang])) {
+            if (ownName.test(key)) continue;
+            assert.ok(!cjk.test(textOf(value)),
+                `${lang}.${key} still contains Chinese: ${textOf(value)}`);
+        }
+    }
 });
 
 test('every schema field and enum has dictionary entries', () => {

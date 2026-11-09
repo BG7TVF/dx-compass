@@ -67,7 +67,7 @@ html, body {
     border: 1px solid var(--line);
     border-radius: var(--r);
 }
-.brand { display: flex; flex-direction: column; line-height: 1.15; margin-right: auto; }
+.brand { display: flex; flex-direction: column; line-height: 1.15; margin-inline-end: auto; }
 .brand b {
     font-size: clamp(22px, 2.7vh, 52px);
     letter-spacing: 3px;
@@ -78,7 +78,7 @@ html, body {
 /* the clock always sits at the far right edge: the brand's auto margin eats the
  * leftover header space, so the UTC block stays right-aligned whether or not
  * the countdown is shown */
-.clock { margin-left: 12px; display: flex; align-items: baseline; gap: 8px; }
+.clock { margin-inline-start: 12px; display: flex; align-items: baseline; gap: 8px; }
 .clock b { font-size: clamp(22px, 2.7vh, 52px); letter-spacing: 1px; }
 .clock span { font-size: var(--fs-small); color: var(--dim); }
 .clock i { font-style: normal; font-size: var(--fs-micro); letter-spacing: 1px; color: var(--accent); }
@@ -363,12 +363,12 @@ html, body {
     padding: clamp(2px, 0.3vh, 4px) clamp(4px, 0.55vh, 8px);
     background: var(--panel-2);
     border: 1px solid var(--line);
-    border-left: 3px solid var(--accent);
+    border-inline-start: 3px solid var(--accent);
     border-radius: 5px;
     min-width: 0;
     overflow: hidden;
 }
-.radio.tx { border-left-color: var(--poor); }
+.radio.tx { border-inline-start-color: var(--poor); }
 .radio label { font-size: var(--fs-micro); line-height: 1.15; letter-spacing: .5px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .radio b { font-size: var(--fs-body); line-height: 1.15; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .radio span { font-size: var(--fs-micro); line-height: 1.15; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -530,7 +530,7 @@ html, body {
     border: 1px solid rgba(122, 168, 255, .14);
     /* Same colour the rival's map markers use, so a card is identifiable at a
      * glance without changing the existing type scale or card height. */
-    border-left: 4px solid var(--call-color, rgba(255, 107, 107, .4));
+    border-inline-start: 4px solid var(--call-color, rgba(255, 107, 107, .4));
     border-radius: 7px;
 }
 /* Second encoding: the identical glyph the rival carries on the map. */
@@ -743,3 +743,15 @@ html, body {
     .trend { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: minmax(150px, auto); }
     .card.radios-card, .card.rate { min-height: 150px; }
 }
+
+/* ---------- Arabic (dir="rtl") ----------
+ * The wall mirrors as a whole: the grid columns and flex rows follow the inline
+ * direction, so the environment rail moves to the right edge. The map, its
+ * legend and every numeric readout keep LTR order, otherwise times, frequencies
+ * and coordinates would be reversed while the Latin digits stay unmirrored. */
+html[dir="rtl"] .map-panel,
+html[dir="rtl"] .layer-tag,
+html[dir="rtl"] .map-legend,
+html[dir="rtl"] .clock,
+html[dir="rtl"] .wall-foot { direction: ltr; }
+html[dir="rtl"] .wall-foot { text-align: left; }

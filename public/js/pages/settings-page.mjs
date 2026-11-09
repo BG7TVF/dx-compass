@@ -672,7 +672,11 @@ export function createSettingsPage(ctx) {
         const t = ctx.t;
         ctx.i18n.setLanguage(ctx.settings.lang);
         document.documentElement.lang = ctx.settings.lang;
+        /* Keep the map dashboard LTR (Leaflet is not mirrored) but render the
+         * settings pane right-to-left for Arabic. */
         document.documentElement.dir = 'ltr';
+        const configPanel = $('#configPanel');
+        if (configPanel) configPanel.dir = ctx.settings.lang === 'ar' ? 'rtl' : 'ltr';
         document.body.classList.toggle('lang-ar', ctx.settings.lang === 'ar');
         document.title = `DX-Compass · ${t('subtitle')}`;
         const texts = {
