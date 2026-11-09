@@ -403,6 +403,41 @@ html, body {
     flex: 1 1 0;
     height: 0;
     min-height: 40px;
+    transition: opacity .22s ease;
+}
+.spark canvas.switching { opacity: .12; }
+
+/* space-weather carousel ticks: eight fixed slots, the active one advances a
+ * light bar over the JS dwell time (--sw-dwell is set by wall-charts.mjs) */
+.sw-dots {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    flex: 0 0 auto;
+    height: 10px;
+    margin: 3px 0 1px;
+}
+.sw-dots i {
+    position: relative;
+    width: 18px;
+    height: 3px;
+    border-radius: 2px;
+    background: rgba(122, 168, 255, .18);
+    overflow: hidden;
+}
+.sw-dots i.off { opacity: .3; }
+.sw-dots i.on { background: var(--dot, var(--accent)); }
+.sw-dots i.on::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: rgba(255, 255, 255, .55);
+    transform-origin: left center;
+    animation: swDwell var(--sw-dwell, 8s) linear forwards;
+}
+@keyframes swDwell {
+    from { transform: scaleX(0); }
+    to { transform: scaleX(1); }
 }
 
 /* opponents: one tile per band with live spots */
