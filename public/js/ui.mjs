@@ -1,3 +1,5 @@
+import {formatClockDateTime} from '../shared/core/clock.mjs';
+
 export const $ = selector => document.querySelector(selector);
 export const $$ = selector => document.querySelectorAll(selector);
 
@@ -57,10 +59,8 @@ export function modeBadge(mode) {
     return `<span class="${className}">${escapeHtml(mode)}</span>`;
 }
 
-export function formatTime(timestamp) {
-    const date = new Date(timestamp);
-    return Number.isNaN(date.getTime()) ? String(timestamp || '') :
-        `${date.toISOString().replace('T', ' ').substring(0, 19)}Z`;
+export function formatTime(timestamp, options = {}) {
+    return formatClockDateTime(timestamp, options) || String(timestamp || '');
 }
 
 export function escapeHtml(value) {

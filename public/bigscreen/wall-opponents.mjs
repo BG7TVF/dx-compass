@@ -194,7 +194,7 @@ const WINDOW_MS = OPPONENT_WINDOW_MIN * 60 * 1000;
  * direction" would be a lie; the cell reports multi-directional instead. */
 const CONCENTRATION_MIN = 0.4;
 
-function finishBand(entry) {
+function finishBand(entry, concentrationMin) {
     const resultant = entry.dirs ? Math.hypot(entry.sin, entry.cos) / entry.dirs : 0;
     const dir = entry.dirs
         ? (Math.atan2(entry.sin, entry.cos) * 180 / Math.PI + 360) % 360
@@ -209,11 +209,13 @@ function finishBand(entry) {
         dirSamples: entry.dirs,
         /* One bearing is not a "main" direction; the cell shows it dimmed.
          * Two or more spread over the compass mean the band is multi-directional. */
-        spread: entry.dirs >= 2 && resultant < CONCENTRATION_MIN
+        spread: entry.dirs >= 2 && resultant < concentrationMin
     };
 }
 
-export function buildOpponents(rows, myCall, bearing, {now = Date.now(), windowMs = WINDOW_MS} = {}) {
+export function buildOpponents(rows, myCall, bearing, {
+    now = Date.now(), windowMs = WINDOW_MS, concentrationMin = CONCENTRATION_MIN
+} = {}) {
     const my = String(myCall || '').toUpperCase();
     const opponents = new Map();
     (Array.isArray(rows) ? rows : []).forEach(row => {
@@ -262,7 +264,7 @@ export function buildOpponents(rows, myCall, bearing, {now = Date.now(), windowM
         ts: opponent.ts,
         bands: [...opponent.bands.values()]
             .sort((a, b) => b.n - a.n || bandRank(a.band) - bandRank(b.band))
-            .map(finishBand)
+            .map(entry => finishBand(entry, concentrationMin))
     })).sort((a, b) => b.n - a.n || b.ts - a.ts || a.call.localeCompare(b.call));
     /* Colour and glyph in the same order the cards are painted, so the map can
      * rebuild the identical assignment from the same rows. */
@@ -326,32 +328,38 @@ export function bandCellHtml(band) {
         '</div>';
 }
 
-export function opponentCardHtml(opponent) {
+export function opponentCardHtml(opponent, bandsMax = 12) {
+    const limit = Number.isFinite(bandsMax) ? Math.max(1, Math.round(bandsMax)) : opponent.bands.length;
     return '<section class="opp-call-card" style="--call-color:' +
         (opponent.color || OPPONENT_COLORS[0]) + '">' +
         '<div class="oc-head"><i class="oc-shape">' +
         shapeSvg(opponent.shape, opponent.color, 13) + '</i>' +
         '<b>' + esc(opponent.call) + '</b><span>' +
         opponent.bands.length + ' 频段 · ' + opponent.n + ' SPOT</span></div>' +
-        '<div class="ob-bands">' + opponent.bands.map(bandCellHtml).join('') + '</div>' +
+        '<div class="ob-bands">' + opponent.bands.slice(0, limit).map(bandCellHtml).join('') + '</div>' +
         '</section>';
 }
 
-export function createOpponentRenderer({bearing}) {
+export function createOpponentRenderer({bearing, windowMin = 30, concentrationMin = 0.4,
+    compactMin = 5, bandsMax = 12} = {}) {
     let opponents = [];
+    let lastRows = [];
+    let lastCall = '';
+    const config = {windowMin, concentrationMin, compactMin, bandsMax};
+    const windowMs = () => Math.max(1, Number(config.windowMin) || 30) * 60000;
 
     function paint() {
         const box = $('#oppRows');
         if (!box) return;
         const summary = $('#oppSummary');
         if (!opponents.length) {
-            box.innerHTML = '<div class="opp-empty">最近 ' + OPPONENT_WINDOW_MIN +
+            box.innerHTML = '<div class="opp-empty">最近 ' + config.windowMin +
                 ' 分钟无对手 SPOT</div>';
             box.classList.remove('dense', 'dense-2', 'compact');
             if (summary) summary.textContent = '';
             return;
         }
-        box.innerHTML = opponents.map(opponentCardHtml).join('');
+        box.innerHTML = opponents.map(opponent => opponentCardHtml(opponent, config.bandsMax)).join('');
         const bands = new Set();
         opponents.forEach(opponent => opponent.bands.forEach(band => bands.add(band.band)));
         if (summary) summary.textContent = opponents.length + ' 对手 · ' + bands.size + ' 频段';
@@ -361,7 +369,7 @@ export function createOpponentRenderer({bearing}) {
         box.classList.remove('dense');
         box.classList.remove('dense-2');
         box.classList.remove('compact');
-        if (opponents.length >= 5) {
+        if (opponents.length >= config.compactMin) {
             box.classList.add('compact');
             return;
         }
@@ -372,9 +380,27 @@ export function createOpponentRenderer({bearing}) {
     }
 
     function render(rows, myCall) {
-        opponents = buildOpponents(rows, myCall, bearing);
+        lastRows = Array.isArray(rows) ? rows : [];
+        lastCall = myCall;
+        opponents = buildOpponents(lastRows, lastCall, bearing, {
+            windowMs: windowMs(),
+            concentrationMin: config.concentrationMin
+        });
         paint();
     }
 
-    return {render, trim: paint};
+    function setOptions(options = {}) {
+        const read = (key, fallback, min, max) => {
+            const value = Number(options[key]);
+            config[key] = Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback;
+        };
+        read('windowMin', 30, 5, 180);
+        read('concentrationMin', 0.4, 0, 1);
+        read('compactMin', 5, 2, 12);
+        read('bandsMax', 12, 3, 12);
+        if (lastRows.length) render(lastRows, lastCall);
+        else paint();
+    }
+
+    return {render, trim: paint, setOptions};
 }

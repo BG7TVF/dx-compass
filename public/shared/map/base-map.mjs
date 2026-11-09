@@ -160,6 +160,28 @@ export function fitWorld(map) {
     return zoom;
 }
 
+/** Same width-filling fit as fitWorld, but centred on an explicit latitude
+ *  window. The documented defaults (85/-85) delegate to fitWorld so the wall
+ *  keeps its existing framing byte-for-byte. */
+export function fitWorldRange(map, topLat = 85, bottomLat = -85) {
+    let north = Number(topLat);
+    let south = Number(bottomLat);
+    if (!Number.isFinite(north)) north = 85;
+    if (!Number.isFinite(south)) south = -85;
+    north = clamp(north, -85, 85);
+    south = clamp(south, -85, 85);
+    if (north < south) [north, south] = [south, north];
+    if (north === 85 && south === -85) return fitWorld(map);
+    map.setMinZoom(0);
+    const zoom = map.getBoundsZoom(WORLD_BOUNDS, true);
+    map.setMinZoom(zoom);
+    const span = viewSpan(map, zoom);
+    const half = Math.min(0.5, span / 2);
+    const center = clamp((mercY(north) + mercY(south)) / 2, half, 1 - half);
+    map.setView([mercLat(center), 0], zoom, {animate: false});
+    return zoom;
+}
+
 export function fitPoints(map, points, {L = globalThis.L, maxZoom = AUTO_FIT_MAX_ZOOM, pad = 0.08} = {}) {
     const valid = (points || []).filter(point => point &&
         Number.isFinite(Number(point[0])) && Number.isFinite(Number(point[1])));

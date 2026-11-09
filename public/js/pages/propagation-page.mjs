@@ -1052,7 +1052,11 @@ export function createPropagationPage(ctx) {
         }
     }
 
-    const poller = createPoller(loadSnapshot, {intervalMs: 60000, immediate: false});
+    const pollMs = () => {
+        const value = Number(ctx.settings && ctx.settings.propPollSec);
+        return Math.min(600, Math.max(30, Number.isFinite(value) ? value : 60)) * 1000;
+    };
+    const poller = createPoller(loadSnapshot, {intervalMs: pollMs, immediate: false});
 
     function refresh() {
         return poller.run();
@@ -1111,7 +1115,14 @@ export function createPropagationPage(ctx) {
             state.observer = new ResizeObserver(() => { if (state.view) resize(); });
             state.observer.observe(state.wrap);
         }
-        state.timer = setInterval(() => { if (state.view) draw(); }, 60000);
+        let lastDraw = 0;
+        state.timer = setInterval(() => {
+            if (!state.view) return;
+            const now = Date.now();
+            if (now - lastDraw < pollMs()) return;
+            lastDraw = now;
+            draw();
+        }, 1000);
         poller.start();
         void refresh();
     }

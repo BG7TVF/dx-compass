@@ -1,6 +1,6 @@
 import {getLeaflet} from '../../shared/map/leaflet.mjs';
 import {
-    AUTO_FIT_MAX_ZOOM, createBaseMap, fitPoints, fitWorld, setWorldMinZoom
+    createBaseMap, fitPoints, fitWorld
 } from '../../shared/map/base-map.mjs';
 import {createTerminator} from '../../shared/map/terminator.mjs';
 import {addTrackPaths} from '../../shared/map/layers.mjs';
@@ -10,7 +10,17 @@ import {bandColorOf, ttlForMode} from '../settings-model.mjs';
 import {$, $$, formatTime, showConfirm, timeAgo} from '../ui.mjs';
 
 const MAX_CELLS = 9;
-const HISTORY_LIMIT = 500;
+
+function readNumber(settings, key, fallback, min, max) {
+    const value = Number(settings && settings[key]);
+    if (!Number.isFinite(value)) return fallback;
+    return Math.min(max, Math.max(min, value));
+}
+
+function readBool(settings, key, fallback) {
+    const value = settings && settings[key];
+    return typeof value === 'boolean' ? value : fallback;
+}
 
 export function createSpotPage(ctx) {
     const L = getLeaflet();
@@ -28,6 +38,28 @@ export function createSpotPage(ctx) {
     const ttl = spot => ttlForMode(ctx.settings, spot.mode);
     const color = band => bandColorOf(ctx.settings, band);
     const visibleCells = () => state.cells.filter(cell => cell.el.style.display !== 'none');
+    const heatEnabled = () => readBool(ctx.settings, 'heatShow', true);
+    const heatOptions = () => ({
+        radius: readNumber(ctx.settings, 'heatRadius', 38, 10, 80),
+        blur: readNumber(ctx.settings, 'heatBlur', 28, 5, 60),
+        minOpacity: readNumber(ctx.settings, 'heatOpacity', 0.3, 0.05, 1),
+        maxZoom: readNumber(ctx.settings, 'autoFitMaxZoom', 7, 3, 10)
+    });
+    const markerSize = which => readNumber(ctx.settings,
+        which === 'monitored' ? 'monitoredSize' : 'spotterSize',
+        which === 'monitored' ? 14 : 12, 4, 24);
+    const gcEnabled = () => readBool(ctx.settings, 'gcShow', true);
+    const gcSamples = () => readNumber(ctx.settings, 'gcSamples', 64, 16, 128);
+    const markerLimit = () => readNumber(ctx.settings, 'markerMax', 500, 100, 2000);
+    const fitMaxZoom = () => readNumber(ctx.settings, 'autoFitMaxZoom', 7, 3, 10);
+    const fitPadding = () => readNumber(ctx.settings, 'fitPad', 0.08, 0, 0.3);
+    const historyLimit = () => readNumber(ctx.settings, 'historyLimit', 500, 100, 2000);
+    const terminatorOptions = () => ({
+        L,
+        shifts: [0],
+        intervalMs: readNumber(ctx.settings, 'terminatorSec', 60, 30, 600) * 1000,
+        visible: readBool(ctx.settings, 'terminatorShow', true)
+    });
     const rotationPages = () => Math.max(1, Math.ceil(
         state.callsigns.filter(Boolean).length / (visibleCells().length || 1)));
     const rotationNeeded = () => rotationPages() > 1;
@@ -90,10 +122,14 @@ export function createSpotPage(ctx) {
             points.push([spot.lat, spot.lon, weight * opacity]);
         }
         let layer = cell.heat[band];
+        if (!heatEnabled()) {
+            if (layer && cell.map.hasLayer(layer)) cell.map.removeLayer(layer);
+            return;
+        }
         if (!points.length && !layer) return;
         if (!layer) {
             layer = L.heatLayer([], {
-                radius: 38, blur: 28, minOpacity: 0.3, maxZoom: 7,
+                ...heatOptions(),
                 gradient: {0.2: '#2b4bff', 0.4: '#00e5ff', 0.6: '#2ecc71',
                     0.75: '#f1c40f', 0.9: '#e67e22', 1: '#e74c3c'}
             });
@@ -141,7 +177,7 @@ export function createSpotPage(ctx) {
                 points.push([spot.dx_lat, spot.dx_lon]);
             }
         }
-        fitPoints(cell.map, points, {L, maxZoom: AUTO_FIT_MAX_ZOOM});
+        fitPoints(cell.map, points, {L, maxZoom: fitMaxZoom(), pad: fitPadding()});
     }
 
     function scheduleFit(cell) {
@@ -217,26 +253,37 @@ export function createSpotPage(ctx) {
         if (ttlMs === undefined) ttlMs = fullTtl;
         if (ttlMs <= 0) return;
         const layers = [];
+        let monitoredMarker = null;
+        let spotterMarker = null;
+        let tracks = [];
         if (hasDx) {
-            const marker = L.marker([spot.dx_lat, spot.dx_lon], {icon: dotIcon('#2ecc71', 14)}).addTo(cell.map);
-            marker.bindPopup(`<b>${spot.monitored_call || spot.spot_call}</b> (monitored)<br>${spot.dx_lat.toFixed(4)}, ${spot.dx_lon.toFixed(4)}`);
-            layers.push(marker);
+            monitoredMarker = L.marker([spot.dx_lat, spot.dx_lon], {
+                icon: dotIcon('#2ecc71', markerSize('monitored'))
+            }).addTo(cell.map);
+            monitoredMarker.bindPopup(`<b>${spot.monitored_call || spot.spot_call}</b> (monitored)<br>${spot.dx_lat.toFixed(4)}, ${spot.dx_lon.toFixed(4)}`);
+            layers.push(monitoredMarker);
         }
         if (hasDe) {
             const signal = spot.signal ? `Signal: ${spot.signal}` :
                 spot.snr !== null && spot.snr !== undefined ? `SNR: ${spot.snr} dB` : '';
-            const marker = L.marker([spot.lat, spot.lon], {icon: dotIcon('#e74c3c', 12)}).addTo(cell.map);
-            marker.bindPopup(`<b>${spot.de}</b> (spotter)<br>Freq: ${spot.freq} kHz ${spot.band ? `(${spot.band})` : ''}<br>${signal}<br>Mode: ${spot.mode || '—'}<br>Distance: ${spot.distance_km} km (${spot.distance_miles} mi)<br>Time: ${formatTime(spot.timestamp)}<br><i>${spot.comment || ''}</i>`);
-            layers.push(marker);
+            spotterMarker = L.marker([spot.lat, spot.lon], {
+                icon: dotIcon('#e74c3c', markerSize('spotter'))
+            }).addTo(cell.map);
+            spotterMarker.bindPopup(`<b>${spot.de}</b> (spotter)<br>Freq: ${spot.freq} kHz ${spot.band ? `(${spot.band})` : ''}<br>${signal}<br>Mode: ${spot.mode || '—'}<br>Distance: ${spot.distance_km} km (${spot.distance_miles} mi)<br>Time: ${formatTime(spot.timestamp, ctx.settings)}<br><i>${spot.comment || ''}</i>`);
+            layers.push(spotterMarker);
         }
-        if (hasDe && hasDx) {
-            const paths = greatCirclePaths(spot.dx_lat, spot.dx_lon, spot.lat, spot.lon, 64);
-            layers.push(...addTrackPaths(cell.map, paths, {
+        if (hasDe && hasDx && gcEnabled()) {
+            const paths = greatCirclePaths(spot.dx_lat, spot.dx_lon, spot.lat, spot.lon, gcSamples());
+            tracks = addTrackPaths(cell.map, paths, {
                 L, color: color(spot.band), weight: 2, opacity: 0.85
-            }));
+            });
+            layers.push(...tracks);
         }
         const now = Date.now();
-        const group = {layers, _spot: spot, _addedAt: now, _dieAt: now + ttlMs};
+        const group = {
+            layers, tracks, monitoredMarker, spotterMarker,
+            _spot: spot, _addedAt: now, _dieAt: now + ttlMs
+        };
         group._bornAt = group._dieAt - fullTtl;
         group._ttl = setTimeout(() => removeMarker(cell, group), ttlMs);
         applyMarkerFade(group, now);
@@ -248,7 +295,7 @@ export function createSpotPage(ctx) {
         refreshActiveBand(cell);
         renderCellInfo(cell);
         scheduleFit(cell);
-        if (cell.markers.length > 500) {
+        if (cell.markers.length > markerLimit()) {
             const old = cell.markers.shift();
             clearTimeout(old._ttl);
             old.layers.forEach(layer => {
@@ -263,7 +310,7 @@ export function createSpotPage(ctx) {
         const call = cell.call;
         if (!call) return;
         try {
-            const rows = await fetchSpots({call, limit: HISTORY_LIMIT});
+            const rows = await fetchSpots({call, limit: historyLimit()});
             store.replay(rows);
             if (cell.call !== call || !state.monitoring) return;
             const now = Date.now();
@@ -372,7 +419,7 @@ export function createSpotPage(ctx) {
         element.dataset.index = index;
         element.innerHTML = `<div class="cell-header"><span class="call-label">—</span><span class="spot-count">0</span><button class="clear-cell-btn" title="Clear map">×</button></div><div class="cell-info"></div><div class="map"></div><div class="cell-empty-hint"><span class="hint-icon">📡</span>${ctx.t('cellHint')}</div>`;
         const base = createBaseMap(element.querySelector('.map'), {L, provider: ctx.settings.tiles});
-        const terminator = createTerminator(base.map, {L, shifts: [0]});
+        const terminator = createTerminator(base.map, terminatorOptions());
         const cell = {
             index, call: '', map: base.map, base, terminator, markers: [], count: 0,
             bandInfo: {}, heat: {}, activeBand: null, bandPinned: false, seen: new Set(),
@@ -459,6 +506,47 @@ export function createSpotPage(ctx) {
         }
     }
 
+    function syncTrackLayers(cell, group) {
+        const spot = group._spot;
+        const hasDe = spot.lat !== null && spot.lat !== undefined && spot.lon !== null && spot.lon !== undefined;
+        const hasDx = spot.dx_lat !== null && spot.dx_lat !== undefined &&
+            spot.dx_lon !== null && spot.dx_lon !== undefined;
+        const tracks = group.tracks || [];
+        if (!gcEnabled() || !hasDe || !hasDx) {
+            tracks.forEach(layer => {
+                if (cell.map.hasLayer(layer)) cell.map.removeLayer(layer);
+            });
+            group.layers = (group.layers || []).filter(layer => !tracks.includes(layer));
+            group.tracks = [];
+            return;
+        }
+        if (tracks.length) return;
+        const paths = greatCirclePaths(spot.dx_lat, spot.dx_lon, spot.lat, spot.lon, gcSamples());
+        group.tracks = addTrackPaths(cell.map, paths, {
+            L, color: color(spot.band), weight: 2, opacity: 0.85
+        });
+        group.layers.push(...group.tracks);
+        applyMarkerFade(group, Date.now());
+    }
+
+    function applyMapSettings() {
+        state.cells.forEach(cell => {
+            cell.terminator.setVisible(readBool(ctx.settings, 'terminatorShow', true));
+            cell.terminator.setIntervalMs(readNumber(ctx.settings, 'terminatorSec', 60, 30, 600) * 1000);
+            Object.values(cell.heat).forEach(layer => {
+                if (cell.map.hasLayer(layer)) cell.map.removeLayer(layer);
+            });
+            cell.heat = {};
+            cell.markers.forEach(group => {
+                if (group.monitoredMarker) group.monitoredMarker.setIcon(dotIcon('#2ecc71', markerSize('monitored')));
+                if (group.spotterMarker) group.spotterMarker.setIcon(dotIcon('#e74c3c', markerSize('spotter')));
+                syncTrackLayers(cell, group);
+            });
+            refreshActiveBand(cell);
+            if (cell.el.style.display !== 'none') fitCellView(cell);
+        });
+    }
+
     function refreshMaps() {
         visibleCells().forEach(cell => {
             cell.map.invalidateSize();
@@ -510,7 +598,7 @@ export function createSpotPage(ctx) {
     }
 
     return {
-        state, store, init, applyCallsigns, applyLang, applyBandColors, setConnState,
+        state, store, init, applyCallsigns, applyLang, applyBandColors, applyMapSettings, setConnState,
         setLayout, setMonitoring, updateMonitorBtn, handleSpot, replayHistory,
         setTileProvider, refreshMaps, fitCellView, visibleCells, clearCell,
         startRotation, stopRotation, rotateStep, restartRotationTimer, updateRotateUI,

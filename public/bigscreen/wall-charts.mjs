@@ -7,7 +7,7 @@ const COLORS = {qso: '#35d6a4', myspot: '#4cc9f0'};
 /* Space-weather carousel: one canvas cycles through the same series the
  * readout table shows. Dwell time is mirrored into CSS through --sw-dwell so
  * the progress tick under the header always matches the JS timer. */
-const SPACE_DWELL = 8000;
+let spaceDwell = 8000;
 const spaceColumn = (list, index) => (list || [])
     .map(row => row && row[index])
     .filter(value => value !== null && value !== undefined && isFinite(value))
@@ -154,7 +154,7 @@ function renderSpaceDots(active) {
         metric.key + (metric.values(spaceData).length >= 2 ? '1' : '0')).join('');
     if (key === spaceDotsKey) return;
     spaceDotsKey = key;
-    dots.style.setProperty('--sw-dwell', SPACE_DWELL + 'ms');
+    dots.style.setProperty('--sw-dwell', spaceDwell + 'ms');
     dots.innerHTML = SPACE_METRICS.map(metric => {
         const hasData = metric.values(spaceData).length >= 2;
         const className = metric.key === active.key ? ' class="on"' :
@@ -206,7 +206,25 @@ function startSpaceCarousel() {
         if (metrics.length < 2) return;
         spaceIndex = (spaceIndex + 1) % metrics.length;
         paintSpace(true);
-    }, SPACE_DWELL);
+    }, spaceDwell);
+}
+
+/** Change the carousel dwell; the running interval is restarted so a shorter
+ *  value takes effect immediately. Invalid values keep the current setting. */
+export function setSpaceDwell(ms) {
+    const value = Number(ms);
+    if (!Number.isFinite(value) || value <= 0) return;
+    const next = Math.min(30000, Math.max(3000, Math.round(value)));
+    if (next === spaceDwell) return;
+    spaceDwell = next;
+    spaceDotsKey = '';
+    if (spaceTimer) {
+        clearInterval(spaceTimer);
+        spaceTimer = null;
+        startSpaceCarousel();
+    }
+    const dots = $('#swDots');
+    if (dots) dots.style.setProperty('--sw-dwell', spaceDwell + 'ms');
 }
 
 export function renderSpaceTrend(data) {

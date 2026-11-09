@@ -1,5 +1,5 @@
 import {getLeaflet} from '../../shared/map/leaflet.mjs';
-import {AUTO_FIT_MAX_ZOOM, createBaseMap, fitPoints, fitWorld, setWorldMinZoom} from '../../shared/map/base-map.mjs';
+import {createBaseMap, fitPoints, fitWorld, setWorldMinZoom} from '../../shared/map/base-map.mjs';
 import {createTerminator} from '../../shared/map/terminator.mjs';
 import {addTrackPaths} from '../../shared/map/layers.mjs';
 import {greatCirclePaths} from '../../shared/geo/great-circle.mjs';
@@ -10,10 +10,7 @@ import {bandColorOf, bandLabel, dbRowToQso} from '../settings-model.mjs';
 import {formatDuration} from '../../shared/core/clock.mjs';
 import {$, $$, escapeHtml, timeAgo} from '../ui.mjs';
 
-const SPOT_ALERT_MS = 8000;
-const QSO_RATE_BUCKET_MS = 5 * 60000;
 const QSO_RATE_BUCKETS = 12;
-const QSO_MIN_BUCKETS = 30;
 const VOICE_LANGS = {
     zh: 'zh-CN', en: 'en-US', de: 'de-DE', fr: 'fr-FR', es: 'es-ES',
     pt: 'pt-PT', ru: 'ru-RU', it: 'it-IT', ar: 'ar-SA', ko: 'ko-KR', ja: 'ja-JP'
@@ -40,6 +37,32 @@ export function createQsoPage(ctx) {
     const lastSpotByCall = new Map();
     const home = () => gridToLatLon(ctx.settings.grid);
     const color = band => bandColorOf(ctx.settings, band);
+    const settingNumber = (key, fallback, min, max) => {
+        const value = Number(ctx.settings && ctx.settings[key]);
+        if (!Number.isFinite(value)) return fallback;
+        return Math.min(max, Math.max(min, value));
+    };
+    const rateBucketMin = () => settingNumber('rateBucketMin', 5, 1, 30);
+    const minBuckets = () => Math.round(settingNumber('minBuckets', 30, 6, 120));
+    const gcSamples = () => settingNumber('gcSamples', 64, 16, 128);
+    const fitMaxZoom = () => settingNumber('autoFitMaxZoom', 7, 3, 10);
+    const fitPadding = () => settingNumber('fitPad', 0.08, 0, 0.3);
+    const historyLimit = () => Math.round(settingNumber('qsoHistoryLimit', 500, 100, 2000));
+    const terminatorOptions = () => ({
+        L,
+        shifts: [0],
+        intervalMs: settingNumber('terminatorSec', 60, 30, 600) * 1000,
+        visible: ctx.settings.terminatorShow !== false
+    });
+
+    function alertAllowed(spot) {
+        const minSnr = settingNumber('alertSnrMin', -30, -30, 30);
+        const minDistance = settingNumber('alertDistanceKmMin', 0, 0, 20000);
+        if (minSnr > -30 && typeof spot.snr === 'number' && spot.snr < minSnr) return false;
+        const distance = Number(spot.distance_km);
+        if (minDistance > 0 && Number.isFinite(distance) && distance < minDistance) return false;
+        return true;
+    }
 
     function init() {
         const element = document.createElement('div');
@@ -47,7 +70,7 @@ export function createQsoPage(ctx) {
         $('#qsoView').appendChild(element);
         state.base = createBaseMap(element, {L, provider: ctx.settings.tiles});
         state.map = state.base.map;
-        state.terminator = createTerminator(state.map, {L, shifts: [0]});
+        state.terminator = createTerminator(state.map, terminatorOptions());
         fitWorld(state.map);
         rebuildHome();
     }
@@ -77,7 +100,7 @@ export function createQsoPage(ctx) {
             q.lon !== null && q.lon !== undefined).map(q => [q.lat, q.lon]);
         const point = home();
         if (point) points.push(point);
-        fitPoints(state.map, points, {L, maxZoom: AUTO_FIT_MAX_ZOOM});
+        fitPoints(state.map, points, {L, maxZoom: fitMaxZoom(), pad: fitPadding()});
     }
 
     function scheduleQsoFit() {
@@ -111,7 +134,7 @@ export function createQsoPage(ctx) {
         const hex = color(qso.band), layers = [], lines = [];
         const point = home();
         if (point && ctx.settings.qsoLines) {
-            const paths = greatCirclePaths(point[0], point[1], qso.lat, qso.lon, 64);
+            const paths = greatCirclePaths(point[0], point[1], qso.lat, qso.lon, gcSamples());
             const track = addTrackPaths(state.map, paths, {
                 L, color: hex, weight: 1.5, opacity: 0.55, interactive: false
             });
@@ -156,7 +179,7 @@ export function createQsoPage(ctx) {
         const layers = [], point = home();
         if (point) {
             layers.push(...addTrackPaths(state.map,
-                greatCirclePaths(point[0], point[1], lat, lon, 64),
+                greatCirclePaths(point[0], point[1], lat, lon, gcSamples()),
                 {L, color: '#e74c3c', weight: 2, opacity: 0.9, interactive: false}));
         }
         const marker = L.marker([lat, lon], {icon: ctx.spot.dotIcon('#e74c3c', 12)}).addTo(state.map);
@@ -265,12 +288,13 @@ export function createQsoPage(ctx) {
     }
 
     function renderQsoRate() {
-        const slot = Math.floor(Date.now() / QSO_RATE_BUCKET_MS);
+        const bucketMin = rateBucketMin(), bucketMs = bucketMin * 60000;
+        const slot = Math.floor(Date.now() / bucketMs);
         const counts = new Array(QSO_RATE_BUCKETS).fill(0);
         let total = 0;
         state.allTs.forEach(timestamp => {
             if (!Number.isFinite(timestamp)) return;
-            const index = QSO_RATE_BUCKETS - 1 - (slot - Math.floor(timestamp / QSO_RATE_BUCKET_MS));
+            const index = QSO_RATE_BUCKETS - 1 - (slot - Math.floor(timestamp / bucketMs));
             if (index >= 0 && index < QSO_RATE_BUCKETS) {
                 counts[index]++;
                 total++;
@@ -281,7 +305,7 @@ export function createQsoPage(ctx) {
         counts.forEach((count, index) => {
             const bar = document.createElement('div');
             bar.className = 'qso-rate-bar';
-            bar.title = `${(QSO_RATE_BUCKETS - 1 - index) * 5}–${(QSO_RATE_BUCKETS - index) * 5} min: ${count}`;
+            bar.title = `${(QSO_RATE_BUCKETS - 1 - index) * bucketMin}–${(QSO_RATE_BUCKETS - index) * bucketMin} min: ${count}`;
             const fill = document.createElement('div');
             fill.className = 'qso-rate-fill';
             fill.style.height = `${Math.max(count ? 6 : 1, count / max * 100)}%`;
@@ -293,12 +317,13 @@ export function createQsoPage(ctx) {
     }
 
     function renderQsoMinute() {
-        const slot = Math.floor(Date.now() / 60000), counts = new Array(QSO_MIN_BUCKETS).fill(0);
+        const buckets = minBuckets();
+        const slot = Math.floor(Date.now() / 60000), counts = new Array(buckets).fill(0);
         let total = 0;
         state.allTs.forEach(timestamp => {
             if (!Number.isFinite(timestamp)) return;
-            const index = QSO_MIN_BUCKETS - 1 - (slot - Math.floor(timestamp / 60000));
-            if (index >= 0 && index < QSO_MIN_BUCKETS) {
+            const index = buckets - 1 - (slot - Math.floor(timestamp / 60000));
+            if (index >= 0 && index < buckets) {
                 counts[index]++;
                 total++;
             }
@@ -308,7 +333,7 @@ export function createQsoPage(ctx) {
         counts.forEach((count, index) => {
             const bar = document.createElement('div');
             bar.className = 'qso-min-bar';
-            bar.title = `${QSO_MIN_BUCKETS - 1 - index} min: ${count}`;
+            bar.title = `${buckets - 1 - index} min: ${count}`;
             const fill = document.createElement('div');
             fill.className = 'qso-min-fill';
             fill.style.height = `${Math.max(count ? 6 : 1, count / max * 100)}%`;
@@ -316,7 +341,7 @@ export function createQsoPage(ctx) {
             bar.appendChild(fill);
             chart.appendChild(bar);
         });
-        $('#qMinSum').textContent = `${total} QSO · ${(total / QSO_MIN_BUCKETS).toFixed(1)}/min`;
+        $('#qMinSum').textContent = `${total} QSO · ${(total / buckets).toFixed(1)}/min`;
     }
 
     function renderDist(element, values, vertical) {
@@ -476,7 +501,7 @@ export function createQsoPage(ctx) {
             // Station state is optional while N1MM has not sent anything.
         }
         try {
-            const rows = await fetchQsos({limit: 500});
+            const rows = await fetchQsos({limit: historyLimit()});
             store.replay(rows);
             const qsos = store.all().map(dbRowToQso);
             for (const qso of qsos) {
@@ -507,8 +532,8 @@ export function createQsoPage(ctx) {
             speechSynthesis.cancel();
             const utterance = new SpeechSynthesisUtterance(text);
             utterance.lang = VOICE_LANGS[ctx.settings.lang] || 'en-US';
-            utterance.rate = 1.05;
-            utterance.volume = 1;
+            utterance.rate = settingNumber('voiceRate', 1.05, 0.6, 1.6);
+            utterance.volume = settingNumber('voiceVolume', 1, 0, 1);
             speechSynthesis.speak(utterance);
         } catch {
             // Speech is optional and can be disabled by the browser.
@@ -543,11 +568,12 @@ export function createQsoPage(ctx) {
         void box.offsetWidth;
         box.classList.add('alert-in');
         clearTimeout(alertTimer);
-        alertTimer = setTimeout(hideSpotAlert, SPOT_ALERT_MS);
+        alertTimer = setTimeout(hideSpotAlert, settingNumber('alertPopupMs', 8000, 2000, 30000));
     }
 
     function showSpotAlert(spot, call, own) {
         if (state.view !== 'qso') return;
+        if (!alertAllowed(spot)) return;
         if (own) {
             if (ctx.settings.mySpotVoice) speakAlert(String(ctx.t('voiceMySpot')));
             if (ctx.settings.mySpotPopup) fillAlert(spot, call, true);
@@ -556,10 +582,11 @@ export function createQsoPage(ctx) {
         if (!ctx.settings.qsoSpotAlert) return;
         fillAlert(spot, call, false);
         const previous = lastSpotByCall.get(call), frequency = Number(spot.freq);
+        const deltaKhz = settingNumber('freqDeltaKhz', 1, 0, 50);
         let phrase = ctx.t('voiceNewSpot');
         if (previous) {
             if (previous.band && spot.band && previous.band !== spot.band) phrase = ctx.t('voiceChangeBand');
-            else if (Number.isFinite(previous.freq) && Number.isFinite(frequency) && Math.abs(frequency - previous.freq) > 1) {
+            else if (Number.isFinite(previous.freq) && Number.isFinite(frequency) && Math.abs(frequency - previous.freq) > deltaKhz) {
                 phrase = ctx.t('voiceNewFreq');
                 lastSpotByCall.set(call, {band: spot.band, freq: frequency});
             }
@@ -606,6 +633,15 @@ export function createQsoPage(ctx) {
         }
     }
 
+    function applyDisplaySettings() {
+        state.terminator?.setVisible(ctx.settings.terminatorShow !== false);
+        state.terminator?.setIntervalMs(settingNumber('terminatorSec', 60, 30, 600) * 1000);
+        if (state.view === 'qso') {
+            rebuildQsoMap();
+            renderQsoPanel();
+        }
+    }
+
     function tick(now = Date.now()) {
         fadeMySpots(now);
         if (state.lastQso) {
@@ -618,7 +654,7 @@ export function createQsoPage(ctx) {
         state, store, init, loadStation, handleQso, handleQsoDelete, handleStationMessage,
         renderQsoPanel, renderLastQso, updateQsoAge, rebuildQsoMap, rebuildHome,
         fitQsoMap, refreshMap, setViewMode, setTileProvider: key => state.base.setTileProvider(key),
-        addMySpot, clearMySpots, applyMySpotLimits, showSpotAlert,
+        addMySpot, clearMySpots, applyMySpotLimits, showSpotAlert, applyDisplaySettings,
         hideSpotAlert, hideSpotAlertAndVoice, tick
     };
 }

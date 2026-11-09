@@ -46,7 +46,7 @@ export function createRecordsPage(ctx) {
             if (recorded) {
                 tr.innerHTML = `<td>${escapeHtml(row.date || '')}</td><td>${escapeHtml(row.time || '')}</td><td>${escapeHtml(row.call || '')}</td><td>${escapeHtml(row.de)}</td><td>${escapeHtml(row.band || '')}</td><td>${escapeHtml(row.freq || '')}</td><td>${modeBadge(row.mode)}</td><td>${escapeHtml(row.detail || '')}</td><td class="${snrClass(row)}">${row.snr ?? ''}</td><td>${row.distance_km || ''}</td><td title="${escapeHtml(row.comment || '')}">${escapeHtml(String(row.comment || '').substring(0, 30))}</td>`;
             } else {
-                tr.innerHTML = `<td>${formatTime(row.timestamp)}</td><td>${escapeHtml(row.monitored_call)}</td><td>${escapeHtml(row.de)}</td><td>${escapeHtml(row.freq || '')}</td><td>${modeBadge(row.mode)}</td><td class="${signalClass(row)}">${escapeHtml(row.signal || '')}</td><td class="${snrClass(row)}">${row.snr ?? ''}</td><td>${row.distance_km || ''}</td><td title="${escapeHtml(row.comment || '')}">${escapeHtml(String(row.comment || '').substring(0, 30))}</td>`;
+                tr.innerHTML = `<td>${formatTime(row.timestamp, ctx.settings)}</td><td>${escapeHtml(row.monitored_call)}</td><td>${escapeHtml(row.de)}</td><td>${escapeHtml(row.freq || '')}</td><td>${modeBadge(row.mode)}</td><td class="${signalClass(row)}">${escapeHtml(row.signal || '')}</td><td class="${snrClass(row)}">${row.snr ?? ''}</td><td>${row.distance_km || ''}</td><td title="${escapeHtml(row.comment || '')}">${escapeHtml(String(row.comment || '').substring(0, 30))}</td>`;
             }
             body.appendChild(tr);
         }
@@ -55,7 +55,9 @@ export function createRecordsPage(ctx) {
 
     async function refresh() {
         const current = ++sequence, recorded = state.view === 'rec';
-        $('#recordsHead').innerHTML = ctx.t(recorded ? 'headRec' : 'headAll').map(text => `<th>${text}</th>`).join('');
+        const head = [...ctx.t(recorded ? 'headRec' : 'headAll')];
+        if (!recorded && ctx.settings.timeZone === 'local' && head.length) head[0] = 'Time (Local)';
+        $('#recordsHead').innerHTML = head.map(text => `<th>${text}</th>`).join('');
         try {
             const rows = await rowsForCurrentView();
             if (current !== sequence) return;
@@ -204,7 +206,13 @@ export function createRecordsPage(ctx) {
     const poller = createPoller(async () => {
         await refreshRecordingStatus();
         if (state.status && state.status.active && state.view === 'rec') await refresh();
-    }, {intervalMs: 15000, immediate: false});
+    }, {
+        intervalMs: () => {
+            const value = Number(ctx.settings && ctx.settings.recordsRefreshSec);
+            return Math.min(300, Math.max(5, Number.isFinite(value) ? value : 15)) * 1000;
+        },
+        immediate: false
+    });
 
     function bind() {
         $('#btnRefreshRecords').addEventListener('click', refresh);

@@ -1,7 +1,9 @@
 import {
+    clockOptions,
+    clockWeekday,
     formatDuration,
-    formatUtcDate,
-    formatUtcTime,
+    formatClock,
+    formatClockDate,
     parseUtcDateTime
 } from '../shared/core/clock.mjs';
 import {WALL_BAND_COLORS} from './wall-opponents.mjs';
@@ -15,9 +17,10 @@ const esc = value => String(value === null || value === undefined ? '' : value)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 export function tickClock(settings, now = new Date()) {
-    $('#utcClock').textContent = formatUtcTime(now);
-    $('#utcDate').textContent = formatUtcDate(now) + ' · ' +
-        ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][now.getUTCDay()];
+    const options = clockOptions(settings);
+    $('#utcClock').textContent = formatClock(now, options);
+    $('#utcDate').textContent = formatClockDate(now, options) + ' · ' +
+        ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][clockWeekday(now, options)];
     renderTimer(settings, now);
 }
 

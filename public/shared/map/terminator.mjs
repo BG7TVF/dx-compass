@@ -70,6 +70,7 @@ export function createTerminator(map, {
     L = globalThis.L,
     now = () => new Date(),
     intervalMs = 60000,
+    visible = true,
     shifts = [-360, 0, 360],
     lineOptions = {},
     shadeOptions = {},
@@ -80,6 +81,7 @@ export function createTerminator(map, {
     let layers = [];
     let timer = null;
     let active = true;
+    let show = visible !== false;
 
     const remove = () => {
         layers.forEach(layer => {
@@ -89,7 +91,7 @@ export function createTerminator(map, {
         if (map._termLayers) map._termLayers = layers;
     };
     const update = () => {
-        if (!active) return null;
+        if (!active || !show) return null;
         remove();
         const geometry = computeTerminator(now());
         shifts.forEach(shift => {
@@ -121,15 +123,49 @@ export function createTerminator(map, {
         timer = null;
         if (map._termTimer) map._termTimer = null;
     };
+    const start = () => {
+        if (!active || !show || timer !== null) return;
+        timer = setIntervalImpl(update, intervalMs);
+        map._termTimer = timer;
+    };
     const destroy = () => {
         if (!active) return;
         active = false;
         stop();
         remove();
     };
+    const setVisible = next => {
+        const value = next !== false;
+        if (value === show) return;
+        show = value;
+        if (!active) return;
+        if (show) {
+            update();
+            start();
+        } else {
+            stop();
+            remove();
+        }
+    };
+    const setIntervalMs = next => {
+        const value = Number(next);
+        if (!Number.isFinite(value) || value <= 0) return;
+        intervalMs = value;
+        if (timer !== null) {
+            stop();
+            start();
+        }
+    };
 
     update();
-    timer = setIntervalImpl(update, intervalMs);
-    map._termTimer = timer;
-    return {update, stop, destroy, get layers() { return [...layers]; }};
+    start();
+    return {
+        update,
+        stop,
+        destroy,
+        setVisible,
+        setIntervalMs,
+        get visible() { return show; },
+        get layers() { return [...layers]; }
+    };
 }

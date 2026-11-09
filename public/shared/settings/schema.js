@@ -100,20 +100,20 @@
             desc: 'Map grid layout; deliberately browser-local so phones and wall keep their own.'
         }),
         field('timeZone', 'ui', 'enum', 'utc', {
-            values: TIME_ZONES, wired: false, label: 'Time zone', zh: '时区',
-            desc: 'Placeholder: UTC vs local rendering for clocks and tables.'
+            values: TIME_ZONES, label: 'Time zone', zh: '时区',
+            desc: 'UTC vs local rendering for clocks and tables.'
         }),
         field('hour12', 'ui', 'bool', false, {
-            wired: false, label: '12-hour clock', zh: '12 小时制',
-            desc: 'Placeholder: 12/24-hour display.'
+            label: '12-hour clock', zh: '12 小时制',
+            desc: '12/24-hour display.'
         }),
         field('showSeconds', 'ui', 'bool', true, {
-            wired: false, label: 'Show seconds', zh: '显示秒',
-            desc: 'Placeholder: seconds in clocks and record timestamps.'
+            label: 'Show seconds', zh: '显示秒',
+            desc: 'Seconds in clocks and record timestamps.'
         }),
         field('clockSec', 'ui', 'int', 1, {
-            min: 1, max: 60, wired: false, label: 'Clock refresh (s)', zh: '时钟刷新（秒）',
-            desc: 'Placeholder: UTC clock tick interval.'
+            min: 1, max: 60, label: 'Clock refresh (s)', zh: '时钟刷新（秒）',
+            desc: 'Clock tick interval.'
         }),
 
         // ---- map / Spot Map
@@ -131,60 +131,68 @@
             desc: 'DVR-style page rotation interval; stored in dxcompass-rot-sec, not in uiSettings.'
         }),
         field('autoFitMaxZoom', 'map', 'int', 7, {
-            min: 3, max: 10, wired: false, label: 'Auto-fit max zoom', zh: '自动适配最大层级',
-            desc: 'Placeholder: cap for per-cell marker auto-fit.'
+            min: 3, max: 10, label: 'Auto-fit max zoom', zh: '自动适配最大层级',
+            desc: 'Cap for per-cell marker auto-fit.'
         }),
         field('fitPad', 'map', 'number', 0.08, {
-            min: 0, max: 0.3, wired: false, label: 'Fit padding', zh: '适配内边距',
-            desc: 'Placeholder: bounds padding ratio for auto-fit.'
+            min: 0, max: 0.3, label: 'Fit padding', zh: '适配内边距',
+            desc: 'Bounds padding ratio for auto-fit.'
         }),
         field('terminatorShow', 'map', 'bool', true, {
-            wired: false, label: 'Day/night overlay', zh: '晨昏线',
-            desc: 'Placeholder: draw the gray line and night shading.'
+            label: 'Day/night overlay', zh: '晨昏线',
+            desc: 'Draw the gray line and night shading.'
         }),
         field('terminatorSec', 'map', 'int', 60, {
-            min: 30, max: 600, wired: false, label: 'Terminator refresh (s)', zh: '晨昏线刷新（秒）',
-            desc: 'Placeholder: terminator recompute interval.'
+            min: 30, max: 600, label: 'Terminator refresh (s)', zh: '晨昏线刷新（秒）',
+            desc: 'Terminator recompute interval.'
         }),
         field('heatShow', 'map', 'bool', true, {
-            wired: false, label: 'Heatmap', zh: '热力图',
-            desc: 'Placeholder: CW/DIGI heatmaps per band.'
+            label: 'Heatmap', zh: '热力图',
+            desc: 'CW/DIGI heatmaps per band.'
         }),
         field('heatRadius', 'map', 'int', 38, {
-            min: 10, max: 80, wired: false, label: 'Heat radius', zh: '热力半径',
-            desc: 'Placeholder: heat blob radius in pixels.'
+            min: 10, max: 80, label: 'Heat radius', zh: '热力半径',
+            desc: 'Heat blob radius in pixels.'
         }),
         field('heatBlur', 'map', 'int', 28, {
-            min: 5, max: 60, wired: false, label: 'Heat blur', zh: '热力模糊',
-            desc: 'Placeholder: heat blob blur in pixels.'
+            min: 5, max: 60, label: 'Heat blur', zh: '热力模糊',
+            desc: 'Heat blob blur in pixels.'
+        }),
+        field('heatOpacity', 'map', 'number', 0.3, {
+            min: 0.05, max: 1, label: 'Heat intensity', zh: '热力强度',
+            desc: 'Minimum heat opacity (minOpacity).'
         }),
         field('gcShow', 'map', 'bool', true, {
-            wired: false, label: 'Great-circle links', zh: '大圆连线',
-            desc: 'Placeholder: draw monitored -> spotter great-circle paths.'
+            label: 'Great-circle links', zh: '大圆连线',
+            desc: 'Draw monitored -> spotter great-circle paths.'
         }),
         field('gcSamples', 'map', 'int', 64, {
-            min: 16, max: 128, wired: false, label: 'Great-circle samples', zh: '大圆采样点',
-            desc: 'Placeholder: interpolation samples per path.'
+            min: 16, max: 128, label: 'Great-circle samples', zh: '大圆采样点',
+            desc: 'Interpolation samples per path.'
         }),
         field('spotterSize', 'map', 'int', 12, {
-            min: 4, max: 24, wired: false, label: 'Spotter dot size', zh: '监听站大小',
-            desc: 'Placeholder: red spotter marker diameter in pixels.'
+            min: 4, max: 24, label: 'Spotter dot size', zh: '监听站大小',
+            desc: 'Red spotter marker diameter in pixels.'
         }),
         field('monitoredSize', 'map', 'int', 14, {
-            min: 4, max: 24, wired: false, label: 'Monitored dot size', zh: '被监听站大小',
-            desc: 'Placeholder: green monitored marker diameter in pixels.'
+            min: 4, max: 24, label: 'Monitored dot size', zh: '被监听站大小',
+            desc: 'Green monitored marker diameter in pixels.'
         }),
         field('historyLimit', 'map', 'int', 500, {
-            min: 100, max: 2000, wired: false, label: 'History replay limit', zh: '历史回放条数',
-            desc: 'Placeholder: spots replayed after a browser refresh.'
+            min: 100, max: 2000, label: 'History replay limit', zh: '历史回放条数',
+            desc: 'Spots replayed after a browser refresh.'
+        }),
+        field('markerMax', 'map', 'int', 500, {
+            min: 100, max: 2000, label: 'Markers per cell', zh: '每格标记上限',
+            desc: 'Oldest marker in a cell is dropped beyond this count.'
         }),
         field('fadeSec', 'map', 'int', 10, {
-            min: 5, max: 60, wired: false, label: 'Fade tick (s)', zh: '淡出刷新（秒）',
-            desc: 'Placeholder: marker opacity recompute interval.'
+            min: 5, max: 60, label: 'Fade tick (s)', zh: '淡出刷新（秒）',
+            desc: 'Marker opacity recompute interval.'
         }),
         field('pruneSec', 'map', 'int', 30, {
-            min: 10, max: 300, wired: false, label: 'Prune tick (s)', zh: '剪枝刷新（秒）',
-            desc: 'Placeholder: expired marker cleanup interval.'
+            min: 10, max: 300, label: 'Prune tick (s)', zh: '剪枝刷新（秒）',
+            desc: 'Expired marker cleanup interval.'
         }),
 
         // ---- qso / QSO Map
@@ -223,40 +231,40 @@
             label: 'My spot voice', zh: '我的 SPOT 语音', desc: 'Voice alert for spots heard at my station.'
         }),
         field('rateBucketMin', 'qso', 'int', 5, {
-            min: 1, max: 30, wired: false, label: 'Rate bucket (min)', zh: '速率分桶（分钟）',
-            desc: 'Placeholder: bucket width for the QSO rate chart.'
+            min: 1, max: 30, label: 'Rate bucket (min)', zh: '速率分桶（分钟）',
+            desc: 'Bucket width for the QSO rate chart.'
         }),
         field('minBuckets', 'qso', 'int', 30, {
-            min: 6, max: 120, wired: false, label: 'Rate buckets', zh: '速率柱数量',
-            desc: 'Placeholder: number of wall-clock aligned buckets.'
+            min: 6, max: 120, label: 'Rate buckets', zh: '速率柱数量',
+            desc: 'Number of wall-clock aligned buckets.'
         }),
         field('qsoHistoryLimit', 'qso', 'int', 500, {
-            min: 100, max: 2000, wired: false, label: 'QSO history limit', zh: 'QSO 历史条数',
-            desc: 'Placeholder: QSO rows fetched on load.'
+            min: 100, max: 2000, label: 'QSO history limit', zh: 'QSO 历史条数',
+            desc: 'QSO rows fetched on load.'
         }),
         field('freqDeltaKhz', 'qso', 'number', 1, {
-            min: 0, max: 50, wired: false, label: 'Frequency alert delta (kHz)', zh: '换频播报阈值（kHz）',
-            desc: 'Placeholder: minimum frequency change before announcing.'
+            min: 0, max: 50, label: 'Frequency alert delta (kHz)', zh: '换频播报阈值（kHz）',
+            desc: 'Minimum frequency change before announcing.'
         }),
         field('alertPopupMs', 'qso', 'int', 8000, {
-            min: 2000, max: 30000, wired: false, label: 'Alert popup duration (ms)', zh: '弹窗时长（毫秒）',
-            desc: 'Placeholder: visible time of the spot alert card.'
+            min: 2000, max: 30000, label: 'Alert popup duration (ms)', zh: '弹窗时长（毫秒）',
+            desc: 'Visible time of the spot alert card.'
         }),
         field('alertSnrMin', 'qso', 'int', -30, {
-            min: -30, max: 30, wired: false, label: 'Alert min SNR (-30 = off)', zh: '告警 SNR 门槛（-30 关）',
-            desc: 'Placeholder: only alert when spot SNR is at least this value.'
+            min: -30, max: 30, label: 'Alert min SNR (-30 = off)', zh: '告警 SNR 门槛（-30 关）',
+            desc: 'Only alert when spot SNR is at least this value.'
         }),
         field('alertDistanceKmMin', 'qso', 'int', 0, {
-            min: 0, max: 20000, wired: false, label: 'Alert min distance (km, 0 = off)', zh: '告警距离门槛（km，0 关）',
-            desc: 'Placeholder: only alert when the path is longer than this.'
+            min: 0, max: 20000, label: 'Alert min distance (km, 0 = off)', zh: '告警距离门槛（km，0 关）',
+            desc: 'Only alert when the path is longer than this.'
         }),
         field('voiceRate', 'qso', 'number', 1.05, {
-            min: 0.6, max: 1.6, wired: false, label: 'Voice rate', zh: '语速',
-            desc: 'Placeholder: SpeechSynthesisUtterance.rate.'
+            min: 0.6, max: 1.6, label: 'Voice rate', zh: '语速',
+            desc: 'SpeechSynthesisUtterance.rate.'
         }),
         field('voiceVolume', 'qso', 'number', 1, {
-            min: 0, max: 1, wired: false, label: 'Voice volume', zh: '音量',
-            desc: 'Placeholder: SpeechSynthesisUtterance.volume.'
+            min: 0, max: 1, label: 'Voice volume', zh: '音量',
+            desc: 'SpeechSynthesisUtterance.volume.'
         }),
         field('quietFrom', 'qso', 'time', '', {
             pattern: /^([01]\d|2[0-3]):[0-5]\d$/, allowEmpty: true, wired: false,
@@ -293,36 +301,56 @@
             label: 'Countdown end (UTC)', zh: '倒计时结束（UTC）', desc: 'UTC end of the contest window.'
         }),
         field('cycleSec', 'wall', 'int', 10, {
-            min: 3, max: 60, wired: false, label: 'Layer dwell (s)', zh: '图层停留（秒）',
-            desc: 'Placeholder: per-layer dwell in cycle mode.'
+            min: 3, max: 60, label: 'Layer dwell (s)', zh: '图层停留（秒）',
+            desc: 'Per-layer dwell in cycle mode.'
         }),
         field('spaceDwellSec', 'wall', 'int', 8, {
-            min: 3, max: 30, wired: false, label: 'Space weather dwell (s)', zh: '空间天气停留（秒）',
-            desc: 'Placeholder: dwell of the space-weather card rotation.'
+            min: 3, max: 30, label: 'Space weather dwell (s)', zh: '空间天气停留（秒）',
+            desc: 'Dwell of the space-weather card rotation.'
         }),
         field('syncSec', 'wall', 'int', 60, {
-            min: 10, max: 300, wired: false, label: 'Wall config sync (s)', zh: '大屏配置同步（秒）',
-            desc: 'Placeholder: how often the wall pulls /api/settings.'
+            min: 10, max: 300, label: 'Wall config sync (s)', zh: '大屏配置同步（秒）',
+            desc: 'How often the wall pulls /api/settings.'
+        }),
+        field('wallSpotSec', 'wall', 'int', 30, {
+            min: 5, max: 300, label: 'Wall spot poll (s)', zh: '大屏 SPOT 轮询（秒）',
+            desc: 'How often the wall reloads the spot feed.'
+        }),
+        field('wallQsoSec', 'wall', 'int', 30, {
+            min: 5, max: 300, label: 'Wall QSO poll (s)', zh: '大屏 QSO 轮询（秒）',
+            desc: 'How often the wall reloads QSO rows.'
+        }),
+        field('wallStationSec', 'wall', 'int', 15, {
+            min: 5, max: 120, label: 'Wall station poll (s)', zh: '大屏电台轮询（秒）',
+            desc: 'How often the wall reloads the station snapshot.'
         }),
         field('topLat', 'wall', 'int', 85, {
-            min: 0, max: 90, wired: false, label: 'Map north latitude', zh: '地图北纬',
-            desc: 'Placeholder: northern clip of the wall world fit.'
+            min: 0, max: 90, label: 'Map north latitude', zh: '地图北纬',
+            desc: 'Northern clip of the wall world fit.'
         }),
         field('bottomLat', 'wall', 'int', -85, {
-            min: -90, max: 0, wired: false, label: 'Map south latitude', zh: '地图南纬',
-            desc: 'Placeholder: southern clip of the wall world fit.'
+            min: -90, max: 0, label: 'Map south latitude', zh: '地图南纬',
+            desc: 'Southern clip of the wall world fit.'
         }),
         field('opponentWindowMin', 'wall', 'int', 30, {
-            min: 5, max: 180, wired: false, label: 'Opponent window (min)', zh: '对手窗口（分钟）',
-            desc: 'Placeholder: spot window used by the opponent card.'
+            min: 5, max: 180, label: 'Opponent window (min)', zh: '对手窗口（分钟）',
+            desc: 'Spot window used by the opponent card.'
         }),
         field('opponentCount', 'wall', 'int', 6, {
             min: 3, max: 12, wired: false, label: 'Opponent rows', zh: '对手行数',
             desc: 'Placeholder: number of opponent rows on the wall.'
         }),
+        field('opponentCompactMin', 'wall', 'int', 5, {
+            min: 2, max: 12, label: 'Compact threshold', zh: '紧凑模式阈值（对手数）',
+            desc: 'Switch opponent cards to the compact grid at this count.'
+        }),
+        field('opponentBandsMax', 'wall', 'int', 12, {
+            min: 3, max: 12, label: 'Bands per card', zh: '每卡频段上限',
+            desc: 'Maximum band cells rendered inside one opponent card.'
+        }),
         field('concentrationMin', 'wall', 'number', 0.4, {
-            min: 0, max: 1, wired: false, label: 'Direction concentration', zh: '方向集中度',
-            desc: 'Placeholder: minimum share for the dominant direction label.'
+            min: 0, max: 1, label: 'Direction concentration', zh: '方向集中度',
+            desc: 'Minimum share for the dominant direction label.'
         }),
 
         // ---- data / Data & Alerts
@@ -378,12 +406,12 @@
             desc: 'Enable the hourly retention job.'
         }),
         field('recordsRefreshSec', 'data', 'int', 15, {
-            min: 5, max: 300, wired: false, label: 'Records refresh (s)', zh: '记录刷新（秒）',
-            desc: 'Placeholder: records panel refresh interval.'
+            min: 5, max: 300, label: 'Records refresh (s)', zh: '记录刷新（秒）',
+            desc: 'Records panel refresh interval.'
         }),
         field('propPollSec', 'data', 'int', 60, {
-            min: 30, max: 600, wired: false, label: 'Propagation refresh (s)', zh: '传播页刷新（秒）',
-            desc: 'Placeholder: propagation page polling interval.'
+            min: 30, max: 600, label: 'Propagation refresh (s)', zh: '传播页刷新（秒）',
+            desc: 'Propagation page polling interval.'
         }),
         field('maxCallsigns', 'data', 'int', 9, {
             min: 1, max: 27, scope: 'server', wired: true,

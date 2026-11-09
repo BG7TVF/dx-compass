@@ -1,5 +1,6 @@
 /**
- * Non-reentrant async poller. Input: an async callback and interval in ms.
+ * Non-reentrant async poller. Input: an async callback and a fixed interval or
+ * a function returning the interval in ms (re-read before every schedule).
  * Output: {start, stop, run, running, pending}; runs share one in-flight promise
  * and the next automatic run is scheduled only after the previous one settles.
  */
@@ -11,11 +12,18 @@ export function createPoller(callback, {
     clearTimeoutImpl = globalThis.clearTimeout
 } = {}) {
     if (typeof callback !== 'function') throw new TypeError('callback must be a function');
-    if (!Number.isFinite(intervalMs) || intervalMs <= 0) throw new RangeError('intervalMs must be positive');
+    if (typeof intervalMs !== 'function' && (!Number.isFinite(intervalMs) || intervalMs <= 0)) {
+        throw new RangeError('intervalMs must be positive');
+    }
     let active = false;
     let timer = null;
     let inFlight = null;
 
+    const readInterval = () => {
+        const raw = typeof intervalMs === 'function' ? intervalMs() : intervalMs;
+        const value = Number(raw);
+        return Number.isFinite(value) && value > 0 ? value : 30000;
+    };
     const clear = () => {
         if (timer !== null) clearTimeoutImpl(timer);
         timer = null;
@@ -25,7 +33,7 @@ export function createPoller(callback, {
         timer = setTimeoutImpl(() => {
             timer = null;
             void run();
-        }, intervalMs);
+        }, readInterval());
     };
     const run = () => {
         if (inFlight) return inFlight;

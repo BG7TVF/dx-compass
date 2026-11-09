@@ -16,6 +16,16 @@ const FIELD_CONTAINERS = {
     wall: '#wallAdvanced', data: '#dataFields', prop: '#propFields'
 };
 
+/* Keys with a hand-written control in index.html; generated schema fields
+ * skip them to avoid duplicate inputs. */
+const LEGACY_FIELD_KEYS = new Set([
+    'lang', 'theme', 'tiles', 'myCall', 'grid', 'layout', 'rotationSec',
+    'category', 'qsoMax', 'qsoLines', 'qsoAutoFit', 'qsoSpotAlert', 'qsoVoiceAlert',
+    'mySpotTtl', 'mySpotMax', 'mySpotPopup', 'mySpotVoice',
+    'wallTitle', 'wallLayers', 'wallMode', 'wallTimerOn', 'wallTimerStart', 'wallTimerEnd',
+    'ttl', 'bandColors'
+]);
+
 const DOMAIN_LABELS = {
     ui: ['全局', 'Global'], map: ['SPOT 地图', 'Spot Map'], qso: ['QSO 地图', 'QSO Map'],
     wall: ['大屏', 'Wall'], data: ['数据与告警', 'Data & Alerts'], prop: ['传播', 'Propagation']
@@ -98,9 +108,32 @@ export function createSettingsPage(ctx) {
         return pushNow();
     }
 
+    const CLOCK_SETTING_KEYS = new Set(['timeZone', 'hour12', 'showSeconds', 'clockSec']);
+    const MAP_SETTING_KEYS = new Set([
+        'autoFitMaxZoom', 'fitPad', 'terminatorShow', 'terminatorSec',
+        'heatShow', 'heatRadius', 'heatBlur', 'heatOpacity', 'gcShow', 'gcSamples',
+        'spotterSize', 'monitoredSize', 'historyLimit', 'markerMax'
+    ]);
+    const QSO_SETTING_KEYS = new Set([
+        'autoFitMaxZoom', 'fitPad', 'terminatorShow', 'terminatorSec', 'gcSamples'
+    ]);
+    const LIVE_SETTING_KEYS = new Set([
+        ...CLOCK_SETTING_KEYS, ...MAP_SETTING_KEYS, ...QSO_SETTING_KEYS
+    ]);
+
+    /** Push only the affected display groups into the live pages. */
+    function applyLiveSettings(keys = LIVE_SETTING_KEYS) {
+        const changed = [...keys];
+        if (changed.some(key => CLOCK_SETTING_KEYS.has(key))) ctx.refreshClock?.();
+        if (changed.some(key => MAP_SETTING_KEYS.has(key))) ctx.spot?.applyMapSettings?.();
+        if (changed.some(key => QSO_SETTING_KEYS.has(key))) ctx.qso?.applyDisplaySettings?.();
+    }
+
     function save(patch) {
         localStorage.setItem('dxcompass-settings', JSON.stringify(ctx.settings));
         if (applyingRemote) return;
+        const changed = patch && typeof patch === 'object' ? Object.keys(patch) : [...LIVE_SETTING_KEYS];
+        applyLiveSettings(changed);
         const delta = patch && typeof patch === 'object' ? patch : diffAgainstSynced();
         if (!Object.keys(delta).length) return;
         pendingPatch = mergeSettings(pendingPatch || {}, delta);
@@ -200,7 +233,7 @@ export function createSettingsPage(ctx) {
             const wrap = $(selector);
             if (!wrap) continue;
             wrap.innerHTML = SETTINGS_FIELDS
-                .filter(field => field.domain === domain && !field.wired)
+                .filter(field => field.domain === domain && !LEGACY_FIELD_KEYS.has(field.key))
                 .map(fieldHtml).join('');
         }
         bindGeneratedFields();
@@ -477,6 +510,8 @@ export function createSettingsPage(ctx) {
             propDxLat: ctx.settings.propDxLat, propDxLon: ctx.settings.propDxLon,
             colors: JSON.stringify(ctx.settings.bandColors)
         };
+        const displayBefore = {};
+        LIVE_SETTING_KEYS.forEach(key => { displayBefore[key] = JSON.stringify(ctx.settings[key]); });
         applyingRemote = true;
         try {
             const merged = sanitizeSettings(raw, {languages: ctx.i18n.languages});
@@ -527,6 +562,9 @@ export function createSettingsPage(ctx) {
                 ctx.qso.applyMySpotLimits();
             }
             ctx.prop.applySettings();
+            const changedDisplay = [...LIVE_SETTING_KEYS]
+                .filter(key => displayBefore[key] !== JSON.stringify(ctx.settings[key]));
+            applyLiveSettings(changedDisplay);
             if (ctx.settings.grid !== previous.grid ||
                 ctx.settings.propDxLat !== previous.propDxLat || ctx.settings.propDxLon !== previous.propDxLon) {
                 void ctx.prop.refresh();

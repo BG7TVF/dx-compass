@@ -5,7 +5,7 @@ import {gridToLatLon} from '../shared/geo/maidenhead.mjs';
 import {
     addOfflineLand,
     createBaseMap,
-    fitWorld,
+    fitWorldRange,
     LAND_BOUNDS,
     mercLat,
     mercY,
@@ -25,14 +25,23 @@ import {
 } from '../shared/propagation/forecast-view.mjs';
 
 const COLORS = {qso: '#35d6a4', myspot: '#4cc9f0', dxspot: '#ff6b6b'};
-const TOP_LAT = 85;
-const BOTTOM_LAT = -85;
+const DEFAULT_TOP_LAT = 85;
+const DEFAULT_BOTTOM_LAT = -85;
+let viewTopLat = DEFAULT_TOP_LAT;
+let viewBottomLat = DEFAULT_BOTTOM_LAT;
 
 /* Rows follow the Leaflet Mercator projection so the MUF field lines up with
  * the Mercator-rendered land instead of stretching towards the poles. */
 function rowLat(row, rows) {
-    const top = mercY(TOP_LAT), bottom = mercY(BOTTOM_LAT);
+    const top = mercY(viewTopLat), bottom = mercY(viewBottomLat);
     return mercLat(top + (row + 0.5) / rows * (bottom - top));
+}
+
+/* The overlay bounds mirror the configured latitude window; the default
+ * window reproduces LAND_BOUNDS exactly. */
+function rangeBounds() {
+    if (viewTopLat === DEFAULT_TOP_LAT && viewBottomLat === DEFAULT_BOTTOM_LAT) return LAND_BOUNDS;
+    return [[viewBottomLat, -180], [viewTopLat, 180]];
 }
 
 function fieldSize(map) {
@@ -118,7 +127,7 @@ export function createWallMap() {
      * reaches the pole and a LAND_BOUNDS overlay would leave a strip of bare
      * container background above 85 deg. */
     addOfflineLand(map, {L, bounds: WORLD_BOUNDS, pane: 'raster', zIndex: 250});
-    fitWorld(map);
+    fitWorldRange(map, viewTopLat, viewBottomLat);
 
     const views = {};
     ['aurora', 'weather', 'qso', 'myspot', 'dxspot'].forEach(key => {
@@ -128,6 +137,7 @@ export function createWallMap() {
     const visible = {};
     let mufOverlay = null;
     let nightOverlay = null;
+    let lastMufGrid = null;
 
     function setVisible(key, on) {
         visible[key] = Boolean(on);
@@ -141,14 +151,16 @@ export function createWallMap() {
 
     function renderProp(mufGrid) {
         if (!mufGrid || !Array.isArray(mufGrid.values)) return;
+        lastMufGrid = mufGrid;
         const when = new Date();
         const size = fieldSize(map);
-        const nextMuf = L.imageOverlay(mufImage(mufGrid, size), LAND_BOUNDS, {
+        const bounds = rangeBounds();
+        const nextMuf = L.imageOverlay(mufImage(mufGrid, size), bounds, {
             opacity: MUF_LAYER_ALPHA,
             interactive: false,
             pane: 'raster'
         });
-        const nextNight = L.imageOverlay(nightImage(when, size), LAND_BOUNDS, {
+        const nextNight = L.imageOverlay(nightImage(when, size), bounds, {
             opacity: 1,
             interactive: false,
             pane: 'raster'
@@ -160,13 +172,14 @@ export function createWallMap() {
         setLayerVisible(map, nightOverlay, visible.prop);
     }
 
-    function drawSpots(rows, myCall) {
+    function drawSpots(rows, myCall, {windowMin = 30} = {}) {
         const my = String(myCall || '').toUpperCase();
-        const cutoff = Date.now() - 30 * 60 * 1000;
+        const windowMs = Math.min(180, Math.max(5, Number(windowMin) || 30)) * 60000;
+        const cutoff = Date.now() - windowMs;
         /* Same call -> colour + glyph assignment as the opponent panel, so a
          * rival's markers and its card always match. Calls the panel cannot
          * aggregate (no band) keep the neutral DX red dot. */
-        const styles = opponentStyleMap(rows, my);
+        const styles = opponentStyleMap(rows, my, {windowMs});
         const painted = new Set();
         views.myspot.clearLayers();
         views.dxspot.clearLayers();
@@ -286,17 +299,34 @@ export function createWallMap() {
         });
     }
 
+    function fit() {
+        map.invalidateSize();
+        fitWorldRange(map, viewTopLat, viewBottomLat);
+    }
+
+    function setRange(topLat, bottomLat) {
+        let top = Number(topLat);
+        let bottom = Number(bottomLat);
+        if (!Number.isFinite(top)) top = DEFAULT_TOP_LAT;
+        if (!Number.isFinite(bottom)) bottom = DEFAULT_BOTTOM_LAT;
+        top = Math.min(DEFAULT_TOP_LAT, Math.max(0, top));
+        bottom = Math.min(0, Math.max(DEFAULT_BOTTOM_LAT, bottom));
+        if (top === viewTopLat && bottom === viewBottomLat) return;
+        viewTopLat = top;
+        viewBottomLat = bottom;
+        fit();
+        if (lastMufGrid) renderProp(lastMufGrid);
+    }
+
     return {
         setVisible,
+        setRange,
         renderProp,
         drawSpots,
         drawQso,
         drawAurora,
         drawWeather,
-        fit() {
-            map.invalidateSize();
-            fitWorld(map);
-        },
+        fit,
         invalidate() {
             map.invalidateSize();
         },

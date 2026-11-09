@@ -9,7 +9,8 @@ import {
     renderQsoTrend,
     renderRateTrend,
     renderSpaceTrend,
-    renderSpotTrend
+    renderSpotTrend,
+    setSpaceDwell
 } from './wall-charts.mjs';
 import {createOpponentRenderer, opponentColorGradient} from './wall-opponents.mjs';
 import {
@@ -55,6 +56,14 @@ export async function startWallPage() {
             {lat: lat2, lon: lon2}
         )
     });
+    const secSetting = (key, fallback, min, max) => {
+        const value = Number(state.settings && state.settings[key]);
+        return (Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback) * 1000;
+    };
+    const numSetting = (key, fallback, min, max) => {
+        const value = Number(state.settings && state.settings[key]);
+        return Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback;
+    };
 
     function renderLegend(shown) {
         const parts = [];
@@ -89,6 +98,14 @@ export async function startWallPage() {
         const layers = Array.isArray(settings.wallLayers) ? settings.wallLayers : [];
         const selected = LAYER_ORDER.filter(key => layers.includes(key));
         state.selected = selected.length ? selected : ['prop'];
+        wallMap.setRange(numSetting('topLat', 85, 0, 90), numSetting('bottomLat', -85, -90, 0));
+        opponents.setOptions({
+            windowMin: numSetting('opponentWindowMin', 30, 5, 180),
+            concentrationMin: numSetting('concentrationMin', 0.4, 0, 1),
+            compactMin: numSetting('opponentCompactMin', 5, 2, 12),
+            bandsMax: numSetting('opponentBandsMax', 12, 3, 12)
+        });
+        setSpaceDwell(secSetting('spaceDwellSec', 8, 3, 30));
 
         if (state.cycleTimer) {
             clearInterval(state.cycleTimer);
@@ -109,7 +126,7 @@ export async function startWallPage() {
             state.cycleTimer = setInterval(() => {
                 index = (index + 1) % state.selected.length;
                 show();
-            }, 10000);
+            }, secSetting('cycleSec', 10, 3, 60));
         } else {
             state.selected.forEach(key => wallMap.setVisible(key, true));
             $('#layerTag').textContent = 'ALL LAYERS · ' + state.selected.length;
@@ -128,6 +145,14 @@ export async function startWallPage() {
             state.settings.wallTitle,
             state.settings.wallLayers,
             state.settings.wallMode,
+            state.settings.cycleSec,
+            state.settings.spaceDwellSec,
+            state.settings.topLat,
+            state.settings.bottomLat,
+            state.settings.opponentWindowMin,
+            state.settings.concentrationMin,
+            state.settings.opponentCompactMin,
+            state.settings.opponentBandsMax,
             state.settings.myCall,
             state.settings.grid
         ]);
@@ -160,7 +185,9 @@ export async function startWallPage() {
         } catch (error) {
             /* Keep the previous spots. */
         }
-        wallMap.drawSpots(state.spotRows, state.settings.myCall);
+        wallMap.drawSpots(state.spotRows, state.settings.myCall, {
+            windowMin: numSetting('opponentWindowMin', 30, 5, 180)
+        });
         renderSpotTrend(state.spotRows);
         opponents.render(state.spotRows, state.settings.myCall);
     }
@@ -187,11 +214,11 @@ export async function startWallPage() {
     }
 
     const pollers = [
-        createPoller(refreshProp, {intervalMs: 60000, immediate: false}),
-        createPoller(refreshSpots, {intervalMs: 30000, immediate: false}),
-        createPoller(refreshQso, {intervalMs: 30000, immediate: false}),
-        createPoller(refreshStation, {intervalMs: 15000, immediate: false}),
-        createPoller(refreshSettings, {intervalMs: 60000, immediate: false})
+        createPoller(refreshProp, {intervalMs: () => secSetting('propPollSec', 60, 30, 600), immediate: false}),
+        createPoller(refreshSpots, {intervalMs: () => secSetting('wallSpotSec', 30, 5, 300), immediate: false}),
+        createPoller(refreshQso, {intervalMs: () => secSetting('wallQsoSec', 30, 5, 300), immediate: false}),
+        createPoller(refreshStation, {intervalMs: () => secSetting('wallStationSec', 15, 5, 120), immediate: false}),
+        createPoller(refreshSettings, {intervalMs: () => secSetting('syncSec', 60, 10, 300), immediate: false})
     ];
     const [propPoller, spotPoller, qsoPoller, stationPoller, settingsPoller] = pollers;
 

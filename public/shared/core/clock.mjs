@@ -1,9 +1,78 @@
 /**
- * UTC-only clock helpers. Input: Date, epoch milliseconds or ISO-like strings.
- * Output: epoch milliseconds, UTC labels and stable hour keys; invalid dates yield NaN/''.
+ * Clock helpers. UTC-only helpers stay for the wire format; the settings-aware
+ * formatters below honour timeZone/hour12/showSeconds and fall back to UTC.
+ * Input: Date, epoch milliseconds or ISO-like strings.
+ * Output: epoch milliseconds, labels and stable hour keys; invalid dates yield NaN/''.
  */
 export function toDate(value = new Date()) {
     return value instanceof Date ? value : new Date(value);
+}
+
+export const DEFAULT_CLOCK_OPTIONS = Object.freeze({timeZone: 'utc', hour12: false, seconds: true});
+
+/** Normalise a settings object (or partial options) into clock display options. */
+export function clockOptions(source = {}) {
+    const settings = source || {};
+    return {
+        timeZone: settings.timeZone === 'local' ? 'local' : 'utc',
+        hour12: Boolean(settings.hour12),
+        seconds: settings.showSeconds !== false && settings.seconds !== false
+    };
+}
+
+function pad2(value) {
+    return String(value).padStart(2, '0');
+}
+
+function displayParts(date, options) {
+    const local = (options && options.timeZone) === 'local';
+    return {
+        year: local ? date.getFullYear() : date.getUTCFullYear(),
+        month: (local ? date.getMonth() : date.getUTCMonth()) + 1,
+        day: local ? date.getDate() : date.getUTCDate(),
+        hour: local ? date.getHours() : date.getUTCHours(),
+        minute: local ? date.getMinutes() : date.getUTCMinutes(),
+        second: local ? date.getSeconds() : date.getUTCSeconds(),
+        weekday: local ? date.getDay() : date.getUTCDay()
+    };
+}
+
+/** HH:MM[:SS] in UTC or local time, with an optional AM/PM suffix. */
+export function formatClock(value = new Date(), options = {}) {
+    const date = toDate(value);
+    if (Number.isNaN(date.getTime())) return '';
+    const resolved = Object.assign({}, DEFAULT_CLOCK_OPTIONS, options);
+    const parts = displayParts(date, resolved);
+    let hour = parts.hour;
+    let suffix = '';
+    if (resolved.hour12) {
+        suffix = hour < 12 ? ' AM' : ' PM';
+        hour = hour % 12 || 12;
+    }
+    const hh = pad2(hour);
+    return `${hh}:${pad2(parts.minute)}${resolved.seconds !== false ? `:${pad2(parts.second)}` : ''}${suffix}`;
+}
+
+/** YYYY-MM-DD in UTC or local time. */
+export function formatClockDate(value = new Date(), options = {}) {
+    const date = toDate(value);
+    if (Number.isNaN(date.getTime())) return '';
+    const parts = displayParts(date, Object.assign({}, DEFAULT_CLOCK_OPTIONS, options));
+    return `${parts.year}-${pad2(parts.month)}-${pad2(parts.day)}`;
+}
+
+/** Date + clock; UTC keeps the trailing Z so wire timestamps stay unambiguous. */
+export function formatClockDateTime(value = new Date(), options = {}) {
+    const resolved = Object.assign({}, DEFAULT_CLOCK_OPTIONS, options);
+    const date = formatClockDate(value, resolved);
+    if (!date) return '';
+    return `${date} ${formatClock(value, resolved)}${resolved.timeZone === 'local' ? '' : 'Z'}`;
+}
+
+export function clockWeekday(value = new Date(), options = {}) {
+    const date = toDate(value);
+    if (Number.isNaN(date.getTime())) return -1;
+    return displayParts(date, Object.assign({}, DEFAULT_CLOCK_OPTIONS, options)).weekday;
 }
 
 export function toEpochMs(value) {

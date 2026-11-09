@@ -1,5 +1,5 @@
 import {createI18n} from '../shared/core/i18n.mjs';
-import {formatUtcTime} from '../shared/core/clock.mjs';
+import {formatClock, clockOptions} from '../shared/core/clock.mjs';
 import {subscribeWS} from '../shared/core/transport.mjs';
 import {createMonitoringClient} from '../shared/monitoring/client.mjs';
 import {loadLocalSettings} from './settings-model.mjs';
@@ -64,16 +64,41 @@ async function start() {
         }
     });
 
-    setInterval(() => {
-        $('#utcClock').textContent = `UTC: ${formatUtcTime(new Date())}`;
-        if (ctx.qso.state.view === 'qso') ctx.qso.updateQsoAge();
-    }, 1000);
+    function refreshClock() {
+        const options = clockOptions(ctx.settings);
+        const label = options.timeZone === 'local' ? 'LOCAL' : 'UTC';
+        $('#utcClock').textContent = `${label}: ${formatClock(new Date(), options)}`;
+    }
+    ctx.refreshClock = refreshClock;
+
+    let lastClock = 0;
+    let lastTick = 0;
+    let lastPrune = 0;
+    const clampSec = (value, fallback, min, max) => {
+        const number = Number(value);
+        return Number.isFinite(number) ? Math.min(max, Math.max(min, number)) : fallback;
+    };
+
     setInterval(() => {
         const now = Date.now();
-        ctx.spot.tick(now);
-        ctx.qso.tick(now);
-    }, 10000);
-    setInterval(() => ctx.spot.prune(), 30000);
+        if (now - lastClock >= clampSec(ctx.settings.clockSec, 1, 1, 60) * 1000) {
+            lastClock = now;
+            refreshClock();
+        }
+        if (ctx.qso.state.view === 'qso') ctx.qso.updateQsoAge();
+    }, 250);
+    setInterval(() => {
+        const now = Date.now();
+        if (now - lastTick >= clampSec(ctx.settings.fadeSec, 10, 5, 60) * 1000) {
+            lastTick = now;
+            ctx.spot.tick(now);
+            ctx.qso.tick(now);
+        }
+        if (now - lastPrune >= clampSec(ctx.settings.pruneSec, 30, 10, 300) * 1000) {
+            lastPrune = now;
+            ctx.spot.prune(now);
+        }
+    }, 1000);
     window.addEventListener('resize', () => {
         if (ctx.qso.state.view === 'spots') ctx.spot.refreshMaps();
         else if (ctx.qso.state.view === 'qso') ctx.qso.refreshMap();
