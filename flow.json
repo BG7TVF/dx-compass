@@ -2373,7 +2373,7 @@
         "type": "function",
         "z": "dxc0000000000001",
         "name": "Settings: save",
-        "func": "const dx = global.get('dx');\nconst result = dx.settings.save(global, msg.payload);\nif (result.statusCode) msg.statusCode = result.statusCode;\nmsg.payload = result.payload;\nreturn [msg, result.broadcast ? {payload: result.broadcast} : null];",
+        "func": "const dx = global.get('dx');\nconst result = dx.settings.save(global, msg.payload);\nif (result.warnings && result.warnings.length) node.warn('settings fallback: ' + result.warnings.join(' | '));\nif (result.statusCode) msg.statusCode = result.statusCode;\nmsg.payload = result.payload;\nreturn [msg, result.broadcast ? {payload: result.broadcast} : null];",
         "outputs": 2,
         "timeout": "",
         "noerr": 0,
@@ -2401,6 +2401,63 @@
         "x": 600,
         "y": 1130,
         "wires": []
+    },
+    {
+        "id": "dxc00000000000f6",
+        "type": "http in",
+        "z": "dxc0000000000001",
+        "name": "POST /api/settings/reset",
+        "url": "/api/settings/reset",
+        "method": "post",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 160,
+        "y": 1220,
+        "wires": [
+            [
+                "dxc00000000000f7"
+            ]
+        ]
+    },
+    {
+        "id": "dxc00000000000f7",
+        "type": "function",
+        "z": "dxc0000000000001",
+        "name": "Settings: reset domain",
+        "func": "const dx = global.get('dx');\nconst body = msg.payload && typeof msg.payload === 'object' ? msg.payload : {};\nconst result = dx.settings.resetDomain(global, body.domain, body);\nif (result.statusCode) msg.statusCode = result.statusCode;\nmsg.payload = result.payload;\nreturn [msg, result.broadcast ? {payload: result.broadcast} : null];",
+        "outputs": 2,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 400,
+        "y": 1220,
+        "wires": [
+            [
+                "dxc00000000000f5"
+            ],
+            [
+                "dxc000000000000e"
+            ]
+        ]
+    },
+    {
+        "id": "dxc00000000000f8",
+        "type": "http in",
+        "z": "dxc0000000000001",
+        "name": "POST /api/settings/patch",
+        "url": "/api/settings/patch",
+        "method": "post",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 170,
+        "y": 1300,
+        "wires": [
+            [
+                "dxc00000000000f4"
+            ]
+        ]
     },
     {
         "id": "dxc0000000000100",

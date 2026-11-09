@@ -35,9 +35,23 @@ test('main settings sanitizer applies defaults and one-time Mercator migration',
     assert.deepEqual(fallback, defaultSettings());
     const migrated = sanitizeSettings({cfgV: 1, propProj: 'mercator'});
     assert.equal(migrated.propProj, 'robinson');
-    assert.equal(migrated.cfgV, 2);
+    assert.equal(migrated.cfgV, 3);
     const explicit = sanitizeSettings({cfgV: 2, propProj: 'mercator'});
     assert.equal(explicit.propProj, 'mercator');
+});
+
+test('schema placeholders keep defaults out of the shared blob', () => {
+    const result = sanitizeSettings({
+        rotationSec: 42, monitoring: true, terminatorSec: 5, voiceRate: 9
+    });
+    // external keys never enter the settings object
+    assert.equal(result.rotationSec, undefined);
+    assert.equal(result.monitoring, undefined);
+    // out-of-range placeholder falls back to its schema default
+    assert.equal(result.terminatorSec, 60);
+    assert.equal(result.voiceRate, 1.05);
+    // one shared key still drives the whole default object
+    assert.equal(Object.keys(defaultSettings()).length, Object.keys(result).length);
 });
 
 test('main QSO display adapters preserve band and N1MM fields', () => {

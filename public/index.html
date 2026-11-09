@@ -249,6 +249,8 @@
                         <button type="button" class="cfg-tab" data-pane="spot" id="tabSpot">Spot Map</button>
                         <button type="button" class="cfg-tab" data-pane="qso" id="tabQso">QSO Map</button>
                         <button type="button" class="cfg-tab" data-pane="wall" id="tabWall">Wall</button>
+                        <button type="button" class="cfg-tab" data-pane="data" id="tabData">Data</button>
+                        <button type="button" class="cfg-tab" data-pane="prop" id="tabProp">Propagation</button>
                     </div>
 
                     <!-- Global settings -->
@@ -272,6 +274,25 @@
                         <div class="form-row">
                             <label id="gridLabel" for="setGrid">My grid (Maidenhead)</label>
                             <input type="text" id="setGrid" class="set-input" maxlength="6" placeholder="e.g. OM89vx" style="text-transform:uppercase">
+                        </div>
+                        <div class="form-section">
+                            <div class="section-title" id="globalAdvancedTitle">Advanced</div>
+                            <div class="set-grid" id="globalAdvanced"></div>
+                        </div>
+                        <div class="form-section">
+                            <div class="section-title" id="backupTitle">Backup</div>
+                            <div class="btn-row">
+                                <button type="button" class="mini-btn" id="btnExportSettings">Export JSON</button>
+                                <button type="button" class="mini-btn" id="btnImportSettings">Import JSON</button>
+                                <input type="file" id="importSettingsFile" accept=".json,application/json" class="hidden">
+                            </div>
+                            <p class="hint" id="backupHint">Export writes every shared setting; import validates first and rolls back on failure.</p>
+                        </div>
+                        <div class="form-row reset-row">
+                            <label id="globalResetLabel">Reset Global settings</label>
+                            <div class="btn-row">
+                                <button type="button" class="mini-btn danger-btn" data-reset-domain="ui" id="btnResetGlobal">Reset group</button>
+                            </div>
                         </div>
                         <div class="form-row reset-row">
                             <label id="resetAllLabel">Reset everything</label>
@@ -309,6 +330,14 @@
                                 <label id="bandTitle">Band colors</label>
                                 <div class="band-colors" id="bandColors"></div>
                             </div>
+                        </div>
+                        <div class="form-section">
+                            <div class="section-title" id="spotAdvancedTitle">Display</div>
+                            <div class="set-grid" id="spotAdvanced"></div>
+                        </div>
+                        <div class="form-row reset-row">
+                            <label id="spotResetLabel">Reset Spot Map settings</label>
+                            <button type="button" class="mini-btn danger-btn" data-reset-domain="map" id="btnResetSpot">Reset group</button>
                         </div>
                     </div>
 
@@ -376,6 +405,14 @@
                                 <input type="password" id="setQrzPass" class="set-input" maxlength="64" autocomplete="new-password">
                             </div>
                         </div>
+                        <div class="form-section">
+                            <div class="section-title" id="qsoAdvancedTitle">Display &amp; alerts</div>
+                            <div class="set-grid" id="qsoAdvanced"></div>
+                        </div>
+                        <div class="form-row reset-row">
+                            <label id="qsoResetLabel">Reset QSO Map settings</label>
+                            <button type="button" class="mini-btn danger-btn" data-reset-domain="qso" id="btnResetQso">Reset group</button>
+                        </div>
                     </div>
                     <!-- Wall display settings (bigscreen page on port 5859) -->
                     <div class="cfg-pane" id="paneWall">
@@ -435,6 +472,40 @@
                                 <label id="wallDxSpotLabel" for="setWallDxSpot">Opponent spots</label>
                                 <input type="checkbox" id="setWallDxSpot" class="set-check">
                             </div>
+                        </div>
+                        <div class="form-section">
+                            <div class="section-title" id="wallAdvancedTitle">Advanced</div>
+                            <div class="set-grid" id="wallAdvanced"></div>
+                        </div>
+                        <div class="form-row reset-row">
+                            <label id="wallResetLabel">Reset Wall settings</label>
+                            <button type="button" class="mini-btn danger-btn" data-reset-domain="wall" id="btnResetWall">Reset group</button>
+                        </div>
+                    </div>
+
+                    <!-- Data / server settings -->
+                    <div class="cfg-pane" id="paneData">
+                        <div class="form-section">
+                            <div class="section-title" id="dataTitle">Data &amp; Alerts</div>
+                            <p class="hint" id="dataHint">Server-side ingest, retention and diagnostics. Restart-marked items apply after a Node-RED restart.</p>
+                            <div class="set-grid" id="dataFields"></div>
+                        </div>
+                        <div class="form-row reset-row">
+                            <label id="dataResetLabel">Reset Data settings</label>
+                            <button type="button" class="mini-btn danger-btn" data-reset-domain="data" id="btnResetData">Reset group</button>
+                        </div>
+                    </div>
+
+                    <!-- Propagation settings -->
+                    <div class="cfg-pane" id="paneProp">
+                        <div class="form-section">
+                            <div class="section-title" id="propTitle">Propagation</div>
+                            <p class="hint" id="propSettingsHint">Projection, layer and the DX target live on the propagation toolbar; the values below tune collection and thresholds.</p>
+                            <div class="set-grid" id="propFields"></div>
+                        </div>
+                        <div class="form-row reset-row">
+                            <label id="propResetLabel">Reset Propagation settings</label>
+                            <button type="button" class="mini-btn danger-btn" data-reset-domain="prop" id="btnResetProp">Reset group</button>
                         </div>
                     </div>
 

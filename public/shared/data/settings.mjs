@@ -1,7 +1,8 @@
 /**
- * Settings repository for /api/settings. Input: existing shared settings DTO.
- * Output: the inner settings object on load and the unchanged server response on save.
- * Browser-local layout is excluded from writes unless explicitly requested.
+ * Settings repository for /api/settings.
+ * - Full writes stay compatible with older clients (plain settings object).
+ * - Partial writes send {__patch} so one field change never wipes another domain.
+ * - Browser-local layout is excluded from writes unless explicitly requested.
  */
 import {getJson, postJson} from '../core/transport.mjs';
 
@@ -23,6 +24,25 @@ export async function saveSettings(settings, {
     const body = {...settings};
     if (!includeLayout) delete body.layout;
     return transport.postJson('/api/settings', body, options);
+}
+
+/** Send only the changed keys; the server merges them into the stored settings. */
+export async function saveSettingsPatch(patch, {
+    transport = defaultTransport,
+    includeLayout = false,
+    ...options
+} = {}) {
+    if (!patch || typeof patch !== 'object' || Array.isArray(patch)) {
+        throw new TypeError('settings patch must be an object');
+    }
+    const body = {...patch};
+    if (!includeLayout) delete body.layout;
+    return transport.postJson('/api/settings/patch', {__patch: body}, options);
+}
+
+/** Reset one domain (ui/map/qso/wall/data/prop) or all of them. */
+export async function resetSettingsDomain(domain, {transport = defaultTransport, ...options} = {}) {
+    return transport.postJson('/api/settings/reset', {domain}, options);
 }
 
 /** Return a settings broadcast unchanged, or null for another WS message type. */

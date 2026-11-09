@@ -1,0 +1,764 @@
+/**
+ * DX-Compass settings schema — the single source of truth for defaults,
+ * types, ranges, scopes and migration. Consumed by both the browser
+ * (side-effect import -> globalThis.DXSettingsSchema) and Node (require()).
+ *
+ * Field contract:
+ *   key        persisted key (flat, identical to the legacy wire format)
+ *   domain     ui | map | qso | wall | data | prop
+ *   type       enum | bool | int | number | string | color | datetime | time
+ *              | intMap | colorMap | enumArray
+ *   default    default value used on every fallback
+ *   values     allowed values (enum / enumArray)
+ *   min/max    inclusive numeric range (int / number)
+ *   pattern    RegExp for string / datetime / time
+ *   maxLen     maximum string length
+ *   upper      uppercase strings before validation
+ *   allowEmpty empty string is valid
+ *   scope      client | server | both | local
+ *   storage    shared (localStorage + uiSettings) | local (localStorage only)
+ *   restart    true when a change needs a Node-RED restart
+ *   wired      true when business code already reads the key; false = placeholder
+ *   exportable / importable  backup behaviour
+ */
+(function (root, factory) {
+    'use strict';
+    const api = factory();
+    if (typeof module === 'object' && module.exports) module.exports = api;
+    if (root && typeof root === 'object') root.DXSettingsSchema = api;
+})(typeof globalThis !== 'undefined' ? globalThis : this, function () {
+    'use strict';
+
+    const SCHEMA_VERSION = 3;
+
+    const UI_LANGUAGES = ['zh', 'en', 'de', 'fr', 'es', 'pt', 'ru', 'it', 'ar', 'ko', 'ja'];
+    const THEMES = ['dark', 'light', 'ocean', 'amber'];
+    const TILE_PROVIDERS = ['osm', 'amap'];
+    const CONTEST_CATEGORIES = ['SO1R', 'SO2R', 'MS', 'MM'];
+    const WALL_LAYERS = ['prop', 'aurora', 'weather', 'qso', 'myspot', 'dxspot'];
+    const WALL_MODES = ['all', 'cycle'];
+    const PROP_PROJECTIONS = ['mercator', 'azimuthal', 'robinson'];
+    const PROP_LAYERS = ['muf', 'weather', 'aurora'];
+    const LAYOUTS = ['1x1', '2x2', '3x3'];
+    const LOG_LEVELS = ['error', 'warn', 'info', 'debug'];
+    const RECORDING_REPEATS = ['once', 'daily', 'weekly'];
+    const TIME_ZONES = ['utc', 'local'];
+
+    const DEFAULT_TTL_MIN = {CW: 30, SSB: 30, DIGI: 30};
+    const DEFAULT_BAND_COLORS = {
+        '160m': '#b565d8', '80m': '#e67e22', '60m': '#fd79a8', '40m': '#f1c40f',
+        '30m': '#1abc9c', '20m': '#00e5ff', '17m': '#3498db', '15m': '#9b59b6',
+        '12m': '#e84393', '10m': '#e17055', '6m': '#dfe6e9', '2m': '#55efc4'
+    };
+    const BAND_METERS = [160, 80, 60, 40, 30, 20, 17, 15, 12, 10, 6, 4, 2];
+    const BAND_COLOR_KEYS = Object.keys(DEFAULT_BAND_COLORS);
+
+    const DOMAINS = [
+        {key: 'ui', pane: 'global', title: 'Global', titleZh: '全局', desc: 'Language, theme, identity and clock display.'},
+        {key: 'map', pane: 'spot', title: 'Spot Map', titleZh: 'SPOT 地图', desc: 'Spot map lifetime, layers and marker density.'},
+        {key: 'qso', pane: 'qso', title: 'QSO Map', titleZh: 'QSO 地图', desc: 'QSO map display and alert thresholds.'},
+        {key: 'wall', pane: 'wall', title: 'Wall', titleZh: '大屏', desc: 'Read-only wall overlay and rotation.'},
+        {key: 'data', pane: 'data', title: 'Data & Alerts', titleZh: '数据与告警', desc: 'Upstream polling, retention and diagnostics.'},
+        {key: 'prop', pane: 'prop', title: 'Propagation', titleZh: '传播', desc: 'Propagation collection and condition thresholds.'}
+    ];
+
+    function field(key, domain, type, def, opts) {
+        return Object.assign({
+            key, domain, type, default: def,
+            scope: 'client', storage: 'shared', wired: true, restart: false,
+            exportable: true, importable: true, allowEmpty: false,
+            label: key, zh: key, desc: ''
+        }, opts || {});
+    }
+
+    // ---------------------------------------------------------------- fields
+    const FIELDS = [
+        // ---- ui / Global
+        field('lang', 'ui', 'enum', 'zh', {
+            values: UI_LANGUAGES, label: 'Language', zh: '界面语言',
+            desc: 'UI language; the i18n dictionary is the only consumer.'
+        }),
+        field('theme', 'ui', 'enum', 'dark', {
+            values: THEMES, label: 'Theme', zh: '主题', desc: 'Colour theme applied to body[data-theme].'
+        }),
+        field('tiles', 'ui', 'enum', 'osm', {
+            values: TILE_PROVIDERS, label: 'Base map', zh: '底图',
+            desc: 'Raster tile provider; amap is reachable from mainland China.'
+        }),
+        field('myCall', 'ui', 'string', '', {
+            pattern: /^[A-Z0-9/]{3,12}$/, upper: true, allowEmpty: true, maxLen: 12,
+            scope: 'both', label: 'My callsign', zh: '我的呼号',
+            desc: 'Used by the server to tag "my" spots and to auto-adjust monitored calls.'
+        }),
+        field('grid', 'ui', 'string', '', {
+            pattern: /^[A-R]{2}[0-9]{2}([A-X]{2})?$/i, upper: true, allowEmpty: true, maxLen: 6,
+            scope: 'both', label: 'My grid', zh: '我的网格',
+            desc: 'Maidenhead locator (4 or 6 chars); home position on QSO map and propagation DE.'
+        }),
+        field('layout', 'ui', 'enum', '1x1', {
+            values: LAYOUTS, storage: 'local', label: 'Layout', zh: '布局',
+            desc: 'Map grid layout; deliberately browser-local so phones and wall keep their own.'
+        }),
+        field('timeZone', 'ui', 'enum', 'utc', {
+            values: TIME_ZONES, wired: false, label: 'Time zone', zh: '时区',
+            desc: 'Placeholder: UTC vs local rendering for clocks and tables.'
+        }),
+        field('hour12', 'ui', 'bool', false, {
+            wired: false, label: '12-hour clock', zh: '12 小时制',
+            desc: 'Placeholder: 12/24-hour display.'
+        }),
+        field('showSeconds', 'ui', 'bool', true, {
+            wired: false, label: 'Show seconds', zh: '显示秒',
+            desc: 'Placeholder: seconds in clocks and record timestamps.'
+        }),
+        field('clockSec', 'ui', 'int', 1, {
+            min: 1, max: 60, wired: false, label: 'Clock refresh (s)', zh: '时钟刷新（秒）',
+            desc: 'Placeholder: UTC clock tick interval.'
+        }),
+
+        // ---- map / Spot Map
+        field('ttl', 'map', 'intMap', DEFAULT_TTL_MIN, {
+            keys: ['CW', 'SSB', 'DIGI'], min: 1, max: 180,
+            label: 'Marker lifetime (min)', zh: '标记存活（分钟）',
+            desc: 'Per-mode lifetime for markers, link lines and band chips.'
+        }),
+        field('bandColors', 'map', 'colorMap', DEFAULT_BAND_COLORS, {
+            keys: BAND_COLOR_KEYS, label: 'Band colours', zh: '频段配色',
+            desc: 'Per-band colour used by markers, links and band chips.'
+        }),
+        field('rotationSec', 'map', 'int', 15, {
+            min: 3, max: 600, storage: 'external', label: 'Rotation interval (s)', zh: '轮播间隔（秒）',
+            desc: 'DVR-style page rotation interval; stored in dxcompass-rot-sec, not in uiSettings.'
+        }),
+        field('autoFitMaxZoom', 'map', 'int', 7, {
+            min: 3, max: 10, wired: false, label: 'Auto-fit max zoom', zh: '自动适配最大层级',
+            desc: 'Placeholder: cap for per-cell marker auto-fit.'
+        }),
+        field('fitPad', 'map', 'number', 0.08, {
+            min: 0, max: 0.3, wired: false, label: 'Fit padding', zh: '适配内边距',
+            desc: 'Placeholder: bounds padding ratio for auto-fit.'
+        }),
+        field('terminatorShow', 'map', 'bool', true, {
+            wired: false, label: 'Day/night overlay', zh: '晨昏线',
+            desc: 'Placeholder: draw the gray line and night shading.'
+        }),
+        field('terminatorSec', 'map', 'int', 60, {
+            min: 30, max: 600, wired: false, label: 'Terminator refresh (s)', zh: '晨昏线刷新（秒）',
+            desc: 'Placeholder: terminator recompute interval.'
+        }),
+        field('heatShow', 'map', 'bool', true, {
+            wired: false, label: 'Heatmap', zh: '热力图',
+            desc: 'Placeholder: CW/DIGI heatmaps per band.'
+        }),
+        field('heatRadius', 'map', 'int', 38, {
+            min: 10, max: 80, wired: false, label: 'Heat radius', zh: '热力半径',
+            desc: 'Placeholder: heat blob radius in pixels.'
+        }),
+        field('heatBlur', 'map', 'int', 28, {
+            min: 5, max: 60, wired: false, label: 'Heat blur', zh: '热力模糊',
+            desc: 'Placeholder: heat blob blur in pixels.'
+        }),
+        field('gcShow', 'map', 'bool', true, {
+            wired: false, label: 'Great-circle links', zh: '大圆连线',
+            desc: 'Placeholder: draw monitored -> spotter great-circle paths.'
+        }),
+        field('gcSamples', 'map', 'int', 64, {
+            min: 16, max: 128, wired: false, label: 'Great-circle samples', zh: '大圆采样点',
+            desc: 'Placeholder: interpolation samples per path.'
+        }),
+        field('spotterSize', 'map', 'int', 12, {
+            min: 4, max: 24, wired: false, label: 'Spotter dot size', zh: '监听站大小',
+            desc: 'Placeholder: red spotter marker diameter in pixels.'
+        }),
+        field('monitoredSize', 'map', 'int', 14, {
+            min: 4, max: 24, wired: false, label: 'Monitored dot size', zh: '被监听站大小',
+            desc: 'Placeholder: green monitored marker diameter in pixels.'
+        }),
+        field('historyLimit', 'map', 'int', 500, {
+            min: 100, max: 2000, wired: false, label: 'History replay limit', zh: '历史回放条数',
+            desc: 'Placeholder: spots replayed after a browser refresh.'
+        }),
+        field('fadeSec', 'map', 'int', 10, {
+            min: 5, max: 60, wired: false, label: 'Fade tick (s)', zh: '淡出刷新（秒）',
+            desc: 'Placeholder: marker opacity recompute interval.'
+        }),
+        field('pruneSec', 'map', 'int', 30, {
+            min: 10, max: 300, wired: false, label: 'Prune tick (s)', zh: '剪枝刷新（秒）',
+            desc: 'Placeholder: expired marker cleanup interval.'
+        }),
+
+        // ---- qso / QSO Map
+        field('category', 'qso', 'enum', 'SO1R', {
+            values: CONTEST_CATEGORIES, label: 'Contest category', zh: '比赛类别',
+            desc: 'Decides whether multi-radio station cards are shown.'
+        }),
+        field('qsoMax', 'qso', 'int', 1500, {
+            min: 200, max: 4000, label: 'QSO markers limit', zh: 'QSO 标记上限',
+            desc: 'Oldest QSO markers are dropped beyond this count.'
+        }),
+        field('qsoLines', 'qso', 'bool', true, {
+            label: 'Home -> QSO lines', zh: '本台→QSO 连线', desc: 'Draw great-circle lines from home to each QSO.'
+        }),
+        field('qsoAutoFit', 'qso', 'bool', true, {
+            label: 'Auto zoom to fit QSOs', zh: 'QSO 自动缩放', desc: 'Auto-fit the QSO map after updates.'
+        }),
+        field('qsoSpotAlert', 'qso', 'bool', true, {
+            label: 'New spot alert', zh: '新 SPOT 弹窗', desc: 'Show the in-page spot alert card.'
+        }),
+        field('qsoVoiceAlert', 'qso', 'bool', true, {
+            label: 'Voice alert', zh: '语音告警', desc: 'Speak new spots with SpeechSynthesis.'
+        }),
+        field('mySpotTtl', 'qso', 'int', 30, {
+            min: 1, max: 180, label: 'My spot lifetime (min)', zh: '我的 SPOT 存活（分钟）',
+            desc: 'Lifetime of markers derived from my own callsign.'
+        }),
+        field('mySpotMax', 'qso', 'int', 300, {
+            min: 10, max: 2000, label: 'My spot max markers', zh: '我的 SPOT 上限',
+            desc: 'Upper bound for my-own-spot markers.'
+        }),
+        field('mySpotPopup', 'qso', 'bool', true, {
+            label: 'My spot popup', zh: '我的 SPOT 弹窗', desc: 'Popup for spots heard at my station.'
+        }),
+        field('mySpotVoice', 'qso', 'bool', true, {
+            label: 'My spot voice', zh: '我的 SPOT 语音', desc: 'Voice alert for spots heard at my station.'
+        }),
+        field('rateBucketMin', 'qso', 'int', 5, {
+            min: 1, max: 30, wired: false, label: 'Rate bucket (min)', zh: '速率分桶（分钟）',
+            desc: 'Placeholder: bucket width for the QSO rate chart.'
+        }),
+        field('minBuckets', 'qso', 'int', 30, {
+            min: 6, max: 120, wired: false, label: 'Rate buckets', zh: '速率柱数量',
+            desc: 'Placeholder: number of wall-clock aligned buckets.'
+        }),
+        field('qsoHistoryLimit', 'qso', 'int', 500, {
+            min: 100, max: 2000, wired: false, label: 'QSO history limit', zh: 'QSO 历史条数',
+            desc: 'Placeholder: QSO rows fetched on load.'
+        }),
+        field('freqDeltaKhz', 'qso', 'number', 1, {
+            min: 0, max: 50, wired: false, label: 'Frequency alert delta (kHz)', zh: '换频播报阈值（kHz）',
+            desc: 'Placeholder: minimum frequency change before announcing.'
+        }),
+        field('alertPopupMs', 'qso', 'int', 8000, {
+            min: 2000, max: 30000, wired: false, label: 'Alert popup duration (ms)', zh: '弹窗时长（毫秒）',
+            desc: 'Placeholder: visible time of the spot alert card.'
+        }),
+        field('alertSnrMin', 'qso', 'int', -30, {
+            min: -30, max: 30, wired: false, label: 'Alert min SNR (-30 = off)', zh: '告警 SNR 门槛（-30 关）',
+            desc: 'Placeholder: only alert when spot SNR is at least this value.'
+        }),
+        field('alertDistanceKmMin', 'qso', 'int', 0, {
+            min: 0, max: 20000, wired: false, label: 'Alert min distance (km, 0 = off)', zh: '告警距离门槛（km，0 关）',
+            desc: 'Placeholder: only alert when the path is longer than this.'
+        }),
+        field('voiceRate', 'qso', 'number', 1.05, {
+            min: 0.6, max: 1.6, wired: false, label: 'Voice rate', zh: '语速',
+            desc: 'Placeholder: SpeechSynthesisUtterance.rate.'
+        }),
+        field('voiceVolume', 'qso', 'number', 1, {
+            min: 0, max: 1, wired: false, label: 'Voice volume', zh: '音量',
+            desc: 'Placeholder: SpeechSynthesisUtterance.volume.'
+        }),
+        field('quietFrom', 'qso', 'time', '', {
+            pattern: /^([01]\d|2[0-3]):[0-5]\d$/, allowEmpty: true, wired: false,
+            label: 'Quiet hours from', zh: '静音开始',
+            desc: 'Placeholder: local time when alerts stop (empty = disabled).'
+        }),
+        field('quietTo', 'qso', 'time', '', {
+            pattern: /^([01]\d|2[0-3]):[0-5]\d$/, allowEmpty: true, wired: false,
+            label: 'Quiet hours to', zh: '静音结束',
+            desc: 'Placeholder: local time when alerts resume; may cross midnight.'
+        }),
+
+        // ---- wall / Wall
+        field('wallTitle', 'wall', 'string', 'DX-COMPASS', {
+            maxLen: 24, truncate: true, label: 'Wall title', zh: '大屏标题', desc: 'Brand text on the wall header.'
+        }),
+        field('wallMode', 'wall', 'enum', 'all', {
+            values: WALL_MODES, label: 'Overlay mode', zh: '叠加模式',
+            desc: 'all = every layer at once, cycle = rotate layers.'
+        }),
+        field('wallLayers', 'wall', 'enumArray', ['prop', 'qso', 'myspot', 'dxspot'], {
+            values: WALL_LAYERS, label: 'Wall layers', zh: '大屏图层',
+            desc: 'Which overlays are rendered on the wall page.'
+        }),
+        field('wallTimerOn', 'wall', 'bool', false, {
+            label: 'Countdown', zh: '倒计时', desc: 'Show the UTC contest countdown.'
+        }),
+        field('wallTimerStart', 'wall', 'datetime', '', {
+            pattern: /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/, allowEmpty: true, maxLen: 19,
+            label: 'Countdown start (UTC)', zh: '倒计时开始（UTC）', desc: 'UTC start of the contest window.'
+        }),
+        field('wallTimerEnd', 'wall', 'datetime', '', {
+            pattern: /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/, allowEmpty: true, maxLen: 19,
+            label: 'Countdown end (UTC)', zh: '倒计时结束（UTC）', desc: 'UTC end of the contest window.'
+        }),
+        field('cycleSec', 'wall', 'int', 10, {
+            min: 3, max: 60, wired: false, label: 'Layer dwell (s)', zh: '图层停留（秒）',
+            desc: 'Placeholder: per-layer dwell in cycle mode.'
+        }),
+        field('spaceDwellSec', 'wall', 'int', 8, {
+            min: 3, max: 30, wired: false, label: 'Space weather dwell (s)', zh: '空间天气停留（秒）',
+            desc: 'Placeholder: dwell of the space-weather card rotation.'
+        }),
+        field('syncSec', 'wall', 'int', 60, {
+            min: 10, max: 300, wired: false, label: 'Wall config sync (s)', zh: '大屏配置同步（秒）',
+            desc: 'Placeholder: how often the wall pulls /api/settings.'
+        }),
+        field('topLat', 'wall', 'int', 85, {
+            min: 0, max: 90, wired: false, label: 'Map north latitude', zh: '地图北纬',
+            desc: 'Placeholder: northern clip of the wall world fit.'
+        }),
+        field('bottomLat', 'wall', 'int', -85, {
+            min: -90, max: 0, wired: false, label: 'Map south latitude', zh: '地图南纬',
+            desc: 'Placeholder: southern clip of the wall world fit.'
+        }),
+        field('opponentWindowMin', 'wall', 'int', 30, {
+            min: 5, max: 180, wired: false, label: 'Opponent window (min)', zh: '对手窗口（分钟）',
+            desc: 'Placeholder: spot window used by the opponent card.'
+        }),
+        field('opponentCount', 'wall', 'int', 6, {
+            min: 3, max: 12, wired: false, label: 'Opponent rows', zh: '对手行数',
+            desc: 'Placeholder: number of opponent rows on the wall.'
+        }),
+        field('concentrationMin', 'wall', 'number', 0.4, {
+            min: 0, max: 1, wired: false, label: 'Direction concentration', zh: '方向集中度',
+            desc: 'Placeholder: minimum share for the dominant direction label.'
+        }),
+
+        // ---- data / Data & Alerts
+        field('pollDxwatchSec', 'data', 'int', 30, {
+            min: 5, max: 300, scope: 'server', restart: true, wired: false,
+            label: 'dxwatch poll (s)', zh: 'dxwatch 轮询（秒）',
+            desc: 'Placeholder: dxwatch ingest interval; applied by the flow timer.'
+        }),
+        field('pollRbnSec', 'data', 'int', 10, {
+            min: 5, max: 300, scope: 'server', restart: true, wired: false,
+            label: 'RBN poll (s)', zh: 'RBN 轮询（秒）',
+            desc: 'Placeholder: reversebeacon ingest interval; keep >= 5s to avoid bans.'
+        }),
+        field('pollPskrSyncSec', 'data', 'int', 120, {
+            min: 30, max: 900, scope: 'server', restart: true, wired: false,
+            label: 'PSKR sync (s)', zh: 'PSKR 订阅同步（秒）',
+            desc: 'Placeholder: MQTT subscription resync interval.'
+        }),
+        field('sourceDxwatch', 'data', 'bool', true, {
+            scope: 'server', wired: false, label: 'Enable dxwatch', zh: '启用 dxwatch',
+            desc: 'Placeholder: master switch for the dxwatch source.'
+        }),
+        field('sourceRbn', 'data', 'bool', true, {
+            scope: 'server', wired: false, label: 'Enable RBN', zh: '启用 RBN',
+            desc: 'Placeholder: master switch for reversebeacon.net.'
+        }),
+        field('sourcePskr', 'data', 'bool', true, {
+            scope: 'server', wired: false, label: 'Enable PSKReporter', zh: '启用 PSKReporter',
+            desc: 'Placeholder: master switch for the PSKReporter MQTT stream.'
+        }),
+        field('freshSec', 'data', 'int', 3600, {
+            min: 300, max: 7200, scope: 'both', wired: false,
+            label: 'Active spot window (s)', zh: '活跃窗口（秒）',
+            desc: 'Placeholder: server replay window; spots stay persisted beyond it.'
+        }),
+        field('retentionSpotsDays', 'data', 'int', 0, {
+            min: 0, max: 3650, scope: 'server', wired: false,
+            label: 'Spot retention (days, 0 = keep)', zh: 'SPOT 保留（天，0 永久）',
+            desc: 'Placeholder: automatic purge of the spots table.'
+        }),
+        field('retentionRecordingMonths', 'data', 'int', 2, {
+            min: 1, max: 120, scope: 'server', wired: false,
+            label: 'Recording retention (months)', zh: '录音保留（月）',
+            desc: 'Placeholder: currently hard-coded to two months.'
+        }),
+        field('retentionQsoDays', 'data', 'int', 0, {
+            min: 0, max: 3650, scope: 'server', wired: false,
+            label: 'QSO retention (days, 0 = keep)', zh: 'QSO 保留（天，0 永久）',
+            desc: 'Placeholder: automatic purge of the qsos table.'
+        }),
+        field('autoPurge', 'data', 'bool', true, {
+            scope: 'server', wired: false, label: 'Automatic purge', zh: '自动清理',
+            desc: 'Placeholder: enable the hourly retention job.'
+        }),
+        field('recordsRefreshSec', 'data', 'int', 15, {
+            min: 5, max: 300, wired: false, label: 'Records refresh (s)', zh: '记录刷新（秒）',
+            desc: 'Placeholder: records panel refresh interval.'
+        }),
+        field('propPollSec', 'data', 'int', 60, {
+            min: 30, max: 600, wired: false, label: 'Propagation refresh (s)', zh: '传播页刷新（秒）',
+            desc: 'Placeholder: propagation page polling interval.'
+        }),
+        field('maxCallsigns', 'data', 'int', 9, {
+            min: 1, max: 27, scope: 'server', wired: false,
+            label: 'Max monitored callsigns', zh: '被监控呼号上限',
+            desc: 'Placeholder: server still caps at nine slots and nine PSKR subscriptions.'
+        }),
+        field('logLevel', 'data', 'enum', 'info', {
+            values: LOG_LEVELS, scope: 'server', restart: true, wired: false,
+            label: 'Log level', zh: '日志级别',
+            desc: 'Placeholder: Node-RED logging level; debug can fill the disk fast.'
+        }),
+        field('httpProxy', 'data', 'string', '', {
+            maxLen: 300, allowEmpty: true, scope: 'server', restart: true, wired: false,
+            label: 'HTTP proxy', zh: 'HTTP 代理',
+            desc: 'Placeholder: outbound proxy for SWPC/RBN/dxwatch fetches.'
+        }),
+        field('fetchTimeoutMs', 'data', 'int', 25000, {
+            min: 5000, max: 60000, scope: 'server', wired: false,
+            label: 'Upstream timeout (ms)', zh: '上游超时（毫秒）',
+            desc: 'Placeholder: per-request timeout for upstream collectors.'
+        }),
+        field('n1mmPorts', 'data', 'string', '12060,12061,12062', {
+            pattern: /^\d{2,5}(,\d{2,5}){0,5}$/, maxLen: 40, scope: 'server', restart: true, wired: false,
+            label: 'N1MM UDP ports', zh: 'N1MM UDP 端口',
+            desc: 'Placeholder: UDP listen ports; changing them requires a restart.'
+        }),
+        field('recordingRepeat', 'data', 'enum', 'once', {
+            values: RECORDING_REPEATS, scope: 'server', wired: false,
+            label: 'Recording repeat', zh: '录音重复',
+            desc: 'Placeholder: once / daily / weekly scheduled recording.'
+        }),
+        field('monitoring', 'data', 'bool', false, {
+            storage: 'external', scope: 'both', exportable: false, importable: false,
+            label: 'Monitoring', zh: '监控开关',
+            desc: 'Runtime switch; stored in dxcompass-monitoring and global.monitoring, never in uiSettings.'
+        }),
+
+        // ---- prop / Propagation
+        field('propProj', 'prop', 'enum', 'robinson', {
+            values: PROP_PROJECTIONS, label: 'Projection', zh: '投影',
+            desc: 'Propagation map projection.'
+        }),
+        field('propLayer', 'prop', 'enum', 'muf', {
+            values: PROP_LAYERS, label: 'Layer', zh: '图层', desc: 'Propagation raster overlay.'
+        }),
+        field('propDxLat', 'prop', 'number', 40, {
+            min: -85, max: 85, scope: 'both', label: 'DX latitude', zh: 'DX 纬度',
+            desc: 'Point-to-point DX target latitude.'
+        }),
+        field('propDxLon', 'prop', 'number', -100, {
+            min: -180, max: 180, scope: 'both', label: 'DX longitude', zh: 'DX 经度',
+            desc: 'Point-to-point DX target longitude.'
+        }),
+        field('collectSec', 'prop', 'int', 300, {
+            min: 60, max: 3600, scope: 'server', restart: true, wired: false,
+            label: 'Collector interval (s)', zh: '采集间隔（秒）',
+            desc: 'Placeholder: SWPC/GAMBIT collection interval.'
+        }),
+        field('condClosed', 'prop', 'number', 0.97, {
+            min: 0.5, max: 1, wired: false, label: 'Closed threshold', zh: '关闭阈值',
+            desc: 'Placeholder: frequency above this ratio of MUF is Closed.'
+        }),
+        field('condGood', 'prop', 'number', 0.55, {
+            min: 0, max: 1, wired: false, label: 'Good threshold', zh: '良好阈值',
+            desc: 'Placeholder: headroom ratio above this is Good.'
+        }),
+        field('condFair', 'prop', 'number', 0.25, {
+            min: 0, max: 1, wired: false, label: 'Fair threshold', zh: '一般阈值',
+            desc: 'Placeholder: headroom ratio above this is Fair.'
+        }),
+        field('mufOpacity', 'prop', 'int', 77, {
+            min: 0, max: 255, wired: false, label: 'MUF opacity', zh: 'MUF 透明度',
+            desc: 'Placeholder: alpha of the MUF raster overlay (0-255).'
+        }),
+        field('nightOpacity', 'prop', 'number', 0.18, {
+            min: 0, max: 1, wired: false, label: 'Night shading opacity', zh: '夜罩透明度',
+            desc: 'Placeholder: night-side shading alpha.'
+        })
+    ];
+
+    const FIELD_MAP = {};
+    const DOMAIN_FIELDS = {};
+    const KNOWN_KEYS = new Set();
+    for (const f of FIELDS) {
+        FIELD_MAP[f.key] = f;
+        (DOMAIN_FIELDS[f.domain] = DOMAIN_FIELDS[f.domain] || []).push(f);
+        KNOWN_KEYS.add(f.key);
+    }
+    KNOWN_KEYS.add('_ext');
+    KNOWN_KEYS.add('_rev');
+    KNOWN_KEYS.add('cfgV');
+
+    function isPlain(value) {
+        return !!value && typeof value === 'object' && !Array.isArray(value);
+    }
+
+    function clone(value) {
+        if (Array.isArray(value)) return value.slice();
+        if (isPlain(value)) {
+            const out = {};
+            for (const key of Object.keys(value)) out[key] = clone(value[key]);
+            return out;
+        }
+        return value;
+    }
+
+    function defaultsForDomain(domain) {
+        const out = {};
+        const list = (domain === 'all' ? FIELDS : (DOMAIN_FIELDS[domain] || []))
+            .filter(f => f.storage !== 'external');
+        for (const f of list) out[f.key] = clone(f.default);
+        return out;
+    }
+
+    function defaultSettings() {
+        const out = defaultsForDomain('all');
+        out.cfgV = SCHEMA_VERSION;
+        return out;
+    }
+
+    function asInt(value) {
+        if (typeof value === 'number') return Number.isInteger(value) ? value : NaN;
+        if (typeof value === 'string' && value.trim() !== '') {
+            const n = Number(value);
+            return Number.isInteger(n) ? n : NaN;
+        }
+        return NaN;
+    }
+
+    function asNumber(value) {
+        if (typeof value === 'number') return Number.isFinite(value) ? value : NaN;
+        if (typeof value === 'string' && value.trim() !== '') {
+            const n = Number(value);
+            return Number.isFinite(n) ? n : NaN;
+        }
+        return NaN;
+    }
+
+    function validateValue(f, value) {
+        switch (f.type) {
+            case 'enum': {
+                const allowed = f.values || [];
+                if (typeof value === 'string' && allowed.includes(value)) return {ok: true, value};
+                return {ok: false, reason: `expected one of ${allowed.join('/')}`};
+            }
+            case 'bool':
+                return typeof value === 'boolean' ? {ok: true, value} : {ok: false, reason: 'expected boolean'};
+            case 'int': {
+                const n = asInt(value);
+                if (!Number.isFinite(n)) return {ok: false, reason: 'expected integer'};
+                if (f.min !== undefined && n < f.min) return {ok: false, reason: `below minimum ${f.min}`};
+                if (f.max !== undefined && n > f.max) return {ok: false, reason: `above maximum ${f.max}`};
+                return {ok: true, value: n};
+            }
+            case 'number': {
+                const n = asNumber(value);
+                if (!Number.isFinite(n)) return {ok: false, reason: 'expected number'};
+                if (f.min !== undefined && n < f.min) return {ok: false, reason: `below minimum ${f.min}`};
+                if (f.max !== undefined && n > f.max) return {ok: false, reason: `above maximum ${f.max}`};
+                return {ok: true, value: n};
+            }
+            case 'string': {
+                if (typeof value !== 'string') return {ok: false, reason: 'expected string'};
+                const str0 = (f.upper ? value.toUpperCase() : value).trim();
+                if (str0 === '') {
+                    return f.allowEmpty ? {ok: true, value: ''} : {ok: false, reason: 'required'};
+                }
+                let str = str0;
+                if (f.maxLen !== undefined && str.length > f.maxLen) {
+                    if (!f.truncate) return {ok: false, reason: `longer than ${f.maxLen}`};
+                    str = str.slice(0, f.maxLen);
+                }
+                if (f.pattern && !f.pattern.test(str)) return {ok: false, reason: 'format mismatch'};
+                return {ok: true, value: str};
+            }
+            case 'color':
+                return /^#[0-9a-fA-F]{6}$/.test(String(value || ''))
+                    ? {ok: true, value: String(value)}
+                    : {ok: false, reason: 'expected #RRGGBB'};
+            case 'datetime':
+            case 'time': {
+                if (value === '' && f.allowEmpty) return {ok: true, value: ''};
+                const str = String(value || '');
+                return f.pattern && f.pattern.test(str)
+                    ? {ok: true, value: str}
+                    : {ok: false, reason: 'expected date/time string'};
+            }
+            case 'intMap': {
+                if (!isPlain(value)) return {ok: false, reason: 'expected object'};
+                const out = {};
+                for (const key of f.keys) {
+                    const n = asInt(value[key]);
+                    out[key] = Number.isFinite(n) && n >= f.min && n <= f.max ? n : f.default[key];
+                }
+                return {ok: true, value: out};
+            }
+            case 'colorMap': {
+                if (!isPlain(value)) return {ok: false, reason: 'expected object'};
+                const out = {};
+                for (const key of f.keys) {
+                    const color = value[key];
+                    out[key] = /^#[0-9a-fA-F]{6}$/.test(String(color || '')) ? String(color) : f.default[key];
+                }
+                return {ok: true, value: out};
+            }
+            case 'enumArray': {
+                if (!Array.isArray(value)) return {ok: false, reason: 'expected array'};
+                const allowed = f.values || [];
+                const out = [];
+                for (const item of value) if (allowed.includes(item) && !out.includes(item)) out.push(item);
+                return {ok: true, value: out};
+            }
+            default:
+                return {ok: false, reason: `unknown type ${f.type}`};
+        }
+    }
+
+    function getPath(object, path) {
+        return stringPath(path).reduce((acc, key) => (acc == null ? undefined : acc[key]), object);
+    }
+
+    function setPath(object, path, value) {
+        const parts = stringPath(path);
+        let cursor = object;
+        for (let i = 0; i < parts.length - 1; i++) {
+            if (!isPlain(cursor[parts[i]])) cursor[parts[i]] = {};
+            cursor = cursor[parts[i]];
+        }
+        cursor[parts[parts.length - 1]] = value;
+    }
+
+    function stringPath(path) {
+        return String(path).split('.');
+    }
+
+    function mergeDeep(target, patch) {
+        const out = isPlain(target) ? clone(target) : {};
+        if (!isPlain(patch)) return out;
+        for (const key of Object.keys(patch)) {
+            const value = patch[key];
+            if (isPlain(value) && isPlain(out[key])) out[key] = mergeDeep(out[key], value);
+            else out[key] = Array.isArray(value) ? value.slice() : clone(value);
+        }
+        return out;
+    }
+
+    /** Legacy data fix-ups; runs before validation and always stamps cfgV. */
+    function migrate(input) {
+        const raw = isPlain(input) ? clone(input) : {};
+        const from = parseInt(raw.cfgV, 10);
+        const version = Number.isFinite(from) ? from : 0;
+        // v2 introduced Mercator as a valid projection. Older data still used
+        // Mercator as the implicit default and must be moved to Robinson.
+        if (version < 2 && raw.propProj === 'mercator') raw.propProj = 'robinson';
+        raw.cfgV = SCHEMA_VERSION;
+        return raw;
+    }
+
+    function collectExt(raw) {
+        const ext = {};
+        let bytes = 0, count = 0;
+        const candidates = {};
+        if (isPlain(raw._ext)) Object.assign(candidates, raw._ext);
+        for (const key of Object.keys(raw)) {
+            if (KNOWN_KEYS.has(key)) continue;
+            candidates[key] = raw[key];
+        }
+        for (const key of Object.keys(candidates)) {
+            if (count >= 48) break;
+            let size = 0;
+            try { size = JSON.stringify(candidates[key]).length; }
+            catch (e) { continue; }
+            if (size > 2048 || bytes + size > 16384) continue;
+            ext[key] = candidates[key];
+            bytes += size;
+            count += 1;
+        }
+        return Object.keys(ext).length ? ext : null;
+    }
+
+    /**
+     * Validate a full settings object. Missing keys keep defaults, invalid
+     * values fall back to defaults and are reported, unknown keys are kept
+     * in the bounded _ext area so newer clients survive older servers.
+     */
+    function sanitize(input, options) {
+        const opts = options || {};
+        const raw = isPlain(input) ? migrate(input) : migrate({});
+        const out = defaultSettings();
+        const warnings = [];
+        const rejected = [];
+        for (const f of FIELDS) {
+            if (f.storage === 'external') continue;
+            if (!Object.prototype.hasOwnProperty.call(raw, f.key)) continue;
+            const field = opts.enums && opts.enums[f.key]
+                ? Object.assign({}, f, {values: opts.enums[f.key]})
+                : f;
+            const result = validateValue(field, raw[f.key]);
+            if (result.ok) out[f.key] = result.value;
+            else if (raw[f.key] !== undefined && raw[f.key] !== null) {
+                rejected.push(f.key);
+                warnings.push(`${f.key}: ${result.reason}; using default`);
+            }
+        }
+        const ext = collectExt(raw);
+        if (ext) out._ext = ext;
+        if (Number.isInteger(raw._rev) && raw._rev >= 0) out._rev = raw._rev;
+        out.cfgV = SCHEMA_VERSION;
+        return {settings: out, warnings, rejected};
+    }
+
+    /**
+     * Validate only the keys present in a patch. Used by partial updates,
+     * import and domain resets so absent keys are never overwritten.
+     */
+    function validatePatch(patch, options) {
+        const opts = options || {};
+        const raw = isPlain(patch) ? patch : {};
+        const values = {};
+        const warnings = [];
+        const rejected = [];
+        const unknown = [];
+        for (const key of Object.keys(raw)) {
+            if (!KNOWN_KEYS.has(key)) {
+                unknown.push(key);
+                continue;
+            }
+            const f = FIELD_MAP[key];
+            if (!f) continue;
+            if (f.storage === 'external') continue;
+            const field = opts.enums && opts.enums[key]
+                ? Object.assign({}, f, {values: opts.enums[key]})
+                : f;
+            const result = validateValue(field, raw[key]);
+            if (result.ok) values[key] = result.value;
+            else if (raw[key] !== undefined && raw[key] !== null) {
+                rejected.push(key);
+                warnings.push(`${key}: ${result.reason}; ignored`);
+            }
+        }
+        const ext = collectExt(raw);
+        if (ext) values._ext = mergeDeep(values._ext || {}, ext);
+        if (Number.isInteger(raw._rev)) values._rev = raw._rev;
+        return {values, warnings, rejected, unknown};
+    }
+
+    return {
+        SCHEMA_VERSION,
+        DOMAINS,
+        FIELDS,
+        FIELD_MAP,
+        DOMAIN_FIELDS,
+        UI_LANGUAGES,
+        THEMES,
+        TILE_PROVIDERS,
+        CONTEST_CATEGORIES,
+        WALL_LAYERS,
+        WALL_MODES,
+        PROP_PROJECTIONS,
+        PROP_LAYERS,
+        LAYOUTS,
+        LOG_LEVELS,
+        RECORDING_REPEATS,
+        DEFAULT_TTL_MIN,
+        DEFAULT_BAND_COLORS,
+        BAND_METERS,
+        defaultsForDomain,
+        defaultSettings,
+        sanitize,
+        validatePatch,
+        validateValue,
+        migrate,
+        mergeDeep,
+        getPath,
+        setPath,
+        clone
+    };
+});
