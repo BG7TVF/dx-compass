@@ -242,42 +242,49 @@
                 <span class="panel-title">Settings</span>
                 <button class="panel-close" data-close="configPanel">&times;</button>
             </div>
-            <div class="panel-body">
-                <form id="configForm" class="config-form">
-                    <div class="cfg-tabs" id="cfgTabs">
-                        <button type="button" class="cfg-tab active" data-pane="global" id="tabGlobal">Global</button>
-                        <button type="button" class="cfg-tab" data-pane="spot" id="tabSpot">Spot Map</button>
-                        <button type="button" class="cfg-tab" data-pane="qso" id="tabQso">QSO Map</button>
-                        <button type="button" class="cfg-tab" data-pane="wall" id="tabWall">Wall</button>
-                        <button type="button" class="cfg-tab" data-pane="data" id="tabData">Data</button>
-                        <button type="button" class="cfg-tab" data-pane="prop" id="tabProp">Propagation</button>
+            <div class="cfg-topbar">
+                <div class="cfg-topbar-inner">
+                    <div class="cfg-tabs" id="cfgTabs" role="tablist" aria-label="Settings sections">
+                        <button type="button" class="cfg-tab active" data-pane="global" id="tabGlobal" role="tab" aria-selected="true" aria-controls="paneGlobal">Global</button>
+                        <button type="button" class="cfg-tab" data-pane="spot" id="tabSpot" role="tab" aria-selected="false" aria-controls="paneSpot">Spot Map</button>
+                        <button type="button" class="cfg-tab" data-pane="qso" id="tabQso" role="tab" aria-selected="false" aria-controls="paneQso">QSO Map</button>
+                        <button type="button" class="cfg-tab" data-pane="wall" id="tabWall" role="tab" aria-selected="false" aria-controls="paneWall">Wall</button>
+                        <button type="button" class="cfg-tab" data-pane="data" id="tabData" role="tab" aria-selected="false" aria-controls="paneData">Data</button>
+                        <button type="button" class="cfg-tab" data-pane="prop" id="tabProp" role="tab" aria-selected="false" aria-controls="paneProp">Propagation</button>
                     </div>
                     <div class="cfg-search-row">
-                        <input type="search" id="cfgSearch" class="set-input" placeholder="Search settings…" autocomplete="off">
-                        <span class="hint" id="cfgSearchHint"></span>
+                        <input type="search" id="cfgSearch" class="set-input" placeholder="Search settings…" autocomplete="off" aria-label="Search settings" aria-controls="configForm">
+                        <span class="hint" id="cfgSearchHint" aria-live="polite"></span>
                     </div>
+                </div>
+            </div>
+            <div class="panel-body">
+                <form id="configForm" class="config-form">
 
                     <!-- Global settings -->
-                    <div class="cfg-pane active" id="paneGlobal">
-                        <div class="form-row">
-                            <label id="langLabel" for="setLang">Language / ??</label>
-                            <select id="setLang" class="set-input"></select>
-                        </div>
-                        <div class="form-row">
-                            <label id="themeLabel" for="setTheme">Theme</label>
-                            <select id="setTheme" class="set-input"></select>
-                        </div>
-                        <div class="form-row">
-                            <label id="tilesLabel" for="setTiles">Base map</label>
-                            <select id="setTiles" class="set-input"></select>
-                        </div>
-                        <div class="form-row">
-                            <label id="myCallLabel" for="setMyCall">My callsign</label>
-                            <input type="text" id="setMyCall" class="set-input" maxlength="12" placeholder="e.g. BG7TVF" style="text-transform:uppercase">
-                        </div>
-                        <div class="form-row">
-                            <label id="gridLabel" for="setGrid">My grid (Maidenhead)</label>
-                            <input type="text" id="setGrid" class="set-input" maxlength="6" placeholder="e.g. OM89vx" style="text-transform:uppercase">
+                    <div class="cfg-pane active" id="paneGlobal" role="tabpanel" aria-labelledby="tabGlobal">
+                        <div class="form-section">
+                            <div class="section-title" id="basicSectionTitle">Basics</div>
+                            <div class="form-row">
+                                <label id="langLabel" for="setLang">Language / 语言</label>
+                                <select id="setLang" class="set-input"></select>
+                            </div>
+                            <div class="form-row">
+                                <label id="themeLabel" for="setTheme">Theme</label>
+                                <select id="setTheme" class="set-input"></select>
+                            </div>
+                            <div class="form-row">
+                                <label id="tilesLabel" for="setTiles">Base map</label>
+                                <select id="setTiles" class="set-input"></select>
+                            </div>
+                            <div class="form-row">
+                                <label id="myCallLabel" for="setMyCall">My callsign</label>
+                                <input type="text" id="setMyCall" class="set-input" maxlength="12" placeholder="e.g. BG7TVF" style="text-transform:uppercase">
+                            </div>
+                            <div class="form-row">
+                                <label id="gridLabel" for="setGrid">My grid (Maidenhead)</label>
+                                <input type="text" id="setGrid" class="set-input" maxlength="6" placeholder="e.g. OM89vx" style="text-transform:uppercase">
+                            </div>
                         </div>
                         <div class="form-section">
                             <div class="section-title" id="globalAdvancedTitle">Advanced</div>
@@ -312,7 +319,7 @@
                     </div>
 
                     <!-- Spot map settings -->
-                    <div class="cfg-pane" id="paneSpot">
+                    <div class="cfg-pane" id="paneSpot" role="tabpanel" aria-labelledby="tabSpot">
                         <div class="form-section">
                             <div class="section-title" id="cfgSectionTitle">Monitored Callsigns</div>
                             <div class="call-inputs" id="callInputs">
@@ -353,7 +360,7 @@
                     </div>
 
                     <!-- QSO map settings -->
-                    <div class="cfg-pane" id="paneQso">
+                    <div class="cfg-pane" id="paneQso" role="tabpanel" aria-labelledby="tabQso">
                         <div class="form-section">
                             <div class="section-title" id="qsoSectionTitle">QSO Map</div>
                             <div class="form-row">
@@ -426,7 +433,7 @@
                         </div>
                     </div>
                     <!-- Wall display settings (bigscreen page on port 5859) -->
-                    <div class="cfg-pane" id="paneWall">
+                    <div class="cfg-pane" id="paneWall" role="tabpanel" aria-labelledby="tabWall">
                         <div class="form-section">
                             <div class="section-title" id="wallSectionTitle">Wall display</div>
                             <div class="form-row">
@@ -495,7 +502,7 @@
                     </div>
 
                     <!-- Data / server settings -->
-                    <div class="cfg-pane" id="paneData">
+                    <div class="cfg-pane" id="paneData" role="tabpanel" aria-labelledby="tabData">
                         <div class="form-section">
                             <div class="section-title" id="dataTitle">Data &amp; Alerts</div>
                             <p class="hint" id="dataHint">Server-side ingest, retention and diagnostics. Restart-marked items apply after a Node-RED restart.</p>
@@ -508,7 +515,7 @@
                     </div>
 
                     <!-- Propagation settings -->
-                    <div class="cfg-pane" id="paneProp">
+                    <div class="cfg-pane" id="paneProp" role="tabpanel" aria-labelledby="tabProp">
                         <div class="form-section">
                             <div class="section-title" id="propTitle">Propagation</div>
                             <p class="hint" id="propSettingsHint">Projection, layer and the DX target live on the propagation toolbar; the values below tune collection and thresholds.</p>
@@ -520,7 +527,7 @@
                         </div>
                     </div>
 
-                    <div class="form-row">
+                    <div class="form-actions">
                         <button type="submit" class="primary-btn" id="btnSaveCfg">Save</button>
                     </div>
                     <p class="hint" id="cfgHint">Callsigns are assigned to map slots in order. Empty slots stay blank on the dashboard.<br>

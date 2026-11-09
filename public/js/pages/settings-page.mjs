@@ -31,6 +31,143 @@ const DOMAIN_LABELS = {
     wall: ['大屏', 'Wall'], data: ['数据与告警', 'Data & Alerts'], prop: ['传播', 'Propagation']
 };
 
+/* Short Chinese descriptions for the row list. The schema keeps the English
+ * source text; this map only feeds the muted second line under each label. */
+const DESC_ZH = {
+    lang: '界面语言，切换后立即生效。',
+    theme: '全局配色主题，立即应用到所有页面。',
+    tiles: '底图来源；国内网络建议选择高德。',
+    myCall: '用于标记“我的 SPOT”并自动调整被监控呼号。',
+    grid: 'Maidenhead 网格，决定本台在 QSO 地图与传播页的位置。',
+    layout: '地图宫格布局，仅保存在本机。',
+    timeZone: '时钟与表格使用 UTC 还是本地时间。',
+    hour12: '使用 12 小时制显示时间。',
+    showSeconds: '在时钟与记录时间中显示秒。',
+    clockSec: '时钟刷新的间隔。',
+    ttl: '各模式标记、连线与频段徽章的存活时间。',
+    bandColors: '标记、连线与频段徽章使用的频段配色。',
+    rotationSec: '轮播模式翻页的间隔。',
+    autoFitMaxZoom: '单格自动适配时的最大缩放层级。',
+    fitPad: '自动适配边界时保留的内边距比例。',
+    terminatorShow: '绘制晨昏线与夜侧阴影。',
+    terminatorSec: '晨昏线重新计算的间隔。',
+    heatShow: '按频段显示 CW/DIGI 热力图。',
+    heatRadius: '热力光斑半径（像素）。',
+    heatBlur: '热力光斑模糊半径（像素）。',
+    heatOpacity: '热力图层的最低不透明度。',
+    gcShow: '绘制被监听站到监听站的大圆路径。',
+    gcSamples: '每条大圆路径的插值采样点数。',
+    spotterSize: '红色监听站标记的直径（像素）。',
+    monitoredSize: '绿色被监听站标记的直径（像素）。',
+    historyLimit: '浏览器刷新后回放的 SPOT 数量。',
+    markerMax: '每格保留的最大标记数，超出丢弃最旧。',
+    fadeSec: '重新计算标记透明度的间隔。',
+    pruneSec: '清理过期标记的间隔。',
+    category: '决定是否显示多机台卡片。',
+    qsoMax: 'QSO 标记上限，超出丢弃最旧。',
+    qsoLines: '从本台向每个 QSO 绘制大圆连线。',
+    qsoAutoFit: 'QSO 更新后自动缩放到全部标记。',
+    qsoSpotAlert: '显示页内新 SPOT 提示卡。',
+    qsoVoiceAlert: '使用语音合成播报新 SPOT。',
+    mySpotTtl: '我的呼号衍生标记的存活时间。',
+    mySpotMax: '我的 SPOT 标记数量上限。',
+    mySpotPopup: '我的 SPOT 弹出提示卡。',
+    mySpotVoice: '我的 SPOT 语音播报。',
+    rateBucketMin: 'QSO 速率图的分桶宽度。',
+    minBuckets: '对齐整点的分桶数量。',
+    qsoHistoryLimit: '载入时拉取的 QSO 记录条数。',
+    freqDeltaKhz: '换频超过该差值才播报。',
+    alertPopupMs: '提示卡的显示时长。',
+    alertSnrMin: '仅当 SNR 不低于该值时告警。',
+    alertDistanceKmMin: '仅当路径长于该距离时告警。',
+    voiceRate: '语音合成的语速。',
+    voiceVolume: '语音合成的音量。',
+    quietFrom: '本地时间，到点后停止弹窗与语音（留空关闭）。',
+    quietTo: '本地时间，到点恢复告警；支持跨零点。',
+    alertSound: '每次告警播放短提示音，默认关闭，不影响语音。',
+    alertSoundVolume: '提示音音量（0 为静音）。',
+    wallTitle: '大屏顶部的品牌文字。',
+    wallMode: 'all 同时显示全部图层；cycle 自动轮播。',
+    wallLayers: '大屏实际渲染的叠加图层。',
+    wallTimerOn: '显示 UTC 比赛倒计时。',
+    wallTimerStart: '比赛窗口的 UTC 开始时间。',
+    wallTimerEnd: '比赛窗口的 UTC 结束时间。',
+    cycleSec: '轮播模式下每层停留时间。',
+    spaceDwellSec: '空间天气卡片轮播的停留时间。',
+    syncSec: '大屏拉取设置的间隔。',
+    wallSpotSec: '大屏刷新 SPOT 的间隔。',
+    wallQsoSec: '大屏刷新 QSO 的间隔。',
+    wallStationSec: '大屏刷新电台快照的间隔。',
+    topLat: '大屏世界适配的北侧裁剪纬度。',
+    bottomLat: '大屏世界适配的南侧裁剪纬度。',
+    opponentWindowMin: '对手卡片统计的 SPOT 时间窗。',
+    opponentCompactMin: '对手数达到该值时切换紧凑网格。',
+    opponentBandsMax: '单张对手卡片最多显示的频段数。',
+    concentrationMin: '主导方向标签所需的最低占比。',
+    pollDxwatchSec: 'dxwatch 采集间隔；5 秒流程节拍受此值控制。',
+    pollRbnSec: 'reversebeacon 采集间隔；建议不低于 5 秒。',
+    pollPskrSyncSec: 'PSKReporter MQTT 订阅同步间隔。',
+    sourceDxwatch: 'dxwatch 数据源总开关。',
+    sourceRbn: 'reversebeacon.net 数据源总开关。',
+    sourcePskr: 'PSKReporter MQTT 数据源总开关。',
+    freshSec: '服务端回放的活跃窗口；更早的 SPOT 仍会保存。',
+    retentionSpotsDays: '每小时清理 SPOT 表；0 表示永久保留。',
+    retentionRecordingMonths: '每小时清理早于该月数的录音 SPOT。',
+    retentionQsoDays: '每小时清理 QSO 表；0 表示永久保留。',
+    autoPurge: '启用每小时保留策略清理任务。',
+    recordsRefreshSec: '记录面板的刷新间隔。',
+    propPollSec: '传播页的轮询间隔。',
+    maxCallsigns: '/api/callsigns 与 PSKR 订阅列表的上限。',
+    logLevel: 'DX-Compass 模块日志级别；Node-RED 核心日志仍由 settings.js 控制。',
+    httpProxy: '传播采集器的出站代理；留空为直连。',
+    fetchTimeoutMs: '传播采集器单次请求超时。',
+    upstreamBase: 'services.swpc.noaa.gov 的替代地址；留空使用官方地址。',
+    n1mmPorts: '只读：UDP 端口是 flow.json 的节点属性，修改需要编辑流程并重新部署。',
+    recordingRepeat: 'once / daily / weekly 定时录音。',
+    diskWarnPct: '工作目录所在文件系统使用率超过该百分比时告警。',
+    diskCheckSec: '两次磁盘检查之间的最小间隔。',
+    diskAlert: '超过阈值时输出 Node-RED 警告。',
+    monitoring: '运行时开关；保存在本机与 global.monitoring，不写入 uiSettings。',
+    propProj: '传播地图使用的投影。',
+    propLayer: '传播栅格叠加图层。',
+    propDxLat: '点对点 DX 目标的纬度。',
+    propDxLon: '点对点 DX 目标的经度。',
+    collectSec: 'SWPC/GAMBIT 采集间隔；30 秒流程节拍受此值控制。',
+    condClosed: '频率达到 MUF 的该比例以上判定为 Closed。',
+    condGood: '余量比例高于该值判定为 Good。',
+    condFair: '余量比例高于该值判定为 Fair。',
+    mufOpacity: '传播页与大屏 MUF 栅格的透明度（0-255）。',
+    nightOpacity: '夜侧阴影透明度，晨昏带随之缩放。'
+};
+
+/* Hand-written controls mapped to their schema key, so the same description
+ * and unit logic applies to legacy markup and generated rows. */
+const LEGACY_ROW_KEYS = {
+    setLang: 'lang', setTheme: 'theme', setTiles: 'tiles', setMyCall: 'myCall', setGrid: 'grid',
+    setCategory: 'category', setQsoMax: 'qsoMax', setQsoAutoFit: 'qsoAutoFit',
+    setQsoLines: 'qsoLines', setQsoSpotAlert: 'qsoSpotAlert', setQsoVoice: 'qsoVoiceAlert',
+    setMySpotTtl: 'mySpotTtl', setMySpotMax: 'mySpotMax', setMySpotPopup: 'mySpotPopup',
+    setMySpotVoice: 'mySpotVoice', setWallTitle: 'wallTitle', setWallMode: 'wallMode',
+    setWallTimerOn: 'wallTimerOn', setWallTimerStart: 'wallTimerStart', setWallTimerEnd: 'wallTimerEnd',
+    ttlCw: 'ttl', ttlSsb: 'ttl', ttlDigi: 'ttl',
+    setWallProp: 'wallLayers', setWallAurora: 'wallLayers', setWallWeather: 'wallLayers',
+    setWallQso: 'wallLayers', setWallMySpot: 'wallLayers', setWallDxSpot: 'wallLayers'
+};
+const CUSTOM_DESC = {
+    setQrzUser: ['用于查询呼号资料；仅保存在本机。', 'Used for callsign lookups; kept in this browser only.'],
+    setQrzPass: ['QRZ.com 密码，仅在保存时提交。', 'QRZ.com password; submitted only when saved.'],
+    setWallProp: ['传播地图与 MUF 栅格。', 'Propagation map and MUF raster.'],
+    setWallAurora: ['极光椭圆叠加。', 'Aurora oval overlay.'],
+    setWallWeather: ['空间天气卡片与太阳图像。', 'Space-weather cards and solar imagery.'],
+    setWallQso: ['QSO 连线与比分。', 'QSO paths and score.'],
+    setWallMySpot: ['本台呼号衍生的标记。', 'Markers derived from your own callsign.'],
+    setWallDxSpot: ['被监控对手的 SPOT 标记。', 'Spot markers for monitored rivals.']
+};
+/* Rows whose control carries no id of its own (multi-input groups). */
+const LEGACY_LABEL_KEYS = {bandTitle: 'bandColors', ttlTitle: 'ttl'};
+/* Units that are not written in the label parenthetical. */
+const UNIT_BY_KEY = {propDxLat: '°', propDxLon: '°'};
+
 function escapeHtml(value) {
     return String(value).replace(/[&<>"']/g, char => ({
         '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
@@ -230,9 +367,101 @@ export function createSettingsPage(ctx) {
         if (field.readonly) flags.push(`<span class="set-flag readonly">${bi('只读', 'read-only')}</span>`);
         if (field.restart) flags.push(`<span class="set-flag restart">${bi('需重启', 'restart')}</span>`);
         const label = bi(field.zh, field.label);
-        return `<div class="set-field" title="${escapeHtml(field.desc || '')}" data-search="${escapeHtml(`${field.key} ${field.label} ${field.zh} ${field.desc || ''}`.toLowerCase())}">` +
-            `<label for="gen_${escapeHtml(field.key)}">${escapeHtml(label)}${flags.join('')}</label>` +
-            `${control}</div>`;
+        const desc = ctx.settings.lang === 'zh' ? (DESC_ZH[field.key] || field.desc) : field.desc;
+        return `<div class="set-row" data-search="${escapeHtml(`${field.key} ${field.label} ${field.zh} ${desc}`.toLowerCase())}">` +
+            `<div class="set-text"><label class="set-label" for="gen_${escapeHtml(field.key)}">` +
+            `<span class="set-label-text">${escapeHtml(label)}</span>` +
+            (flags.length ? `<span class="set-flags">${flags.join('')}</span>` : '') +
+            `</label><p class="set-desc">${escapeHtml(desc || '')}</p></div>` +
+            `<div class="set-ctl">${control}</div></div>`;
+    }
+
+    /** Split a trailing unit parenthetical from a localized label. */
+    function splitUnit(text) {
+        const match = String(text || '').match(/^(.*?)\s*[（(]([^）)]+)[）)]\s*$/);
+        if (!match) return null;
+        const unit = match[2].split(/[,，]/)[0].trim();
+        if (!/^[A-Za-z%°秒分钟天月小时毫秒千赫公里]+$/.test(unit)) return null;
+        return {label: match[1].trim(), unit};
+    }
+
+    function rowKey(row) {
+        const keyed = row.querySelector('[data-key]');
+        if (keyed) return keyed.dataset.key;
+        const label = row.querySelector('label[id]');
+        if (label && LEGACY_LABEL_KEYS[label.id]) return LEGACY_LABEL_KEYS[label.id];
+        for (const control of row.querySelectorAll('input[id], select[id]')) {
+            if (LEGACY_ROW_KEYS[control.id]) return LEGACY_ROW_KEYS[control.id];
+            if (control.id.startsWith('set')) {
+                return control.id.charAt(3).toLowerCase() + control.id.slice(4);
+            }
+        }
+        return null;
+    }
+
+    function descFor(key) {
+        const field = SETTINGS_SCHEMA.FIELD_MAP[key];
+        if (field) return ctx.settings.lang === 'zh' ? (DESC_ZH[key] || field.desc) : field.desc;
+        const custom = CUSTOM_DESC[key];
+        return custom ? custom[ctx.settings.lang === 'zh' ? 0 : 1] : '';
+    }
+
+    /** Give every hand-written row the same text/description/unit anatomy as
+     * the generated rows without touching the controls themselves. */
+    function decorateRows() {
+        $$('.set-row, .form-row').forEach(row => {
+            let text = row.querySelector(':scope > .set-text');
+            let label = text
+                ? text.querySelector(':scope > label')
+                : row.querySelector(':scope > label');
+            if (!text && label) {
+                text = document.createElement('div');
+                text.className = 'set-text';
+                row.insertBefore(text, label);
+                text.appendChild(label);
+            }
+            if (!text) return;
+            const key = rowKey(row);
+            const controlId = row.querySelector('input[id], select[id]')?.id;
+            const customDesc = controlId && CUSTOM_DESC[controlId];
+            const rawLabel = label
+                ? (label.querySelector('.set-label-text')?.textContent || label.textContent || '')
+                : '';
+            const desc = customDesc
+                ? customDesc[ctx.settings.lang === 'zh' ? 0 : 1]
+                : (key ? descFor(key) : '');
+            let descEl = text.querySelector('.set-desc');
+            if (desc) {
+                if (!descEl) {
+                    descEl = document.createElement('p');
+                    descEl.className = 'set-desc';
+                    text.appendChild(descEl);
+                }
+                descEl.textContent = desc;
+            } else if (descEl) {
+                descEl.remove();
+            }
+            row.dataset.search = `${key || ''} ${rawLabel} ${desc}`.toLowerCase();
+
+            const numbers = row.querySelectorAll('input[type="number"]');
+            let unitEl = row.querySelector('.set-unit');
+            if (numbers.length === 1 && label) {
+                const target = label.querySelector('.set-label-text') || label;
+                const parsed = splitUnit(target.textContent) ||
+                    (UNIT_BY_KEY[key] ? {label: target.textContent.trim(), unit: UNIT_BY_KEY[key]} : null);
+                if (parsed) {
+                    target.textContent = parsed.label;
+                    if (!unitEl) {
+                        unitEl = document.createElement('span');
+                        unitEl.className = 'set-unit';
+                        numbers[0].after(unitEl);
+                    }
+                    unitEl.textContent = parsed.unit;
+                } else if (unitEl) {
+                    unitEl.remove();
+                }
+            }
+        });
     }
 
     function renderSchemaFields() {
@@ -245,6 +474,7 @@ export function createSettingsPage(ctx) {
         }
         bindGeneratedFields();
         syncGeneratedFields();
+        decorateRows();
     }
 
     function syncField(input, field) {
@@ -289,7 +519,7 @@ export function createSettingsPage(ctx) {
         let total = 0;
         panes.forEach(pane => {
             let visible = 0;
-            pane.querySelectorAll('.set-field, .form-row').forEach(node => {
+            pane.querySelectorAll('.set-row, .form-row').forEach(node => {
                 if (!query) {
                     node.classList.remove('search-hidden');
                     return;
@@ -298,6 +528,22 @@ export function createSettingsPage(ctx) {
                 const match = haystack.toLowerCase().includes(query);
                 node.classList.toggle('search-hidden', !match);
                 if (match) visible++;
+            });
+            // Keep matching sections open and hide sections whose rows all miss.
+            pane.querySelectorAll('.form-section').forEach(section => {
+                const rows = section.querySelectorAll('.set-row, .form-row');
+                if (!query) {
+                    section.classList.remove('search-hidden');
+                    return;
+                }
+                if (!rows.length) return;
+                if ([...rows].some(row => !row.classList.contains('search-hidden'))) {
+                    section.classList.remove('search-hidden', 'collapsed');
+                    const title = section.querySelector('.section-title');
+                    if (title) title.setAttribute('aria-expanded', 'true');
+                } else {
+                    section.classList.add('search-hidden');
+                }
             });
             pane.dataset.matches = String(visible);
             total += visible;
@@ -579,6 +825,7 @@ export function createSettingsPage(ctx) {
         setText('#tabData', bi('数据', 'Data'));
         setText('#tabProp', bi('传播', 'Prop'));
         setText('#globalAdvancedTitle', bi('高级', 'Advanced'));
+        setText('#basicSectionTitle', bi('基础', 'Basics'));
         setText('#spotAdvancedTitle', bi('显示', 'Display'));
         setText('#qsoAdvancedTitle', bi('显示与告警', 'Display & alerts'));
         setText('#wallAdvancedTitle', bi('高级', 'Advanced'));
@@ -858,10 +1105,33 @@ export function createSettingsPage(ctx) {
             return !call || /^[A-Z0-9/]{3,12}$/.test(call) ? call : null;
         }, () => ctx.qso.clearMySpots());
         $$('.cfg-tab').forEach(button => button.addEventListener('click', () => {
-            $$('.cfg-tab').forEach(item => item.classList.toggle('active', item === button));
+            $$('.cfg-tab').forEach(item => {
+                const active = item === button;
+                item.classList.toggle('active', active);
+                item.setAttribute('aria-selected', active ? 'true' : 'false');
+            });
             $$('.cfg-pane').forEach(pane => pane.classList.toggle('active',
                 pane.id === `pane${button.dataset.pane.charAt(0).toUpperCase()}${button.dataset.pane.slice(1)}`));
         }));
+        // Section headers collapse their card; keyboard and pointer share one path.
+        $$('.form-section').forEach(section => {
+            const title = section.querySelector('.section-title');
+            if (!title) return;
+            title.setAttribute('role', 'button');
+            title.setAttribute('tabindex', '0');
+            title.setAttribute('aria-expanded', 'true');
+            const toggle = () => {
+                const collapsed = section.classList.toggle('collapsed');
+                title.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+            };
+            title.addEventListener('click', toggle);
+            title.addEventListener('keydown', event => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    toggle();
+                }
+            });
+        });
         const category = $('#setCategory');
         category.value = ctx.settings.category;
         category.addEventListener('change', () => {
