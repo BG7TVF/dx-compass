@@ -87,32 +87,42 @@ html, body {
 /* ---------- body: U layout, map in the middle ---------- */
 /* Two full-height rails hug the map and the trend strip closes the U along
  * the bottom of the centre column, so every card wraps the map on three
- * sides. The rails match in width so the map stays centred on screen. The map
- * row is sized by the map pane's own aspect ratio (see .map-panel) and the
- * trend strip keeps whatever height is left. */
+ * sides. The rails match in width so the map stays centred on screen.
+ *
+ * The map column is content-sized by the pane's own aspect ratio (see
+ * .map-panel) and the two rails split whatever width is left, so the pane
+ * always fills its cell exactly. The old viewport cap (max-height:
+ * 100vh - 220px) shrank the pane on shorter-but-wider windows (1080p with
+ * browser chrome, ultrawides) and left a dark band between map and rail. */
 .wall-body {
     display: grid;
-    grid-template-columns: minmax(240px, 20%) minmax(0, 1fr) minmax(240px, 20%);
-    grid-template-rows: auto minmax(96px, 1fr);
+    grid-template-columns: minmax(240px, 1fr) auto minmax(240px, 1fr);
+    grid-template-rows: minmax(0, 1fr) 96px;
     grid-template-areas:
         "left map right"
         "left trend right";
     gap: 8px;
     min-height: 0;
+    container-type: inline-size;
 }
 
 .map-panel {
     grid-area: map;
     position: relative;
+    justify-self: start;
+    /* Height comes from the row the layout hands out, width follows the
+     * ratio, so the pane is never wider than the space it was given: one
+     * world fitted to the width needs height >= 0.687 x width to keep every
+     * coastline and part of Antarctica in view. 1.40 leaves ~13 px of the
+     * Antarctic peninsula visible instead of the ~4 px a 1.44 ratio gives.
+     * max-width keeps both rails at their 240 px minimum on tall, narrow
+     * windows. */
+    height: 100%;
+    width: auto;
+    aspect-ratio: 1.40 / 1;
+    max-width: calc(100cqw - 496px);
     min-width: 0;
     min-height: 0;
-    /* Height follows the pane width instead of the viewport height: one world
-     * fitted to the full width needs height >= 0.687 x width to keep every
-     * coastline and part of Antarctica in view, so the trend strip only gets
-     * what is left. 1.40 leaves ~13 px of Antarctic peninsula visible at 1600
-     * px wide instead of the ~4 px a 1.44 ratio would give. */
-    aspect-ratio: 1.40 / 1;
-    max-height: calc(100vh - 220px);
     background: #08111c;
     /* No border and no radius: a 1px frame hugging the raster reads as a black
      * edge around the map, which the wall display must not show. */
@@ -203,15 +213,18 @@ html, body {
 .group-head span { font-size: 9px; letter-spacing: 1.5px; color: rgba(124, 140, 163, .45); }
 
 /* Trend strip: the base of the U, four cards under the map (station, rate,
- * QSO and spot trends). The cards stretch to the row height and the canvas
- * takes whatever is left, so the charts grow with the screen instead of
- * sitting at a fixed 50px. */
+ * QSO and spot trends). The row is a fixed content strip, so the map row
+ * above it absorbs every remaining pixel of the screen. Inline-size
+ * containment keeps the four cards from widening the shared column: the
+ * column must be exactly as wide as the map pane, otherwise the strip's
+ * content would push the column wider and leave a gap beside the map. */
 .trend {
     grid-area: trend;
     display: grid;
     grid-template-columns: 1fr .95fr 1.15fr 1.15fr;
     gap: 8px;
     min-height: 0;
+    contain: inline-size;
 }
 .card {
     background: var(--panel);
@@ -601,7 +614,9 @@ html, body {
         grid-template-areas: "map" "left" "right" "trend";
     }
     .rail { flex-direction: column; }
-    .map-panel { max-height: none; }
+    /* Stacked layout: one full-width column, so the pane keeps the width and
+     * takes its height from the width-driven ratio. */
+    .map-panel { justify-self: stretch; height: auto; max-width: none; }
     .rail .group,
     .rail .group.grow { flex: 1 1 100%; flex-direction: row; flex-wrap: wrap; align-items: stretch; }
     .rail .group .group-head { flex: 1 1 100%; }

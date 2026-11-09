@@ -112,7 +112,11 @@ export function createWallMap() {
             maxBoundsViscosity: 1
         }
     });
-    addOfflineLand(map, {L, bounds: LAND_BOUNDS, pane: 'raster', zIndex: 250});
+    /* Cover the same latitude window the map may pan to (WORLD_BOUNDS), not
+     * just the LAND_BOUNDS the rings are drawn in: on very tall panes the view
+     * reaches the pole and a LAND_BOUNDS overlay would leave a strip of bare
+     * container background above 85 deg. */
+    addOfflineLand(map, {L, bounds: WORLD_BOUNDS, pane: 'raster', zIndex: 250});
     fitWorld(map);
 
     const views = {};
