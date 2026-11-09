@@ -67,7 +67,7 @@ html, body {
     border: 1px solid var(--line);
     border-radius: var(--r);
 }
-.brand { display: flex; flex-direction: column; line-height: 1.15; }
+.brand { display: flex; flex-direction: column; line-height: 1.15; margin-right: auto; }
 .brand b {
     font-size: clamp(22px, 2.7vh, 52px);
     letter-spacing: 3px;
@@ -75,6 +75,9 @@ html, body {
     white-space: nowrap;
 }
 .brand span { font-size: var(--fs-micro); letter-spacing: 2px; color: var(--dim); }
+/* the clock always sits at the far right edge: the brand's auto margin eats the
+ * leftover header space, so the UTC block stays right-aligned whether or not
+ * the countdown is shown */
 .clock { margin-left: 12px; display: flex; align-items: baseline; gap: 8px; }
 .clock b { font-size: clamp(22px, 2.7vh, 52px); letter-spacing: 1px; }
 .clock span { font-size: var(--fs-small); color: var(--dim); }
@@ -83,7 +86,6 @@ html, body {
 /* contest countdown: framed figure between the brand and the UTC clock, fed
  * by the start/end times set on the settings page */
 .timer {
-    margin-left: auto;
     display: flex;
     align-items: baseline;
     gap: 8px;
