@@ -8,7 +8,9 @@ import {
     PROP_NORTH_MIN,
     PROP_SOUTH_MIN
 } from '../public/shared/map/projection.mjs';
-import {mercLat, mercY, ringPoints} from '../public/shared/map/base-map.mjs';
+import {
+    fitWorld, mercLat, mercY, ringPoints, worldViewCenter
+} from '../public/shared/map/base-map.mjs';
 import {
     computeTerminator, createTerminator, propTerminator, solarCos, solarCosAt
 } from '../public/shared/map/terminator.mjs';
@@ -62,6 +64,39 @@ test('Mercator row helpers round-trip latitude for wall field sampling', () => {
         close(mercLat(mercY(lat)), lat, 1e-9);
     }
     assert.equal(mercLat(0.5), 0);
+});
+
+test('world view fills the container without cutting continental land', () => {
+    globalThis.LAND = [
+        [100, 10, 140, 70, 100, 10],
+        [0, -80, 20, -65, 0, -80]
+    ];
+    const calls = {};
+    const map = {
+        getSize: () => ({x: 592, y: 399}),
+        project: ([, lon], zoom) => ({x: (lon + 180) / 360 * 256 * Math.pow(2, zoom)}),
+        getBoundsZoom: (bounds, inside) => inside ? 1.15 : 1,
+        setMinZoom: zoom => { calls.minZoom = zoom; },
+        setView: (center, zoom) => { calls.center = center; calls.zoom = zoom; }
+    };
+    const zoom = fitWorld(map);
+    assert.equal(zoom, 1.15);
+    assert.equal(calls.zoom, 1.15);
+    assert.equal(calls.minZoom, 1.15);
+    const span = 399 / (256 * Math.pow(2, zoom));
+    const y = mercY(calls.center[0]);
+    assert.ok(y - span / 2 <= mercY(70) + 1e-9, 'northern land must stay inside');
+    assert.ok(y + span / 2 >= mercY(-65) - 1e-9, 'Antarctica must stay partly visible');
+    assert.equal(calls.center[1], 0);
+});
+
+test('world view centre matches the fitted latitude', () => {
+    const map = {
+        getSize: () => ({x: 592, y: 399}),
+        project: ([, lon], zoom) => ({x: (lon + 180) / 360 * 256 * Math.pow(2, zoom)})
+    };
+    const lat = worldViewCenter(map, 1.15)[0];
+    assert.ok(Number.isFinite(lat) && lat > 0 && lat < 90);
 });
 
 test('terminator geometry remains finite through solstices and equinox', () => {

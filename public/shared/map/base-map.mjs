@@ -90,9 +90,66 @@ export function setWorldMinZoom(map, bounds = WORLD_BOUNDS) {
     return map.getMinZoom();
 }
 
+/* Latitude above which a land ring counts as a continent; Antarctica (and the
+ * sub-Antarctic islands) is the only land allowed to be cropped. */
+const ANTARCTIC_MAX_LAT = -55;
+const LAND_VIEW_FALLBACK = {north: 83.5, antarcticNorth: -55.2};
+let landViewCache = null;
+
+/** Northern limit of continental land plus the northern edge of Antarctica. */
+function landViewExtents() {
+    if (landViewCache) return landViewCache;
+    let north = -90;
+    let antarcticNorth = -90;
+    let found = false;
+    for (const ring of globalThis.LAND || []) {
+        if (!ring || !ring.length) continue;
+        const flat = typeof ring[0] === 'number';
+        const count = flat ? Math.floor(ring.length / 2) : ring.length;
+        let highest = -90;
+        for (let i = 0; i < count; i++) {
+            const lat = Number(flat ? ring[i * 2 + 1] : ring[i][1]);
+            if (Number.isFinite(lat) && lat > highest) highest = lat;
+        }
+        if (highest < -90) continue;
+        found = true;
+        if (highest > ANTARCTIC_MAX_LAT) north = Math.max(north, highest);
+        else antarcticNorth = Math.max(antarcticNorth, highest);
+    }
+    landViewCache = found ? {north, antarcticNorth} : LAND_VIEW_FALLBACK;
+    return landViewCache;
+}
+
+/** Visible Mercator fraction (0-1) and longitude coverage at a given zoom. */
+function viewCoverage(map, zoom) {
+    const size = map.getSize();
+    const worldPx = map.project([0, 180], zoom).x - map.project([0, -180], zoom).x;
+    return {span: size.y / worldPx, lon: size.x / worldPx};
+}
+
+/** Centre latitude that keeps every continental coastline inside the viewport
+ *  while Antarctica may run past the southern edge. */
+export function worldViewCenter(map, zoom) {
+    const {span} = viewCoverage(map, zoom);
+    const {north, antarcticNorth} = landViewExtents();
+    const half = Math.min(0.5, span / 2);
+    const center = clamp((mercY(north) + mercY(antarcticNorth)) / 2, half, 1 - half);
+    return [mercLat(center), 0];
+}
+
+/** Fill the container with the world map without cutting continental land.
+ *  Falls back to a contained (letterboxed) world when the aspect ratio makes
+ *  both impossible. */
 export function fitWorld(map) {
-    setWorldMinZoom(map);
-    map.setView([0, 0], map.getMinZoom(), {animate: false});
+    const coverZoom = map.getBoundsZoom(WORLD_BOUNDS, true);
+    const coverage = viewCoverage(map, coverZoom);
+    const {north, antarcticNorth} = landViewExtents();
+    const needed = mercY(antarcticNorth) - mercY(north);
+    const fills = coverage.lon >= 1 - 1e-6 && coverage.span >= needed;
+    const zoom = fills ? coverZoom : map.getBoundsZoom(WORLD_BOUNDS, false);
+    map.setMinZoom(zoom);
+    map.setView(worldViewCenter(map, zoom), zoom, {animate: false});
+    return zoom;
 }
 
 export function fitPoints(map, points, {L = globalThis.L, maxZoom = AUTO_FIT_MAX_ZOOM, pad = 0.08} = {}) {
@@ -100,7 +157,7 @@ export function fitPoints(map, points, {L = globalThis.L, maxZoom = AUTO_FIT_MAX
         Number.isFinite(Number(point[0])) && Number.isFinite(Number(point[1])));
     setWorldMinZoom(map);
     if (!valid.length) {
-        map.setView([0, 0], map.getMinZoom(), {animate: false});
+        fitWorld(map);
         return;
     }
     const bounds = getLeaflet(L).latLngBounds(valid).pad(pad);
