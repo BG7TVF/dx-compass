@@ -453,10 +453,10 @@ html, body {
     to { transform: scaleX(1); }
 }
 
-/* opponents: one tile per band with live spots */
-/* The column has to read from across the room, so every active band gets its
- * own coloured tile: band name, the band's main propagation heading and the
- * rival calls with the exact frequency heard on that band. */
+/* opponents: one big card per rival, one small cell per active band */
+/* Outer grouping is by call sign, so each rival gets a prominent card with its
+ * own activity summary; inside it every band with live spots gets a small cell
+ * (band, exact frequency in MHz, that band's main heading). */
 .opp-group .group-head {
     font-size: 12.5px;
     letter-spacing: 2px;
@@ -475,107 +475,128 @@ html, body {
 .card.opp-card {
     border-color: rgba(255, 107, 107, .22);
     background: linear-gradient(180deg, rgba(255, 107, 107, .06), rgba(10, 18, 29, 0) 45%), var(--panel);
-    padding: 8px;
+    padding: 7px;
 }
 .opp-rows {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    grid-auto-rows: minmax(0, 1fr);
+    display: flex;
+    flex-direction: column;
     gap: 6px;
     flex: 1 1 0;
     min-height: 0;
+    padding-right: 2px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(122, 168, 255, .28) transparent;
+}
+.opp-rows::-webkit-scrollbar { width: 4px; }
+.opp-rows::-webkit-scrollbar-thumb { background: rgba(122, 168, 255, .28); border-radius: 2px; }
+.opp-call-card {
+    flex: 0 0 auto;
+    min-width: 0;
+    padding: 5px 7px 7px;
+    background: rgba(6, 13, 22, .55);
+    border: 1px solid rgba(255, 107, 107, .16);
+    border-radius: 7px;
+}
+.oc-head {
+    display: flex;
+    align-items: baseline;
+    gap: 7px;
+    min-width: 0;
+    padding-bottom: 4px;
+    border-bottom: 1px solid rgba(255, 107, 107, .12);
+}
+.oc-head b {
     overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: clamp(15px, 1.5vh, 22px);
+    font-weight: 700;
+    letter-spacing: .5px;
+    color: #fff;
+}
+.oc-head span {
+    flex: 0 0 auto;
+    margin-left: auto;
+    font-size: 10px;
+    letter-spacing: .3px;
+    color: rgba(219, 230, 245, .6);
+    white-space: nowrap;
+}
+.ob-bands {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(98px, 1fr));
+    gap: 4px;
+    margin-top: 5px;
 }
 .opp-band {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 1px;
     min-width: 0;
-    min-height: 0;
-    padding: 6px 8px;
+    padding: 3px 6px;
     background: var(--panel-2);
-    border: 1px solid var(--line);
-    border-left: 3px solid var(--band-color, var(--accent));
-    border-radius: 6px;
-    overflow: hidden;
+    border-left: 2px solid var(--band-color, var(--accent));
+    border-radius: 4px;
 }
-.opp-band.wide { grid-column: 1 / -1; }
-.ob-top { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
-.ob-top b {
-    font-size: clamp(16px, 1.7vh, 25px);
+.ob-line { display: flex; align-items: baseline; gap: 5px; min-width: 0; }
+.ob-line b {
+    white-space: nowrap;
+    font-size: clamp(11px, 1.15vh, 15px);
     font-weight: 700;
-    line-height: 1.05;
-    letter-spacing: .5px;
+    letter-spacing: .3px;
     color: var(--band-color, var(--text));
 }
-.ob-top span {
+.ob-line u {
     margin-left: auto;
-    padding: 0 5px;
-    border-radius: 8px;
-    background: rgba(122, 168, 255, .12);
-    font-size: 10px;
-    line-height: 15px;
-    color: var(--dim);
-}
-.ob-dir { display: flex; align-items: center; gap: 5px; min-width: 0; }
-.ob-dir label {
-    font-size: 9.5px;
-    letter-spacing: 1px;
-    color: var(--dim);
+    text-decoration: none;
     white-space: nowrap;
+    font-size: clamp(10px, 1.05vh, 14px);
+    color: var(--dx);
+    font-variant-numeric: tabular-nums;
 }
+.ob-line u small {
+    margin-left: 1px;
+    font-size: 8px;
+    letter-spacing: 0;
+    color: rgba(255, 107, 107, .55);
+}
+.ob-dir { display: flex; align-items: center; gap: 3px; min-width: 0; }
 .ob-dir em {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     font-style: normal;
-    font-size: clamp(13px, 1.45vh, 21px);
-    font-weight: 600;
+    font-size: clamp(10px, 1.05vh, 14px);
     color: var(--text);
 }
 .ob-arrow {
     display: inline-block;
     font-style: normal;
-    font-size: clamp(10px, 1.1vh, 15px);
+    font-size: clamp(9px, 1vh, 13px);
     line-height: 1;
     color: var(--band-color, var(--accent));
 }
-.ob-list {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    flex: 1 1 0;
-    min-height: 0;
-    overflow: hidden;
-}
-.ob-call {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto auto;
-    align-items: baseline;
-    gap: 5px;
-}
-.ob-call b {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-size: clamp(12px, 1.25vh, 17px);
-    font-weight: 600;
-}
-.ob-call u {
-    text-decoration: none;
-    font-size: clamp(11px, 1.1vh, 15px);
-    color: var(--dx);
-    font-variant-numeric: tabular-nums;
-}
-.ob-call i { font-style: normal; font-size: 10px; color: var(--my); }
-.ob-more { font-size: 10px; color: var(--dim); }
-/* Narrow rails cannot fit the caption beside the heading without clipping the
- * degrees, so the arrow + compass carry the meaning on their own. */
-@media (max-width: 1440px) {
-    .ob-dir label { display: none; }
-    .ob-call i { display: none; }
-}
+/* A single bearing is shown for information but not sold as a main heading. */
+.opp-band.thin .ob-dir em { color: var(--dim); }
+/* Density fallback before the list is allowed to scroll: tighten type/padding
+ * so as many rivals as possible stay on screen with no clipped text. */
+.opp-rows.dense .opp-call-card { padding: 3px 6px 5px; }
+.opp-rows.dense .oc-head { padding-bottom: 2px; }
+.opp-rows.dense .oc-head b { font-size: clamp(13px, 1.3vh, 18px); }
+.opp-rows.dense .ob-bands { margin-top: 3px; gap: 3px; }
+.opp-rows.dense .opp-band { padding: 2px 5px; }
+.opp-rows.dense .ob-line b { font-size: clamp(10px, 1.05vh, 13px); }
+.opp-rows.dense .ob-line u { font-size: clamp(9px, .95vh, 12px); }
+.opp-rows.dense .ob-dir em { font-size: clamp(9px, .95vh, 12px); }
+/* Second tier for short panels: spacing only, fonts stay at the dense size, so
+ * every rival card fits with no clipped cell before scrolling is allowed. */
+.opp-rows.dense-2 { gap: 4px; }
+.opp-rows.dense-2 .opp-call-card { padding: 3px 5px 4px; }
+.opp-rows.dense-2 .oc-head { padding-bottom: 1px; }
+.opp-rows.dense-2 .ob-bands { margin-top: 2px; gap: 2px; }
+.opp-rows.dense-2 .opp-band { padding: 1px 5px; }
 .opp-empty { font-size: 11px; color: var(--dim); }
 
 /* ---------- footer ---------- */

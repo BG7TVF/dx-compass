@@ -1,16 +1,16 @@
-/* Opponent aggregation for the wall, grouped by band with recent activity.
- * The shared geo bearing function is injected so this module contains no
- * second geography formula.
+/* Opponent aggregation for the wall: one big card per rival, and inside it one
+ * small cell per band that rival is active on. The shared geo bearing function
+ * is injected so this module contains no second geography formula.
  *
  * Data comes straight from /api/spots rows:
  *   monitored_call  rival call (target of the spot)
  *   band / freq     band label ("20m") and kHz
  *   lat / lon       spotter position
  *   dx_lat / dx_lon rival position
- * The per-band "main direction" is the circular mean of the bearings from the
- * rival to its spotters: the heading the rival's signal is reaching, i.e. the
- * direction that band is being worked. Spots older than the activity window
- * are ignored, matching the 30 min cutoff of the wall map markers. */
+ * For each rival+band pair the "main direction" is the circular mean of the
+ * bearings from that rival to its spotters on that band: the heading its signal
+ * is reaching, i.e. the direction that band is being worked. Spots older than
+ * the activity window are ignored, matching the 30 min map marker cutoff. */
 
 const $ = selector => document.querySelector(selector);
 const COMPASS = ['北', '东北', '东', '东南', '南', '西南', '西', '西北'];
@@ -37,14 +37,32 @@ const bandRank = band => {
 /** Spots older than this are not "active" on the wall (same window as the map). */
 export const OPPONENT_WINDOW_MIN = 30;
 const WINDOW_MS = OPPONENT_WINDOW_MIN * 60 * 1000;
-const MAX_CALLS = 4;
 /* Below this resultant length the bearings cancel out, so a single "main
- * direction" would be a lie; the tile reports multi-directional instead. */
+ * direction" would be a lie; the cell reports multi-directional instead. */
 const CONCENTRATION_MIN = 0.4;
 
-export function buildOpponentBands(rows, myCall, bearing, {now = Date.now(), windowMs = WINDOW_MS} = {}) {
+function finishBand(entry) {
+    const resultant = entry.dirs ? Math.hypot(entry.sin, entry.cos) / entry.dirs : 0;
+    const dir = entry.dirs
+        ? (Math.atan2(entry.sin, entry.cos) * 180 / Math.PI + 360) % 360
+        : null;
+    return {
+        band: entry.band,
+        color: WALL_BAND_COLORS[entry.band] || '#8aa0bd',
+        n: entry.n,
+        ts: entry.ts,
+        freq: entry.freq,
+        dir,
+        dirSamples: entry.dirs,
+        /* One bearing is not a "main" direction; the cell shows it dimmed.
+         * Two or more spread over the compass mean the band is multi-directional. */
+        spread: entry.dirs >= 2 && resultant < CONCENTRATION_MIN
+    };
+}
+
+export function buildOpponents(rows, myCall, bearing, {now = Date.now(), windowMs = WINDOW_MS} = {}) {
     const my = String(myCall || '').toUpperCase();
-    const bands = new Map();
+    const opponents = new Map();
     (Array.isArray(rows) ? rows : []).forEach(row => {
         const call = String(row.monitored_call || row.dx_call || '').toUpperCase();
         if (!call || call === my) return;
@@ -53,22 +71,23 @@ export function buildOpponentBands(rows, myCall, bearing, {now = Date.now(), win
         const band = String(row.band || '').toUpperCase();
         if (!band) return;
 
-        let entry = bands.get(band);
-        if (!entry) {
-            entry = {band, n: 0, sin: 0, cos: 0, dirs: 0, calls: new Map()};
-            bands.set(band, entry);
-        }
-        entry.n++;
-
-        let opponent = entry.calls.get(call);
+        let opponent = opponents.get(call);
         if (!opponent) {
-            opponent = {call, n: 0, ts: 0, freq: null};
-            entry.calls.set(call, opponent);
+            opponent = {call, n: 0, ts: 0, bands: new Map()};
+            opponents.set(call, opponent);
         }
         opponent.n++;
-        if (time >= opponent.ts) {
-            opponent.ts = time;
-            opponent.freq = row.freq === undefined ? null : row.freq;
+        opponent.ts = Math.max(opponent.ts, time);
+
+        let entry = opponent.bands.get(band);
+        if (!entry) {
+            entry = {band, n: 0, ts: 0, freq: null, sin: 0, cos: 0, dirs: 0};
+            opponent.bands.set(band, entry);
+        }
+        entry.n++;
+        if (time >= entry.ts) {
+            entry.ts = time;
+            entry.freq = row.freq === undefined ? null : row.freq;
         }
 
         if (row.lat !== null && row.lat !== undefined &&
@@ -84,77 +103,77 @@ export function buildOpponentBands(rows, myCall, bearing, {now = Date.now(), win
         }
     });
 
-    return [...bands.values()].map(entry => {
-        const calls = [...entry.calls.values()]
-            .sort((a, b) => b.n - a.n || a.call.localeCompare(b.call));
-        const resultant = entry.dirs ? Math.hypot(entry.sin, entry.cos) / entry.dirs : 0;
-        const dir = entry.dirs
-            ? (Math.atan2(entry.sin, entry.cos) * 180 / Math.PI + 360) % 360
-            : null;
-        return {
-            band: entry.band,
-            color: WALL_BAND_COLORS[entry.band] || '#8aa0bd',
-            n: entry.n,
-            calls,
-            dir,
-            spread: dir === null || resultant < CONCENTRATION_MIN
-        };
-    }).sort((a, b) => b.n - a.n || bandRank(a.band) - bandRank(b.band));
+    return [...opponents.values()].map(opponent => ({
+        call: opponent.call,
+        n: opponent.n,
+        ts: opponent.ts,
+        bands: [...opponent.bands.values()]
+            .sort((a, b) => b.n - a.n || bandRank(a.band) - bandRank(b.band))
+            .map(finishBand)
+    })).sort((a, b) => b.n - a.n || b.ts - a.ts || a.call.localeCompare(b.call));
 }
 
-export function opponentBandHtml(band, wide, maxCalls = MAX_CALLS) {
-    const arrow = band.dir !== null && !band.spread
-        ? '<i class="ob-arrow">' + ARROWS[compassIndex(band.dir)] + '</i>'
-        : '';
-    const direction = band.spread
-        ? '多向'
-        : compass(band.dir) + ' ' + Math.round(band.dir) + '°';
-    const calls = band.calls.slice(0, maxCalls).map(item => {
-        const frequency = item.freq ? num(item.freq / 1000, 3) : '—';
-        return '<div class="ob-call"><b>' + esc(item.call) + '</b><u>' + frequency +
-            '</u><i>' + item.n + '</i></div>';
-    }).join('');
-    const extra = band.calls.length > maxCalls
-        ? '<div class="ob-more">+' + (band.calls.length - maxCalls) + ' more</div>' : '';
-    const title = band.calls.length + ' 个对手 · ' + band.n + ' 个 SPOT';
-    return '<div class="opp-band' + (wide ? ' wide' : '') +
-        '" style="--band-color:' + band.color + '">' +
-        '<div class="ob-top"><b>' + esc(band.band) + '</b><span title="' + title + '">' +
-        band.n + ' SPOT</span></div>' +
-        '<div class="ob-dir" title="主攻方向：对手信号抵达的方向"><label>主攻</label>' +
-        arrow + '<em>' + direction + '</em></div>' +
-        '<div class="ob-list">' + calls + extra + '</div>' +
+export function bandCellHtml(band) {
+    let direction = '—';
+    let arrow = '';
+    if (band.dirSamples >= 2 && band.spread) {
+        direction = '多向';
+    } else if (band.dir !== null) {
+        direction = compass(band.dir) + ' ' + Math.round(band.dir) + '°';
+        arrow = '<i class="ob-arrow">' + ARROWS[compassIndex(band.dir)] + '</i>';
+    }
+    const thin = band.dirSamples === 1;
+    const frequency = band.freq ? num(band.freq / 1000, 3) : '—';
+    const title = band.band + ' · ' + band.n + ' SPOT · ' +
+        (band.dirSamples ? band.dirSamples + ' 个方向样本' : '无坐标样本') +
+        (thin ? '（仅 1 个，方向仅供参考）' : '');
+    return '<div class="opp-band' + (thin ? ' thin' : '') + '" style="--band-color:' +
+        band.color + '" title="' + esc(title) + '">' +
+        '<div class="ob-line"><b>' + esc(band.band) + '</b><u>' + frequency +
+        '<small>MHz</small></u></div>' +
+        '<div class="ob-dir">' + arrow + '<em>' + direction + '</em></div>' +
         '</div>';
 }
 
+export function opponentCardHtml(opponent) {
+    return '<section class="opp-call-card">' +
+        '<div class="oc-head"><b>' + esc(opponent.call) + '</b><span>' +
+        opponent.bands.length + ' 频段 · ' + opponent.n + ' SPOT</span></div>' +
+        '<div class="ob-bands">' + opponent.bands.map(bandCellHtml).join('') + '</div>' +
+        '</section>';
+}
+
 export function createOpponentRenderer({bearing}) {
-    let bands = [];
-    let callCount = 0;
+    let opponents = [];
 
     function paint() {
         const box = $('#oppRows');
         if (!box) return;
         const summary = $('#oppSummary');
-        if (!bands.length) {
+        if (!opponents.length) {
             box.innerHTML = '<div class="opp-empty">最近 ' + OPPONENT_WINDOW_MIN +
                 ' 分钟无对手 SPOT</div>';
+            box.classList.remove('dense');
             if (summary) summary.textContent = '';
             return;
         }
-        const maxCalls = bands.length > 8 ? 2 : bands.length > 6 ? 3 : MAX_CALLS;
-        box.innerHTML = bands.map((band, index) => opponentBandHtml(
-            band,
-            bands.length % 2 === 1 && index === bands.length - 1,
-            maxCalls
-        )).join('');
-        if (summary) summary.textContent = callCount + ' 对手 · ' + bands.length + ' 频段';
+        box.innerHTML = opponents.map(opponentCardHtml).join('');
+        const bands = new Set();
+        opponents.forEach(opponent => opponent.bands.forEach(band => bands.add(band.band)));
+        if (summary) summary.textContent = opponents.length + ' 对手 · ' + bands.size + ' 频段';
+        /* If the cards are taller than the panel, tighten type/padding first and
+         * then, on short screens, squeeze the spacing only (same font sizes) so
+         * every rival stays fully visible before the list falls back to scroll. */
+        box.classList.remove('dense');
+        box.classList.remove('dense-2');
+        if (box.scrollHeight > box.clientHeight + 1) {
+            box.classList.add('dense');
+            if (box.scrollHeight > box.clientHeight + 1) box.classList.add('dense-2');
+        }
     }
 
     function render(rows, myCall) {
-        bands = buildOpponentBands(rows, myCall, bearing);
-        const calls = new Set();
-        bands.forEach(band => band.calls.forEach(item => calls.add(item.call)));
-        callCount = calls.size;
+        opponents = buildOpponents(rows, myCall, bearing);
         paint();
     }
 
