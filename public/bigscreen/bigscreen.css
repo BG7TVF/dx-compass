@@ -22,6 +22,19 @@
     --my: #4cc9f0;
     --dx: #ff6b6b;
     --r: 8px;
+
+    /* Wall type scale. Every step is anchored to viewport height, so a 24/27
+     * inch or 2K/4K wall screen grows the text instead of keeping the preview
+     * pixel size; the minimums keep the 1366x768 laptop preview legible and
+     * the maximums stop a 2160p panel from ballooning. Hierarchy:
+     * headline > number > title > body > small > tiny > micro. */
+    --fs-micro: clamp(11px, 1.24vh, 22px);
+    --fs-tiny: clamp(12px, 1.30vh, 24px);
+    --fs-small: clamp(12.5px, 1.36vh, 26px);
+    --fs-body: clamp(13px, 1.44vh, 27px);
+    --fs-title: clamp(14px, 1.60vh, 31px);
+    --fs-num: clamp(20px, 2.5vh, 48px);
+    --fs-headline: clamp(32px, 4.1vh, 76px);
 }
 
 * { box-sizing: border-box; }
@@ -38,8 +51,9 @@ html, body {
 
 .wall {
     height: 100vh;
+    /* Header and footer grow with the type scale; the body row takes the rest. */
     display: grid;
-    grid-template-rows: 56px minmax(0, 1fr) 28px;
+    grid-template-rows: clamp(56px, 6.2vh, 128px) minmax(0, 1fr) clamp(28px, 3vh, 56px);
     gap: 8px;
     padding: 8px;
 }
@@ -55,16 +69,16 @@ html, body {
 }
 .brand { display: flex; flex-direction: column; line-height: 1.15; }
 .brand b {
-    font-size: 22px;
+    font-size: clamp(22px, 2.7vh, 52px);
     letter-spacing: 3px;
     color: var(--accent);
     white-space: nowrap;
 }
-.brand span { font-size: 10px; letter-spacing: 2px; color: var(--dim); }
+.brand span { font-size: var(--fs-micro); letter-spacing: 2px; color: var(--dim); }
 .clock { margin-left: 12px; display: flex; align-items: baseline; gap: 8px; }
-.clock b { font-size: 22px; letter-spacing: 1px; }
-.clock span { font-size: 11px; color: var(--dim); }
-.clock i { font-style: normal; font-size: 10px; letter-spacing: 1px; color: var(--accent); }
+.clock b { font-size: clamp(22px, 2.7vh, 52px); letter-spacing: 1px; }
+.clock span { font-size: var(--fs-small); color: var(--dim); }
+.clock i { font-style: normal; font-size: var(--fs-micro); letter-spacing: 1px; color: var(--accent); }
 
 /* contest countdown: framed figure between the brand and the UTC clock, fed
  * by the start/end times set on the settings page */
@@ -79,8 +93,8 @@ html, body {
     border-radius: 6px;
 }
 .timer[hidden] { display: none; }
-.timer label { font-size: 10px; letter-spacing: 1.5px; color: var(--dim); }
-.timer b { font-size: 21px; font-weight: 600; letter-spacing: 1px; color: var(--accent); }
+.timer label { font-size: var(--fs-micro); letter-spacing: 1.5px; color: var(--dim); }
+.timer b { font-size: clamp(21px, 2.5vh, 54px); font-weight: 600; letter-spacing: 1px; color: var(--accent); }
 .timer.ended b { color: var(--poor); }
 .timer.ended label { color: var(--poor); }
 
@@ -97,7 +111,9 @@ html, body {
 .wall-body {
     display: grid;
     grid-template-columns: minmax(240px, 1fr) auto minmax(240px, 1fr);
-    grid-template-rows: minmax(0, 1fr) 96px;
+    /* The trend strip scales with the type scale so the larger radio/rate
+     * text still fits; the map row keeps every remaining pixel. */
+    grid-template-rows: minmax(0, 1fr) clamp(140px, 15vh, 320px);
     grid-template-areas:
         "left map right"
         "left trend right";
@@ -140,7 +156,7 @@ html, body {
     right: 8px;
     z-index: 900;
     padding: 3px 8px;
-    font-size: 11px;
+    font-size: var(--fs-small);
     letter-spacing: 1px;
     color: var(--accent);
     background: rgba(6, 13, 22, 0.82);
@@ -158,7 +174,7 @@ html, body {
     gap: 10px;
     align-items: center;
     padding: 5px 9px;
-    font-size: 11px;
+    font-size: var(--fs-small);
     color: var(--dim);
     background: rgba(6, 13, 22, 0.82);
     border: 1px solid var(--line);
@@ -168,13 +184,13 @@ html, body {
 }
 .map-legend .dot {
     display: inline-block;
-    width: 8px;
-    height: 8px;
+    width: clamp(8px, 0.9vh, 16px);
+    height: clamp(8px, 0.9vh, 16px);
     border-radius: 50%;
     margin-right: 4px;
     vertical-align: middle;
 }
-.map-legend .grad { width: 84px; height: 7px; border-radius: 3px; }
+.map-legend .grad { width: clamp(84px, 9vh, 160px); height: clamp(7px, 0.8vh, 14px); border-radius: 3px; }
 
 /* ---------- rail ---------- */
 .rail {
@@ -204,13 +220,13 @@ html, body {
     gap: 6px;
     margin: 0;
     padding: 0 2px 3px;
-    font-size: 11px;
+    font-size: var(--fs-title);
     font-weight: 600;
     letter-spacing: 1.5px;
     color: rgba(124, 140, 163, .9);
     border-bottom: 1px solid var(--line);
 }
-.group-head span { font-size: 9px; letter-spacing: 1.5px; color: rgba(124, 140, 163, .45); }
+.group-head span { font-size: var(--fs-micro); letter-spacing: 1.5px; color: rgba(124, 140, 163, .45); }
 
 /* Trend strip: the base of the U, four cards under the map (station, rate,
  * QSO and spot trends). The row is a fixed content strip, so the map row
@@ -221,7 +237,10 @@ html, body {
 .trend {
     grid-area: trend;
     display: grid;
-    grid-template-columns: 1fr .95fr 1.15fr 1.15fr;
+    /* The station card needs the most width for four radio cells, the rate
+     * card keeps enough for its title on one line, and the two trend charts
+     * stay narrow. */
+    grid-template-columns: 1.7fr .94fr .93fr .93fr;
     gap: 8px;
     min-height: 0;
     contain: inline-size;
@@ -230,19 +249,19 @@ html, body {
     background: var(--panel);
     border: 1px solid var(--line);
     border-radius: var(--r);
-    padding: 7px 10px;
+    padding: clamp(6px, 0.8vh, 12px) clamp(10px, 1.05vh, 16px);
     min-height: 0;
     min-width: 0;
 }
 .card.grow { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 .card h3 {
-    margin: 0 0 6px;
-    font-size: 12px;
+    margin: 0 0 clamp(5px, 0.6vh, 9px);
+    font-size: var(--fs-title);
     font-weight: 600;
-    letter-spacing: 1px;
+    letter-spacing: .5px;
     color: var(--dim);
 }
-.card h3 span { margin-left: 6px; font-size: 9.5px; letter-spacing: 1.2px; color: rgba(124, 140, 163, .55); }
+.card h3 span { margin-left: 4px; font-size: var(--fs-micro); letter-spacing: 0; color: rgba(124, 140, 163, .55); }
 
 /* space weather */
 .sw-grid {
@@ -257,11 +276,11 @@ html, body {
 .sw-grid div {
     display: flex;
     flex-direction: column;
-    padding: 4px 6px;
+    padding: clamp(4px, 0.5vh, 8px) clamp(6px, 0.7vh, 10px);
     background: var(--panel-2);
 }
-.sw-grid label { font-size: 9px; letter-spacing: 1px; color: var(--dim); }
-.sw-grid b { font-size: 19px; font-weight: 600; }
+.sw-grid label { font-size: var(--fs-micro); letter-spacing: 1px; color: var(--dim); }
+.sw-grid b { font-size: var(--fs-num); font-weight: 600; line-height: 1.15; }
 .sw-grid b.warn { color: var(--fair); }
 .sw-grid b.bad { color: var(--poor); }
 
@@ -284,23 +303,23 @@ html, body {
     flex-direction: column;
     justify-content: center;
     gap: 1px;
-    padding: 5px 10px;
+    padding: clamp(5px, 0.65vh, 10px) clamp(9px, 1vh, 14px);
     border: 1px solid var(--line);
     border-radius: 5px;
     background: var(--panel-2);
     min-width: 0;
     overflow: hidden;
 }
-.band b { font-size: 16px; font-weight: 600; line-height: 1.1; }
-.band > span { font-size: 11px; letter-spacing: .5px; }
+.band b { font-size: clamp(15px, 1.75vh, 34px); font-weight: 600; line-height: 1.1; }
+.band > span { font-size: var(--fs-small); letter-spacing: .5px; }
 .band .meter {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 3px;
-    margin-top: 3px;
+    margin-top: clamp(3px, 0.4vh, 6px);
 }
 .band .meter u {
-    height: 5px;
+    height: clamp(5px, 0.6vh, 8px);
     border-radius: 3px;
     background: rgba(122, 168, 255, .13);
 }
@@ -313,11 +332,12 @@ html, body {
 .band.closed { opacity: .4; }
 
 /* radio cards: the station card lives in the bottom strip now, so the grid
- * fills its height and folds to one column when the card is narrow */
+ * fills its height as a 2x2 block; each cell carries three short lines so the
+ * name, frequency and band/mode stay readable without clipping. */
 .card.radios-card { display: flex; flex-direction: column; overflow: hidden; }
 .radios {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     grid-auto-rows: minmax(0, 1fr);
     gap: 5px;
     flex: 1 1 0;
@@ -327,8 +347,8 @@ html, body {
     display: flex;
     flex-direction: column;
     justify-content: center;
-    gap: 1px;
-    padding: 5px 8px;
+    gap: 0;
+    padding: clamp(2px, 0.3vh, 4px) clamp(4px, 0.55vh, 8px);
     background: var(--panel-2);
     border: 1px solid var(--line);
     border-left: 3px solid var(--accent);
@@ -337,59 +357,61 @@ html, body {
     overflow: hidden;
 }
 .radio.tx { border-left-color: var(--poor); }
-.radio label { font-size: 9px; letter-spacing: 1px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.radio b { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.radio span { font-size: 10px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.radio label { font-size: var(--fs-micro); line-height: 1.15; letter-spacing: .5px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.radio b { font-size: var(--fs-body); line-height: 1.15; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.radio span { font-size: var(--fs-micro); line-height: 1.15; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* QSO rate: the headline number stays, but the hourly history is drawn as a
  * line so the card shows a shape instead of two bare figures. */
 .card.rate { display: flex; flex-direction: column; overflow: hidden; }
-.rate-nums { display: flex; align-items: baseline; gap: 8px; }
-.rate-nums b { font-size: 34px; font-weight: 600; color: var(--accent); line-height: 1; }
-.rate-nums span { font-size: 10px; color: var(--dim); white-space: nowrap; }
-.rate-nums i { font-style: normal; font-size: 15px; font-weight: 600; color: var(--text); }
+/* The per-minute figure sits under the headline instead of beside it: at the
+ * larger scale the pair no longer fits on one line in a narrow rate card. */
+.rate-nums { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; }
+.rate-nums b { font-size: var(--fs-headline); font-weight: 600; color: var(--accent); line-height: 1.1; }
+.rate-nums span { flex: 1 1 100%; font-size: var(--fs-small); color: var(--dim); white-space: nowrap; }
+.rate-nums i { font-style: normal; font-size: var(--fs-body); font-weight: 600; color: var(--text); }
 .card.rate canvas {
     display: block;
     width: 100%;
     flex: 1 1 0;
     height: 0;
-    min-height: 24px;
-    margin-top: 4px;
+    min-height: 16px;
+    margin-top: 2px;
 }
 
 /* ---------- per-operator / per-band ranking ---------- */
 /* Horizontal bars instead of a number per row: the track gives a sense of
  * ratio between operators (and bands keep their own colour). */
-.list h3 { margin-bottom: 5px; }
-.rows { display: flex; flex-direction: column; gap: 4px; }
+.list h3 { margin-bottom: clamp(4px, 0.5vh, 8px); }
+.rows { display: flex; flex-direction: column; gap: clamp(3px, 0.4vh, 6px); }
 .hbar {
     display: grid;
-    grid-template-columns: 58px minmax(0, 1fr) 32px;
+    grid-template-columns: clamp(58px, 6.4vh, 120px) minmax(0, 1fr) clamp(34px, 3.7vh, 66px);
     align-items: center;
-    gap: 6px;
-    font-size: 12px;
+    gap: clamp(5px, 0.6vh, 12px);
+    font-size: var(--fs-small);
 }
 .hbar .k { color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hbar .track {
     display: block;
-    height: 8px;
+    height: clamp(7px, 0.8vh, 15px);
     border-radius: 4px;
     background: rgba(122, 168, 255, .12);
     overflow: hidden;
 }
 .hbar .track > i { display: block; height: 100%; border-radius: 4px; background: var(--accent); }
-.hbar em { font-style: normal; text-align: right; font-size: 13px; font-weight: 600; color: var(--text); }
+.hbar em { font-style: normal; text-align: right; font-size: var(--fs-body); font-weight: 600; color: var(--text); }
 
 /* ---------- trend charts ---------- */
 .chart-head {
     display: flex;
     align-items: baseline;
     gap: 6px;
-    font-size: 10px;
+    font-size: var(--fs-tiny);
     letter-spacing: .5px;
     color: var(--dim);
 }
-.chart-head b { margin-left: auto; font-size: 16px; font-weight: 600; color: var(--text); }
+.chart-head b { margin-left: auto; font-size: clamp(16px, 1.9vh, 40px); font-weight: 600; color: var(--text); }
 
 /* Both canvas kinds fill their card: the box keeps its own height (fixed
  * spark, strip row) and the canvas absorbs the rest, so a wall screen gets
@@ -458,7 +480,7 @@ html, body {
  * own activity summary; inside it every band with live spots gets a small cell
  * (band, exact frequency in MHz, that band's main heading). */
 .opp-group .group-head {
-    font-size: 12.5px;
+    font-size: var(--fs-title);
     letter-spacing: 2px;
     color: var(--dx);
     border-bottom-color: rgba(255, 107, 107, .32);
@@ -467,7 +489,7 @@ html, body {
 .opp-sum {
     margin-left: auto;
     font-style: normal;
-    font-size: 10.5px;
+    font-size: var(--fs-tiny);
     letter-spacing: .5px;
     color: rgba(219, 230, 245, .72);
     white-space: nowrap;
@@ -510,7 +532,7 @@ html, body {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: clamp(15px, 1.5vh, 22px);
+    font-size: clamp(15px, 1.65vh, 32px);
     font-weight: 700;
     letter-spacing: .5px;
     color: #fff;
@@ -518,14 +540,16 @@ html, body {
 .oc-head span {
     flex: 0 0 auto;
     margin-left: auto;
-    font-size: 10px;
+    font-size: var(--fs-micro);
     letter-spacing: .3px;
     color: rgba(219, 230, 245, .6);
     white-space: nowrap;
 }
 .ob-bands {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(98px, 1fr));
+    /* Cell width follows the type scale so band and frequency never have to
+     * truncate on a 2K/4K wall; the column count falls out of the rail width. */
+    grid-template-columns: repeat(auto-fill, minmax(clamp(98px, 10.5vh, 220px), 1fr));
     gap: 4px;
     margin-top: 5px;
 }
@@ -542,7 +566,7 @@ html, body {
 .ob-line { display: flex; align-items: baseline; gap: 5px; min-width: 0; }
 .ob-line b {
     white-space: nowrap;
-    font-size: clamp(11px, 1.15vh, 15px);
+    font-size: clamp(11.5px, 1.32vh, 28px);
     font-weight: 700;
     letter-spacing: .3px;
     color: var(--band-color, var(--text));
@@ -551,13 +575,13 @@ html, body {
     margin-left: auto;
     text-decoration: none;
     white-space: nowrap;
-    font-size: clamp(10px, 1.05vh, 14px);
+    font-size: clamp(11px, 1.30vh, 27px);
     color: var(--dx);
     font-variant-numeric: tabular-nums;
 }
 .ob-line u small {
     margin-left: 1px;
-    font-size: 8px;
+    font-size: var(--fs-micro);
     letter-spacing: 0;
     color: rgba(255, 107, 107, .55);
 }
@@ -568,13 +592,13 @@ html, body {
     text-overflow: ellipsis;
     white-space: nowrap;
     font-style: normal;
-    font-size: clamp(10px, 1.05vh, 14px);
+    font-size: clamp(11px, 1.30vh, 27px);
     color: var(--text);
 }
 .ob-arrow {
     display: inline-block;
     font-style: normal;
-    font-size: clamp(9px, 1vh, 13px);
+    font-size: clamp(11px, 1.28vh, 26px);
     line-height: 1;
     color: var(--band-color, var(--accent));
 }
@@ -584,12 +608,12 @@ html, body {
  * so as many rivals as possible stay on screen with no clipped text. */
 .opp-rows.dense .opp-call-card { padding: 3px 6px 5px; }
 .opp-rows.dense .oc-head { padding-bottom: 2px; }
-.opp-rows.dense .oc-head b { font-size: clamp(13px, 1.3vh, 18px); }
+.opp-rows.dense .oc-head b { font-size: clamp(14px, 1.5vh, 29px); }
 .opp-rows.dense .ob-bands { margin-top: 3px; gap: 3px; }
 .opp-rows.dense .opp-band { padding: 2px 5px; }
-.opp-rows.dense .ob-line b { font-size: clamp(10px, 1.05vh, 13px); }
-.opp-rows.dense .ob-line u { font-size: clamp(9px, .95vh, 12px); }
-.opp-rows.dense .ob-dir em { font-size: clamp(9px, .95vh, 12px); }
+.opp-rows.dense .ob-line b { font-size: clamp(11.5px, 1.34vh, 26px); }
+.opp-rows.dense .ob-line u { font-size: clamp(11px, 1.32vh, 25px); }
+.opp-rows.dense .ob-dir em { font-size: clamp(11px, 1.32vh, 25px); }
 /* Second tier for short panels: spacing only, fonts stay at the dense size, so
  * every rival card fits with no clipped cell before scrolling is allowed. */
 .opp-rows.dense-2 { gap: 4px; }
@@ -597,7 +621,7 @@ html, body {
 .opp-rows.dense-2 .oc-head { padding-bottom: 1px; }
 .opp-rows.dense-2 .ob-bands { margin-top: 2px; gap: 2px; }
 .opp-rows.dense-2 .opp-band { padding: 1px 5px; }
-.opp-empty { font-size: 11px; color: var(--dim); }
+.opp-empty { font-size: var(--fs-small); color: var(--dim); }
 
 /* ---------- footer ---------- */
 .wall-foot {
@@ -605,7 +629,7 @@ html, body {
     align-items: center;
     gap: 14px;
     padding: 0 12px;
-    font-size: 10px;
+    font-size: var(--fs-small);
     color: rgba(124, 140, 163, .8);
     background: var(--panel);
     border: 1px solid var(--line);
