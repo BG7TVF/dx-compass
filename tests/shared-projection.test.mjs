@@ -90,6 +90,46 @@ test('world view fills the container without cutting continental land', () => {
     assert.equal(calls.center[1], 0);
 });
 
+test('panes narrower than one world at zoom 1 still fill the full width', () => {
+    /* Leaflet's getBoundsZoom returns max(current minZoom, coverZoom). The wall
+     * map used to start at minZoom 1, so a 377 px pane kept zoom 1 (512 px wide
+     * world) and the raster overflowed the container. fitWorld must lift the
+     * limit before asking, whatever the pane size. */
+    const size = {x: 377, y: 318};
+    const calls = {minZoom: 1};
+    const cover = Math.log2(size.x / 256);
+    const map = {
+        getSize: () => size,
+        project: ([, lon], zoom) => ({x: (lon + 180) / 360 * 256 * Math.pow(2, zoom)}),
+        getBoundsZoom: () => Math.max(calls.minZoom, cover),
+        setMinZoom: zoom => { calls.minZoom = zoom; },
+        setView: (center, zoom) => { calls.zoom = zoom; calls.center = center; }
+    };
+    const zoom = fitWorld(map);
+    close(zoom, cover);
+    close(calls.zoom, cover);
+    close(calls.minZoom, cover);
+    close(256 * Math.pow(2, zoom), size.x);
+});
+
+test('wide containers still fit one world to the full width', () => {
+    const size = {x: 1200, y: 400};
+    const calls = {minZoom: 0};
+    const cover = Math.log2(size.x / 256);
+    const map = {
+        getSize: () => size,
+        project: ([, lon], zoom) => ({x: (lon + 180) / 360 * 256 * Math.pow(2, zoom)}),
+        getBoundsZoom: () => Math.max(calls.minZoom, cover),
+        setMinZoom: zoom => { calls.minZoom = zoom; },
+        setView: (center, zoom) => { calls.zoom = zoom; }
+    };
+    const zoom = fitWorld(map);
+    close(zoom, cover);
+    close(calls.zoom, cover);
+    close(calls.minZoom, cover);
+    close(256 * Math.pow(2, zoom), size.x);
+});
+
 test('world view centre matches the fitted latitude', () => {
     const map = {
         getSize: () => ({x: 592, y: 399}),

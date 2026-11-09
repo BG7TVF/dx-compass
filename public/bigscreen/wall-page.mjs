@@ -207,6 +207,19 @@ export async function startWallPage() {
     });
     if (window.ResizeObserver) {
         new ResizeObserver(() => opponents.trim()).observe($('#oppRows'));
+        /* The grid can settle after the first fit (fonts, wrapped header, data
+         * cards), so re-fit whenever the pane itself changes size instead of
+         * trusting the size the map was created with. */
+        let paneWidth = 0;
+        let paneHeight = 0;
+        new ResizeObserver(entries => {
+            const box = entries[0].contentRect;
+            if (!box.width || !box.height) return;
+            if (box.width === paneWidth && box.height === paneHeight) return;
+            paneWidth = box.width;
+            paneHeight = box.height;
+            wallMap.fit();
+        }).observe($('#map'));
     }
 
     tickClock(state.settings);

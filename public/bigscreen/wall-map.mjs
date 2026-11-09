@@ -5,9 +5,11 @@ import {gridToLatLon} from '../shared/geo/maidenhead.mjs';
 import {
     addOfflineLand,
     createBaseMap,
+    fitWorld,
     LAND_BOUNDS,
     mercLat,
-    mercY
+    mercY,
+    WORLD_BOUNDS
 } from '../shared/map/base-map.mjs';
 import {getLeaflet} from '../shared/map/leaflet.mjs';
 import {
@@ -22,7 +24,6 @@ import {
 } from '../shared/propagation/forecast-view.mjs';
 
 const COLORS = {qso: '#35d6a4', myspot: '#4cc9f0', dxspot: '#ff6b6b'};
-const WORLD_FIT = [[-62, -180], [85, 180]];
 const TOP_LAT = 85;
 const BOTTOM_LAT = -85;
 
@@ -105,14 +106,14 @@ export function createWallMap() {
             boxZoom: false,
             keyboard: false,
             zoomSnap: 0,
-            minZoom: 1,
+            minZoom: 0,
             maxZoom: 6,
-            maxBounds: LAND_BOUNDS,
+            maxBounds: WORLD_BOUNDS,
             maxBoundsViscosity: 1
         }
     });
     addOfflineLand(map, {L, bounds: LAND_BOUNDS, pane: 'raster', zIndex: 250});
-    map.fitBounds(WORLD_FIT, {animate: false});
+    fitWorld(map);
 
     const views = {};
     ['aurora', 'weather', 'qso', 'myspot', 'dxspot'].forEach(key => {
@@ -259,7 +260,7 @@ export function createWallMap() {
         drawWeather,
         fit() {
             map.invalidateSize();
-            map.fitBounds(WORLD_FIT, {animate: false});
+            fitWorld(map);
         },
         invalidate() {
             map.invalidateSize();

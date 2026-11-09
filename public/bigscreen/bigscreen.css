@@ -111,8 +111,8 @@ html, body {
     border-radius: var(--r);
     overflow: hidden;
 }
-/* The fitted world is narrower than this panel, so the strips left and right
- * of the raster must read as open ocean, not as a frame. */
+/* One world is fitted to the full pane width, so the raster reaches both
+ * edges and only vertical ocean bands are cropped. */
 #map { position: absolute; inset: 0; background: #08111c; }
 
 .layer-tag {

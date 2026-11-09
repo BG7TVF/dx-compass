@@ -120,33 +120,32 @@ function landViewExtents() {
     return landViewCache;
 }
 
-/** Visible Mercator fraction (0-1) and longitude coverage at a given zoom. */
-function viewCoverage(map, zoom) {
+/** Visible Mercator fraction (0-1) of the world at a given zoom. */
+function viewSpan(map, zoom) {
     const size = map.getSize();
     const worldPx = map.project([0, 180], zoom).x - map.project([0, -180], zoom).x;
-    return {span: size.y / worldPx, lon: size.x / worldPx};
+    return size.y / worldPx;
 }
 
 /** Centre latitude that keeps every continental coastline inside the viewport
  *  while Antarctica may run past the southern edge. */
 export function worldViewCenter(map, zoom) {
-    const {span} = viewCoverage(map, zoom);
+    const span = viewSpan(map, zoom);
     const {north, antarcticNorth} = landViewExtents();
     const half = Math.min(0.5, span / 2);
     const center = clamp((mercY(north) + mercY(antarcticNorth)) / 2, half, 1 - half);
     return [mercLat(center), 0];
 }
 
-/** Fill the container with the world map without cutting continental land.
- *  Falls back to a contained (letterboxed) world when the aspect ratio makes
- *  both impossible. */
+/** Fill the container width exactly with one world, cropping only vertical
+ *  ocean/void bands. The centre keeps every continental coastline inside the
+ *  viewport (Antarctica may run past the southern edge). */
 export function fitWorld(map) {
-    const coverZoom = map.getBoundsZoom(WORLD_BOUNDS, true);
-    const coverage = viewCoverage(map, coverZoom);
-    const {north, antarcticNorth} = landViewExtents();
-    const needed = mercY(antarcticNorth) - mercY(north);
-    const fills = coverage.lon >= 1 - 1e-6 && coverage.span >= needed;
-    const zoom = fills ? coverZoom : map.getBoundsZoom(WORLD_BOUNDS, false);
+    /* getBoundsZoom clamps its answer to the current minZoom, so the limit has
+     * to be lifted first or a small container keeps the old (too coarse) zoom
+     * and the world ends up wider than the map pane. */
+    map.setMinZoom(0);
+    const zoom = map.getBoundsZoom(WORLD_BOUNDS, true);
     map.setMinZoom(zoom);
     map.setView(worldViewCenter(map, zoom), zoom, {animate: false});
     return zoom;
