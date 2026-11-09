@@ -21,16 +21,9 @@ import {
     tickClock
 } from './wall-cards.mjs';
 import {createWallMap} from './wall-map.mjs';
+import {applyStatic, getLanguage, setLanguage, t} from './wall-i18n.mjs';
 
 const $ = selector => document.querySelector(selector);
-const LAYERS = {
-    prop: {name: '传播场', en: 'PROP'},
-    aurora: {name: '极光', en: 'AURORA'},
-    weather: {name: '天气', en: 'WX'},
-    qso: {name: 'QSO', en: 'QSO'},
-    myspot: {name: '我方 SPOT', en: 'MY SPOT'},
-    dxspot: {name: '对手 SPOT', en: 'DX SPOT'}
-};
 const LAYER_ORDER = ['prop', 'aurora', 'weather', 'qso', 'myspot', 'dxspot'];
 const COLORS = {qso: '#35d6a4', myspot: '#4cc9f0', dxspot: '#ff6b6b'};
 
@@ -72,22 +65,26 @@ export async function startWallPage() {
                 wallMap.mufLegendGradient() + ')"></i>');
         }
         if (shown.includes('aurora')) {
-            parts.push('<span><i class="dot" style="background:#5ce68a"></i>极光</span>');
+            parts.push('<span><i class="dot" style="background:#5ce68a"></i>' +
+                t('wall.layer.aurora') + '</span>');
         }
         if (shown.includes('weather')) {
-            parts.push('<span><i class="dot" style="background:#7bc4ff"></i>天气</span>');
+            parts.push('<span><i class="dot" style="background:#7bc4ff"></i>' +
+                t('wall.layer.weather') + '</span>');
         }
         if (shown.includes('qso')) {
-            parts.push('<span><i class="dot" style="background:' + COLORS.qso + '"></i>QSO</span>');
+            parts.push('<span><i class="dot" style="background:' + COLORS.qso + '"></i>' +
+                t('wall.layer.qso') + '</span>');
         }
         if (shown.includes('myspot')) {
-            parts.push('<span><i class="dot" style="background:' + COLORS.myspot + '"></i>我方 SPOT</span>');
+            parts.push('<span><i class="dot" style="background:' + COLORS.myspot + '"></i>' +
+                t('wall.layer.myspot') + '</span>');
         }
         if (shown.includes('dxspot')) {
             /* Each rival has its own colour, so the legend shows the palette
              * swatch instead of a single neutral red. */
             parts.push('<span><i class="dot" style="background:' +
-                opponentColorGradient() + '"></i>对手 SPOT</span>');
+                opponentColorGradient() + '"></i>' + t('wall.layer.dxspot') + '</span>');
         }
         $('#mapLegend').innerHTML = parts.join('');
     }
@@ -122,7 +119,7 @@ export async function startWallPage() {
             const show = () => {
                 LAYER_ORDER.forEach(key => wallMap.setVisible(key, false));
                 wallMap.setVisible(state.selected[index], true);
-                $('#layerTag').textContent = LAYERS[state.selected[index]].en +
+                $('#layerTag').textContent = t('wall.layer.' + state.selected[index]) +
                     ' · ' + (index + 1) + '/' + state.selected.length;
                 renderLegend([state.selected[index]]);
             };
@@ -133,7 +130,7 @@ export async function startWallPage() {
             }, secSetting('cycleSec', 10, 3, 60));
         } else {
             state.selected.forEach(key => wallMap.setVisible(key, true));
-            $('#layerTag').textContent = 'ALL LAYERS · ' + state.selected.length;
+            $('#layerTag').textContent = t('wall.layer.all', {count: state.selected.length});
             renderLegend(state.selected);
         }
     }
@@ -145,6 +142,7 @@ export async function startWallPage() {
         } catch (error) {
             /* Keep the previous settings and the read-only defaults. */
         }
+        const lang = state.settings.lang || getLanguage();
         const key = JSON.stringify([
             state.settings.wallTitle,
             state.settings.wallLayers,
@@ -160,12 +158,26 @@ export async function startWallPage() {
             state.settings.opponentCompactMin,
             state.settings.opponentBandsMax,
             state.settings.myCall,
-            state.settings.grid
+            state.settings.grid,
+            lang
         ]);
         if (key !== state.settingsKey) {
+            const langChanged = lang !== getLanguage();
             state.settingsKey = key;
+            if (langChanged) {
+                setLanguage(lang);
+                applyStatic(document);
+            }
             applyWallSettings();
             wallMap.drawQso(state.qsoRows, state.settings.grid);
+            /* Re-render the text that the modules compose from the dictionary:
+             * legend, opponent cards, chart captions and the station cards. */
+            if (langChanged) {
+                tickClock(state.settings);
+                renderRadios(state.station);
+                renderSpaceTrend(state.prop || {});
+                opponents.render(state.spotRows, state.settings.myCall);
+            }
         }
         renderBands(state.prop && state.prop.forecast);
     }
@@ -224,7 +236,9 @@ export async function startWallPage() {
         createPoller(refreshSpots, {intervalMs: () => secSetting('wallSpotSec', 30, 5, 300), immediate: false}),
         createPoller(refreshQso, {intervalMs: () => secSetting('wallQsoSec', 30, 5, 300), immediate: false}),
         createPoller(refreshStation, {intervalMs: () => secSetting('wallStationSec', 15, 5, 120), immediate: false}),
-        createPoller(refreshSettings, {intervalMs: () => secSetting('syncSec', 60, 10, 300), immediate: false})
+        /* Capped at 15 s so a language switch on the settings page reaches the
+         * wall promptly, even when the configured sync interval is longer. */
+        createPoller(refreshSettings, {intervalMs: () => Math.min(secSetting('syncSec', 60, 10, 300), 15000), immediate: false})
     ];
     const [propPoller, spotPoller, qsoPoller, stationPoller, settingsPoller] = pollers;
 
@@ -260,6 +274,7 @@ export async function startWallPage() {
 
     tickClock(state.settings);
     setInterval(() => tickClock(state.settings), 1000);
+    applyStatic(document);
 
     await settingsPoller.run();
     await Promise.all([

@@ -1,6 +1,8 @@
 /* Wall-only canvas charts. Input rows come from shared repositories; this
  * module owns binning and drawing only, never transport or business lookups. */
 
+import {t} from './wall-i18n.mjs';
+
 const $ = selector => document.querySelector(selector);
 const COLORS = {qso: '#35d6a4', myspot: '#4cc9f0'};
 
@@ -21,21 +23,21 @@ const xrayClass = flux => {
         (mantissa >= 1 ? mantissa.toFixed(1) : '1.0');
 };
 const SPACE_METRICS = [
-    {key: 'sfi', label: 'SFI', span: '30 日趋势', color: '#e8c547', digits: 0,
+    {key: 'sfi', label: 'SFI', color: '#e8c547', digits: 0,
         values: data => spaceColumn(data.sfi && data.sfi.list, 1)},
-    {key: 'ssn', label: 'SSN', span: '24 月趋势', color: '#f0a35e', digits: 0,
+    {key: 'ssn', label: 'SSN', color: '#f0a35e', digits: 0,
         values: data => spaceColumn(data.ssn && data.ssn.list, 1)},
-    {key: 'kp', label: 'KP', span: '近 5 日趋势', color: '#f1c40f', digits: 1,
+    {key: 'kp', label: 'KP', color: '#f1c40f', digits: 1,
         values: data => spaceColumn(data.kp && data.kp.list, 1)},
-    {key: 'dst', label: 'DST', span: '近 3 日趋势', color: '#e4572e', digits: 0,
+    {key: 'dst', label: 'DST', color: '#e4572e', digits: 0,
         values: data => spaceColumn(data.dst && data.dst.list, 1)},
-    {key: 'bz', label: 'BZ', span: '近 2 小时趋势', color: '#4cc9f0', digits: 1,
+    {key: 'bz', label: 'BZ', color: '#4cc9f0', digits: 1,
         values: data => spaceColumn(data.mag && data.mag.list, 2)},
-    {key: 'bt', label: 'BT', span: '近 2 小时趋势', color: '#8f7fff', digits: 1,
+    {key: 'bt', label: 'BT', color: '#8f7fff', digits: 1,
         values: data => spaceColumn(data.mag && data.mag.list, 1)},
-    {key: 'wind', label: 'WIND', span: '近 2 小时趋势', color: '#35d6a4', digits: 0,
+    {key: 'wind', label: 'WIND', color: '#35d6a4', digits: 0,
         values: data => spaceColumn(data.wind && data.wind.list, 1)},
-    {key: 'xray', label: 'XRAY', span: '近 24 小时趋势', color: '#ff9f43', log: true,
+    {key: 'xray', label: 'XRAY', color: '#ff9f43', log: true,
         display: value => xrayClass(value),
         values: data => spaceColumn(data.xray && data.xray.list, 1)}
 ];
@@ -169,7 +171,7 @@ function paintSpace(animate) {
     if (!cv || !label || !now || !dots) return;
     const metrics = spaceAvailable();
     if (!metrics.length) {
-        label.textContent = '趋势等待数据';
+        label.textContent = t('wall.chart.waiting');
         now.textContent = '—';
         dots.innerHTML = '';
         spaceDotsKey = '';
@@ -180,7 +182,7 @@ function paintSpace(animate) {
     const metric = metrics[spaceIndex];
     const values = metric.values(spaceData);
     const draw = () => {
-        label.textContent = metric.label + ' ' + metric.span;
+        label.textContent = t('wall.chart.subtitle.' + metric.key);
         const latest = values[values.length - 1];
         now.textContent = metric.display ? metric.display(latest) :
             metric.digits ? latest.toFixed(metric.digits) : String(Math.round(latest));

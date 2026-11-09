@@ -1404,7 +1404,53 @@ const I18N_EXTRA = {
         'wall.weekday.sat': '周六',
         'wall.weekday.sun': '周日',
         'wall.empty.waitingStation': '等待电台数据…',
-        'wall.clock.utc': 'UTC'
+        'wall.station.radio': '电台 {n}',
+        'wall.clock.utc': 'UTC',
+
+        /* template wiring: settings page */
+        'settings.section.wallLayer1': '1 级图层',
+        'settings.section.wallLayer2': '2 级图层',
+        'settings.desc.qrzUser': '用于查询呼号资料；仅保存在本机。',
+        'settings.desc.qrzPass': 'QRZ.com 密码，仅在保存时提交。',
+        'settings.desc.wallProp': '传播地图与 MUF 栅格。',
+        'settings.desc.wallAurora': '极光椭圆叠加。',
+        'settings.desc.wallWeather': '空间天气卡片与太阳图像。',
+        'settings.desc.wallQso': 'QSO 连线与比分。',
+        'settings.desc.wallMySpot': '本台呼号衍生的标记。',
+        'settings.desc.wallDxSpot': '被监听对手的 SPOT 标记。',
+        'settings.reset.spot': '重置 SPOT 地图设置',
+        'settings.reset.qso': '重置 QSO 地图设置',
+        'settings.reset.wall': '重置大屏设置',
+        'settings.reset.data': '重置数据设置',
+        'settings.reset.prop': '重置传播设置',
+        'settings.reset.global': '重置全局设置',
+
+        /* template wiring: main UI */
+        'nav.spotGrid': 'SPOT 分屏',
+        'nav.qsoMap': 'QSO 地图',
+        'nav.propMap': '传播地图',
+        'nav.settings': '设置',
+        'nav.conn': '实时数据连接',
+        'nav.rotateHint': '可见分屏不足时按页轮播呼号',
+        'nav.clearDbHint': '从数据库删除全部 SPOT 记录',
+        'nav.close': '关闭',
+        'nav.local': '本地',
+        'nav.rateFrom': '−60 分',
+        'nav.slot': '槽位 {n}',
+        'records.timeLocal': '时间（本地）',
+        'map.clear': '清空地图',
+        'map.amap': '高德地图（AMap）',
+
+        /* template wiring: wall display */
+        'wall.brand': '全球操作大屏',
+        'wall.layer.all': '全部图层 · {count}',
+        'wall.condition.good': '良好',
+        'wall.condition.fair': '一般',
+        'wall.condition.poor': '较差',
+        'wall.condition.closed': '关闭',
+        'wall.band.vhf': '甚高频',
+        'wall.chart.qsoPerMin': 'QSO / 分钟',
+        'wall.chart.spotPerMin': 'SPOT / 分钟'
     },
     en: {
         'settings.domain.ui.title': 'Global',
@@ -1424,7 +1470,7 @@ const I18N_EXTRA = {
         'settings.tab.qso': 'QSO Map',
         'settings.tab.wall': 'Wall',
         'settings.tab.data': 'Data',
-        'settings.tab.prop': 'Propagation',
+        'settings.tab.prop': 'Prop',
         'settings.section.basic': 'Basics',
         'settings.section.display': 'Display',
         'settings.section.displayAlerts': 'Display & alerts',
@@ -1776,7 +1822,53 @@ const I18N_EXTRA = {
         'wall.weekday.sat': 'Sat',
         'wall.weekday.sun': 'Sun',
         'wall.empty.waitingStation': 'Waiting for station data…',
-        'wall.clock.utc': 'UTC'
+        'wall.station.radio': 'Radio {n}',
+        'wall.clock.utc': 'UTC',
+
+        /* template wiring: settings page */
+        'settings.section.wallLayer1': 'Level 1 layers',
+        'settings.section.wallLayer2': 'Level 2 layers',
+        'settings.desc.qrzUser': 'Used for callsign lookups; stored on this device only.',
+        'settings.desc.qrzPass': 'QRZ.com password, sent only when you save.',
+        'settings.desc.wallProp': 'Propagation map and MUF grid.',
+        'settings.desc.wallAurora': 'Aurora oval overlay.',
+        'settings.desc.wallWeather': 'Space-weather cards and solar imagery.',
+        'settings.desc.wallQso': 'QSO links and score.',
+        'settings.desc.wallMySpot': 'Markers derived from my own callsign.',
+        'settings.desc.wallDxSpot': 'Spot markers for monitored rivals.',
+        'settings.reset.spot': 'Reset Spot map settings',
+        'settings.reset.qso': 'Reset QSO map settings',
+        'settings.reset.wall': 'Reset wall settings',
+        'settings.reset.data': 'Reset data settings',
+        'settings.reset.prop': 'Reset propagation settings',
+        'settings.reset.global': 'Reset global settings',
+
+        /* template wiring: main UI */
+        'nav.spotGrid': 'Spot grid',
+        'nav.qsoMap': 'QSO map',
+        'nav.propMap': 'Propagation map',
+        'nav.settings': 'Settings',
+        'nav.conn': 'Live data link',
+        'nav.rotateHint': 'Page through callsigns when there are more than visible cells',
+        'nav.clearDbHint': 'Delete all spot records from the database',
+        'nav.close': 'Close',
+        'nav.local': 'LOCAL',
+        'nav.rateFrom': '-60m',
+        'nav.slot': 'Slot {n}',
+        'records.timeLocal': 'Time (local)',
+        'map.clear': 'Clear map',
+        'map.amap': 'Amap (高德)',
+
+        /* template wiring: wall display */
+        'wall.brand': 'GLOBAL OPERATIONS WALL',
+        'wall.layer.all': 'ALL LAYERS · {count}',
+        'wall.condition.good': 'Good',
+        'wall.condition.fair': 'Fair',
+        'wall.condition.poor': 'Poor',
+        'wall.condition.closed': 'Closed',
+        'wall.band.vhf': 'VHF',
+        'wall.chart.qsoPerMin': 'QSO / MIN',
+        'wall.chart.spotPerMin': 'SPOT / MIN'
     }
 };
 

@@ -26,120 +26,9 @@ const LEGACY_FIELD_KEYS = new Set([
     'ttl', 'bandColors'
 ]);
 
-const DOMAIN_LABELS = {
-    ui: ['全局', 'Global'], map: ['SPOT 地图', 'Spot Map'], qso: ['QSO 地图', 'QSO Map'],
-    wall: ['大屏', 'Wall'], data: ['数据与告警', 'Data & Alerts'], prop: ['传播', 'Propagation']
-};
-
-/* Short Chinese descriptions for the row list. The schema keeps the English
- * source text; this map only feeds the muted second line under each label. */
-const DESC_ZH = {
-    lang: '界面语言，切换后立即生效。',
-    theme: '全局配色主题，立即应用到所有页面。',
-    tiles: '底图来源；国内网络建议选择高德。',
-    myCall: '用于标记“我的 SPOT”并自动调整被监控呼号。',
-    grid: 'Maidenhead 网格，决定本台在 QSO 地图与传播页的位置。',
-    layout: '地图宫格布局，仅保存在本机。',
-    timeZone: '时钟与表格使用 UTC 还是本地时间。',
-    hour12: '使用 12 小时制显示时间。',
-    showSeconds: '在时钟与记录时间中显示秒。',
-    clockSec: '时钟刷新的间隔。',
-    ttl: '各模式标记、连线与频段徽章的存活时间。',
-    bandColors: '标记、连线与频段徽章使用的频段配色。',
-    rotationSec: '轮播模式翻页的间隔。',
-    autoFitMaxZoom: '单格自动适配时的最大缩放层级。',
-    fitPad: '自动适配边界时保留的内边距比例。',
-    terminatorShow: '绘制晨昏线与夜侧阴影。',
-    terminatorSec: '晨昏线重新计算的间隔。',
-    heatShow: '按频段显示 CW/DIGI 热力图。',
-    heatRadius: '热力光斑半径（像素）。',
-    heatBlur: '热力光斑模糊半径（像素）。',
-    heatOpacity: '热力图层的最低不透明度。',
-    gcShow: '绘制被监听站到监听站的大圆路径。',
-    gcSamples: '每条大圆路径的插值采样点数。',
-    spotterSize: '红色监听站标记的直径（像素）。',
-    monitoredSize: '绿色被监听站标记的直径（像素）。',
-    historyLimit: '浏览器刷新后回放的 SPOT 数量。',
-    markerMax: '每格保留的最大标记数，超出丢弃最旧。',
-    fadeSec: '重新计算标记透明度的间隔。',
-    pruneSec: '清理过期标记的间隔。',
-    category: '决定是否显示多机台卡片。',
-    qsoMax: 'QSO 标记上限，超出丢弃最旧。',
-    qsoLines: '从本台向每个 QSO 绘制大圆连线。',
-    qsoAutoFit: 'QSO 更新后自动缩放到全部标记。',
-    qsoSpotAlert: '显示页内新 SPOT 提示卡。',
-    qsoVoiceAlert: '使用语音合成播报新 SPOT。',
-    mySpotTtl: '我的呼号衍生标记的存活时间。',
-    mySpotMax: '我的 SPOT 标记数量上限。',
-    mySpotPopup: '我的 SPOT 弹出提示卡。',
-    mySpotVoice: '我的 SPOT 语音播报。',
-    rateBucketMin: 'QSO 速率图的分桶宽度。',
-    minBuckets: '对齐整点的分桶数量。',
-    qsoHistoryLimit: '载入时拉取的 QSO 记录条数。',
-    freqDeltaKhz: '换频超过该差值才播报。',
-    alertPopupMs: '提示卡的显示时长。',
-    alertSnrMin: '仅当 SNR 不低于该值时告警。',
-    alertDistanceKmMin: '仅当路径长于该距离时告警。',
-    voiceRate: '语音合成的语速。',
-    voiceVolume: '语音合成的音量。',
-    quietFrom: '本地时间，到点后停止弹窗与语音（留空关闭）。',
-    quietTo: '本地时间，到点恢复告警；支持跨零点。',
-    alertSound: '每次告警播放短提示音，默认关闭，不影响语音。',
-    alertSoundVolume: '提示音音量（0 为静音）。',
-    wallTitle: '大屏顶部的品牌文字。',
-    wallMode: 'all 同时显示全部图层；cycle 自动轮播。',
-    wallLayers: '大屏实际渲染的叠加图层。',
-    wallTimerOn: '显示 UTC 比赛倒计时。',
-    wallTimerStart: '比赛窗口的 UTC 开始时间。',
-    wallTimerEnd: '比赛窗口的 UTC 结束时间。',
-    cycleSec: '轮播模式下每层停留时间。',
-    spaceDwellSec: '空间天气卡片轮播的停留时间。',
-    syncSec: '大屏拉取设置的间隔。',
-    wallSpotSec: '大屏刷新 SPOT 的间隔。',
-    wallQsoSec: '大屏刷新 QSO 的间隔。',
-    wallStationSec: '大屏刷新电台快照的间隔。',
-    topLat: '大屏世界适配的北侧裁剪纬度。',
-    bottomLat: '大屏世界适配的南侧裁剪纬度。',
-    opponentWindowMin: '对手卡片统计的 SPOT 时间窗。',
-    opponentCompactMin: '对手数达到该值时切换紧凑网格。',
-    opponentBandsMax: '单张对手卡片最多显示的频段数。',
-    concentrationMin: '主导方向标签所需的最低占比。',
-    pollDxwatchSec: 'dxwatch 采集间隔；5 秒流程节拍受此值控制。',
-    pollRbnSec: 'reversebeacon 采集间隔；建议不低于 5 秒。',
-    pollPskrSyncSec: 'PSKReporter MQTT 订阅同步间隔。',
-    sourceDxwatch: 'dxwatch 数据源总开关。',
-    sourceRbn: 'reversebeacon.net 数据源总开关。',
-    sourcePskr: 'PSKReporter MQTT 数据源总开关。',
-    freshSec: '服务端回放的活跃窗口；更早的 SPOT 仍会保存。',
-    retentionSpotsDays: '每小时清理 SPOT 表；0 表示永久保留。',
-    retentionRecordingMonths: '每小时清理早于该月数的录音 SPOT。',
-    retentionQsoDays: '每小时清理 QSO 表；0 表示永久保留。',
-    autoPurge: '启用每小时保留策略清理任务。',
-    recordsRefreshSec: '记录面板的刷新间隔。',
-    propPollSec: '传播页的轮询间隔。',
-    maxCallsigns: '/api/callsigns 与 PSKR 订阅列表的上限。',
-    logLevel: 'DX-Compass 模块日志级别；Node-RED 核心日志仍由 settings.js 控制。',
-    httpProxy: '传播采集器的出站代理；留空为直连。',
-    fetchTimeoutMs: '传播采集器单次请求超时。',
-    upstreamBase: 'services.swpc.noaa.gov 的替代地址；留空使用官方地址。',
-    n1mmPorts: '只读：UDP 端口是 flow.json 的节点属性，修改需要编辑流程并重新部署。',
-    recordingRepeat: 'once / daily / weekly 定时录音。',
-    diskWarnPct: '工作目录所在文件系统使用率超过该百分比时告警。',
-    diskCheckSec: '两次磁盘检查之间的最小间隔。',
-    diskAlert: '超过阈值时输出 Node-RED 警告。',
-    monitoring: '运行时开关；保存在本机与 global.monitoring，不写入 uiSettings。',
-    propProj: '传播地图使用的投影。',
-    propLayer: '传播栅格叠加图层。',
-    propDxLat: '点对点 DX 目标的纬度。',
-    propDxLon: '点对点 DX 目标的经度。',
-    collectSec: 'SWPC/GAMBIT 采集间隔；30 秒流程节拍受此值控制。',
-    condClosed: '频率达到 MUF 的该比例以上判定为 Closed。',
-    condGood: '余量比例高于该值判定为 Good。',
-    condFair: '余量比例高于该值判定为 Fair。',
-    mufOpacity: '传播页与大屏 MUF 栅格的透明度（0-255）。',
-    nightOpacity: '夜侧阴影透明度，晨昏带随之缩放。'
-};
-
+/* Short descriptions come from the dictionary (settings.field.<key>.desc,
+ * see docs/i18n-glossary-and-gap-audit.md); the schema keeps English as a
+ * fallback for callers that do not go through i18n. */
 /* Hand-written controls mapped to their schema key, so the same description
  * and unit logic applies to legacy markup and generated rows. */
 const LEGACY_ROW_KEYS = {
@@ -153,15 +42,11 @@ const LEGACY_ROW_KEYS = {
     setWallProp: 'wallLayers', setWallAurora: 'wallLayers', setWallWeather: 'wallLayers',
     setWallQso: 'wallLayers', setWallMySpot: 'wallLayers', setWallDxSpot: 'wallLayers'
 };
-const CUSTOM_DESC = {
-    setQrzUser: ['用于查询呼号资料；仅保存在本机。', 'Used for callsign lookups; kept in this browser only.'],
-    setQrzPass: ['QRZ.com 密码，仅在保存时提交。', 'QRZ.com password; submitted only when saved.'],
-    setWallProp: ['传播地图与 MUF 栅格。', 'Propagation map and MUF raster.'],
-    setWallAurora: ['极光椭圆叠加。', 'Aurora oval overlay.'],
-    setWallWeather: ['空间天气卡片与太阳图像。', 'Space-weather cards and solar imagery.'],
-    setWallQso: ['QSO 连线与比分。', 'QSO paths and score.'],
-    setWallMySpot: ['本台呼号衍生的标记。', 'Markers derived from your own callsign.'],
-    setWallDxSpot: ['被监控对手的 SPOT 标记。', 'Spot markers for monitored rivals.']
+/* Controls whose tooltip lives outside the schema (settings.desc.<name>). */
+const CUSTOM_DESC_KEYS = {
+    setQrzUser: 'qrzUser', setQrzPass: 'qrzPass',
+    setWallProp: 'wallProp', setWallAurora: 'wallAurora', setWallWeather: 'wallWeather',
+    setWallQso: 'wallQso', setWallMySpot: 'wallMySpot', setWallDxSpot: 'wallDxSpot'
 };
 /* Rows whose control carries no id of its own (multi-input groups). */
 const LEGACY_LABEL_KEYS = {bandTitle: 'bandColors', ttlTitle: 'ttl'};
@@ -178,7 +63,6 @@ export function createSettingsPage(ctx) {
     let pushTimer = null, pendingPush = null, pendingPatch = null, applyingRemote = false;
     let syncedSettings = null;
 
-    const bi = (zh, en) => (ctx.settings.lang === 'zh' ? zh : en);
     const cloneSettings = value => SETTINGS_SCHEMA.clone(value);
 
     function applyTheme(name) {
@@ -340,7 +224,7 @@ export function createSettingsPage(ctx) {
             case 'enum':
                 return `<select class="set-input" ${common}>` +
                     (field.values || []).map(value =>
-                        `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`).join('') +
+                        `<option value="${escapeHtml(value)}">${escapeHtml(ctx.t(`settings.field.${field.key}.option.${value}`))}</option>`).join('') +
                     '</select>';
             case 'int':
             case 'number':
@@ -363,12 +247,13 @@ export function createSettingsPage(ctx) {
         const control = fieldControl(field);
         if (!control) return '';
         const flags = [];
-        if (!field.wired) flags.push(`<span class="set-flag preview">${bi('预览', 'preview')}</span>`);
-        if (field.readonly) flags.push(`<span class="set-flag readonly">${bi('只读', 'read-only')}</span>`);
-        if (field.restart) flags.push(`<span class="set-flag restart">${bi('需重启', 'restart')}</span>`);
-        const label = bi(field.zh, field.label);
-        const desc = ctx.settings.lang === 'zh' ? (DESC_ZH[field.key] || field.desc) : field.desc;
-        return `<div class="set-row" data-search="${escapeHtml(`${field.key} ${field.label} ${field.zh} ${desc}`.toLowerCase())}">` +
+        if (!field.wired) flags.push(`<span class="set-flag preview">${ctx.t('settings.flag.preview')}</span>`);
+        if (field.readonly) flags.push(`<span class="set-flag readonly">${ctx.t('settings.flag.readonly')}</span>`);
+        if (field.restart) flags.push(`<span class="set-flag restart">${ctx.t('settings.flag.restart')}</span>`);
+        const label = ctx.t(`settings.field.${field.key}.label`);
+        const desc = descFor(field.key);
+        const search = `${field.key} ${field.label} ${field.zh} ${label} ${desc}`.toLowerCase();
+        return `<div class="set-row" data-search="${escapeHtml(search)}">` +
             `<div class="set-text"><label class="set-label" for="gen_${escapeHtml(field.key)}">` +
             `<span class="set-label-text">${escapeHtml(label)}</span>` +
             (flags.length ? `<span class="set-flags">${flags.join('')}</span>` : '') +
@@ -400,11 +285,14 @@ export function createSettingsPage(ctx) {
     }
 
     function descFor(key) {
-        const field = SETTINGS_SCHEMA.FIELD_MAP[key];
-        if (field) return ctx.settings.lang === 'zh' ? (DESC_ZH[key] || field.desc) : field.desc;
-        const custom = CUSTOM_DESC[key];
-        return custom ? custom[ctx.settings.lang === 'zh' ? 0 : 1] : '';
+        if (!key) return '';
+        if (SETTINGS_SCHEMA.FIELD_MAP[key]) return ctx.t(`settings.field.${key}.desc`);
+        return '';
     }
+
+    /* Rows that share one schema key across several controls keep their own
+     * labels (mode names, wall layer names) instead of the field label. */
+    const MULTI_LABEL_KEYS = new Set(['ttl', 'wallLayers']);
 
     /** Give every hand-written row the same text/description/unit anatomy as
      * the generated rows without touching the controls themselves. */
@@ -423,13 +311,17 @@ export function createSettingsPage(ctx) {
             if (!text) return;
             const key = rowKey(row);
             const controlId = row.querySelector('input[id], select[id]')?.id;
-            const customDesc = controlId && CUSTOM_DESC[controlId];
+            if (key && label && !MULTI_LABEL_KEYS.has(key) && SETTINGS_SCHEMA.FIELD_MAP[key]) {
+                const target = label.querySelector('.set-label-text') || label;
+                target.textContent = ctx.t(`settings.field.${key}.label`);
+            }
+            const customDescKey = controlId && CUSTOM_DESC_KEYS[controlId];
             const rawLabel = label
                 ? (label.querySelector('.set-label-text')?.textContent || label.textContent || '')
                 : '';
-            const desc = customDesc
-                ? customDesc[ctx.settings.lang === 'zh' ? 0 : 1]
-                : (key ? descFor(key) : '');
+            const desc = customDescKey
+                ? ctx.t(`settings.desc.${customDescKey}`)
+                : descFor(key);
             let descEl = text.querySelector('.set-desc');
             if (desc) {
                 if (!descEl) {
@@ -592,7 +484,7 @@ export function createSettingsPage(ctx) {
 
     function saveProfile() {
         const existing = $('#profileSelect').value;
-        const answer = window.prompt(bi('配置档名称', 'Profile name'), existing || '');
+        const answer = window.prompt(ctx.t('settings.profile.name'), existing || '');
         const name = String(answer || '').trim().slice(0, 24);
         if (!name) return;
         const shared = {};
@@ -606,7 +498,7 @@ export function createSettingsPage(ctx) {
         profiles[name] = {settings: shared, savedAt: new Date().toISOString()};
         writeProfiles(profiles);
         renderProfiles(name);
-        showToast(bi('配置档已保存', 'Profile saved'));
+        showToast(ctx.t('settings.profile.saved'));
     }
 
     async function loadProfile() {
@@ -615,7 +507,7 @@ export function createSettingsPage(ctx) {
         if (!profile) return;
         const result = validateSettingsPatch(profile.settings, {languages: ctx.i18n.languages});
         if (!Object.keys(result.values).length) {
-            showToast(bi('该配置档没有可用设置', 'This profile has no usable settings'));
+            showToast(ctx.t('settings.profile.empty'));
             return;
         }
         const before = cloneSettings(ctx.settings);
@@ -629,22 +521,22 @@ export function createSettingsPage(ctx) {
             showToast(ctx.t('saveFail'));
             return;
         }
-        showToast(bi(`已应用配置档「${name}」`, `Applied profile "${name}"`));
+        showToast(ctx.t('settings.profile.applied', {name}));
     }
 
     async function deleteProfile() {
         const name = $('#profileSelect').value;
         if (!name) return;
         const confirmed = await showConfirm(ctx,
-            bi(`确定删除配置档「${name}」吗？`, `Delete the profile "${name}"?`), {
-                title: bi('删除配置档', 'Delete profile'), okText: ctx.t('danger'), danger: true
+            ctx.t('settings.profile.deleteConfirm', {name}), {
+                title: ctx.t('settings.profile.deleteTitle'), okText: ctx.t('danger'), danger: true
             });
         if (!confirmed) return;
         const profiles = readProfiles();
         delete profiles[name];
         writeProfiles(profiles);
         renderProfiles();
-        showToast(bi('配置档已删除', 'Profile deleted'));
+        showToast(ctx.t('settings.profile.deleted'));
     }
 
     // ----------------------------------------------------------- backup I/O
@@ -679,14 +571,14 @@ export function createSettingsPage(ctx) {
         try {
             parsed = JSON.parse(await file.text());
         } catch {
-            showToast(bi('导入失败：文件不是有效 JSON', 'Import failed: invalid JSON'));
+            showToast(ctx.t('settings.import.invalidJson'));
             return {ok: false, error: 'parse'};
         }
         const source = parsed && typeof parsed === 'object'
             ? (parsed.settings && typeof parsed.settings === 'object' ? parsed.settings : parsed)
             : null;
         if (!source) {
-            showToast(bi('导入失败：缺少 settings 对象', 'Import failed: missing settings object'));
+            showToast(ctx.t('settings.import.missingSettings'));
             return {ok: false, error: 'shape'};
         }
         const incoming = cloneSettings(source);
@@ -695,7 +587,7 @@ export function createSettingsPage(ctx) {
         const result = validateSettingsPatch(incoming, {languages: ctx.i18n.languages});
         const appliedKeys = Object.keys(result.values);
         if (!appliedKeys.length) {
-            showToast(bi('没有可导入的有效设置', 'No valid settings to import'));
+            showToast(ctx.t('settings.import.nothing'));
             return {ok: false, error: 'empty', rejected: result.rejected};
         }
 
@@ -729,9 +621,11 @@ export function createSettingsPage(ctx) {
         }
 
         showToast(result.rejected.length
-            ? bi(`已导入 ${appliedKeys.length - result.rejected.length} 项，跳过 ${result.rejected.length} 项`,
-                `Imported ${appliedKeys.length - result.rejected.length}, skipped ${result.rejected.length}`)
-            : bi('设置已导入', 'Settings imported'));
+            ? ctx.t('settings.import.partial', {
+                applied: appliedKeys.length - result.rejected.length,
+                skipped: result.rejected.length
+            })
+            : ctx.t('settings.import.ok'));
         return {ok: true, applied: appliedKeys.length, rejected: result.rejected};
     }
 
@@ -747,10 +641,10 @@ export function createSettingsPage(ctx) {
     }
 
     async function resetDomainSettings(domain) {
-        const labels = DOMAIN_LABELS[domain] || ['设置', 'Settings'];
+        const label = ctx.t(`settings.domain.${domain}.title`);
         const confirmed = await showConfirm(ctx,
-            bi(`确定将「${labels[0]}」分组恢复默认值吗？`, `Reset the "${labels[1]}" group to its defaults?`), {
-                title: bi('重置分组', 'Reset group'), okText: ctx.t('danger'), danger: true
+            ctx.t('settings.reset.groupConfirm', {group: label}), {
+                title: ctx.t('settings.reset.groupTitle'), okText: ctx.t('danger'), danger: true
             });
         if (!confirmed) return false;
         try {
@@ -780,6 +674,7 @@ export function createSettingsPage(ctx) {
         document.documentElement.lang = ctx.settings.lang;
         document.documentElement.dir = 'ltr';
         document.body.classList.toggle('lang-ar', ctx.settings.lang === 'ar');
+        document.title = `DX-Compass · ${t('subtitle')}`;
         const texts = {
             '#btnConfig': 'settings', '#recordsPanel .panel-title': 'records',
             '#btnRefreshRecords': 'refresh', '#btnExportCsv': 'exportCsv', '#btnClearDb': 'clearDb',
@@ -814,40 +709,54 @@ export function createSettingsPage(ctx) {
             const element = $(selector);
             if (element) element.textContent = t(key);
         });
-        $('#btnConfig').title = t('settings');
+        $('#btnConfig').title = t('nav.settings');
         $('#btnMenu').title = t('menu');
+        const tooltips = {
+            '#btnSpotView': 'nav.spotGrid', '#btnQsoView': 'nav.qsoMap',
+            '#btnPropView': 'nav.propMap', '#connDot': 'nav.conn',
+            '#rotateGroup': 'nav.rotateHint', '#btnClearDb': 'nav.clearDbHint',
+            '#saClose': 'nav.close'
+        };
+        Object.entries(tooltips).forEach(([selector, key]) => {
+            const element = $(selector);
+            if (element) element.title = t(key);
+        });
+        setText('#qRateFrom', t('nav.rateFrom'));
+        setText('#qRateNow', t('now'));
         $('#wallTimerStartLabel').textContent = `${t('wallTimerStart')} (UTC)`;
         $('#wallTimerEndLabel').textContent = `${t('wallTimerEnd')} (UTC)`;
         $('#cfgHint').innerHTML = t('cfgHint');
         $('#btnRotateNext').title = t('nextPage');
         $('#rotSec').title = t('rotSecTitle');
+        const search = document.querySelector('#cfgSearch');
+        if (search) search.placeholder = t('settings.action.search');
 
-        setText('#tabData', bi('数据', 'Data'));
-        setText('#tabProp', bi('传播', 'Prop'));
-        setText('#globalAdvancedTitle', bi('高级', 'Advanced'));
-        setText('#basicSectionTitle', bi('基础', 'Basics'));
-        setText('#spotAdvancedTitle', bi('显示', 'Display'));
-        setText('#qsoAdvancedTitle', bi('显示与告警', 'Display & alerts'));
-        setText('#wallAdvancedTitle', bi('高级', 'Advanced'));
-        setText('#dataTitle', bi('数据与告警', 'Data & Alerts'));
-        setText('#propTitle', bi('传播', 'Propagation'));
-        setText('#backupTitle', bi('备份与恢复', 'Backup & restore'));
-        setText('#backupHint', bi('导出会写出全部共享设置；导入先逐项校验，保存失败会自动回滚。',
-            'Export writes every shared setting; import validates first and rolls back on failure.'));
-        setText('#btnExportSettings', bi('导出 JSON', 'Export JSON'));
-        setText('#btnImportSettings', bi('导入 JSON', 'Import JSON'));
-        setText('#dataHint', bi('服务端采集、保留与诊断。标有“需重启”的项在 Node-RED 重启后生效。',
-            'Server-side ingest, retention and diagnostics. Restart-marked items apply after a Node-RED restart.'));
-        setText('#propSettingsHint', bi('投影、图层与 DX 目标点在传播页工具栏调整；以下用于采集与条件阈值。',
-            'Projection, layer and the DX target live on the propagation toolbar; the values below tune collection and thresholds.'));
-        setText('#spotResetLabel', bi('重置 SPOT 地图设置', 'Reset Spot Map settings'));
-        setText('#qsoResetLabel', bi('重置 QSO 地图设置', 'Reset QSO Map settings'));
-        setText('#wallResetLabel', bi('重置大屏设置', 'Reset Wall settings'));
-        setText('#dataResetLabel', bi('重置数据设置', 'Reset Data settings'));
-        setText('#propResetLabel', bi('重置传播设置', 'Reset Propagation settings'));
-        setText('#globalResetLabel', bi('重置全局设置', 'Reset Global settings'));
+        setText('#tabData', t('settings.tab.data'));
+        setText('#tabProp', t('settings.tab.prop'));
+        setText('#globalAdvancedTitle', t('settings.section.advanced'));
+        setText('#basicSectionTitle', t('settings.section.basic'));
+        setText('#spotAdvancedTitle', t('settings.section.display'));
+        setText('#qsoAdvancedTitle', t('settings.section.displayAlerts'));
+        setText('#wallAdvancedTitle', t('settings.section.advanced'));
+        setText('#dataTitle', t('settings.section.data'));
+        setText('#propTitle', t('settings.section.prop'));
+        setText('#backupTitle', t('settings.section.backup'));
+        setText('#backupHint', t('settings.hint.backup'));
+        setText('#btnExportSettings', t('settings.action.export'));
+        setText('#btnImportSettings', t('settings.action.import'));
+        setText('#dataHint', t('settings.hint.data'));
+        setText('#propSettingsHint', t('settings.hint.prop'));
+        setText('#spotResetLabel', t('settings.reset.spot'));
+        setText('#qsoResetLabel', t('settings.reset.qso'));
+        setText('#wallResetLabel', t('settings.reset.wall'));
+        setText('#dataResetLabel', t('settings.reset.data'));
+        setText('#propResetLabel', t('settings.reset.prop'));
+        setText('#globalResetLabel', t('settings.reset.global'));
         $$('[data-reset-domain]').forEach(button => {
-            button.textContent = bi('重置本组', 'Reset group');
+            button.textContent = t('settings.action.resetGroup');
+        });
+        $$('.cfg-call').forEach((input, index) => {
+            input.placeholder = t('nav.slot', {n: index + 1});
         });
 
         renderThemeOptions();
@@ -1088,7 +997,8 @@ export function createSettingsPage(ctx) {
             save({theme: ctx.settings.theme});
         });
         const tiles = $('#setTiles');
-        tiles.innerHTML = Object.keys(TILE_PROVIDERS).map(key => `<option value="${key}">${TILE_PROVIDERS[key].name}</option>`).join('');
+        tiles.innerHTML = Object.keys(TILE_PROVIDERS).map(key =>
+            `<option value="${key}">${ctx.t(`settings.field.tiles.option.${key}`)}</option>`).join('');
         tiles.value = ctx.settings.tiles;
         tiles.addEventListener('change', () => setTileProvider(tiles.value));
 

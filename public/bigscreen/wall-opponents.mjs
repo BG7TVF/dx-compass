@@ -12,11 +12,13 @@
  * is reaching, i.e. the direction that band is being worked. Spots older than
  * the activity window are ignored, matching the 30 min map marker cutoff. */
 
+import {t} from './wall-i18n.mjs';
+
 const $ = selector => document.querySelector(selector);
-const COMPASS = ['北', '东北', '东', '东南', '南', '西南', '西', '西北'];
+const COMPASS = ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw'];
 const ARROWS = ['↑', '↗', '→', '↘', '↓', '↙', '←', '↖'];
 const compassIndex = degrees => Math.round(((degrees % 360) + 360) % 360 / 45) % 8;
-const compass = degrees => COMPASS[compassIndex(degrees)];
+const compass = degrees => t('wall.dir.' + COMPASS[compassIndex(degrees)]);
 const esc = value => String(value === null || value === undefined ? '' : value)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const num = (value, digits) => value === null || value === undefined || !isFinite(value)
@@ -306,7 +308,7 @@ export function bandCellHtml(band) {
     let direction = '—';
     let arrow = '';
     if (band.dirSamples >= 2 && band.spread) {
-        direction = '多向';
+        direction = t('wall.opp.multiDir');
     } else if (band.dir !== null) {
         /* The compass word is its own span so the compact grid can hide it and
          * keep only the arrow + degrees when the card is narrow. */
@@ -317,8 +319,10 @@ export function bandCellHtml(band) {
     const thin = band.dirSamples === 1;
     const frequency = band.freq ? num(band.freq / 1000, 3) : '—';
     const title = band.band + ' · ' + band.n + ' SPOT · ' +
-        (band.dirSamples ? band.dirSamples + ' 个方向样本' : '无坐标样本') +
-        (thin ? '（仅 1 个，方向仅供参考）' : '') +
+        (band.dirSamples
+            ? t('wall.opp.dirSamples', {count: band.dirSamples})
+            : t('wall.opp.noDirSamples')) +
+        (thin ? t('wall.opp.thinHint') : '') +
         (band.freq ? ' · ' + num(band.freq, 0) + ' kHz' : '');
     return '<div class="opp-band' + (thin ? ' thin' : '') + '" style="--band-color:' +
         band.color + '" title="' + esc(title) + '">' +
@@ -335,7 +339,8 @@ export function opponentCardHtml(opponent, bandsMax = 12) {
         '<div class="oc-head"><i class="oc-shape">' +
         shapeSvg(opponent.shape, opponent.color, 13) + '</i>' +
         '<b>' + esc(opponent.call) + '</b><span>' +
-        opponent.bands.length + ' 频段 · ' + opponent.n + ' SPOT</span></div>' +
+        esc(t('wall.opp.cardMeta', {bands: opponent.bands.length, count: opponent.n})) +
+        '</span></div>' +
         '<div class="ob-bands">' + opponent.bands.slice(0, limit).map(bandCellHtml).join('') + '</div>' +
         '</section>';
 }
@@ -353,8 +358,8 @@ export function createOpponentRenderer({bearing, windowMin = 30, concentrationMi
         if (!box) return;
         const summary = $('#oppSummary');
         if (!opponents.length) {
-            box.innerHTML = '<div class="opp-empty">最近 ' + config.windowMin +
-                ' 分钟无对手 SPOT</div>';
+            box.innerHTML = '<div class="opp-empty">' +
+                esc(t('wall.opp.empty', {min: config.windowMin})) + '</div>';
             box.classList.remove('dense', 'dense-2', 'compact');
             if (summary) summary.textContent = '';
             return;
@@ -362,7 +367,11 @@ export function createOpponentRenderer({bearing, windowMin = 30, concentrationMi
         box.innerHTML = opponents.map(opponent => opponentCardHtml(opponent, config.bandsMax)).join('');
         const bands = new Set();
         opponents.forEach(opponent => opponent.bands.forEach(band => bands.add(band.band)));
-        if (summary) summary.textContent = opponents.length + ' 对手 · ' + bands.size + ' 频段';
+        if (summary) {
+            summary.textContent = t('wall.opp.summary', {
+                count: opponents.length, bands: bands.size
+            });
+        }
         /* Up to nine rivals must fit on a 1080p wall without scrolling, so
          * five or more switch to a two-column grid of short cards (band cells
          * inline). Fewer rivals keep the roomier one-column cards. */

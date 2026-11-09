@@ -417,7 +417,7 @@ export function createSpotPage(ctx) {
         const element = document.createElement('div');
         element.className = 'cell';
         element.dataset.index = index;
-        element.innerHTML = `<div class="cell-header"><span class="call-label">—</span><span class="spot-count">0</span><button class="clear-cell-btn" title="Clear map">×</button></div><div class="cell-info"></div><div class="map"></div><div class="cell-empty-hint"><span class="hint-icon">📡</span>${ctx.t('cellHint')}</div>`;
+        element.innerHTML = `<div class="cell-header"><span class="call-label">—</span><span class="spot-count">0</span><button class="clear-cell-btn" title="${ctx.t('map.clear')}">×</button></div><div class="cell-info"></div><div class="map"></div><div class="cell-empty-hint"><span class="hint-icon">📡</span>${ctx.t('cellHint')}</div>`;
         const base = createBaseMap(element.querySelector('.map'), {L, provider: ctx.settings.tiles});
         const terminator = createTerminator(base.map, terminatorOptions());
         const cell = {
@@ -557,6 +557,8 @@ export function createSpotPage(ctx) {
     function applyLang() {
         state.cells.forEach(cell => {
             cell.hint.innerHTML = `<span class="hint-icon">📡</span>${ctx.t('cellHint')}`;
+            const clear = cell.el.querySelector('.clear-cell-btn');
+            if (clear) clear.title = ctx.t('map.clear');
             if (Object.keys(cell.bandInfo).length) renderCellInfo(cell);
         });
         setConnState(state.connState);

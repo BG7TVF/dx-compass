@@ -7,8 +7,15 @@ import {
     parseUtcDateTime
 } from '../shared/core/clock.mjs';
 import {WALL_BAND_COLORS} from './wall-opponents.mjs';
+import {getLanguage, t} from './wall-i18n.mjs';
 
 const $ = selector => document.querySelector(selector);
+const locale = () => {
+    const lang = getLanguage();
+    return lang === 'zh' ? 'zh-CN' : lang;
+};
+const timeZoneOf = options => options.timeZone === 'local' ? undefined : 'UTC';
+const upper = text => String(text || '').toUpperCase();
 const COLORS = {qso: '#35d6a4'};
 const num = (value, digits) => value === null || value === undefined || !isFinite(value)
     ? '—' : (digits === undefined ? String(value) : Number(value).toFixed(digits));
@@ -16,11 +23,22 @@ const last = list => list && list.length ? list[list.length - 1] : null;
 const esc = value => String(value === null || value === undefined ? '' : value)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
+function dateLabel(now, options) {
+    try {
+        return new Intl.DateTimeFormat(locale(), {
+            year: 'numeric', month: '2-digit', day: '2-digit',
+            weekday: 'short', timeZone: timeZoneOf(options)
+        }).format(now);
+    } catch (error) {
+        return formatClockDate(now, options) + ' · ' +
+            ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][clockWeekday(now, options)];
+    }
+}
+
 export function tickClock(settings, now = new Date()) {
     const options = clockOptions(settings);
     $('#utcClock').textContent = formatClock(now, options);
-    $('#utcDate').textContent = formatClockDate(now, options) + ' · ' +
-        ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][clockWeekday(now, options)];
+    $('#utcDate').textContent = upper(dateLabel(now, options));
     renderTimer(settings, now);
 }
 
@@ -33,13 +51,13 @@ function renderTimer(settings, now) {
     let label = '', target = 0, ended = false;
     if (settings.wallTimerOn) {
         if (isFinite(start) && time < start) {
-            label = '距开始';
+            label = t('wall.timer.toStart');
             target = start;
         } else if (isFinite(end) && time >= end) {
-            label = '已结束';
+            label = t('wall.timer.ended');
             ended = true;
         } else if (isFinite(end)) {
-            label = '距结束';
+            label = t('wall.timer.toEnd');
             target = end;
         }
     }
@@ -98,12 +116,13 @@ export function renderBands(forecast, now = new Date()) {
     $('#bandBar').innerHTML = Object.entries(bands).map(([name, entry]) => {
         const condition = entry && entry[period] || 'Closed';
         const value = String(condition).toLowerCase();
+        const label = String(name).toUpperCase() === 'VHF' ? t('wall.band.vhf') : name.toUpperCase();
         const className = value === 'good' ? 'good' : value === 'fair' ? 'fair' :
             value === 'poor' ? 'poor' : 'closed';
         const level = className === 'good' ? 3 : className === 'fair' ? 2 :
             className === 'poor' ? 1 : 0;
-        return '<div class="band ' + className + '"><b>' + esc(name.toUpperCase()) +
-            '</b><span>' + esc(condition) + '</span><div class="meter">' +
+        return '<div class="band ' + className + '"><b>' + esc(label) +
+            '</b><span>' + esc(t('wall.condition.' + className)) + '</span><div class="meter">' +
             [0, 1, 2].map(index => '<u' + (index < level ? ' class="on"' : '') + '></u>').join('') +
             '</div></div>';
     }).join('');
@@ -129,15 +148,17 @@ export function renderRadios(station) {
     const radios = station && station.radios || {};
     const ids = Object.keys(radios);
     if (!ids.length) {
-        $('#radioCards').innerHTML = '<div class="opp-empty">等待电台数据…</div>';
+        $('#radioCards').innerHTML = '<div class="opp-empty">' +
+            esc(t('wall.empty.waitingStation')) + '</div>';
         return;
     }
     $('#radioCards').innerHTML = ids.map(id => {
         const radio = radios[id] || {};
         const tx = radio.isTransmitting ? ' tx' : '';
         const mhz = radio.freqKhz ? num(radio.freqKhz / 1000, 3) + ' MHz' : '—';
-        const band = bandOf(radio.freqKhz);
-        const name = radio.radioName || ('RADIO ' + id);
+        const bandKey = bandOf(radio.freqKhz);
+        const band = bandKey === 'VHF' ? t('wall.band.vhf') : bandKey;
+        const name = radio.radioName || t('wall.station.radio', {n: id});
         return '<div class="radio' + tx + '"><label>' + esc(name) +
             (tx ? ' · TX' : '') + '</label><b>' + esc(mhz) + '</b><span>' +
             esc(band + (radio.mode ? ' · ' + radio.mode : '') +

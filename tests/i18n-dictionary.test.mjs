@@ -55,6 +55,16 @@ function keysOfLangObject(text) {
             i += 1;
             continue;
         }
+        if (ch === '/' && text[i + 1] === '*') {
+            const close = text.indexOf('*/', i + 2);
+            i = close < 0 ? text.length : close + 2;
+            continue;
+        }
+        if (ch === '/' && text[i + 1] === '/') {
+            const nl = text.indexOf('\n', i + 2);
+            i = nl < 0 ? text.length : nl + 1;
+            continue;
+        }
         if (ch === '{') { depth += 1; i += 1; continue; }
         if (ch === '}') { depth -= 1; i += 1; continue; }
         if (depth === 1) {
@@ -214,4 +224,53 @@ test('every literal t() key used by the UI still resolves', () => {
             assert.ok(key in dict.I18N[lang], `t('${key}') missing from ${lang}`);
         }
     }
+});
+
+test('every data-i18n key in the wall shell resolves in all languages', () => {
+    const html = fs.readFileSync(
+        new URL('../public/bigscreen/index.html', import.meta.url), 'utf8'
+    );
+    const keys = [...html.matchAll(/data-i18n="([^"]+)"/g)].map(match => match[1]);
+    assert.ok(keys.length >= 18, `unexpectedly few wall data-i18n nodes: ${keys.length}`);
+    for (const key of new Set(keys)) {
+        for (const lang of LANGS) {
+            assert.ok(key in dict.I18N[lang], `wall shell ${lang}.${key} is missing`);
+        }
+    }
+});
+
+test('the wall translator resolves composed keys and placeholders', async () => {
+    globalThis.I18N = dict.I18N;
+    const wall = await import('../public/bigscreen/wall-i18n.mjs');
+    assert.equal(wall.setLanguage('en'), 'en');
+    assert.equal(wall.t('wall.condition.good'), 'Good');
+    assert.equal(wall.t('wall.opp.summary', {count: 2, bands: 3}), '2 opponents · 3 bands');
+    assert.equal(wall.setLanguage('zh'), 'zh');
+    assert.equal(wall.t('wall.opp.summary', {count: 2, bands: 3}), '2 对手 · 3 频段');
+    assert.equal(wall.t('wall.dir.ne'), '东北');
+    assert.equal(wall.t('wall.station.radio', {n: 2}), '电台 2');
+    /* Unknown language falls back to English; unknown key echoes itself. */
+    assert.equal(wall.setLanguage('xx'), 'en');
+    assert.equal(wall.t('wall.nope'), 'wall.nope');
+    wall.setLanguage('zh');
+});
+
+test('wall and toolbar strings are no longer hard-coded', () => {
+    const read = relative => fs.readFileSync(
+        new URL(relative, import.meta.url), 'utf8'
+    );
+    const wallPage = read('../public/bigscreen/wall-page.mjs');
+    assert.ok(!/传播场|极光|ALL LAYERS/.test(wallPage), 'wall-page.mjs still hard-codes labels');
+    assert.ok(!/距开始|距结束|已结束/.test(read('../public/bigscreen/wall-cards.mjs')));
+    assert.ok(!/多向|个方向样本|无坐标样本|对手 SPOT/.test(
+        read('../public/bigscreen/wall-opponents.mjs')
+    ));
+    assert.ok(!/趋势等待数据|日趋势|月趋势|小时趋势/.test(
+        read('../public/bigscreen/wall-charts.mjs')
+    ));
+    const spotPage = read('../public/js/pages/spot-page.mjs');
+    assert.ok(!spotPage.includes('title="Clear map"'), 'spot-page still hard-codes Clear map');
+    assert.ok(!read('../public/js/pages/records-page.mjs').includes("'Time (Local)'"));
+    assert.ok(!read('../public/js/main.mjs').includes("'LOCAL'"));
+    assert.ok(!read('../public/js/pages/settings-page.mjs').includes('bi('));
 });

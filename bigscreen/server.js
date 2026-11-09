@@ -54,6 +54,8 @@ const STATIC = {
     '/wall-cards.mjs': ['wall-cards.mjs', JS],
     '/wall-charts.mjs': ['wall-charts.mjs', JS],
     '/wall-opponents.mjs': ['wall-opponents.mjs', JS],
+    '/wall-i18n.mjs': ['wall-i18n.mjs', JS],
+    '/js/i18n.js': ['js/i18n.js', JS, 'public'],
     '/shared/core/clock.mjs': ['core/clock.mjs', JS, 'shared'],
     '/shared/core/events.mjs': ['core/events.mjs', JS, 'shared'],
     '/shared/core/transport.mjs': ['core/transport.mjs', JS, 'shared'],
@@ -86,7 +88,8 @@ const BASES = {
     leaflet: path.join(ROOT, '..', 'vendor', 'leaflet'),
     'leaflet-img': path.join(ROOT, '..', 'vendor', 'leaflet', 'images'),
     data: path.join(ROOT, '..', 'data'),
-    shared: path.join(ROOT, '..', 'shared')
+    shared: path.join(ROOT, '..', 'shared'),
+    public: path.join(ROOT, '..')
 };
 
 function log(req, status) {

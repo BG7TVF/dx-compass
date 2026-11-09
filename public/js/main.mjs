@@ -66,7 +66,7 @@ async function start() {
 
     function refreshClock() {
         const options = clockOptions(ctx.settings);
-        const label = options.timeZone === 'local' ? 'LOCAL' : 'UTC';
+        const label = options.timeZone === 'local' ? ctx.t('nav.local') : 'UTC';
         $('#utcClock').textContent = `${label}: ${formatClock(new Date(), options)}`;
     }
     ctx.refreshClock = refreshClock;

@@ -15,6 +15,8 @@ const MODULE_PATHS = [
     '/wall-cards.mjs',
     '/wall-charts.mjs',
     '/wall-opponents.mjs',
+    '/wall-i18n.mjs',
+    '/js/i18n.js',
     '/shared/core/clock.mjs',
     '/shared/core/events.mjs',
     '/shared/core/transport.mjs',

@@ -714,12 +714,12 @@ public/js/i18n/
 | 阶段 | 内容 | 可改文件 | 状态 |
 | --- | --- | --- | --- |
 | P1 词典内修订 | 22 组术语修订、保留并守卫 71 个传播键、预置 370 个新键 | `public/js/i18n.js`、`tests/i18n-dictionary.test.mjs` | ✅ 已完成（见 §8） |
-| P2 设置页 | 79 标签 + 79 说明 + 15 枚举 + 47 骨架，`bi()` → `t()` | `schema.js`、`settings-page.mjs`、`index.html` | ⛔ 等设置页改版完成 |
-| P3 大屏 | 49 条 + `<html lang>` + 星期/天气等级 | `bigscreen/index.html`、`wall-*.mjs` | ⛔ 需要模板/JS 改动 |
-| P4 主界面残留 | 14 条 title/placeholder/轴标签/表头/底图名 | `index.html`、`records-page.mjs`、`spot-page.mjs`、`main.mjs`、`base-map.mjs` | ⛔ 需要 JS/模板改动 |
-| P5 门禁 | 键齐、空值、禁用词、schema 覆盖、中文残留 | `tests/main-i18n.test.mjs`、脚本 | ✅ 可与 P1 同步 |
+| P2 设置页 | 79 标签 + 79 说明 + 15 枚举 + 47 骨架，`bi()` → `t()` | `schema.js`、`settings-page.mjs`、`index.html` | ✅ 已完成（见 §9） |
+| P3 大屏 | 49 条 + `<html lang>` + 星期/天气等级 | `bigscreen/index.html`、`wall-*.mjs` | ✅ 已完成（见 §9） |
+| P4 主界面残留 | 14 条 title/placeholder/轴标签/表头/底图名 | `index.html`、`records-page.mjs`、`spot-page.mjs`、`main.mjs`、`base-map.mjs` | ✅ 已完成（见 §9） |
+| P5 门禁 | 键齐、空值、禁用词、schema 覆盖、中文残留 | `tests/main-i18n.test.mjs`、脚本 | ✅ 已完成（11 个用例） |
 
-**本轮可直接落地且不冲突的只有 P1**：只改纯词典 `public/js/i18n.js`。其余等设置页改版结束、你确认后再动。
+P1 已在 2026-11-10 完成；设置页 UI 改版定稿（`717eae3`）后，P2–P5 也已落地，见 §9。
 
 ---
 
@@ -734,12 +734,13 @@ public/js/i18n/
 | P1 前合并后键数 | 204 |
 | `I18N_EXTRA` 新增键数 | 370（zh/en 手写，其余 9 语言英文回退） |
 | P1 后每语言键数 | **574** |
+| P2–P4 后每语言键数 | **614**（P1 574 + 40） |
 | 代码中字面量 `t()` 键 | 83 |
 | 字面量缺失键 | 0 |
 | `SETTINGS_FIELDS` | 104（ui 4 / map 16 / qso 13 / wall 12 / data 24 / prop 10，含 25 个旧控件） |
 | 动态生成设置字段 | 79 |
-| 设置页 `bi()` 调用 | 34 对（部分为模板字符串，按 47 条文案计） |
-| 大屏 i18n 键 | 0（已预置 `wall.*` 59 键，未接线） |
+| 设置页 `bi()` 调用 | 0（P2 已全部改为 `ctx.t()`） |
+| 大屏 i18n 键 | 60（`wall.*`，P3 已接线） |
 
 ---
 
@@ -809,7 +810,7 @@ public/js/i18n/
 
 ### 8.4 校验用例
 
-新增 [tests/i18n-dictionary.test.mjs](../tests/i18n-dictionary.test.mjs)，8 个用例：
+新增 [tests/i18n-dictionary.test.mjs](../tests/i18n-dictionary.test.mjs)，11 个用例（8 个 P1 用例 + 3 个模板层用例，见 §9）：
 
 1. 11 种语言键集合完全一致；
 2. 无空值、无“值等于键名”（4 个合法小写英文例外白名单）；
@@ -818,6 +819,75 @@ public/js/i18n/
 5. `I18N_MERGE_DUPLICATES` 为空，`I18N_EXTRA` zh/en 键集一致且 ≥300；
 6. 禁用译法全局扫描：蚂蚁、钻机、乐队、斑点、终结者、夏令时、噪声地板、登录簿、个人资料、梅登海德、最大可用频率；
 7. schema 104 字段的 `label`/`desc` 与全部枚举选项在 11 语言中均存在；
-8. 代码中 83 个字面量 `t('key')` 在 11 语言中均可解析。
+8. 代码中 83 个字面量 `t('key')` 在 11 语言中均可解析；
+9. 大屏 `index.html` 的 19 个 `data-i18n` 键在 11 语言中均存在；
+10. `bigscreen/wall-i18n.mjs` 的插值、语言切换与英文回退；
+11. 大屏/工具栏源码不再残留硬编码中文与英文 title。
 
-`npm test` 结果：**152 个用例全部通过**（原 144 + 新增 8）。
+`npm test` 结果：**157 个用例全部通过**（P1 时 152 + 新增 3 + 白名单 2）。
+
+---
+
+## 9. 模板层落地记录（2026-11-10，P2–P5）
+
+设置页 UI 改版定稿（`717eae3`）后执行。只替换文案来源，不改结构、样式与交互。
+
+### 9.1 设置页（P2，220 条 + 14 条残留）
+
+| 区域 | 条数 | 落地方式 |
+| --- | --- | --- |
+| 动态字段标签 | 79 | `settings.field.<key>.label` |
+| 动态字段 tooltip | 79 | `settings.field.<key>.desc`（`schema.js` 的 `desc` 保留为兜底，不再直接展示） |
+| 枚举选项 | 15 字段 / 47 值 | `settings.field.<key>.option.<value>` |
+| 页签、分区、域标题 | 6 + 7 + 12 | `settings.tab.*`、`settings.section.*`、`settings.domain.*` |
+| 搜索、导出/导入、配置档、重置、提示 | 47 | `settings.action.*`、`settings.hint.*`、`settings.profile.*`、`settings.import.*`、`settings.reset.*`、`settings.flag.*` |
+
+- 删除 `bi(zh,en)`、`DESC_ZH`、`CUSTOM_DESC`、`DOMAIN_LABELS`；字段说明统一由 `descFor()` 走 `ctx.t()`。
+- 配置档的 `{name}`、导入的 `{applied}/{skipped}`、槽位 `{n}` 使用同一套插值，跨语言占位符一致。
+- 语言切换仍走 `applyLang()`：页签、分区、字段、tooltip、枚举、弹窗与占位符即时刷新；保存/patch/搜索/导入导出/配置档/分域重置的监听逻辑未改动。
+
+### 9.2 大屏（P3，49 条）
+
+新增 [public/bigscreen/wall-i18n.mjs](../public/bigscreen/wall-i18n.mjs)：延迟读取 `window.I18N`，提供 `t()`、`setLanguage()`、`applyStatic()`；`bigscreen/server.js` 白名单加入 `/wall-i18n.mjs` 与 `/js/i18n.js`。
+
+| 区域 | 条数 | 键 |
+| --- | --- | --- |
+| 静态壳（19 个 `data-i18n`） | 19 | `wall.brand`、`wall.group.*`、`wall.card.*`、`wall.chart.subtitle.sfi`、`wall.chart.last12h`、`wall.timer.toEnd`、`wall.clock.utc` |
+| 图层标签与图例 | 7 | `wall.layer.*`、`wall.layer.all` |
+| 倒计时 | 3 | `wall.timer.toStart/toEnd/ended` |
+| 频段条件与单位 | 5 | `wall.condition.good/fair/poor/closed`、`wall.band.vhf` |
+| 空间天气轮播 | 9 | `wall.chart.subtitle.*`（8 条）+ `wall.chart.waiting` |
+| 对手监测 | 13 | `wall.opp.*`、`wall.dir.*` |
+| 电台 / 图表轴 | 3 | `wall.empty.waitingStation`、`wall.station.radio`、`wall.chart.qsoPerMin`、`wall.chart.spotPerMin` |
+
+- `<html lang>` 与 `dir` 由 `applyStatic()` 写入，语言取自 `/api/settings` 的 `lang`。
+- 日期与星期改用 `Intl.DateTimeFormat(lang, {weekday:'short', timeZone})`，替换 `['SUN',…]` 硬编码。
+- `Good/Fair/Poor/Closed` 由服务端原始值映射到 `wall.condition.*`；`VHF` 映射到 `wall.band.vhf`。
+- 设置轮询上限收紧到 15 秒（仍受 `syncSec` 约束），语言切换无需刷新页面；动态卡片、图例、图表标题立即重绘。
+
+### 9.3 主界面 / 记录 / 地图（P4，14 条）
+
+| # | 位置 | 键 |
+| --- | --- | --- |
+| 1–3 | 视图切换 title | `nav.spotGrid`、`nav.qsoMap`、`nav.propMap` |
+| 4–7 | 连接、轮播、清库、关闭 title | `nav.conn`、`nav.rotateHint`、`nav.clearDbHint`、`nav.close` |
+| 8–9 | QSO 速率横轴 | `nav.rateFrom`、`now` |
+| 10 | 记录表头 | `records.timeLocal` |
+| 11 | Spot 地图清除按钮 | `map.clear`（`applyLang()` 同步刷新） |
+| 12 | 时钟前缀 | `nav.local` |
+| 13–14 | 底图选项 | `settings.field.tiles.option.osm/amap` |
+
+### 9.4 新增键与语言覆盖
+
+- 本轮新增 **40** 个键（`zh`/`en` 各一份）：设置页 16（`settings.section.wallLayer1/2`、`settings.desc.*` 8、`settings.reset.*` 6）、主界面/记录/地图 14（`nav.*` 11 + `records.timeLocal` + `map.clear` + `map.amap`）、大屏 10（`wall.brand`、`wall.layer.all`、`wall.condition.*` 4、`wall.band.vhf`、`wall.chart.qsoPerMin/spotPerMin`、`wall.station.radio`）。大屏 `wall.*` 合计 **60**。
+- 每语言键数：**614**（P1 574 + 40）。
+- 无重复键：`I18N_MERGE_DUPLICATES` 为空；新增键全部只在 `I18N_EXTRA` 的 zh/en 块出现一次。
+- `zh`、`en`：人工撰写，术语按 §3 术语表；禁用译法校验通过。
+- `de/fr/es/pt/ru/it/ar/ko/ja`：新增键继续**回退英文**，键存在、`t()` 可解析，**待母语校对**（清单同 §8.3）。大屏在这 9 种语言下为英文界面，但不再出现中英混排。
+
+### 9.5 回归与门禁
+
+- `npm test`：**157 个用例全部通过**。
+- 新增 3 个门禁：大屏 `data-i18n` 键在 11 语言中存在；`wall-i18n.mjs` 的插值/切换/回退；大屏与工具栏源码不得再出现硬编码中文与英文 title。
+- `wall-server.test.js` 的静态白名单覆盖 `/wall-i18n.mjs` 与 `/js/i18n.js`。
+- 修改的模块全部通过 `node --check`；设置页保存/patch/搜索/导出导入/配置档/分域重置的绑定未改动。

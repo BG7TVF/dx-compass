@@ -56,7 +56,9 @@ export function createRecordsPage(ctx) {
     async function refresh() {
         const current = ++sequence, recorded = state.view === 'rec';
         const head = [...ctx.t(recorded ? 'headRec' : 'headAll')];
-        if (!recorded && ctx.settings.timeZone === 'local' && head.length) head[0] = 'Time (Local)';
+        if (!recorded && ctx.settings.timeZone === 'local' && head.length) {
+            head[0] = ctx.t('records.timeLocal');
+        }
         $('#recordsHead').innerHTML = head.map(text => `<th>${text}</th>`).join('');
         try {
             const rows = await rowsForCurrentView();

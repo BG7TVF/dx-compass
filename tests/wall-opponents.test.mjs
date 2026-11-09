@@ -1,10 +1,20 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
 import {
     OPPONENT_COLORS, OPPONENT_SHAPES, WALL_BAND_COLORS, assignOpponentColors,
     assignOpponentStyles, bandCellHtml, buildOpponents, callColorIndex,
     opponentCardHtml, opponentColorMap, opponentStyleMap, shapeSvg, trackStyle
 } from '../public/bigscreen/wall-opponents.mjs';
+
+/* The card markup is composed from the shared dictionary (wall-i18n reads
+ * globalThis.I18N lazily), so load the shipped Chinese/English strings. */
+const i18nSource = fs.readFileSync(new URL('../public/js/i18n.js', import.meta.url), 'utf8');
+const sandbox = {};
+vm.createContext(sandbox);
+vm.runInContext(`${i18nSource}\n;globalThis.I18N = I18N;`, sandbox);
+globalThis.I18N = sandbox.I18N;
 
 const bearing = () => 90;
 const now = Date.parse('2026-11-08T12:00:00Z');

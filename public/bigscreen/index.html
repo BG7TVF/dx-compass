@@ -14,16 +14,16 @@
     <header class="wall-head">
         <div class="brand">
             <b id="wallName">DX-COMPASS</b>
-            <span>GLOBAL OPERATIONS WALL</span>
+            <span data-i18n="wall.brand">GLOBAL OPERATIONS WALL</span>
         </div>
         <div class="timer" id="wallTimer" hidden>
-            <label id="timerLabel">距结束</label>
+            <label id="timerLabel" data-i18n="wall.timer.toEnd">距结束</label>
             <b id="timerValue">--:--:--</b>
         </div>
         <div class="clock">
             <b id="utcClock">--:--:--</b>
             <span id="utcDate">----</span>
-            <i>UTC</i>
+            <i data-i18n="wall.clock.utc">UTC</i>
         </div>
     </header>
 
@@ -43,20 +43,20 @@
              carries the score bars and the opponent table. -->
         <aside class="rail rail-left">
             <div class="group grow">
-                <h4 class="group-head">环境 <span>ENVIRONMENT</span></h4>
+                <h4 class="group-head"><span data-i18n="wall.group.environment">环境</span> <span data-lang-sub>ENVIRONMENT</span></h4>
 
                 <section class="card grow">
-                    <h3>空间天气 <span>SPACE WEATHER</span></h3>
+                    <h3><span data-i18n="wall.card.spaceWx">空间天气</span> <span data-lang-sub>SPACE WEATHER</span></h3>
                     <div class="sw-grid" id="swGrid"></div>
                     <div class="spark">
-                        <div class="chart-head"><label id="swLabel">SFI 30 日趋势</label><b id="swNow">—</b></div>
+                        <div class="chart-head"><label id="swLabel" data-i18n="wall.chart.subtitle.sfi">SFI 30 日趋势</label><b id="swNow">—</b></div>
                         <div class="sw-dots" id="swDots"></div>
                         <canvas id="swTrend"></canvas>
                     </div>
                 </section>
 
                 <section class="card grow bandcard">
-                    <h3>频段条件 <span>BAND CONDITIONS</span></h3>
+                    <h3><span data-i18n="wall.card.bandConditions">频段条件</span> <span data-lang-sub>BAND CONDITIONS</span></h3>
                     <div class="band-bar" id="bandBar"></div>
                 </section>
             </div>
@@ -64,14 +64,14 @@
 
         <aside class="rail rail-right">
             <div class="group">
-                <h4 class="group-head">成绩 <span>SCORE</span></h4>
+                <h4 class="group-head"><span data-i18n="wall.group.score">成绩</span> <span data-lang-sub>SCORE</span></h4>
 
-                <section class="card list"><h3>各操作员 <span>BY OP</span></h3><div class="rows" id="opList"></div></section>
-                <section class="card list"><h3>各频段 <span>BY BAND</span></h3><div class="rows" id="bandList"></div></section>
+                <section class="card list"><h3><span data-i18n="wall.card.byOp">各操作员</span> <span data-lang-sub>BY OP</span></h3><div class="rows" id="opList"></div></section>
+                <section class="card list"><h3><span data-i18n="wall.card.byBand">各频段</span> <span data-lang-sub>BY BAND</span></h3><div class="rows" id="bandList"></div></section>
             </div>
 
             <div class="group grow opp-group">
-                <h4 class="group-head">对手监测 <span>OPPONENTS</span><i class="opp-sum" id="oppSummary"></i></h4>
+                <h4 class="group-head"><span data-i18n="wall.group.opponents">对手监测</span> <span data-lang-sub>OPPONENTS</span><i class="opp-sum" id="oppSummary"></i></h4>
 
                 <section class="card grow opp-card">
                     <div class="opp-rows" id="oppRows"></div>
@@ -81,28 +81,28 @@
 
         <section class="trend">
             <section class="card radios-card">
-                <h3>电台 <span>STATION</span></h3>
+                <h3><span data-i18n="wall.card.station">电台</span> <span data-lang-sub>STATION</span></h3>
                 <div class="radios" id="radioCards"></div>
             </section>
 
             <section class="card rate">
-                <h3>QSO 速率 <span>RATE / H</span></h3>
+                <h3><span data-i18n="wall.card.rate">QSO 速率</span> <span data-lang-sub>RATE / H</span></h3>
                 <div class="rate-nums">
                     <b id="rateHour">0</b>
-                    <span>每分钟 <i id="rateMin">0.0</i></span>
+                    <span><span data-i18n="wall.chart.perMinute">每分钟</span> <i id="rateMin">0.0</i></span>
                 </div>
-                <div class="chart-head"><label>最近 12 小时</label></div>
+                <div class="chart-head"><label data-i18n="wall.chart.last12h">最近 12 小时</label></div>
                 <canvas id="rateTrend"></canvas>
             </section>
 
             <section class="card chart">
-                <h3>QSO 趋势 <span>60 MIN</span></h3>
-                <div class="chart-head"><label>QSO / MIN</label><b id="qsoPeak">0</b></div>
+                <h3><span data-i18n="wall.card.qsoTrend">QSO 趋势</span> <span data-lang-sub>60 MIN</span></h3>
+                <div class="chart-head"><label data-i18n="wall.chart.qsoPerMin">QSO / MIN</label><b id="qsoPeak">0</b></div>
                 <canvas id="qsoTrend"></canvas>
             </section>
             <section class="card chart">
-                <h3>SPOT 趋势 <span>60 MIN</span></h3>
-                <div class="chart-head"><label>SPOT / MIN</label><b id="spotPeak">0</b></div>
+                <h3><span data-i18n="wall.card.spotTrend">SPOT 趋势</span> <span data-lang-sub>60 MIN</span></h3>
+                <div class="chart-head"><label data-i18n="wall.chart.spotPerMin">SPOT / MIN</label><b id="spotPeak">0</b></div>
                 <canvas id="spotTrend"></canvas>
             </section>
         </section>
@@ -119,6 +119,8 @@
 
 <script src="/data/land.js"></script>
 <script src="/vendor/leaflet/leaflet.js"></script>
+<script src="/js/i18n.js"></script>
+<script>window.I18N = I18N; window.LANGS = LANGS;</script>
 <script type="module" src="main.mjs"></script>
 </body>
 </html>
