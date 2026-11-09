@@ -90,6 +90,24 @@ test('world view fills the container without cutting continental land', () => {
     assert.equal(calls.center[1], 0);
 });
 
+test('Antarctic anchor is the peninsula, not Cape Horn', () => {
+    globalThis.LAND = [
+        [-140, 12, -50, 83.565, -140, 12],                                        // Greenland
+        [-73, 12, -50, -55.166, -73, 12],                                         // Cape Horn
+        [-180, -90, 180, -90, 180, -63.226, -180, -63.226, -180, -90]             // Antarctica
+    ];
+    const size = {x: 900, y: 300};
+    const map = {
+        getSize: () => size,
+        project: ([, lon], zoom) => ({x: (lon + 180) / 360 * 256 * Math.pow(2, zoom)})
+    };
+    const zoom = Math.log2(size.x / 256);
+    const y = mercY(worldViewCenter(map, zoom)[0]);
+    close(y, (mercY(83.565) + mercY(-63.226)) / 2, 1e-6);
+    assert.ok(y > (mercY(83.565) + mercY(-55.166)) / 2 + 1e-6,
+        'Cape Horn must not become the southern anchor');
+});
+
 test('panes narrower than one world at zoom 1 still fill the full width', () => {
     /* Leaflet's getBoundsZoom returns max(current minZoom, coverZoom). The wall
      * map used to start at minZoom 1, so a 377 px pane kept zoom 1 (512 px wide

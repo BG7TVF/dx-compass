@@ -90,33 +90,42 @@ export function setWorldMinZoom(map, bounds = WORLD_BOUNDS) {
     return map.getMinZoom();
 }
 
-/* Latitude above which a land ring counts as a continent; Antarctica (and the
- * sub-Antarctic islands) is the only land allowed to be cropped. */
-const ANTARCTIC_MAX_LAT = -55;
-const LAND_VIEW_FALLBACK = {north: 83.5, antarcticNorth: -55.2};
+/* A ring that reaches this far south belongs to Antarctica; anything else is
+ * continental/coastal land that must stay inside the fitted view. Cape Horn
+ * (-55.2 deg) and the sub-Antarctic islands are therefore not mistaken for the
+ * Antarctic landmass, whose northern edge is the peninsula near -63 deg. */
+const SOUTH_POLAR_REACH = -80;
+const LAND_VIEW_FALLBACK = {north: 83.5, antarcticNorth: -63.2};
 let landViewCache = null;
+let landViewSource = null;
 
 /** Northern limit of continental land plus the northern edge of Antarctica. */
 function landViewExtents() {
-    if (landViewCache) return landViewCache;
+    const land = globalThis.LAND;
+    if (landViewCache && landViewSource === land) return landViewCache;
     let north = -90;
     let antarcticNorth = -90;
     let found = false;
-    for (const ring of globalThis.LAND || []) {
+    for (const ring of land || []) {
         if (!ring || !ring.length) continue;
         const flat = typeof ring[0] === 'number';
         const count = flat ? Math.floor(ring.length / 2) : ring.length;
         let highest = -90;
+        let lowest = 90;
         for (let i = 0; i < count; i++) {
             const lat = Number(flat ? ring[i * 2 + 1] : ring[i][1]);
-            if (Number.isFinite(lat) && lat > highest) highest = lat;
+            if (!Number.isFinite(lat)) continue;
+            if (lat > highest) highest = lat;
+            if (lat < lowest) lowest = lat;
         }
         if (highest < -90) continue;
         found = true;
-        if (highest > ANTARCTIC_MAX_LAT) north = Math.max(north, highest);
-        else antarcticNorth = Math.max(antarcticNorth, highest);
+        if (lowest <= SOUTH_POLAR_REACH) antarcticNorth = Math.max(antarcticNorth, highest);
+        else north = Math.max(north, highest);
     }
-    landViewCache = found ? {north, antarcticNorth} : LAND_VIEW_FALLBACK;
+    if (!found || antarcticNorth < -90) landViewCache = LAND_VIEW_FALLBACK;
+    else landViewCache = {north, antarcticNorth};
+    landViewSource = land;
     return landViewCache;
 }
 
