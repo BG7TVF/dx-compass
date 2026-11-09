@@ -491,13 +491,9 @@ html, body {
 /* Outer grouping is by call sign, so each rival gets a prominent card with its
  * own activity summary; inside it every band with live spots gets a small cell
  * (band, exact frequency in MHz, that band's main heading). */
-.opp-group .group-head {
-    font-size: var(--fs-title);
-    letter-spacing: 2px;
-    color: var(--dx);
-    border-bottom-color: rgba(255, 107, 107, .32);
-}
-.opp-group .group-head span { color: rgba(255, 107, 107, .5); }
+/* The opponents heading is deliberately not restyled: it inherits the shared
+ * .group-head type and neutral rule, so this column reads as one more section
+ * instead of the only red one. */
 .opp-sum {
     margin-left: auto;
     font-style: normal;
@@ -506,9 +502,9 @@ html, body {
     color: rgba(219, 230, 245, .72);
     white-space: nowrap;
 }
+/* Border, background and radius stay at the shared .card values; only the
+ * padding is tighter because the nine-rival grid is height-budgeted. */
 .card.opp-card {
-    border-color: rgba(122, 168, 255, .22);
-    background: linear-gradient(180deg, rgba(122, 168, 255, .05), rgba(10, 18, 29, 0) 45%), var(--panel);
     padding: 7px;
     /* the compact grid drops the compass word on narrow rails (see below) */
     container-type: inline-size;
