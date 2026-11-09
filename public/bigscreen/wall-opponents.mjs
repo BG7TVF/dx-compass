@@ -27,6 +27,68 @@ export const WALL_BAND_COLORS = {
     '30M': '#1abc9c', '20M': '#00e5ff', '17M': '#3498db', '15M': '#9b59b6',
     '12M': '#e84393', '10M': '#e17055', '6M': '#dfe6e9', '2M': '#55efc4'
 };
+
+/* Rival identity palette, shared by the opponent list and the map markers.
+ * Light pastels stay legible on the dark panel and avoid the meanings already
+ * in use: alert red (#e4572e / #ff6b6b), QSO green (#35d6a4), my-station cyan
+ * (#4cc9f0) and the 12 band colours above. */
+export const OPPONENT_COLORS = [
+    '#ff9bb3', /* rose */
+    '#ffc46b', /* amber */
+    '#d7e87c', /* lime */
+    '#93b8ff', /* sky */
+    '#b39dff', /* violet */
+    '#d79bff', /* orchid */
+    '#f59ee6' /* magenta */
+];
+
+/** FNV-1a over the upper-cased call: same call, same slot on every device. */
+export function callColorIndex(call) {
+    const text = String(call || '').toUpperCase();
+    let hash = 0x811c9dc5;
+    for (let index = 0; index < text.length; index++) {
+        hash ^= text.charCodeAt(index);
+        hash = Math.imul(hash, 0x01000193) >>> 0;
+    }
+    return hash % OPPONENT_COLORS.length;
+}
+
+/** Assign colours in display order. While free slots remain every rival gets
+ *  its own colour (hash picks the start, the nearest free slot wins); once the
+ *  palette is exhausted colours are reused, but a rival never repeats its
+ *  predecessor's colour. Deterministic for a given ordered call list. */
+export function assignOpponentColors(calls) {
+    const size = OPPONENT_COLORS.length;
+    const colors = new Map();
+    const used = new Set();
+    let previous = null;
+    calls.forEach(call => {
+        const start = callColorIndex(call);
+        let color = null;
+        for (let step = 0; step < size; step++) {
+            const candidate = OPPONENT_COLORS[(start + step) % size];
+            if (candidate === previous) continue;
+            if (used.size < size && used.has(candidate)) continue;
+            color = candidate;
+            break;
+        }
+        if (!color) color = OPPONENT_COLORS[start];
+        colors.set(call, color);
+        used.add(color);
+        previous = color;
+    });
+    return colors;
+}
+
+/** Conic swatch listing the palette, used by the map legend for DX spots. */
+export function opponentColorGradient() {
+    const stops = OPPONENT_COLORS.map((color, index) => {
+        const from = Math.round(index * 100 / OPPONENT_COLORS.length);
+        const to = Math.round((index + 1) * 100 / OPPONENT_COLORS.length);
+        return color + ' ' + from + '% ' + to + '%';
+    });
+    return 'conic-gradient(' + stops.join(',') + ')';
+}
 const BAND_RANK = ['160M', '80M', '60M', '40M', '30M', '20M', '17M', '15M',
     '12M', '10M', '6M', '2M'];
 const bandRank = band => {
@@ -90,7 +152,7 @@ export function buildOpponents(rows, myCall, bearing, {now = Date.now(), windowM
             entry.freq = row.freq === undefined ? null : row.freq;
         }
 
-        if (row.lat !== null && row.lat !== undefined &&
+        if (bearing && row.lat !== null && row.lat !== undefined &&
             row.lon !== null && row.lon !== undefined &&
             row.dx_lat !== null && row.dx_lat !== undefined &&
             row.dx_lon !== null && row.dx_lon !== undefined) {
@@ -103,7 +165,7 @@ export function buildOpponents(rows, myCall, bearing, {now = Date.now(), windowM
         }
     });
 
-    return [...opponents.values()].map(opponent => ({
+    const list = [...opponents.values()].map(opponent => ({
         call: opponent.call,
         n: opponent.n,
         ts: opponent.ts,
@@ -111,6 +173,23 @@ export function buildOpponents(rows, myCall, bearing, {now = Date.now(), windowM
             .sort((a, b) => b.n - a.n || bandRank(a.band) - bandRank(b.band))
             .map(finishBand)
     })).sort((a, b) => b.n - a.n || b.ts - a.ts || a.call.localeCompare(b.call));
+    /* Colour in the same order the cards are painted, so the map can rebuild
+     * the identical assignment from the same rows. */
+    const colors = assignOpponentColors(list.map(opponent => opponent.call));
+    list.forEach(opponent => {
+        opponent.color = colors.get(opponent.call);
+    });
+    return list;
+}
+
+/** Call -> colour for the map. Runs the list aggregation (same window, same
+ *  band filter, same activity order) so a rival never changes colour between
+ *  the panel and its markers. */
+export function opponentColorMap(rows, myCall, options) {
+    const colors = new Map();
+    buildOpponents(rows, myCall, null, options)
+        .forEach(opponent => colors.set(opponent.call, opponent.color));
+    return colors;
 }
 
 export function bandCellHtml(band) {
@@ -136,8 +215,9 @@ export function bandCellHtml(band) {
 }
 
 export function opponentCardHtml(opponent) {
-    return '<section class="opp-call-card">' +
-        '<div class="oc-head"><b>' + esc(opponent.call) + '</b><span>' +
+    return '<section class="opp-call-card" style="--call-color:' +
+        (opponent.color || OPPONENT_COLORS[0]) + '">' +
+        '<div class="oc-head"><i class="oc-dot"></i><b>' + esc(opponent.call) + '</b><span>' +
         opponent.bands.length + ' 频段 · ' + opponent.n + ' SPOT</span></div>' +
         '<div class="ob-bands">' + opponent.bands.map(bandCellHtml).join('') + '</div>' +
         '</section>';

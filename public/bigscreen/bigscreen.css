@@ -518,7 +518,19 @@ html, body {
     padding: 5px 7px 7px;
     background: rgba(6, 13, 22, .55);
     border: 1px solid rgba(255, 107, 107, .16);
+    /* Same colour the rival's map markers use, so a card is identifiable at a
+     * glance without changing the existing type scale or card height. */
+    border-left: 3px solid var(--call-color, rgba(255, 107, 107, .4));
     border-radius: 7px;
+}
+.oc-dot {
+    flex: 0 0 auto;
+    align-self: center;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--call-color, #ff6b6b);
+    box-shadow: 0 0 6px var(--call-color, #ff6b6b);
 }
 .oc-head {
     display: flex;
@@ -535,7 +547,7 @@ html, body {
     font-size: clamp(15px, 1.65vh, 32px);
     font-weight: 700;
     letter-spacing: .5px;
-    color: #fff;
+    color: var(--call-color, #fff);
 }
 .oc-head span {
     flex: 0 0 auto;

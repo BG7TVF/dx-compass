@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-    buildOpponents, bandCellHtml, opponentCardHtml
+    OPPONENT_COLORS, WALL_BAND_COLORS, assignOpponentColors, bandCellHtml,
+    buildOpponents, callColorIndex, opponentCardHtml, opponentColorMap
 } from '../public/bigscreen/wall-opponents.mjs';
 
 const bearing = () => 90;
@@ -58,6 +59,59 @@ test('band cell shows frequency in MHz and the heading', () => {
     assert.match(html, /14\.026/);
     assert.match(html, /MHz/);
     assert.match(html, /东 90°/);
+});
+
+test('call colours are deterministic and stay off the semantic palette', () => {
+    assert.equal(callColorIndex('K1ABC'), callColorIndex('k1abc'));
+    assert.equal(callColorIndex('K1ABC'), callColorIndex('K1ABC'));
+    /* Alert red, DX red, my-station cyan, QSO green and every band colour. */
+    const reserved = ['#e4572e', '#ff6b6b', '#4cc9f0', '#35d6a4',
+        ...Object.values(WALL_BAND_COLORS)];
+    OPPONENT_COLORS.forEach(color => assert.ok(!reserved.includes(color), color + ' collides'));
+    assert.equal(new Set(OPPONENT_COLORS).size, OPPONENT_COLORS.length);
+});
+
+test('neighbouring rivals never share a colour, even when hashes collide', () => {
+    const byIndex = new Map();
+    let pair = null;
+    for (let index = 0; index < 800 && !pair; index++) {
+        const call = 'T' + index + 'AA';
+        const slot = callColorIndex(call);
+        if (byIndex.has(slot)) pair = [byIndex.get(slot), call];
+        else byIndex.set(slot, call);
+    }
+    assert.ok(pair, 'expected a hash collision inside the palette');
+    const colors = assignOpponentColors(pair);
+    assert.notEqual(colors.get(pair[0]), colors.get(pair[1]));
+
+    const six = ['DL1ABC', 'K1ABC', 'G4XYZ', 'JA1XYZ', 'UA9QQ', 'W3LPL'];
+    const distinct = six.map(call => assignOpponentColors(six).get(call));
+    assert.equal(new Set(distinct).size, six.length, 'free slots must all differ');
+
+    const many = Array.from({length: 20}, (value, index) => 'R' + index + 'AA');
+    const assigned = many.map(call => assignOpponentColors(many).get(call));
+    for (let index = 1; index < assigned.length; index++) {
+        assert.notEqual(assigned[index], assigned[index - 1]);
+    }
+    /* Rebuilding the same ordered list must reproduce the same colours. */
+    assert.deepEqual(many.map(call => assignOpponentColors(many).get(call)), assigned);
+});
+
+test('the map assigns each rival the same colour as its panel card', () => {
+    const rows = [
+        spot('K1ABC', '20m', 14020, '2026-11-08T11:31:00Z'),
+        spot('K1ABC', '40m', 7025, '2026-11-08T11:50:00Z'),
+        spot('DL1ABC', '20m', 14030, '2026-11-08T11:40:00Z'),
+        spot('JA1XYZ', '15m', 21030, '2026-11-08T11:45:00Z')
+    ];
+    const panel = buildOpponents(rows, '', bearing, {now});
+    const map = opponentColorMap(rows, '', {now});
+    assert.equal(map.size, panel.length);
+    panel.forEach(opponent => {
+        assert.equal(map.get(opponent.call), opponent.color);
+        assert.match(opponentCardHtml(opponent), new RegExp('--call-color:' + opponent.color));
+    });
+    assert.match(opponentCardHtml(panel[0]), /class="oc-dot"/);
 });
 
 test('too few or scattered samples never fake a main direction', () => {

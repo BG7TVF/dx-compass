@@ -11,7 +11,7 @@ import {
     renderSpaceTrend,
     renderSpotTrend
 } from './wall-charts.mjs';
-import {createOpponentRenderer} from './wall-opponents.mjs';
+import {createOpponentRenderer, opponentColorGradient} from './wall-opponents.mjs';
 import {
     renderBands,
     renderQsoStats,
@@ -75,7 +75,10 @@ export async function startWallPage() {
             parts.push('<span><i class="dot" style="background:' + COLORS.myspot + '"></i>我方 SPOT</span>');
         }
         if (shown.includes('dxspot')) {
-            parts.push('<span><i class="dot" style="background:' + COLORS.dxspot + '"></i>对手 SPOT</span>');
+            /* Each rival has its own colour, so the legend shows the palette
+             * swatch instead of a single neutral red. */
+            parts.push('<span><i class="dot" style="background:' +
+                opponentColorGradient() + '"></i>对手 SPOT</span>');
         }
         $('#mapLegend').innerHTML = parts.join('');
     }

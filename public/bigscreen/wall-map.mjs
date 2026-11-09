@@ -12,6 +12,7 @@ import {
     WORLD_BOUNDS
 } from '../shared/map/base-map.mjs';
 import {getLeaflet} from '../shared/map/leaflet.mjs';
+import {opponentColorMap} from './wall-opponents.mjs';
 import {
     addTrackPaths,
     createLayerGroup,
@@ -162,13 +163,18 @@ export function createWallMap() {
     function drawSpots(rows, myCall) {
         const my = String(myCall || '').toUpperCase();
         const cutoff = Date.now() - 30 * 60 * 1000;
+        /* Same call -> colour assignment as the opponent panel, so a rival's
+         * markers and its card are always the same colour. Calls the panel
+         * cannot aggregate (no band) keep the neutral DX red. */
+        const colors = opponentColorMap(rows, my);
         views.myspot.clearLayers();
         views.dxspot.clearLayers();
         rows.forEach(row => {
             const time = new Date(row.timestamp).getTime();
             if (!isFinite(time) || time < cutoff) return;
+            const call = String(row.monitored_call || row.dx_call || '').toUpperCase();
             const mine = String(row.monitored_call || '').toUpperCase() === my;
-            const color = mine ? COLORS.myspot : COLORS.dxspot;
+            const color = mine ? COLORS.myspot : (colors.get(call) || COLORS.dxspot);
             const group = mine ? views.myspot : views.dxspot;
             const hasDe = row.lat !== null && row.lat !== undefined &&
                 row.lon !== null && row.lon !== undefined;
@@ -181,8 +187,11 @@ export function createWallMap() {
                 }).addTo(group);
             }
             if (hasDe) {
+                /* Spotter points keep their existing neutral colour; only the
+                 * rival's own marker and path carry the identity colour. */
+                const spotter = mine ? COLORS.myspot : COLORS.dxspot;
                 L.circleMarker([row.lat, row.lon], {
-                    radius: 2.4, color, weight: 1, fillColor: color, fillOpacity: 0.55,
+                    radius: 2.4, color: spotter, weight: 1, fillColor: spotter, fillOpacity: 0.55,
                     interactive: false
                 }).addTo(group);
             }
