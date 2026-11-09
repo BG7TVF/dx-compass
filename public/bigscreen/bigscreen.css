@@ -109,13 +109,15 @@ html, body {
     /* Height follows the pane width instead of the viewport height: one world
      * fitted to the full width needs height >= 0.687 x width to keep every
      * coastline and part of Antarctica in view, so the trend strip only gets
-     * what is left. The cap only kicks in on very wide screens where the
-     * aspect-derived height would not fit the viewport any more. */
-    aspect-ratio: 1.44 / 1;
+     * what is left. 1.40 leaves ~13 px of Antarctic peninsula visible at 1600
+     * px wide instead of the ~4 px a 1.44 ratio would give. */
+    aspect-ratio: 1.40 / 1;
     max-height: calc(100vh - 220px);
-    background: var(--panel);
-    border: 1px solid var(--line);
-    border-radius: var(--r);
+    background: #08111c;
+    /* No border and no radius: a 1px frame hugging the raster reads as a black
+     * edge around the map, which the wall display must not show. */
+    border: 0;
+    border-radius: 0;
     overflow: hidden;
 }
 /* One world is fitted to the full pane width, so the raster reaches both

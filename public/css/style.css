@@ -239,7 +239,7 @@ html, body {
     flex: 1;
     display: grid;
     gap: 2px;
-    padding: 2px;
+    padding: 0;
     background: var(--grid-bg);
 }
 .grid.layout-1x1 { grid-template-columns: 1fr; grid-template-rows: 1fr; }
@@ -251,7 +251,9 @@ html, body {
     z-index: 0; /* create a stacking context so Leaflet panes (z-index 200-1000)
                    cannot escape and cover side panels/toasts */
     background: var(--bg-2);
-    border: 1px solid var(--border);
+    /* No frame: the grid gap already separates cells, and a border here shows
+     * up as a dark line hugging the map. */
+    border: 0;
     display: flex;
     flex-direction: column;
     overflow: hidden;
