@@ -12,7 +12,7 @@ import {
     WORLD_BOUNDS
 } from '../shared/map/base-map.mjs';
 import {getLeaflet} from '../shared/map/leaflet.mjs';
-import {opponentColorMap} from './wall-opponents.mjs';
+import {opponentStyleMap, shapeSvg, trackStyle} from './wall-opponents.mjs';
 import {
     addTrackPaths,
     createLayerGroup,
@@ -163,10 +163,11 @@ export function createWallMap() {
     function drawSpots(rows, myCall) {
         const my = String(myCall || '').toUpperCase();
         const cutoff = Date.now() - 30 * 60 * 1000;
-        /* Same call -> colour assignment as the opponent panel, so a rival's
-         * markers and its card are always the same colour. Calls the panel
-         * cannot aggregate (no band) keep the neutral DX red. */
-        const colors = opponentColorMap(rows, my);
+        /* Same call -> colour + glyph assignment as the opponent panel, so a
+         * rival's markers and its card always match. Calls the panel cannot
+         * aggregate (no band) keep the neutral DX red dot. */
+        const styles = opponentStyleMap(rows, my);
+        const painted = new Set();
         views.myspot.clearLayers();
         views.dxspot.clearLayers();
         rows.forEach(row => {
@@ -174,17 +175,37 @@ export function createWallMap() {
             if (!isFinite(time) || time < cutoff) return;
             const call = String(row.monitored_call || row.dx_call || '').toUpperCase();
             const mine = String(row.monitored_call || '').toUpperCase() === my;
-            const color = mine ? COLORS.myspot : (colors.get(call) || COLORS.dxspot);
+            const style = mine ? null : styles.get(call);
+            const color = mine ? COLORS.myspot : (style ? style.color : COLORS.dxspot);
             const group = mine ? views.myspot : views.dxspot;
             const hasDe = row.lat !== null && row.lat !== undefined &&
                 row.lon !== null && row.lon !== undefined;
             const hasDx = row.dx_lat !== null && row.dx_lat !== undefined &&
                 row.dx_lon !== null && row.dx_lon !== undefined;
             if (hasDx) {
-                L.circleMarker([row.dx_lat, row.dx_lon], {
-                    radius: 3, color, weight: 1, fillColor: color, fillOpacity: 0.85,
-                    interactive: false
-                }).addTo(group);
+                /* One marker per rival position: repeat spots from the same
+                 * op keep a single glyph instead of stacking dozens of icons. */
+                const key = call + '|' + row.dx_lat + '|' + row.dx_lon;
+                if (!painted.has(key)) {
+                    painted.add(key);
+                    if (style) {
+                        L.marker([row.dx_lat, row.dx_lon], {
+                            icon: L.divIcon({
+                                className: 'dx-glyph',
+                                html: shapeSvg(style.shape, style.color, 16),
+                                iconSize: [16, 16],
+                                iconAnchor: [8, 8]
+                            }),
+                            interactive: false,
+                            keyboard: false
+                        }).addTo(group);
+                    } else {
+                        L.circleMarker([row.dx_lat, row.dx_lon], {
+                            radius: 3, color, weight: 1, fillColor: color, fillOpacity: 0.85,
+                            interactive: false
+                        }).addTo(group);
+                    }
+                }
             }
             if (hasDe) {
                 /* Spotter points keep their existing neutral colour; only the
@@ -196,8 +217,9 @@ export function createWallMap() {
                 }).addTo(group);
             }
             if (hasDe && hasDx) {
+                const track = style ? trackStyle(style.shapeIndex) : {weight: 1.1, opacity: 0.45};
                 addTrackPaths(map, trackPaths(row.dx_lat, row.dx_lon, row.lat, row.lon, 64), {
-                    L, group, color, weight: 1.1, opacity: 0.45
+                    L, group, color, ...track
                 });
             }
         });

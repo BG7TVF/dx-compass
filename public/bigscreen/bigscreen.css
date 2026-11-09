@@ -192,6 +192,16 @@ html, body {
 }
 .map-legend .grad { width: clamp(84px, 9vh, 160px); height: clamp(7px, 0.8vh, 14px); border-radius: 3px; }
 
+/* Rival map glyphs are divIcons so colour + shape stay readable at 16px. */
+.dx-glyph {
+    background: transparent;
+    border: 0;
+}
+.dx-glyph svg {
+    display: block;
+    filter: drop-shadow(0 0 2px rgba(0, 0, 0, .9));
+}
+
 /* ---------- rail ---------- */
 .rail {
     display: flex;
@@ -495,8 +505,8 @@ html, body {
     white-space: nowrap;
 }
 .card.opp-card {
-    border-color: rgba(255, 107, 107, .22);
-    background: linear-gradient(180deg, rgba(255, 107, 107, .06), rgba(10, 18, 29, 0) 45%), var(--panel);
+    border-color: rgba(122, 168, 255, .22);
+    background: linear-gradient(180deg, rgba(122, 168, 255, .05), rgba(10, 18, 29, 0) 45%), var(--panel);
     padding: 7px;
 }
 .opp-rows {
@@ -517,37 +527,43 @@ html, body {
     min-width: 0;
     padding: 5px 7px 7px;
     background: rgba(6, 13, 22, .55);
-    border: 1px solid rgba(255, 107, 107, .16);
+    border: 1px solid rgba(122, 168, 255, .14);
     /* Same colour the rival's map markers use, so a card is identifiable at a
      * glance without changing the existing type scale or card height. */
-    border-left: 3px solid var(--call-color, rgba(255, 107, 107, .4));
+    border-left: 4px solid var(--call-color, rgba(255, 107, 107, .4));
     border-radius: 7px;
 }
-.oc-dot {
+/* Second encoding: the identical glyph the rival carries on the map. */
+.oc-shape {
     flex: 0 0 auto;
     align-self: center;
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--call-color, #ff6b6b);
-    box-shadow: 0 0 6px var(--call-color, #ff6b6b);
+    display: inline-flex;
+    line-height: 0;
 }
+.oc-shape svg { display: block; }
 .oc-head {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     gap: 7px;
     min-width: 0;
     padding-bottom: 4px;
-    border-bottom: 1px solid rgba(255, 107, 107, .12);
+    border-bottom: 1px solid rgba(122, 168, 255, .12);
 }
+/* Callsign as a filled pill: a block of colour large enough to match against
+ * a map marker at wall distance, instead of a 7px dot. */
 .oc-head b {
+    flex: 0 1 auto;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    padding: 0 8px;
+    border-radius: 999px;
+    background: var(--call-color, #ff6b6b);
+    color: #071019;
     font-size: clamp(15px, 1.65vh, 32px);
     font-weight: 700;
+    line-height: 1.2;
     letter-spacing: .5px;
-    color: var(--call-color, #fff);
 }
 .oc-head span {
     flex: 0 0 auto;
