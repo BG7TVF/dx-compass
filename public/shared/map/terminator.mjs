@@ -43,7 +43,11 @@ let projectionMemo = null;
 /** Solar elevation cosine at a geographic point, using the same solar geometry
  * as computeTerminator: >0 day, <0 night, 0 on the gray line. */
 export function solarCos(lat, lon, when = new Date()) {
-    const geometry = computeTerminator(when);
+    return solarCosAt(computeTerminator(when), lat, lon);
+}
+
+/** solarCos with caller-supplied geometry, for per-pixel field loops. */
+export function solarCosAt(geometry, lat, lon) {
     const latitude = toRadians(lat);
     const declination = toRadians(geometry.dec);
     const hour = toRadians(lon - geometry.lonSun);

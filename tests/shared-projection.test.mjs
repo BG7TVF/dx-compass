@@ -8,8 +8,10 @@ import {
     PROP_NORTH_MIN,
     PROP_SOUTH_MIN
 } from '../public/shared/map/projection.mjs';
-import {mercY, ringPoints} from '../public/shared/map/base-map.mjs';
-import {computeTerminator, createTerminator, propTerminator, solarCos} from '../public/shared/map/terminator.mjs';
+import {mercLat, mercY, ringPoints} from '../public/shared/map/base-map.mjs';
+import {
+    computeTerminator, createTerminator, propTerminator, solarCos, solarCosAt
+} from '../public/shared/map/terminator.mjs';
 
 const close = (actual, expected, tolerance = 1e-5) => {
     assert.ok(Math.abs(actual - expected) <= tolerance, `${actual} != ${expected}`);
@@ -55,6 +57,13 @@ test('ring helpers unwrap the seam and project finite copies', () => {
     copies.forEach(copy => assert.ok([...copy.pts].every(Number.isFinite)));
 });
 
+test('Mercator row helpers round-trip latitude for wall field sampling', () => {
+    for (const lat of [-85, -60, -23, 0, 23, 45, 60, 85]) {
+        close(mercLat(mercY(lat)), lat, 1e-9);
+    }
+    assert.equal(mercLat(0.5), 0);
+});
+
 test('terminator geometry remains finite through solstices and equinox', () => {
     for (const iso of ['2026-06-21T12:00:00Z', '2026-12-21T12:00:00Z', '2026-03-20T06:00:00Z']) {
         const geometry = computeTerminator(new Date(iso));
@@ -77,6 +86,7 @@ test('solarCos shares terminator geometry for day and night fields', () => {
     const onLine = solarCos(geometry.base[0][0], geometry.base[0][1],
         new Date('2026-06-21T12:00:00Z'));
     assert.ok(Math.abs(onLine) < 1e-9);
+    close(solarCosAt(geometry, 23, 113), solarCos(23, 113, new Date('2026-06-21T12:00:00Z')));
 });
 
 test('Leaflet terminator tracks six layers and destroy removes layers/timer', () => {

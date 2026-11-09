@@ -5,7 +5,7 @@
  */
 import {getLeaflet} from './leaflet.mjs';
 import {createRasterPane} from './layers.mjs';
-import {clamp, toRadians} from '../geo/coordinates.mjs';
+import {clamp, toDegrees, toRadians} from '../geo/coordinates.mjs';
 
 export const WORLD_BOUNDS = [[-85.06, -180], [85.06, 180]];
 export const LAND_BOUNDS = [[-85, -180], [85, 180]];
@@ -111,6 +111,11 @@ export function fitPoints(map, points, {L = globalThis.L, maxZoom = AUTO_FIT_MAX
 export function mercY(lat) {
     const phi = toRadians(clamp(lat, -85, 85));
     return 0.5 - Math.log(Math.tan(Math.PI / 4 + phi / 2)) / (2 * Math.PI);
+}
+
+/** Inverse of mercY: latitude whose normalised Mercator row is y. */
+export function mercLat(y) {
+    return toDegrees(Math.atan(Math.sinh((0.5 - Number(y)) * 2 * Math.PI)));
 }
 
 /** Unwrap flat [lon, lat, ...] or nested [[lon, lat], ...] rings. */

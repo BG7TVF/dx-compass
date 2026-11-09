@@ -7,6 +7,8 @@ import {makeProjection, propLonRel, propRingCopies} from '../../shared/map/proje
 import {propTerminator} from '../../shared/map/terminator.mjs';
 import {
     bestMatrixRow, getForecastMapData, mufColor, mufRgb, sampleMufGrid,
+    MUF_LAYER_ALPHA, MUF_LEGEND_VALUES, NIGHT_ALPHA, NIGHT_ALPHA_NO_TWILIGHT,
+    TWILIGHT_ALPHA, TWILIGHT_ELEVATION_DEG,
     selectBandConditions, selectContinents, selectPathMatrix
 } from '../../shared/propagation/forecast-view.mjs';
 import {$, escapeHtml} from '../ui.mjs';
@@ -120,7 +122,7 @@ export function createPropagationPage(ctx) {
             const value = sampleMufGrid(grid, lat, lon);
             if (value === null) return null;
             const rgb = mufRgb(value);
-            return [rgb[0], rgb[1], rgb[2], 77];
+            return [rgb[0], rgb[1], rgb[2], Math.round(MUF_LAYER_ALPHA * 255)];
         });
     }
 
@@ -277,7 +279,7 @@ export function createPropagationPage(ctx) {
     function drawGrayline(context, projection, width, height, now) {
         const lonC = projection.lon0 || 0;
         const terminator = propTerminator(now, projection.kind === 'azimuthal' ? 0 : lonC);
-        const sinTwilight = Math.sin(toRadians(-6));
+        const sinTwilight = Math.sin(toRadians(TWILIGHT_ELEVATION_DEG));
         context.globalAlpha = 1;
         if (projection.kind === 'azimuthal') {
             const base = discBoundary(projection, width, height, terminator, 0);
@@ -365,7 +367,7 @@ export function createPropagationPage(ctx) {
         if (Math.abs(Math.sin(dec)) >= Math.abs(sinTwilight)) {
             twilight = [];
             for (let offset = -180; offset <= 180; offset += 2) {
-                const lat = terminatorLatitude(-6, toRadians(offset + lonC - terminator.lonSun), dec);
+                const lat = terminatorLatitude(TWILIGHT_ELEVATION_DEG, toRadians(offset + lonC - terminator.lonSun), dec);
                 if (lat === null) {
                     twilight = null;
                     break;
@@ -373,9 +375,9 @@ export function createPropagationPage(ctx) {
                 twilight.push([clamp(lat, -89.99, 89.99), offset]);
             }
         }
-        fillNight(terminator.base, twilight ? 0.18 : 0.42);
+        fillNight(terminator.base, twilight ? NIGHT_ALPHA : NIGHT_ALPHA_NO_TWILIGHT);
         if (twilight) {
-            fillNight(twilight, 0.26);
+            fillNight(twilight, TWILIGHT_ALPHA);
             strokeCurve(twilight, 0.3, 1);
         }
         strokeCurve(terminator.base, 0.85, 1.5);
@@ -473,7 +475,7 @@ export function createPropagationPage(ctx) {
         let stops = null, low = '', high = '';
         if (state.layer === 'muf') {
             if (!forecast() || !forecast().mufGrid) return;
-            stops = [3, 9, 15, 21, 27, 30].map(mufColor);
+            stops = MUF_LEGEND_VALUES.map(mufColor);
             low = '3';
             high = '30 MHz';
         } else if (state.layer === 'weather') {

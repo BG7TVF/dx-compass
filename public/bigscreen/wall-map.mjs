@@ -1,11 +1,13 @@
 import {clamp} from '../shared/geo/coordinates.mjs';
-import {solarCos} from '../shared/map/terminator.mjs';
+import {computeTerminator, solarCosAt} from '../shared/map/terminator.mjs';
 import {trackPaths} from '../shared/geo/great-circle.mjs';
 import {gridToLatLon} from '../shared/geo/maidenhead.mjs';
 import {
     addOfflineLand,
     createBaseMap,
-    LAND_BOUNDS
+    LAND_BOUNDS,
+    mercLat,
+    mercY
 } from '../shared/map/base-map.mjs';
 import {getLeaflet} from '../shared/map/leaflet.mjs';
 import {
@@ -14,45 +16,74 @@ import {
     removeLayers,
     setLayerVisible
 } from '../shared/map/layers.mjs';
-import {mufColor, sampleMufGrid} from '../shared/propagation/forecast-view.mjs';
+import {
+    MUF_LAYER_ALPHA, MUF_LEGEND_VALUES, TWILIGHT_ELEVATION_DEG,
+    mufColor, mufRgb, nightShadeAlpha, sampleMufGrid
+} from '../shared/propagation/forecast-view.mjs';
 
 const COLORS = {qso: '#35d6a4', myspot: '#4cc9f0', dxspot: '#ff6b6b'};
 const WORLD_FIT = [[-62, -180], [85, 180]];
-const FIELD_W = 200;
-const FIELD_H = 100;
-const MUF_LEGEND_VALUES = [3, 8.4, 13.8, 19.2, 24.6, 30];
+const TOP_LAT = 85;
+const BOTTOM_LAT = -85;
 
-function fieldCanvas(mufGrid, when, night) {
+/* Rows follow the Leaflet Mercator projection so the MUF field lines up with
+ * the Mercator-rendered land instead of stretching towards the poles. */
+function rowLat(row, rows) {
+    const top = mercY(TOP_LAT), bottom = mercY(BOTTOM_LAT);
+    return mercLat(top + (row + 0.5) / rows * (bottom - top));
+}
+
+function fieldSize(map) {
+    const size = map.getSize();
+    return {
+        width: Math.max(200, Math.min(720, Math.round(size.x / 2))),
+        height: Math.max(100, Math.min(360, Math.round(size.y / 2)))
+    };
+}
+
+function mufImage(mufGrid, {width, height}) {
     const canvas = document.createElement('canvas');
-    canvas.width = FIELD_W;
-    canvas.height = FIELD_H;
+    canvas.width = width;
+    canvas.height = height;
     const context = canvas.getContext('2d');
-    if (!night) {
-        context.globalAlpha = 150 / 255;
-        for (let y = 0; y < FIELD_H; y++) {
-            const lat = 85 - (y + 0.5) * 170 / FIELD_H;
-            for (let x = 0; x < FIELD_W; x++) {
-                const lon = -180 + (x + 0.5) * 360 / FIELD_W;
-                const value = sampleMufGrid(mufGrid, lat, lon);
-                if (value === null || value === undefined || !isFinite(value)) continue;
-                context.fillStyle = mufColor(value);
-                context.fillRect(x, y, 1, 1);
-            }
-        }
-        return canvas.toDataURL('image/png');
-    }
-
-    const image = context.createImageData(FIELD_W, FIELD_H);
+    const image = context.createImageData(width, height);
     const pixels = image.data;
-    for (let y = 0; y < FIELD_H; y++) {
-        const lat = 85 - (y + 0.5) * 170 / FIELD_H;
-        for (let x = 0; x < FIELD_W; x++) {
-            const lon = -180 + (x + 0.5) * 360 / FIELD_W;
-            const offset = (y * FIELD_W + x) * 4;
-            pixels[offset] = 2;
-            pixels[offset + 1] = 6;
-            pixels[offset + 2] = 12;
-            pixels[offset + 3] = Math.round(150 * clamp((0.12 - solarCos(lat, lon, when)) / 0.24, 0, 1));
+    for (let y = 0; y < height; y++) {
+        const lat = rowLat(y, height);
+        for (let x = 0; x < width; x++) {
+            const lon = -180 + (x + 0.5) * 360 / width;
+            const value = sampleMufGrid(mufGrid, lat, lon);
+            if (value === null || value === undefined || !isFinite(value)) continue;
+            const rgb = mufRgb(value);
+            const offset = (y * width + x) * 4;
+            pixels[offset] = rgb[0];
+            pixels[offset + 1] = rgb[1];
+            pixels[offset + 2] = rgb[2];
+            pixels[offset + 3] = 255;
+        }
+    }
+    context.putImageData(image, 0, 0);
+    return canvas.toDataURL('image/png');
+}
+
+function nightImage(when, {width, height}) {
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext('2d');
+    const image = context.createImageData(width, height);
+    const pixels = image.data;
+    const geometry = computeTerminator(when);
+    const hasTwilight = Math.abs(Math.sin(geometry.dec * Math.PI / 180)) >=
+        Math.abs(Math.sin(TWILIGHT_ELEVATION_DEG * Math.PI / 180));
+    for (let y = 0; y < height; y++) {
+        const lat = rowLat(y, height);
+        for (let x = 0; x < width; x++) {
+            const lon = -180 + (x + 0.5) * 360 / width;
+            const alpha = nightShadeAlpha(solarCosAt(geometry, lat, lon), hasTwilight);
+            if (alpha <= 0) continue;
+            const offset = (y * width + x) * 4;
+            pixels[offset + 3] = Math.round(alpha * 255);
         }
     }
     context.putImageData(image, 0, 0);
@@ -104,14 +135,15 @@ export function createWallMap() {
 
     function renderProp(mufGrid) {
         if (!mufGrid || !Array.isArray(mufGrid.values)) return;
-        const now = new Date();
-        const nextMuf = L.imageOverlay(fieldCanvas(mufGrid, now, false), LAND_BOUNDS, {
-            opacity: 0.72,
+        const when = new Date();
+        const size = fieldSize(map);
+        const nextMuf = L.imageOverlay(mufImage(mufGrid, size), LAND_BOUNDS, {
+            opacity: MUF_LAYER_ALPHA,
             interactive: false,
             pane: 'raster'
         });
-        const nextNight = L.imageOverlay(fieldCanvas(mufGrid, now, true), LAND_BOUNDS, {
-            opacity: 0.9,
+        const nextNight = L.imageOverlay(nightImage(when, size), LAND_BOUNDS, {
+            opacity: 1,
             interactive: false,
             pane: 'raster'
         });

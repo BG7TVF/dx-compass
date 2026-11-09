@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-    bestMatrixRow, mufColor, sampleMufGrid, selectBandConditions, selectPathMatrix
+    bestMatrixRow, mufColor, sampleMufGrid, selectBandConditions, selectPathMatrix,
+    MUF_LAYER_ALPHA, NIGHT_ALPHA, NIGHT_ALPHA_NO_TWILIGHT, TWILIGHT_ALPHA,
+    MUF_LEGEND_VALUES, nightShadeAlpha
 } from '../public/shared/propagation/forecast-view.mjs';
 
 const grid = {
@@ -42,4 +44,15 @@ test('forecast selectors retain server matrix and object-mapped band conditions'
     assert.deepEqual(Object.entries(selectBandConditions(forecast).bands)[0], ['40M', {day: 'Fair', night: 'Good'}]);
     assert.equal(bestMatrixRow(matrix).name, '20M');
     assert.equal(bestMatrixRow(matrix, 0).name, '20M');
+});
+
+test('shared overlay styling matches the propagation canvas night shading', () => {
+    assert.equal(MUF_LAYER_ALPHA, 77 / 255);
+    assert.deepEqual(MUF_LEGEND_VALUES, [3, 9, 15, 21, 27, 30]);
+    assert.equal(nightShadeAlpha(1), 0);
+    assert.equal(nightShadeAlpha(0), 0);
+    assert.equal(nightShadeAlpha(-0.01), NIGHT_ALPHA);
+    assert.equal(nightShadeAlpha(Math.sin(-6 * Math.PI / 180)), NIGHT_ALPHA);
+    assert.equal(nightShadeAlpha(-0.5), 1 - (1 - NIGHT_ALPHA) * (1 - TWILIGHT_ALPHA));
+    assert.equal(nightShadeAlpha(-0.5, false), NIGHT_ALPHA_NO_TWILIGHT);
 });

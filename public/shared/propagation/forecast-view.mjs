@@ -10,6 +10,26 @@ export const MUF_STOPS = [
     [220, 200, 60], [240, 120, 40], [220, 40, 60]
 ];
 
+/* Shared overlay styling so the main panel and the read-only wall paint the
+ * same forecast field with the same numbers. Values mirror the original
+ * propagation canvas: MUF at 77/255, night 0.18, twilight band 0.26. */
+export const MUF_LAYER_ALPHA = 77 / 255;
+export const NIGHT_ALPHA = 0.18;
+export const TWILIGHT_ALPHA = 0.26;
+export const NIGHT_ALPHA_NO_TWILIGHT = 0.42;
+export const TWILIGHT_ELEVATION_DEG = -6;
+export const MUF_LEGEND_VALUES = [3, 9, 15, 21, 27, 30];
+
+/** Composite night alpha for a sun-elevation sine, matching the canvas fill order. */
+export function nightShadeAlpha(sinElevation, hasTwilight = true) {
+    const sine = Number(sinElevation);
+    if (!Number.isFinite(sine) || sine >= 0) return 0;
+    if (!hasTwilight) return NIGHT_ALPHA_NO_TWILIGHT;
+    const twilightSine = Math.sin(TWILIGHT_ELEVATION_DEG * Math.PI / 180);
+    if (sine >= twilightSine) return NIGHT_ALPHA;
+    return 1 - (1 - NIGHT_ALPHA) * (1 - TWILIGHT_ALPHA);
+}
+
 function gridDimensions(grid) {
     if (!grid || typeof grid !== 'object') return null;
     const values = grid.values;
