@@ -1,37 +1,51 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {buildOpponents, opponentRowHtml} from '../public/bigscreen/wall-opponents.mjs';
+import {buildOpponentBands, opponentBandHtml} from '../public/bigscreen/wall-opponents.mjs';
 
 const bearing = () => 90;
-const spot = (call, band, freq, timestamp) => ({
+const now = Date.parse('2026-11-08T12:00:00Z');
+const spot = (call, band, freq, timestamp, overrides = {}) => ({
     monitored_call: call, band, freq, timestamp,
-    lat: 30, lon: 120, dx_lat: 40, dx_lon: -100
+    lat: 30, lon: 120, dx_lat: 40, dx_lon: -100, ...overrides
 });
 
-test('opponents keep one newest slot per band and exclude our own call', () => {
+test('opponent bands keep recent spots, newest frequency per call, exclude our own call', () => {
     const rows = [
-        spot('K1ABC', '20M', 14020, '2026-11-08T10:00:00Z'),
-        spot('K1ABC', '20M', 14025, '2026-11-08T11:00:00Z'),
-        spot('K1ABC', '40M', 7025, '2026-11-08T11:01:00Z'),
-        spot('MYCALL', '20M', 14020, '2026-11-08T11:02:00Z')
+        spot('K1ABC', '20m', 14020, '2026-11-08T11:31:00Z'),
+        spot('K1ABC', '20m', 14025, '2026-11-08T11:34:00Z'),
+        spot('K1ABC', '40m', 7025, '2026-11-08T11:50:00Z'),
+        spot('DL1ABC', '20m', 14030, '2026-11-08T11:40:00Z'),
+        spot('MYCALL', '20m', 14020, '2026-11-08T11:55:00Z'),
+        spot('K1ABC', '15m', 21020, '2026-11-08T09:00:00Z')
     ];
-    const opponents = buildOpponents(rows, 'mycall', bearing);
-    assert.equal(opponents.length, 1);
-    assert.equal(opponents[0].call, 'K1ABC');
-    assert.equal(opponents[0].n, 3);
-    assert.deepEqual(opponents[0].bands.map(item => item.band), ['40M', '20M']);
-    assert.equal(opponents[0].bands[1].freq, 14025);
-    assert.equal(Math.round(opponents[0].dir), 90);
+    const bands = buildOpponentBands(rows, 'mycall', bearing, {now});
+    assert.deepEqual(bands.map(band => band.band), ['20M', '40M']);
+    const twenty = bands[0];
+    assert.equal(twenty.n, 3);
+    assert.deepEqual(twenty.calls.map(item => item.call), ['K1ABC', 'DL1ABC']);
+    assert.equal(twenty.calls[0].freq, 14025);
+    assert.equal(twenty.calls[0].n, 2);
+    assert.equal(Math.round(twenty.dir), 90);
+    assert.equal(twenty.spread, false);
 });
 
-test('opponent rows cap band chips and keep exact frequency for one band', () => {
-    const rows = ['160M', '80M', '40M', '20M'].map((band, i) =>
-        spot('K1ABC', band, 1000 + i, `2026-11-08T11:0${i}:00Z`));
-    const [opponent] = buildOpponents(rows, '', bearing);
-    const html = opponentRowHtml(opponent);
-    assert.match(html, /<em>\+1<\/em>/);
-    assert.doesNotMatch(html, /<u>/);
+test('band tiles show band, direction, calls and MHz frequencies', () => {
+    const [band] = buildOpponentBands([
+        spot('K1ABC', '20m', 14025, '2026-11-08T11:30:00Z')
+    ], '', bearing, {now});
+    const html = opponentBandHtml(band, false);
+    assert.match(html, /20M/);
+    assert.match(html, /东 90°/);
+    assert.match(html, /K1ABC/);
+    assert.match(html, /14\.025/);
+});
 
-    const [single] = buildOpponents([spot('K1ABC', '20M', 14020, '2026-11-08T11:00:00Z')], '', bearing);
-    assert.match(opponentRowHtml(single), /<u>14.020<\/u>/);
+test('a band whose spotters are all around reports multi-directional', () => {
+    const flat = (lat1, lon1, lat2) => lat2;
+    const rows = [0, 90, 180, 270].map((degrees, index) => spot(
+        'K1ABC', '20m', 14025, `2026-11-08T11:3${index}:00Z`, {lat: degrees}
+    ));
+    const [band] = buildOpponentBands(rows, '', flat, {now});
+    assert.equal(band.spread, true);
+    assert.match(opponentBandHtml(band, false), /多向/);
 });
