@@ -20,7 +20,7 @@ import {
     setLayerVisible
 } from '../shared/map/layers.mjs';
 import {
-    MUF_LAYER_ALPHA, MUF_LEGEND_VALUES, TWILIGHT_ELEVATION_DEG,
+    MUF_LAYER_ALPHA, MUF_LEGEND_VALUES, NIGHT_ALPHA, TWILIGHT_ELEVATION_DEG,
     mufColor, mufRgb, nightShadeAlpha, sampleMufGrid
 } from '../shared/propagation/forecast-view.mjs';
 
@@ -29,6 +29,9 @@ const DEFAULT_TOP_LAT = 85;
 const DEFAULT_BOTTOM_LAT = -85;
 let viewTopLat = DEFAULT_TOP_LAT;
 let viewBottomLat = DEFAULT_BOTTOM_LAT;
+/* Overlay strength; the defaults reproduce the original appearance. */
+let mufOpacity = MUF_LAYER_ALPHA;
+let nightScale = 1;
 
 /* Rows follow the Leaflet Mercator projection so the MUF field lines up with
  * the Mercator-rendered land instead of stretching towards the poles. */
@@ -77,7 +80,7 @@ function mufImage(mufGrid, {width, height}) {
     return canvas.toDataURL('image/png');
 }
 
-function nightImage(when, {width, height}) {
+function nightImage(when, {width, height}, scale = 1) {
     const canvas = document.createElement('canvas');
     canvas.width = width;
     canvas.height = height;
@@ -94,7 +97,7 @@ function nightImage(when, {width, height}) {
             const alpha = nightShadeAlpha(solarCosAt(geometry, lat, lon), hasTwilight);
             if (alpha <= 0) continue;
             const offset = (y * width + x) * 4;
-            pixels[offset + 3] = Math.round(alpha * 255);
+            pixels[offset + 3] = Math.min(255, Math.round(alpha * 255 * scale));
         }
     }
     context.putImageData(image, 0, 0);
@@ -156,11 +159,11 @@ export function createWallMap() {
         const size = fieldSize(map);
         const bounds = rangeBounds();
         const nextMuf = L.imageOverlay(mufImage(mufGrid, size), bounds, {
-            opacity: MUF_LAYER_ALPHA,
+            opacity: mufOpacity,
             interactive: false,
             pane: 'raster'
         });
-        const nextNight = L.imageOverlay(nightImage(when, size), bounds, {
+        const nextNight = L.imageOverlay(nightImage(when, size, nightScale), bounds, {
             opacity: 1,
             interactive: false,
             pane: 'raster'
@@ -318,9 +321,21 @@ export function createWallMap() {
         if (lastMufGrid) renderProp(lastMufGrid);
     }
 
+    function setOverlays(muf, night) {
+        const nextMuf = Number.isFinite(Number(muf)) && muf !== ''
+            ? clamp(Number(muf), 0, 255) / 255 : MUF_LAYER_ALPHA;
+        const nextNight = Number.isFinite(Number(night)) && night !== ''
+            ? clamp(Number(night), 0, 1) / NIGHT_ALPHA : 1;
+        if (Math.abs(nextMuf - mufOpacity) < 1e-4 && Math.abs(nextNight - nightScale) < 1e-4) return;
+        mufOpacity = nextMuf;
+        nightScale = nextNight;
+        if (lastMufGrid) renderProp(lastMufGrid);
+    }
+
     return {
         setVisible,
         setRange,
+        setOverlays,
         renderProp,
         drawSpots,
         drawQso,

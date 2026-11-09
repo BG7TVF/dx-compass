@@ -54,6 +54,18 @@ export function createPropagationPage(ctx) {
     const forecast = () => selectForecast(state.data);
     const readouts = () => forecast() && forecast().readouts || {};
 
+    /* Overlay alphas come from the prop settings; the documented defaults
+     * (77/255 and 0.18) reproduce the original canvas exactly. */
+    const mufAlpha = () => {
+        const value = Number(ctx.settings.mufOpacity);
+        return Number.isFinite(value) ? clamp(Math.round(value), 0, 255) : Math.round(MUF_LAYER_ALPHA * 255);
+    };
+    const nightAlpha = () => {
+        const value = Number(ctx.settings.nightOpacity);
+        return Number.isFinite(value) ? clamp(value, 0, 1) : NIGHT_ALPHA;
+    };
+    const nightFactor = () => nightAlpha() / NIGHT_ALPHA;
+
     function shortTime(value) {
         if (!value) return '—';
         const date = new Date(value);
@@ -122,7 +134,7 @@ export function createPropagationPage(ctx) {
             const value = sampleMufGrid(grid, lat, lon);
             if (value === null) return null;
             const rgb = mufRgb(value);
-            return [rgb[0], rgb[1], rgb[2], Math.round(MUF_LAYER_ALPHA * 255)];
+            return [rgb[0], rgb[1], rgb[2], mufAlpha()];
         });
     }
 
@@ -375,9 +387,10 @@ export function createPropagationPage(ctx) {
                 twilight.push([clamp(lat, -89.99, 89.99), offset]);
             }
         }
-        fillNight(terminator.base, twilight ? NIGHT_ALPHA : NIGHT_ALPHA_NO_TWILIGHT);
+        const factor = nightFactor();
+        fillNight(terminator.base, twilight ? nightAlpha() : clamp(NIGHT_ALPHA_NO_TWILIGHT * factor, 0, 1));
         if (twilight) {
-            fillNight(twilight, TWILIGHT_ALPHA);
+            fillNight(twilight, clamp(TWILIGHT_ALPHA * factor, 0, 1));
             strokeCurve(twilight, 0.3, 1);
         }
         strokeCurve(terminator.base, 0.85, 1.5);

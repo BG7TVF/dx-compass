@@ -8,6 +8,7 @@ import {createQsoStore, fetchQsos} from '../../shared/data/qsos.mjs';
 import {applyStationMessage, getStationState} from '../../shared/data/station.mjs';
 import {bandColorOf, bandLabel, dbRowToQso} from '../settings-model.mjs';
 import {formatDuration} from '../../shared/core/clock.mjs';
+import {quietHoursActive} from '../../shared/monitoring/quiet-hours.mjs';
 import {$, $$, escapeHtml, timeAgo} from '../ui.mjs';
 
 const QSO_RATE_BUCKETS = 12;
@@ -62,6 +63,39 @@ export function createQsoPage(ctx) {
         const distance = Number(spot.distance_km);
         if (minDistance > 0 && Number.isFinite(distance) && distance < minDistance) return false;
         return true;
+    }
+
+    /* Quiet hours use the browser's local clock; the helper treats an end
+     * before the start as a window across midnight. */
+    function inQuietHours(now = new Date()) {
+        return quietHoursActive(ctx.settings.quietFrom, ctx.settings.quietTo, now);
+    }
+
+    let toneContext = null;
+    function playAlertTone() {
+        if (!ctx.settings.alertSound) return;
+        const volume = settingNumber('alertSoundVolume', 0.5, 0, 1);
+        if (!volume) return;
+        try {
+            const AudioCtor = window.AudioContext || window.webkitAudioContext;
+            if (!AudioCtor) return;
+            toneContext = toneContext || new AudioCtor();
+            if (toneContext.state === 'suspended') void toneContext.resume();
+            const oscillator = toneContext.createOscillator();
+            const gain = toneContext.createGain();
+            const start = toneContext.currentTime;
+            oscillator.type = 'sine';
+            oscillator.frequency.value = 880;
+            gain.gain.setValueAtTime(0.0001, start);
+            gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, volume * 0.3), start + 0.01);
+            gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.18);
+            oscillator.connect(gain);
+            gain.connect(toneContext.destination);
+            oscillator.start(start);
+            oscillator.stop(start + 0.2);
+        } catch {
+            // Optional tone; blocked or unsupported audio is ignored.
+        }
     }
 
     function init() {
@@ -573,13 +607,16 @@ export function createQsoPage(ctx) {
 
     function showSpotAlert(spot, call, own) {
         if (state.view !== 'qso') return;
+        if (inQuietHours()) return;
         if (!alertAllowed(spot)) return;
         if (own) {
+            if (ctx.settings.mySpotPopup || ctx.settings.mySpotVoice) playAlertTone();
             if (ctx.settings.mySpotVoice) speakAlert(String(ctx.t('voiceMySpot')));
             if (ctx.settings.mySpotPopup) fillAlert(spot, call, true);
             return;
         }
         if (!ctx.settings.qsoSpotAlert) return;
+        playAlertTone();
         fillAlert(spot, call, false);
         const previous = lastSpotByCall.get(call), frequency = Number(spot.freq);
         const deltaKhz = settingNumber('freqDeltaKhz', 1, 0, 50);

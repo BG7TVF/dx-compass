@@ -99,6 +99,10 @@ export async function startWallPage() {
         const selected = LAYER_ORDER.filter(key => layers.includes(key));
         state.selected = selected.length ? selected : ['prop'];
         wallMap.setRange(numSetting('topLat', 85, 0, 90), numSetting('bottomLat', -85, -90, 0));
+        wallMap.setOverlays(
+            numSetting('mufOpacity', 77, 0, 255),
+            numSetting('nightOpacity', 0.18, 0, 1)
+        );
         opponents.setOptions({
             windowMin: numSetting('opponentWindowMin', 30, 5, 180),
             concentrationMin: numSetting('concentrationMin', 0.4, 0, 1),
@@ -149,6 +153,8 @@ export async function startWallPage() {
             state.settings.spaceDwellSec,
             state.settings.topLat,
             state.settings.bottomLat,
+            state.settings.mufOpacity,
+            state.settings.nightOpacity,
             state.settings.opponentWindowMin,
             state.settings.concentrationMin,
             state.settings.opponentCompactMin,

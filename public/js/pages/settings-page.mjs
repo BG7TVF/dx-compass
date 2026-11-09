@@ -117,8 +117,12 @@ export function createSettingsPage(ctx) {
     const QSO_SETTING_KEYS = new Set([
         'autoFitMaxZoom', 'fitPad', 'terminatorShow', 'terminatorSec', 'gcSamples'
     ]);
+    const PROP_SETTING_KEYS = new Set([
+        'propProj', 'propLayer', 'propDxLat', 'propDxLon',
+        'mufOpacity', 'nightOpacity', 'propPollSec'
+    ]);
     const LIVE_SETTING_KEYS = new Set([
-        ...CLOCK_SETTING_KEYS, ...MAP_SETTING_KEYS, ...QSO_SETTING_KEYS
+        ...CLOCK_SETTING_KEYS, ...MAP_SETTING_KEYS, ...QSO_SETTING_KEYS, ...PROP_SETTING_KEYS
     ]);
 
     /** Push only the affected display groups into the live pages. */
@@ -127,6 +131,7 @@ export function createSettingsPage(ctx) {
         if (changed.some(key => CLOCK_SETTING_KEYS.has(key))) ctx.refreshClock?.();
         if (changed.some(key => MAP_SETTING_KEYS.has(key))) ctx.spot?.applyMapSettings?.();
         if (changed.some(key => QSO_SETTING_KEYS.has(key))) ctx.qso?.applyDisplaySettings?.();
+        if (changed.some(key => PROP_SETTING_KEYS.has(key))) ctx.prop?.applySettings?.();
     }
 
     function save(patch) {
@@ -190,7 +195,8 @@ export function createSettingsPage(ctx) {
     // ------------------------------------------------- schema-driven fields
     function fieldControl(field) {
         const id = `gen_${field.key}`;
-        const common = `id="${id}" data-key="${escapeHtml(field.key)}"`;
+        const disabled = field.readonly ? ' disabled' : '';
+        const common = `id="${id}" data-key="${escapeHtml(field.key)}"${disabled}`;
         switch (field.type) {
             case 'bool':
                 return `<input type="checkbox" class="set-check" ${common}>`;
@@ -221,9 +227,10 @@ export function createSettingsPage(ctx) {
         if (!control) return '';
         const flags = [];
         if (!field.wired) flags.push(`<span class="set-flag preview">${bi('预览', 'preview')}</span>`);
+        if (field.readonly) flags.push(`<span class="set-flag readonly">${bi('只读', 'read-only')}</span>`);
         if (field.restart) flags.push(`<span class="set-flag restart">${bi('需重启', 'restart')}</span>`);
         const label = bi(field.zh, field.label);
-        return `<div class="set-field" title="${escapeHtml(field.desc || '')}">` +
+        return `<div class="set-field" title="${escapeHtml(field.desc || '')}" data-search="${escapeHtml(`${field.key} ${field.label} ${field.zh} ${field.desc || ''}`.toLowerCase())}">` +
             `<label for="gen_${escapeHtml(field.key)}">${escapeHtml(label)}${flags.join('')}</label>` +
             `${control}</div>`;
     }
@@ -273,6 +280,125 @@ export function createSettingsPage(ctx) {
                 save({[field.key]: result.value});
             });
         });
+    }
+
+    // ------------------------------------------------- search / profiles
+    function filterSettings(term) {
+        const query = String(term || '').trim().toLowerCase();
+        const panes = $$('.cfg-pane');
+        let total = 0;
+        panes.forEach(pane => {
+            let visible = 0;
+            pane.querySelectorAll('.set-field, .form-row').forEach(node => {
+                if (!query) {
+                    node.classList.remove('search-hidden');
+                    return;
+                }
+                const haystack = node.dataset.search || node.textContent || '';
+                const match = haystack.toLowerCase().includes(query);
+                node.classList.toggle('search-hidden', !match);
+                if (match) visible++;
+            });
+            pane.dataset.matches = String(visible);
+            total += visible;
+        });
+        const hint = $('#cfgSearchHint');
+        if (hint) hint.textContent = query ? String(total) : '';
+        if (!query) {
+            const active = $('.cfg-pane.active');
+            if (active) active.dataset.matches = '';
+            return;
+        }
+        const active = $('.cfg-pane.active');
+        if (active && active.dataset.matches === '0') {
+            const target = panes.find(pane => Number(pane.dataset.matches) > 0);
+            const name = target && target.id.replace(/^pane/, '').toLowerCase();
+            const tab = name && $(`.cfg-tab[data-pane="${name}"]`);
+            if (tab) tab.click();
+        }
+    }
+
+    const PROFILE_KEY = 'dxcompass-profiles';
+    const PROFILE_SKIP = new Set(['lang', 'theme']);
+
+    function readProfiles() {
+        try {
+            const parsed = JSON.parse(localStorage.getItem(PROFILE_KEY) || '{}');
+            return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+        } catch {
+            return {};
+        }
+    }
+
+    function writeProfiles(profiles) {
+        localStorage.setItem(PROFILE_KEY, JSON.stringify(profiles));
+    }
+
+    function renderProfiles(selected) {
+        const select = $('#profileSelect');
+        if (!select) return;
+        const names = Object.keys(readProfiles()).sort();
+        select.innerHTML = names.length
+            ? names.map(name => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join('')
+            : '<option value="">—</option>';
+        if (selected && names.includes(selected)) select.value = selected;
+    }
+
+    function saveProfile() {
+        const existing = $('#profileSelect').value;
+        const answer = window.prompt(bi('配置档名称', 'Profile name'), existing || '');
+        const name = String(answer || '').trim().slice(0, 24);
+        if (!name) return;
+        const shared = {};
+        for (const field of SETTINGS_FIELDS) {
+            if (field.storage !== 'shared' || !field.exportable) continue;
+            if (PROFILE_SKIP.has(field.key)) continue;
+            if (ctx.settings[field.key] === undefined) continue;
+            shared[field.key] = cloneSettings(ctx.settings[field.key]);
+        }
+        const profiles = readProfiles();
+        profiles[name] = {settings: shared, savedAt: new Date().toISOString()};
+        writeProfiles(profiles);
+        renderProfiles(name);
+        showToast(bi('配置档已保存', 'Profile saved'));
+    }
+
+    async function loadProfile() {
+        const name = $('#profileSelect').value;
+        const profile = name && readProfiles()[name];
+        if (!profile) return;
+        const result = validateSettingsPatch(profile.settings, {languages: ctx.i18n.languages});
+        if (!Object.keys(result.values).length) {
+            showToast(bi('该配置档没有可用设置', 'This profile has no usable settings'));
+            return;
+        }
+        const before = cloneSettings(ctx.settings);
+        applySettingsObject(mergeSettings(ctx.settings, result.values), {authoritative: false});
+        localStorage.setItem('dxcompass-settings', JSON.stringify(ctx.settings));
+        syncedSettings = before;
+        const response = await flushAll();
+        if (!response) {
+            applySettingsObject(before, {authoritative: true});
+            localStorage.setItem('dxcompass-settings', JSON.stringify(ctx.settings));
+            showToast(ctx.t('saveFail'));
+            return;
+        }
+        showToast(bi(`已应用配置档「${name}」`, `Applied profile "${name}"`));
+    }
+
+    async function deleteProfile() {
+        const name = $('#profileSelect').value;
+        if (!name) return;
+        const confirmed = await showConfirm(ctx,
+            bi(`确定删除配置档「${name}」吗？`, `Delete the profile "${name}"?`), {
+                title: bi('删除配置档', 'Delete profile'), okText: ctx.t('danger'), danger: true
+            });
+        if (!confirmed) return;
+        const profiles = readProfiles();
+        delete profiles[name];
+        writeProfiles(profiles);
+        renderProfiles();
+        showToast(bi('配置档已删除', 'Profile deleted'));
     }
 
     // ----------------------------------------------------------- backup I/O
@@ -793,6 +919,12 @@ export function createSettingsPage(ctx) {
         $$('[data-reset-domain]').forEach(button => button.addEventListener('click', () => {
             void resetDomainSettings(button.dataset.resetDomain);
         }));
+        const search = $('#cfgSearch');
+        if (search) search.addEventListener('input', () => filterSettings(search.value));
+        renderProfiles();
+        $('#btnSaveProfile').addEventListener('click', saveProfile);
+        $('#btnLoadProfile').addEventListener('click', () => { void loadProfile(); });
+        $('#btnDeleteProfile').addEventListener('click', () => { void deleteProfile(); });
 
         $('#btnResetAll').addEventListener('click', async () => {
             const confirmed = await showConfirm(ctx, ctx.t('resetConfirm'), {
@@ -846,6 +978,6 @@ export function createSettingsPage(ctx) {
     return {
         bind, pull, save, flush: flushAll, applyRemote, applyLang, applyTheme,
         openConfig, closeConfig, closeAppMenu, loadConfig, buildBandColorInputs,
-        exportSettings, importSettings, resetDomainSettings
+        exportSettings, importSettings, resetDomainSettings, filterSettings
     };
 }

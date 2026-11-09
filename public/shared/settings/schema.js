@@ -19,6 +19,7 @@
  *   storage    shared (localStorage + uiSettings) | local (localStorage only)
  *   restart    true when a change needs a Node-RED restart
  *   wired      true when business code already reads the key; false = placeholder
+ *   readonly   true when the value is informational (UI renders it disabled)
  *   exportable / importable  backup behaviour
  */
 (function (root, factory) {
@@ -267,14 +268,22 @@
             desc: 'SpeechSynthesisUtterance.volume.'
         }),
         field('quietFrom', 'qso', 'time', '', {
-            pattern: /^([01]\d|2[0-3]):[0-5]\d$/, allowEmpty: true, wired: false,
+            pattern: /^([01]\d|2[0-3]):[0-5]\d$/, allowEmpty: true,
             label: 'Quiet hours from', zh: '静音开始',
-            desc: 'Placeholder: local time when alerts stop (empty = disabled).'
+            desc: 'Local time when spot popups and voice alerts stop (empty = disabled).'
         }),
         field('quietTo', 'qso', 'time', '', {
-            pattern: /^([01]\d|2[0-3]):[0-5]\d$/, allowEmpty: true, wired: false,
+            pattern: /^([01]\d|2[0-3]):[0-5]\d$/, allowEmpty: true,
             label: 'Quiet hours to', zh: '静音结束',
-            desc: 'Placeholder: local time when alerts resume; may cross midnight.'
+            desc: 'Local time when alerts resume; a window crossing midnight is supported.'
+        }),
+        field('alertSound', 'qso', 'bool', false, {
+            label: 'Alert tone', zh: '提示音',
+            desc: 'Short beep with each spot alert; off by default, independent of voice.'
+        }),
+        field('alertSoundVolume', 'qso', 'number', 0.5, {
+            min: 0, max: 1, label: 'Alert tone volume', zh: '提示音音量',
+            desc: 'Beep volume (0 = silent); separate from the speech volume.'
         }),
 
         // ---- wall / Wall
@@ -335,10 +344,6 @@
         field('opponentWindowMin', 'wall', 'int', 30, {
             min: 5, max: 180, label: 'Opponent window (min)', zh: '对手窗口（分钟）',
             desc: 'Spot window used by the opponent card.'
-        }),
-        field('opponentCount', 'wall', 'int', 6, {
-            min: 3, max: 12, wired: false, label: 'Opponent rows', zh: '对手行数',
-            desc: 'Placeholder: number of opponent rows on the wall.'
         }),
         field('opponentCompactMin', 'wall', 'int', 5, {
             min: 2, max: 12, label: 'Compact threshold', zh: '紧凑模式阈值（对手数）',
@@ -419,9 +424,9 @@
             desc: 'Caps /api/callsigns and the PSKR subscription list.'
         }),
         field('logLevel', 'data', 'enum', 'info', {
-            values: LOG_LEVELS, scope: 'server', restart: true, wired: false,
+            values: LOG_LEVELS, scope: 'server', wired: true,
             label: 'Log level', zh: '日志级别',
-            desc: 'Node-RED logging level; applied from settings.js on restart.'
+            desc: 'DX-Compass module log threshold (error/warn/info/debug); Node-RED core logging stays in settings.js.'
         }),
         field('httpProxy', 'data', 'string', '', {
             maxLen: 300, allowEmpty: true, scope: 'server', wired: true,
@@ -439,9 +444,10 @@
             desc: 'Override for services.swpc.noaa.gov; empty = official endpoint.'
         }),
         field('n1mmPorts', 'data', 'string', '12060,12061,12062', {
-            pattern: /^\d{2,5}(,\d{2,5}){0,5}$/, maxLen: 40, scope: 'server', restart: true, wired: false,
+            pattern: /^\d{2,5}(,\d{2,5}){0,5}$/, maxLen: 40, scope: 'server', restart: true,
+            wired: false, readonly: true,
             label: 'N1MM UDP ports', zh: 'N1MM UDP 端口',
-            desc: 'UDP listen ports are node properties; changing them requires a flow redeploy.'
+            desc: 'Read-only: the UDP listen ports are node properties in flow.json, so changing them needs a flow edit and redeploy.'
         }),
         field('recordingRepeat', 'data', 'enum', 'once', {
             values: RECORDING_REPEATS, scope: 'server', wired: true,
@@ -502,12 +508,12 @@
             desc: 'Headroom ratio above this is Fair.'
         }),
         field('mufOpacity', 'prop', 'int', 77, {
-            min: 0, max: 255, wired: false, label: 'MUF opacity', zh: 'MUF 透明度',
-            desc: 'Placeholder: alpha of the MUF raster overlay (0-255).'
+            min: 0, max: 255, label: 'MUF opacity', zh: 'MUF 透明度',
+            desc: 'Alpha of the MUF raster overlay (0-255) on the propagation page and the wall.'
         }),
         field('nightOpacity', 'prop', 'number', 0.18, {
-            min: 0, max: 1, wired: false, label: 'Night shading opacity', zh: '夜罩透明度',
-            desc: 'Placeholder: night-side shading alpha.'
+            min: 0, max: 1, label: 'Night shading opacity', zh: '夜罩透明度',
+            desc: 'Night-side shading alpha; the twilight band scales with it.'
         })
     ];
 

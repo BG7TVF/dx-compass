@@ -787,6 +787,12 @@ tbody tr:nth-child(even) { background: var(--row-alt); }
     color: var(--text-dim); opacity: .85;
 }
 .set-flag.restart { color: var(--accent); border-color: currentColor; }
+.set-flag.readonly { color: var(--text-dim); opacity: .6; }
+.cfg-search-row { display: flex; align-items: center; gap: 8px; margin: 8px 0 2px; }
+.cfg-search-row .set-input { flex: 1 1 auto; min-width: 0; }
+.cfg-search-row .hint { margin: 0; min-width: 24px; text-align: right; }
+.search-hidden { display: none !important; }
+.profile-row { margin-top: 8px; }
 .bc-item input[type="color"] {
     width: 30px;
     height: 22px;
