@@ -486,7 +486,7 @@ html, body {
     border-radius: 6px;
     overflow: hidden;
 }
-.opp-band.wide { grid-column: span 2; }
+.opp-band.wide { grid-column: 1 / -1; }
 .ob-top { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
 .ob-top b {
     font-size: clamp(16px, 1.7vh, 25px);
@@ -557,6 +557,12 @@ html, body {
 }
 .ob-call i { font-style: normal; font-size: 10px; color: var(--my); }
 .ob-more { font-size: 10px; color: var(--dim); }
+/* Narrow rails cannot fit the caption beside the heading without clipping the
+ * degrees, so the arrow + compass carry the meaning on their own. */
+@media (max-width: 1440px) {
+    .ob-dir label { display: none; }
+    .ob-call i { display: none; }
+}
 .opp-empty { font-size: 11px; color: var(--dim); }
 
 /* ---------- footer ---------- */
