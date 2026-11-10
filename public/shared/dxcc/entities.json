@@ -1,0 +1,2124 @@
+{
+ "source": "ADIF 3.1.5 DXCC Entity Code Enumeration (https://www.adif.org/315/ADIF_315.htm); primary prefix derived from cty.dat (https://www.country-files.com/cty/cty.dat)",
+ "fetched": "2026-11-10",
+ "note": "DXCC codes 1-340. Deleted entities without a current cty.dat record keep an empty prefix. nameZh covers current entities; others fall back to the English name.",
+ "entities": [
+  {
+   "dxcc": 1,
+   "name": "Canada",
+   "prefix": "VE",
+   "deleted": false,
+   "nameZh": "加拿大"
+  },
+  {
+   "dxcc": 2,
+   "name": "Abu Ail Is.",
+   "prefix": "",
+   "deleted": true
+  },
+  {
+   "dxcc": 3,
+   "name": "Afghanistan",
+   "prefix": "YA",
+   "deleted": false,
+   "nameZh": "阿富汗"
+  },
+  {
+   "dxcc": 4,
+   "name": "Agalega & St. Brandon Is.",
+   "prefix": "3B6",
+   "deleted": false,
+   "nameZh": "阿加莱加和圣布兰登群岛"
+  },
+  {
+   "dxcc": 5,
+   "name": "Aland Is.",
+   "prefix": "OH0",
+   "deleted": false,
+   "nameZh": "奥兰群岛"
+  },
+  {
+   "dxcc": 6,
+   "name": "Alaska",
+   "prefix": "KL",
+   "deleted": false,
+   "nameZh": "阿拉斯加"
+  },
+  {
+   "dxcc": 7,
+   "name": "Albania",
+   "prefix": "ZA",
+   "deleted": false,
+   "nameZh": "阿尔巴尼亚"
+  },
+  {
+   "dxcc": 8,
+   "name": "Aldabra",
+   "prefix": "",
+   "deleted": true
+  },
+  {
+   "dxcc": 9,
+   "name": "American Samoa",
+   "prefix": "KH8",
+   "deleted": false,
+   "nameZh": "美属萨摩亚"
+  },
+  {
+   "dxcc": 10,
+   "name": "Amsterdam & St. Paul Is.",
+   "prefix": "FT/z",
+   "deleted": false,
+   "nameZh": "阿姆斯特丹和圣保罗群岛"
+  },
+  {
+   "dxcc": 11,
+   "name": "Andaman & Nicobar Is.",
+   "prefix": "VU4",
+   "deleted": false,
+   "nameZh": "安达曼和尼科巴群岛"
+  },
+  {
+   "dxcc": 12,
+   "name": "Anguilla",
+   "prefix": "VP2E",
+   "deleted": false,
+   "nameZh": "安圭拉"
+  },
+  {
+   "dxcc": 13,
+   "name": "Antarctica",
+   "prefix": "CE9",
+   "deleted": false,
+   "nameZh": "南极洲"
+  },
+  {
+   "dxcc": 14,
+   "name": "Armenia",
+   "prefix": "EK",
+   "deleted": false,
+   "nameZh": "亚美尼亚"
+  },
+  {
+   "dxcc": 15,
+   "name": "Asiatic Russia",
+   "prefix": "UA9",
+   "deleted": false,
+   "nameZh": "亚洲俄罗斯"
+  },
+  {
+   "dxcc": 16,
+   "name": "New Zealand Subantarctic Islands",
+   "prefix": "ZL9",
+   "deleted": false,
+   "nameZh": "新西兰亚南极群岛"
+  },
+  {
+   "dxcc": 17,
+   "name": "Aves I.",
+   "prefix": "YV0",
+   "deleted": false,
+   "nameZh": "阿维斯岛"
+  },
+  {
+   "dxcc": 18,
+   "name": "Azerbaijan",
+   "prefix": "4J",
+   "deleted": false,
+   "nameZh": "阿塞拜疆"
+  },
+  {
+   "dxcc": 19,
+   "name": "Bajo Nuevo",
+   "prefix": "",
+   "deleted": true
+  },
+  {
+   "dxcc": 20,
+   "name": "Baker & Howland Is.",
+   "prefix": "KH1",
+   "deleted": false,
+   "nameZh": "贝克和豪兰群岛"
+  },
+  {
+   "dxcc": 21,
+   "name": "Balearic Is.",
+   "prefix": "EA6",
+   "deleted": false,
+   "nameZh": "巴利阿里群岛"
+  },
+  {
+   "dxcc": 22,
+   "name": "Palau",
+   "prefix": "T8",
+   "deleted": false,
+   "nameZh": "帕劳"
+  },
+  {
+   "dxcc": 23,
+   "name": "Blenheim Reef",
+   "prefix": "",
+   "deleted": true
+  },
+  {
+   "dxcc": 24,
+   "name": "Bouvet",
+   "prefix": "3Y/b",
+   "deleted": false,
+   "nameZh": "布韦岛"
+  },
+  {
+   "dxcc": 25,
+   "name": "British North Borneo",
+   "prefix": "",
+   "deleted": true
+  },
+  {
+   "dxcc": 26,
+   "name": "British Somaliland",
+   "prefix": "",
+   "deleted": true
+  },
+  {
+   "dxcc": 27,
+   "name": "Belarus",
+   "prefix": "EU",
+   "deleted": false,
+   "nameZh": "白俄罗斯"
+  },
+  {
+   "dxcc": 28,
+   "name": "Canal Zone",
+   "prefix": "",
+   "deleted": true
+  },
+  {
+   "dxcc": 29,
+   "name": "Canary Is.",
+   "prefix": "EA8",
+   "deleted": false,
+   "nameZh": "加那利群岛"
+  },
+  {
+   "dxcc": 30,
+   "name": "Celebe & Molucca Is.",
+   "prefix": "",
+   "deleted": true
+  },
+  {
+   "dxcc": 31,
+   "name": "C. Kiribati (British Phoenix Is.)",
+   "prefix": "T31",
+   "deleted": false,
+   "nameZh": "中基里巴斯（英属菲尼克斯群岛）"
+  },
+  {
+   "dxcc": 32,
+   "name": "Ceuta & Melilla",
+   "prefix": "EA9",
+   "deleted": false,
+   "nameZh": "休达和梅利利亚"
+  },
+  {
+   "dxcc": 33,
+   "name": "Chagos Is.",
+   "prefix": "VQ9",
+   "deleted": false,
+   "nameZh": "查戈斯群岛"
+  },
+  {
+   "dxcc": 34,
+   "name": "Chatham Is.",
+   "prefix": "ZL7",
+   "deleted": false,
+   "nameZh": "查塔姆群岛"
+  },
+  {
+   "dxcc": 35,
+   "name": "Christmas I.",
+   "prefix": "VK9X",
+   "deleted": false,
+   "nameZh": "圣诞岛"
+  },
+  {
+   "dxcc": 36,
+   "name": "Clipperton I.",
+   "prefix": "FO/c",
+   "deleted": false,
+   "nameZh": "克利珀顿岛"
+  },
+  {
+   "dxcc": 37,
+   "name": "Cocos I.",
+   "prefix": "TI9",
+   "deleted": false,
+   "nameZh": "科科斯岛"
+  },
+  {
+   "dxcc": 38,
+   "name": "Cocos (Keeling) Is.",
+   "prefix": "VK9C",
+   "deleted": false,
+   "nameZh": "科科斯（基林）群岛"
+  },
+  {
+   "dxcc": 39,
+   "name": "Comoros",
+   "prefix": "D6",
+   "deleted": true
+  },
+  {
+   "dxcc": 40,
+   "name": "Crete",
+   "prefix": "SV9",
+   "deleted": false,
+   "nameZh": "克里特"
+  },
+  {
+   "dxcc": 41,
+   "name": "Crozet I.",
+   "prefix": "FT/w",
+   "deleted": false,
+   "nameZh": "克罗泽群岛"
+  },
+  {
+   "dxcc": 42,
+   "name": "Damao, Diu",
+   "prefix": "",
+   "deleted": true
+  },
+  {
+   "dxcc": 43,
+   "name": "Desecheo I.",
+   "prefix": "KP5",
+   "deleted": false,
+   "nameZh": "德塞切奥岛"
+  },
+  {
+   "dxcc": 44,
+   "name": "Desroches",
+   "prefix": "",
+   "deleted": true
+  },
+  {
+   "dxcc": 45,
+   "name": "Dodecanese",
+   "prefix": "SV5",
+   "deleted": false,
+   "nameZh": "多德卡尼斯"
+  },
+  {
+   "dxcc": 46,
+   "name": "East Malaysia",
+   "prefix": "9M6",
+   "deleted": false,
+   "nameZh": "东马来西亚"
+  },
+  {
+   "dxcc": 47,
+   "name": "Easter I.",
+   "prefix": "CE0Y",
+   "deleted": false,
+   "nameZh": "复活节岛"
+  },
+  {
+   "dxcc": 48,
+   "name": "E. Kiribati (Line Is.)",
+   "prefix": "T32",
+   "deleted": false,
+   "nameZh": "东基里巴斯（莱恩群岛）"
+  },
+  {
+   "dxcc": 49,
+   "name": "Equatorial Guinea",
+   "prefix": "3C",
+   "deleted": false,
+   "nameZh": "赤道几内亚"
+  },
+  {
+   "dxcc": 50,
+   "name": "Mexico",
+   "prefix": "XE",
+   "deleted": false,
+   "nameZh": "墨西哥"
+  },
+  {
+   "dxcc": 51,
+   "name": "Eritrea",
+   "prefix": "E3",
+   "deleted": false,
+   "nameZh": "厄立特里亚"
+  },
+  {
+   "dxcc": 52,
+   "name": "Estonia",
+   "prefix": "ES",
+   "deleted": false,
+   "nameZh": "爱沙尼亚"
+  },
+  {
+   "dxcc": 53,
+   "name": "Ethiopia",
+   "prefix": "ET",
+   "deleted": false,
+   "nameZh": "埃塞俄比亚"
+  },
+  {
+   "dxcc": 54,
+   "name": "European Russia",
+   "prefix": "UA",
+   "deleted": false,
+   "nameZh": "欧洲俄罗斯"
+  },
+  {
+   "dxcc": 55,
+   "name": "Farquhar",
+   "prefix": "",
+   "deleted": true
+  },
+  {
+   "dxcc": 56,
+   "name": "Fernando de Noronha",
+   "prefix": "PY0F",
+   "deleted": false,
+   "nameZh": "费尔南多迪诺罗尼亚"
+  },
+  {
+   "dxcc": 57,
+   "name": "French Equatorial Africa",
+   "prefix": "",
+   "deleted": true
+  },
+  {
+   "dxcc": 58,
+   "name": "French Indo-China",
+   "prefix": "",
+   "deleted": true
+  },
+  {
+   "dxcc": 59,
+   "name": "French West Africa",
+   "prefix": "",
+   "deleted": true
+  },
+  {
+   "dxcc": 60,
+   "name": "Bahamas",
+   "prefix": "C6",
+   "deleted": false,
+   "nameZh": "巴哈马"
+  },
+  {
+   "dxcc": 61,
+   "name": "Franz Josef Land",
+   "prefix": "R1FJ",
+   "deleted": false,
+   "nameZh": "法兰士约瑟夫地群岛"
+  },
+  {
+   "dxcc": 62,
+   "name": "Barbados",
+   "prefix": "8P",
+   "deleted": false,
+   "nameZh": "巴巴多斯"
+  },
+  {
+   "dxcc": 63,
+   "name": "French Guiana",
+   "prefix": "FY",
+   "deleted": false,
+   "nameZh": "法属圭亚那"
+  },
+  {
+   "dxcc": 64,
+   "name": "Bermuda",
+   "prefix": "VP9",
+   "deleted": false,
+   "nameZh": "百慕大"
+  },
+  {
+   "dxcc": 65,
+   "name": "British Virgin Is.",
+   "prefix": "VP2V",
+   "deleted": false,
+   "nameZh": "英属维尔京群岛"
+  },
+  {
+   "dxcc": 66,
+   "name": "Belize",
+   "prefix": "V3",
+   "deleted": false,
+   "nameZh": "伯利兹"
+  },
+  {
+   "dxcc": 67,
+   "name": "French India",
+   "prefix": "",
+   "deleted": true
+  },
+  {
+   "dxcc": 68,
+   "name": "Kuwait/Saudi Arabia Neutral Zone",
+   "prefix": "",
+   "deleted": true
+  },
+  {
+   "dxcc": 69,
+   "name": "Cayman Is.",
+   "prefix": "ZF",
+   "deleted": false,
+   "nameZh": "开曼群岛"
+  },
+  {
+   "dxcc": 70,
+   "name": "Cuba",
+   "prefix": "CM",
+   "deleted": false,
+   "nameZh": "古巴"
+  },
+  {
+   "dxcc": 71,
+   "name": "Galapagos Is.",
+   "prefix": "HC8",
+   "deleted": false,
+   "nameZh": "加拉帕戈斯群岛"
+  },
+  {
+   "dxcc": 72,
+   "name": "Dominican Republic",
+   "prefix": "HI",
+   "deleted": false,
+   "nameZh": "多米尼加共和国"
+  },
+  {
+   "dxcc": 74,
+   "name": "El Salvador",
+   "prefix": "YS",
+   "deleted": false,
+   "nameZh": "萨尔瓦多"
+  },
+  {
+   "dxcc": 75,
+   "name": "Georgia",
+   "prefix": "4L",
+   "deleted": false,
+   "nameZh": "格鲁吉亚"
+  },
+  {
+   "dxcc": 76,
+   "name": "Guatemala",
+   "prefix": "TG",
+   "deleted": false,
+   "nameZh": "危地马拉"
+  },
+  {
+   "dxcc": 77,
+   "name": "Grenada",
+   "prefix": "J3",
+   "deleted": false,
+   "nameZh": "格林纳达"
+  },
+  {
+   "dxcc": 78,
+   "name": "Haiti",
+   "prefix": "HH",
+   "deleted": false,
+   "nameZh": "海地"
+  },
+  {
+   "dxcc": 79,
+   "name": "Guadeloupe",
+   "prefix": "FG",
+   "deleted": false,
+   "nameZh": "瓜德罗普"
+  },
+  {
+   "dxcc": 80,
+   "name": "Honduras",
+   "prefix": "HR",
+   "deleted": false,
+   "nameZh": "洪都拉斯"
+  },
+  {
+   "dxcc": 81,
+   "name": "Germany",
+   "prefix": "DL",
+   "deleted": true
+  },
+  {
+   "dxcc": 82,
+   "name": "Jamaica",
+   "prefix": "6Y",
+   "deleted": false,
+   "nameZh": "牙买加"
+  },
+  {
+   "dxcc": 84,
+   "name": "Martinique",
+   "prefix": "FM",
+   "deleted": false,
+   "nameZh": "马提尼克"
+  },
+  {
+   "dxcc": 85,
+   "name": "Bonaire, Curacao",
+   "prefix": "",
+   "deleted": true
+  },
+  {
+   "dxcc": 86,
+   "name": "Nicaragua",
+   "prefix": "YN",
+   "deleted": false,
+   "nameZh": "尼加拉瓜"
+  },
+  {
+   "dxcc": 88,
+   "name": "Panama",
+   "prefix": "HP",
+   "deleted": false,
+   "nameZh": "巴拿马"
+  },
+  {
+   "dxcc": 89,
+   "name": "Turks & Caicos Is.",
+   "prefix": "VP5",
+   "deleted": false,
+   "nameZh": "特克斯和凯科斯群岛"
+  },
+  {
+   "dxcc": 90,
+   "name": "Trinidad & Tobago",
+   "prefix": "9Y",
+   "deleted": false,
+   "nameZh": "特立尼达和多巴哥"
+  },
+  {
+   "dxcc": 91,
+   "name": "Aruba",
+   "prefix": "P4",
+   "deleted": false,
+   "nameZh": "阿鲁巴"
+  },
+  {
+   "dxcc": 93,
+   "name": "Geyser Reef",
+   "prefix": "",
+   "deleted": true
+  },
+  {
+   "dxcc": 94,
+   "name": "Antigua & Barbuda",
+   "prefix": "V2",
+   "deleted": false,
+   "nameZh": "安提瓜和巴布达"
+  },
+  {
+   "dxcc": 95,
+   "name": "Dominica",
+   "prefix": "J7",
+   "deleted": false,
+   "nameZh": "多米尼克"
+  },
+  {
+   "dxcc": 96,
+   "name": "Montserrat",
+   "prefix": "VP2M",
+   "deleted": false,
+   "nameZh": "蒙特塞拉特"
+  },
+  {
+   "dxcc": 97,
+   "name": "St. Lucia",
+   "prefix": "J6",
+   "deleted": false,
+   "nameZh": "圣卢西亚"
+  },
+  {
+   "dxcc": 98,
+   "name": "St. Vincent",
+   "prefix": "J8",
+   "deleted": false,
+   "nameZh": "圣文森特"
+  },
+  {
+   "dxcc": 99,
+   "name": "Glorioso Is.",
+   "prefix": "FT/g",
+   "deleted": false,
+   "nameZh": "格洛里奥索群岛"
+  },
+  {
+   "dxcc": 100,
+   "name": "Argentina",
+   "prefix": "LU",
+   "deleted": false,
+   "nameZh": "阿根廷"
+  },
+  {
+   "dxcc": 101,
+   "name": "Goa",
+   "prefix": "",
+   "deleted": true
+  },
+  {
+   "dxcc": 102,
+   "name": "Gold Coast, Togoland",
+   "prefix": "",
+   "deleted": true
+  },
+  {
+   "dxcc": 103,
+   "name": "Guam",
+   "prefix": "KH2",
+   "deleted": false,
+   "nameZh": "关岛"
+  },
+  {
+   "dxcc": 104,
+   "name": "Bolivia",
+   "prefix": "CP",
+   "deleted": false,
+   "nameZh": "玻利维亚"
+  },
+  {
+   "dxcc": 105,
+   "name": "Guantanamo Bay",
+   "prefix": "KG4",
+   "deleted": false,
+   "nameZh": "关塔那摩湾"
+  },
+  {
+   "dxcc": 106,
+   "name": "Guernsey",
+   "prefix": "GU",
+   "deleted": false,
+   "nameZh": "根西"
+  },
+  {
+   "dxcc": 107,
+   "name": "Guinea",
+   "prefix": "3X",
+   "deleted": false,
+   "nameZh": "几内亚"
+  },
+  {
+   "dxcc": 108,
+   "name": "Brazil",
+   "prefix": "PY",
+   "deleted": false,
+   "nameZh": "巴西"
+  },
+  {
+   "dxcc": 109,
+   "name": "Guinea-Bissau",
+   "prefix": "J5",
+   "deleted": false,
+   "nameZh": "几内亚比绍"
+  },
+  {
+   "dxcc": 110,
+   "name": "Hawaii",
+   "prefix": "KH6",
+   "deleted": false,
+   "nameZh": "夏威夷"
+  },
+  {
+   "dxcc": 111,
+   "name": "Heard I.",
+   "prefix": "VK0H",
+   "deleted": false,
+   "nameZh": "赫德岛"
+  },
+  {
+   "dxcc": 112,
+   "name": "Chile",
+   "prefix": "CE",
+   "deleted": false,
+   "nameZh": "智利"
+  },
+  {
+   "dxcc": 113,
+   "name": "Ifni",
+   "prefix": "",
+   "deleted": true
+  },
+  {
+   "dxcc": 114,
+   "name": "Isle of Man",
+   "prefix": "GD",
+   "deleted": false,
+   "nameZh": "马恩岛"
+  },
+  {
+   "dxcc": 115,
+   "name": "Italian Somaliland",
+   "prefix": "",
+   "deleted": true
+  },
+  {
+   "dxcc": 116,
+   "name": "Colombia",
+   "prefix": "HK",
+   "deleted": false,
+   "nameZh": "哥伦比亚"
+  },
+  {
+   "dxcc": 117,
+   "name": "ITU HQ",
+   "prefix": "4U1I",
+   "deleted": false,
+   "nameZh": "国际电联总部"
+  },
+  {
+   "dxcc": 118,
+   "name": "Jan Mayen",
+   "prefix": "JX",
+   "deleted": false,
+   "nameZh": "扬马延"
+  },
+  {
+   "dxcc": 119,
+   "name": "Java",
+   "prefix": "",
+   "deleted": true
+  },
+  {
+   "dxcc": 120,
+   "name": "Ecuador",
+   "prefix": "HC",
+   "deleted": false,
+   "nameZh": "厄瓜多尔"
+  },
+  {
+   "dxcc": 122,
+   "name": "Jersey",
+   "prefix": "GJ",
+   "deleted": false,
+   "nameZh": "泽西"
+  },
+  {
+   "dxcc": 123,
+   "name": "Johnston I.",
+   "prefix": "KH3",
+   "deleted": false,
+   "nameZh": "约翰斯顿岛"
+  },
+  {
+   "dxcc": 124,
+   "name": "Juan de Nova, Europa",
+   "prefix": "FT/j",
+   "deleted": false,
+   "nameZh": "胡安·德诺瓦、欧罗巴"
+  },
+  {
+   "dxcc": 125,
+   "name": "Juan Fernandez Is.",
+   "prefix": "CE0Z",
+   "deleted": false,
+   "nameZh": "胡安费尔南德斯群岛"
+  },
+  {
+   "dxcc": 126,
+   "name": "Kaliningrad",
+   "prefix": "UA2",
+   "deleted": false,
+   "nameZh": "加里宁格勒"
+  },
+  {
+   "dxcc": 127,
+   "name": "Kamaran Is.",
+   "prefix": "",
+   "deleted": true
+  },
+  {
+   "dxcc": 128,
+   "name": "Karelo-Finnish Republic",
+   "prefix": "",
+   "deleted": true
+  },
+  {
+   "dxcc": 129,
+   "name": "Guyana",
+   "prefix": "8R",
+   "deleted": false,
+   "nameZh": "圭亚那"
+  },
+  {
+   "dxcc": 130,
+   "name": "Kazakhstan",
+   "prefix": "UN",
+   "deleted": false,
+   "nameZh": "哈萨克斯坦"
+  },
+  {
+   "dxcc": 131,
+   "name": "Kerguelen Is.",
+   "prefix": "FT/x",
+   "deleted": false,
+   "nameZh": "凯尔盖朗群岛"
+  },
+  {
+   "dxcc": 132,
+   "name": "Paraguay",
+   "prefix": "ZP",
+   "deleted": false,
+   "nameZh": "巴拉圭"
+  },
+  {
+   "dxcc": 133,
+   "name": "Kermadec Is.",
+   "prefix": "ZL8",
+   "deleted": false,
+   "nameZh": "克马德克群岛"
+  },
+  {
+   "dxcc": 134,
+   "name": "Kingman Reef",
+   "prefix": "",
+   "deleted": true
+  },
+  {
+   "dxcc": 135,
+   "name": "Kyrgyzstan",
+   "prefix": "EX",
+   "deleted": false,
+   "nameZh": "吉尔吉斯斯坦"
+  },
+  {
+   "dxcc": 136,
+   "name": "Peru",
+   "prefix": "OA",
+   "deleted": false,
+   "nameZh": "秘鲁"
+  },
+  {
+   "dxcc": 137,
+   "name": "Republic of Korea",
+   "prefix": "HL",
+   "deleted": false,
+   "nameZh": "韩国"
+  },
+  {
+   "dxcc": 138,
+   "name": "Kure I.",
+   "prefix": "KH7K",
+   "deleted": false,
+   "nameZh": "库雷岛"
+  },
+  {
+   "dxcc": 139,
+   "name": "Kuria Muria I.",
+   "prefix": "",
+   "deleted": true
+  },
+  {
+   "dxcc": 140,
+   "name": "Suriname",
+   "prefix": "PZ",
+   "deleted": false,
+   "nameZh": "苏里南"
+  },
+  {
+   "dxcc": 141,
+   "name": "Falkland Is.",
+   "prefix": "VP8",
+   "deleted": false,
+   "nameZh": "福克兰群岛"
+  },
+  {
+   "dxcc": 142,
+   "name": "Lakshadweep Is.",
+   "prefix": "VU7",
+   "deleted": false,
+   "nameZh": "拉克沙群岛"
+  },
+  {
+   "dxcc": 143,
+   "name": "Laos",
+   "prefix": "XW",
+   "deleted": false,
+   "nameZh": "老挝"
+  },
+  {
+   "dxcc": 144,
+   "name": "Uruguay",
+   "prefix": "CX",
+   "deleted": false,
+   "nameZh": "乌拉圭"
+  },
+  {
+   "dxcc": 145,
+   "name": "Latvia",
+   "prefix": "YL",
+   "deleted": false,
+   "nameZh": "拉脱维亚"
+  },
+  {
+   "dxcc": 146,
+   "name": "Lithuania",
+   "prefix": "LY",
+   "deleted": false,
+   "nameZh": "立陶宛"
+  },
+  {
+   "dxcc": 147,
+   "name": "Lord Howe I.",
+   "prefix": "VK9L",
+   "deleted": false,
+   "nameZh": "豪勋爵岛"
+  },
+  {
+   "dxcc": 148,
+   "name": "Venezuela",
+   "prefix": "YV",
+   "deleted": false,
+   "nameZh": "委内瑞拉"
+  },
+  {
+   "dxcc": 149,
+   "name": "Azores",
+   "prefix": "CU",
+   "deleted": false,
+   "nameZh": "亚速尔群岛"
+  },
+  {
+   "dxcc": 150,
+   "name": "Australia",
+   "prefix": "VK",
+   "deleted": false,
+   "nameZh": "澳大利亚"
+  },
+  {
+   "dxcc": 151,
+   "name": "Malyj Vysotskij I.",
+   "prefix": "",
+   "deleted": true
+  },
+  {
+   "dxcc": 152,
+   "name": "Macao",
+   "prefix": "XX9",
+   "deleted": false,
+   "nameZh": "澳门"
+  },
+  {
+   "dxcc": 153,
+   "name": "Macquarie I.",
+   "prefix": "VK0M",
+   "deleted": false,
+   "nameZh": "麦夸里岛"
+  },
+  {
+   "dxcc": 154,
+   "name": "Yemen Arab Republic",
+   "prefix": "",
+   "deleted": true
+  },
+  {
+   "dxcc": 155,
+   "name": "Malaya",
+   "prefix": "",
+   "deleted": true
+  },
+  {
+   "dxcc": 157,
+   "name": "Nauru",
+   "prefix": "C2",
+   "deleted": false,
+   "nameZh": "瑙鲁"
+  },
+  {
+   "dxcc": 158,
+   "name": "Vanuatu",
+   "prefix": "YJ",
+   "deleted": false,
+   "nameZh": "瓦努阿图"
+  },
+  {
+   "dxcc": 159,
+   "name": "Maldives",
+   "prefix": "8Q",
+   "deleted": false,
+   "nameZh": "马尔代夫"
+  },
+  {
+   "dxcc": 160,
+   "name": "Tonga",
+   "prefix": "A3",
+   "deleted": false,
+   "nameZh": "汤加"
+  },
+  {
+   "dxcc": 161,
+   "name": "Malpelo I.",
+   "prefix": "HK0/m",
+   "deleted": false,
+   "nameZh": "马尔佩洛岛"
+  },
+  {
+   "dxcc": 162,
+   "name": "New Caledonia",
+   "prefix": "FK",
+   "deleted": false,
+   "nameZh": "新喀里多尼亚"
+  },
+  {
+   "dxcc": 163,
+   "name": "Papua New Guinea",
+   "prefix": "P2",
+   "deleted": false,
+   "nameZh": "巴布亚新几内亚"
+  },
+  {
+   "dxcc": 164,
+   "name": "Manchuria",
+   "prefix": "",
+   "deleted": true
+  },
+  {
+   "dxcc": 165,
+   "name": "Mauritius",
+   "prefix": "3B8",
+   "deleted": false,
+   "nameZh": "毛里求斯"
+  },
+  {
+   "dxcc": 166,
+   "name": "Mariana Is.",
+   "prefix": "KH0",
+   "deleted": false,
+   "nameZh": "马里亚纳群岛"
+  },
+  {
+   "dxcc": 167,
+   "name": "Market Reef",
+   "prefix": "OJ0",
+   "deleted": false,
+   "nameZh": "马凯特礁"
+  },
+  {
+   "dxcc": 168,
+   "name": "Marshall Is.",
+   "prefix": "V7",
+   "deleted": false,
+   "nameZh": "马绍尔群岛"
+  },
+  {
+   "dxcc": 169,
+   "name": "Mayotte",
+   "prefix": "FH",
+   "deleted": false,
+   "nameZh": "马约特"
+  },
+  {
+   "dxcc": 170,
+   "name": "New Zealand",
+   "prefix": "ZL",
+   "deleted": false,
+   "nameZh": "新西兰"
+  },
+  {
+   "dxcc": 171,
+   "name": "Mellish Reef",
+   "prefix": "VK9M",
+   "deleted": false,
+   "nameZh": "梅利什礁"
+  },
+  {
+   "dxcc": 172,
+   "name": "Pitcairn I.",
+   "prefix": "VP6",
+   "deleted": false,
+   "nameZh": "皮特凯恩岛"
+  },
+  {
+   "dxcc": 173,
+   "name": "Micronesia",
+   "prefix": "V6",
+   "deleted": false,
+   "nameZh": "密克罗尼西亚"
+  },
+  {
+   "dxcc": 174,
+   "name": "Midway I.",
+   "prefix": "KH4",
+   "deleted": false,
+   "nameZh": "中途岛"
+  },
+  {
+   "dxcc": 175,
+   "name": "French Polynesia",
+   "prefix": "FO",
+   "deleted": false,
+   "nameZh": "法属波利尼西亚"
+  },
+  {
+   "dxcc": 176,
+   "name": "Fiji",
+   "prefix": "3D2",
+   "deleted": false,
+   "nameZh": "斐济"
+  },
+  {
+   "dxcc": 177,
+   "name": "Minami Torishima",
+   "prefix": "JD/m",
+   "deleted": false,
+   "nameZh": "南鸟岛"
+  },
+  {
+   "dxcc": 178,
+   "name": "Minerva Reef",
+   "prefix": "",
+   "deleted": true
+  },
+  {
+   "dxcc": 179,
+   "name": "Moldova",
+   "prefix": "ER",
+   "deleted": false,
+   "nameZh": "摩尔多瓦"
+  },
+  {
+   "dxcc": 180,
+   "name": "Mount Athos",
+   "prefix": "SV/a",
+   "deleted": false,
+   "nameZh": "阿索斯山"
+  },
+  {
+   "dxcc": 181,
+   "name": "Mozambique",
+   "prefix": "C9",
+   "deleted": false,
+   "nameZh": "莫桑比克"
+  },
+  {
+   "dxcc": 182,
+   "name": "Navassa I.",
+   "prefix": "KP1",
+   "deleted": false,
+   "nameZh": "纳瓦萨岛"
+  },
+  {
+   "dxcc": 183,
+   "name": "Netherlands Borneo",
+   "prefix": "",
+   "deleted": true
+  },
+  {
+   "dxcc": 184,
+   "name": "Netherlands New Guinea",
+   "prefix": "",
+   "deleted": true
+  },
+  {
+   "dxcc": 185,
+   "name": "Solomon Is.",
+   "prefix": "H4",
+   "deleted": false,
+   "nameZh": "所罗门群岛"
+  },
+  {
+   "dxcc": 186,
+   "name": "Newfoundland, Labrador",
+   "prefix": "",
+   "deleted": true
+  },
+  {
+   "dxcc": 187,
+   "name": "Niger",
+   "prefix": "5U",
+   "deleted": false,
+   "nameZh": "尼日尔"
+  },
+  {
+   "dxcc": 188,
+   "name": "Niue",
+   "prefix": "E6",
+   "deleted": false,
+   "nameZh": "纽埃"
+  },
+  {
+   "dxcc": 189,
+   "name": "Norfolk I.",
+   "prefix": "VK9N",
+   "deleted": false,
+   "nameZh": "诺福克岛"
+  },
+  {
+   "dxcc": 190,
+   "name": "Samoa",
+   "prefix": "5W",
+   "deleted": false,
+   "nameZh": "萨摩亚"
+  },
+  {
+   "dxcc": 191,
+   "name": "North Cook Is.",
+   "prefix": "E5/n",
+   "deleted": false,
+   "nameZh": "北库克群岛"
+  },
+  {
+   "dxcc": 192,
+   "name": "Ogasawara",
+   "prefix": "JD/o",
+   "deleted": false,
+   "nameZh": "小笠原群岛"
+  },
+  {
+   "dxcc": 193,
+   "name": "Okinawa (Ryukyu Is.)",
+   "prefix": "",
+   "deleted": true
+  },
+  {
+   "dxcc": 194,
+   "name": "Okino Tori-Shima",
+   "prefix": "",
+   "deleted": true
+  },
+  {
+   "dxcc": 195,
+   "name": "Annobon I.",
+   "prefix": "3C0",
+   "deleted": false,
+   "nameZh": "安诺本岛"
+  },
+  {
+   "dxcc": 196,
+   "name": "Palestine",
+   "prefix": "E4",
+   "deleted": true
+  },
+  {
+   "dxcc": 197,
+   "name": "Palmyra & Jarvis Is.",
+   "prefix": "KH5",
+   "deleted": false,
+   "nameZh": "帕尔迈拉和贾维斯群岛"
+  },
+  {
+   "dxcc": 198,
+   "name": "Papua Territory",
+   "prefix": "",
+   "deleted": true
+  },
+  {
+   "dxcc": 199,
+   "name": "Peter 1 I.",
+   "prefix": "3Y/p",
+   "deleted": false,
+   "nameZh": "彼得一世岛"
+  },
+  {
+   "dxcc": 200,
+   "name": "Portuguese Timor",
+   "prefix": "",
+   "deleted": true
+  },
+  {
+   "dxcc": 201,
+   "name": "Prince Edward & Marion Is.",
+   "prefix": "ZS8",
+   "deleted": false,
+   "nameZh": "爱德华王子及马里恩群岛"
+  },
+  {
+   "dxcc": 202,
+   "name": "Puerto Rico",
+   "prefix": "KP4",
+   "deleted": false,
+   "nameZh": "波多黎各"
+  },
+  {
+   "dxcc": 203,
+   "name": "Andorra",
+   "prefix": "C3",
+   "deleted": false,
+   "nameZh": "安道尔"
+  },
+  {
+   "dxcc": 204,
+   "name": "Revillagigedo",
+   "prefix": "XF4",
+   "deleted": false,
+   "nameZh": "雷维利亚希赫多群岛"
+  },
+  {
+   "dxcc": 205,
+   "name": "Ascension I.",
+   "prefix": "ZD8",
+   "deleted": false,
+   "nameZh": "阿森松岛"
+  },
+  {
+   "dxcc": 206,
+   "name": "Austria",
+   "prefix": "OE",
+   "deleted": false,
+   "nameZh": "奥地利"
+  },
+  {
+   "dxcc": 207,
+   "name": "Rodrigues I.",
+   "prefix": "3B9",
+   "deleted": false,
+   "nameZh": "罗德里格斯岛"
+  },
+  {
+   "dxcc": 208,
+   "name": "Ruanda-Urundi",
+   "prefix": "",
+   "deleted": true
+  },
+  {
+   "dxcc": 209,
+   "name": "Belgium",
+   "prefix": "ON",
+   "deleted": false,
+   "nameZh": "比利时"
+  },
+  {
+   "dxcc": 210,
+   "name": "Saar",
+   "prefix": "",
+   "deleted": true
+  },
+  {
+   "dxcc": 211,
+   "name": "Sable I.",
+   "prefix": "CY0",
+   "deleted": false,
+   "nameZh": "赛布尔岛"
+  },
+  {
+   "dxcc": 212,
+   "name": "Bulgaria",
+   "prefix": "LZ",
+   "deleted": false,
+   "nameZh": "保加利亚"
+  },
+  {
+   "dxcc": 213,
+   "name": "Saint Martin",
+   "prefix": "FS",
+   "deleted": false,
+   "nameZh": "圣马丁"
+  },
+  {
+   "dxcc": 214,
+   "name": "Corsica",
+   "prefix": "TK",
+   "deleted": false,
+   "nameZh": "科西嘉"
+  },
+  {
+   "dxcc": 215,
+   "name": "Cyprus",
+   "prefix": "5B",
+   "deleted": false,
+   "nameZh": "塞浦路斯"
+  },
+  {
+   "dxcc": 216,
+   "name": "San Andres & Providencia",
+   "prefix": "HK0/a",
+   "deleted": false,
+   "nameZh": "圣安德列斯和普罗维登西亚"
+  },
+  {
+   "dxcc": 217,
+   "name": "San Felix & San Ambrosio",
+   "prefix": "CE0X",
+   "deleted": false,
+   "nameZh": "圣费利克斯和圣安布罗西奥"
+  },
+  {
+   "dxcc": 218,
+   "name": "Czechoslovakia",
+   "prefix": "",
+   "deleted": true
+  },
+  {
+   "dxcc": 219,
+   "name": "Sao Tome & Principe",
+   "prefix": "S9",
+   "deleted": false,
+   "nameZh": "圣多美和普林西比"
+  },
+  {
+   "dxcc": 220,
+   "name": "Sarawak",
+   "prefix": "",
+   "deleted": true
+  },
+  {
+   "dxcc": 221,
+   "name": "Denmark",
+   "prefix": "OZ",
+   "deleted": false,
+   "nameZh": "丹麦"
+  },
+  {
+   "dxcc": 222,
+   "name": "Faroe Is.",
+   "prefix": "OY",
+   "deleted": false,
+   "nameZh": "法罗群岛"
+  },
+  {
+   "dxcc": 223,
+   "name": "England",
+   "prefix": "G",
+   "deleted": false,
+   "nameZh": "英格兰"
+  },
+  {
+   "dxcc": 224,
+   "name": "Finland",
+   "prefix": "OH",
+   "deleted": false,
+   "nameZh": "芬兰"
+  },
+  {
+   "dxcc": 225,
+   "name": "Sardinia",
+   "prefix": "IS",
+   "deleted": false,
+   "nameZh": "撒丁岛"
+  },
+  {
+   "dxcc": 226,
+   "name": "Saudi Arabia/Iraq Neutral Zone",
+   "prefix": "",
+   "deleted": true
+  },
+  {
+   "dxcc": 227,
+   "name": "France",
+   "prefix": "F",
+   "deleted": false,
+   "nameZh": "法国"
+  },
+  {
+   "dxcc": 228,
+   "name": "Serrana Bank & Roncador Cay",
+   "prefix": "",
+   "deleted": true
+  },
+  {
+   "dxcc": 229,
+   "name": "German Democratic Republic",
+   "prefix": "",
+   "deleted": true
+  },
+  {
+   "dxcc": 230,
+   "name": "Germany",
+   "prefix": "DL",
+   "deleted": false,
+   "nameZh": "德意志联邦共和国"
+  },
+  {
+   "dxcc": 231,
+   "name": "Sikkim",
+   "prefix": "",
+   "deleted": true
+  },
+  {
+   "dxcc": 232,
+   "name": "Somalia",
+   "prefix": "T5",
+   "deleted": false,
+   "nameZh": "索马里"
+  },
+  {
+   "dxcc": 233,
+   "name": "Gibraltar",
+   "prefix": "ZB",
+   "deleted": false,
+   "nameZh": "直布罗陀"
+  },
+  {
+   "dxcc": 234,
+   "name": "South Cook Is.",
+   "prefix": "E5/s",
+   "deleted": false,
+   "nameZh": "南库克群岛"
+  },
+  {
+   "dxcc": 235,
+   "name": "South Georgia I.",
+   "prefix": "VP8/g",
+   "deleted": false,
+   "nameZh": "南乔治亚岛"
+  },
+  {
+   "dxcc": 236,
+   "name": "Greece",
+   "prefix": "SV",
+   "deleted": false,
+   "nameZh": "希腊"
+  },
+  {
+   "dxcc": 237,
+   "name": "Greenland",
+   "prefix": "OX",
+   "deleted": false,
+   "nameZh": "格陵兰"
+  },
+  {
+   "dxcc": 238,
+   "name": "South Orkney Is.",
+   "prefix": "VP8/o",
+   "deleted": false,
+   "nameZh": "南奥克尼群岛"
+  },
+  {
+   "dxcc": 239,
+   "name": "Hungary",
+   "prefix": "HA",
+   "deleted": false,
+   "nameZh": "匈牙利"
+  },
+  {
+   "dxcc": 240,
+   "name": "South Sandwich Is.",
+   "prefix": "VP8/s",
+   "deleted": false,
+   "nameZh": "南桑威奇群岛"
+  },
+  {
+   "dxcc": 241,
+   "name": "South Shetland Is.",
+   "prefix": "VP8/h",
+   "deleted": false,
+   "nameZh": "南设得兰群岛"
+  },
+  {
+   "dxcc": 242,
+   "name": "Iceland",
+   "prefix": "TF",
+   "deleted": false,
+   "nameZh": "冰岛"
+  },
+  {
+   "dxcc": 243,
+   "name": "People's Democratic Rep. of Yemen",
+   "prefix": "",
+   "deleted": true
+  },
+  {
+   "dxcc": 244,
+   "name": "Southern Sudan",
+   "prefix": "",
+   "deleted": true
+  },
+  {
+   "dxcc": 245,
+   "name": "Ireland",
+   "prefix": "EI",
+   "deleted": false,
+   "nameZh": "爱尔兰"
+  },
+  {
+   "dxcc": 246,
+   "name": "Sovereign Military Order of Malta",
+   "prefix": "1A",
+   "deleted": false,
+   "nameZh": "马耳他主权军事骑士团"
+  },
+  {
+   "dxcc": 247,
+   "name": "Spratly Is.",
+   "prefix": "1S",
+   "deleted": false,
+   "nameZh": "南沙群岛"
+  },
+  {
+   "dxcc": 248,
+   "name": "Italy",
+   "prefix": "I",
+   "deleted": false,
+   "nameZh": "意大利"
+  },
+  {
+   "dxcc": 249,
+   "name": "St. Kitts & Nevis",
+   "prefix": "V4",
+   "deleted": false,
+   "nameZh": "圣基茨和尼维斯"
+  },
+  {
+   "dxcc": 250,
+   "name": "St. Helena",
+   "prefix": "ZD7",
+   "deleted": false,
+   "nameZh": "圣赫勒拿"
+  },
+  {
+   "dxcc": 251,
+   "name": "Liechtenstein",
+   "prefix": "HB0",
+   "deleted": false,
+   "nameZh": "列支敦士登"
+  },
+  {
+   "dxcc": 252,
+   "name": "St. Paul I.",
+   "prefix": "CY9",
+   "deleted": false,
+   "nameZh": "圣保罗岛"
+  },
+  {
+   "dxcc": 253,
+   "name": "St. Peter & St. Paul Rocks",
+   "prefix": "PY0S",
+   "deleted": false,
+   "nameZh": "圣彼得和圣保罗礁"
+  },
+  {
+   "dxcc": 254,
+   "name": "Luxembourg",
+   "prefix": "LX",
+   "deleted": false,
+   "nameZh": "卢森堡"
+  },
+  {
+   "dxcc": 255,
+   "name": "St. Maarten, Saba, St. Eustatius",
+   "prefix": "",
+   "deleted": true
+  },
+  {
+   "dxcc": 256,
+   "name": "Madeira Is.",
+   "prefix": "CT3",
+   "deleted": false,
+   "nameZh": "马德拉群岛"
+  },
+  {
+   "dxcc": 257,
+   "name": "Malta",
+   "prefix": "9H",
+   "deleted": false,
+   "nameZh": "马耳他"
+  },
+  {
+   "dxcc": 258,
+   "name": "Sumatra",
+   "prefix": "",
+   "deleted": true
+  },
+  {
+   "dxcc": 259,
+   "name": "Svalbard",
+   "prefix": "JW",
+   "deleted": false,
+   "nameZh": "斯瓦尔巴"
+  },
+  {
+   "dxcc": 260,
+   "name": "Monaco",
+   "prefix": "3A",
+   "deleted": false,
+   "nameZh": "摩纳哥"
+  },
+  {
+   "dxcc": 261,
+   "name": "Swan Is.",
+   "prefix": "",
+   "deleted": true
+  },
+  {
+   "dxcc": 262,
+   "name": "Tajikistan",
+   "prefix": "EY",
+   "deleted": false,
+   "nameZh": "塔吉克斯坦"
+  },
+  {
+   "dxcc": 263,
+   "name": "Netherlands",
+   "prefix": "PA",
+   "deleted": false,
+   "nameZh": "荷兰"
+  },
+  {
+   "dxcc": 264,
+   "name": "Tangier",
+   "prefix": "",
+   "deleted": true
+  },
+  {
+   "dxcc": 265,
+   "name": "Northern Ireland",
+   "prefix": "GI",
+   "deleted": false,
+   "nameZh": "北爱尔兰"
+  },
+  {
+   "dxcc": 266,
+   "name": "Norway",
+   "prefix": "LA",
+   "deleted": false,
+   "nameZh": "挪威"
+  },
+  {
+   "dxcc": 267,
+   "name": "Territory of New Guinea",
+   "prefix": "",
+   "deleted": true
+  },
+  {
+   "dxcc": 268,
+   "name": "Tibet",
+   "prefix": "",
+   "deleted": true
+  },
+  {
+   "dxcc": 269,
+   "name": "Poland",
+   "prefix": "SP",
+   "deleted": false,
+   "nameZh": "波兰"
+  },
+  {
+   "dxcc": 270,
+   "name": "Tokelau Is.",
+   "prefix": "ZK3",
+   "deleted": false,
+   "nameZh": "托克劳群岛"
+  },
+  {
+   "dxcc": 271,
+   "name": "Trieste",
+   "prefix": "",
+   "deleted": true
+  },
+  {
+   "dxcc": 272,
+   "name": "Portugal",
+   "prefix": "CT",
+   "deleted": false,
+   "nameZh": "葡萄牙"
+  },
+  {
+   "dxcc": 273,
+   "name": "Trindade & Martim Vaz Is.",
+   "prefix": "PY0T",
+   "deleted": false,
+   "nameZh": "特林达德和马丁瓦斯群岛"
+  },
+  {
+   "dxcc": 274,
+   "name": "Tristan da Cunha & Gough I.",
+   "prefix": "ZD9",
+   "deleted": false,
+   "nameZh": "特里斯坦达库尼亚和果夫岛"
+  },
+  {
+   "dxcc": 275,
+   "name": "Romania",
+   "prefix": "YO",
+   "deleted": false,
+   "nameZh": "罗马尼亚"
+  },
+  {
+   "dxcc": 276,
+   "name": "Tromelin I.",
+   "prefix": "FT/t",
+   "deleted": false,
+   "nameZh": "特罗姆兰岛"
+  },
+  {
+   "dxcc": 277,
+   "name": "St. Pierre & Miquelon",
+   "prefix": "FP",
+   "deleted": false,
+   "nameZh": "圣皮埃尔和密克隆"
+  },
+  {
+   "dxcc": 278,
+   "name": "San Marino",
+   "prefix": "T7",
+   "deleted": false,
+   "nameZh": "圣马力诺"
+  },
+  {
+   "dxcc": 279,
+   "name": "Scotland",
+   "prefix": "GM",
+   "deleted": false,
+   "nameZh": "苏格兰"
+  },
+  {
+   "dxcc": 280,
+   "name": "Turkmenistan",
+   "prefix": "EZ",
+   "deleted": false,
+   "nameZh": "土库曼斯坦"
+  },
+  {
+   "dxcc": 281,
+   "name": "Spain",
+   "prefix": "EA",
+   "deleted": false,
+   "nameZh": "西班牙"
+  },
+  {
+   "dxcc": 282,
+   "name": "Tuvalu",
+   "prefix": "T2",
+   "deleted": false,
+   "nameZh": "图瓦卢"
+  },
+  {
+   "dxcc": 283,
+   "name": "UK Sovereign Base Areas on Cyprus",
+   "prefix": "ZC4",
+   "deleted": false,
+   "nameZh": "塞浦路斯英属基地"
+  },
+  {
+   "dxcc": 284,
+   "name": "Sweden",
+   "prefix": "SM",
+   "deleted": false,
+   "nameZh": "瑞典"
+  },
+  {
+   "dxcc": 285,
+   "name": "Virgin Is.",
+   "prefix": "KP2",
+   "deleted": false,
+   "nameZh": "美属维尔京群岛"
+  },
+  {
+   "dxcc": 286,
+   "name": "Uganda",
+   "prefix": "5X",
+   "deleted": false,
+   "nameZh": "乌干达"
+  },
+  {
+   "dxcc": 287,
+   "name": "Switzerland",
+   "prefix": "HB",
+   "deleted": false,
+   "nameZh": "瑞士"
+  },
+  {
+   "dxcc": 288,
+   "name": "Ukraine",
+   "prefix": "UR",
+   "deleted": false,
+   "nameZh": "乌克兰"
+  },
+  {
+   "dxcc": 289,
+   "name": "United Nations HQ",
+   "prefix": "4U1U",
+   "deleted": false,
+   "nameZh": "联合国总部"
+  },
+  {
+   "dxcc": 291,
+   "name": "United States",
+   "prefix": "K",
+   "deleted": false,
+   "nameZh": "美国"
+  },
+  {
+   "dxcc": 292,
+   "name": "Uzbekistan",
+   "prefix": "UK",
+   "deleted": false,
+   "nameZh": "乌兹别克斯坦"
+  },
+  {
+   "dxcc": 293,
+   "name": "Viet Nam",
+   "prefix": "3W",
+   "deleted": false,
+   "nameZh": "越南"
+  },
+  {
+   "dxcc": 294,
+   "name": "Wales",
+   "prefix": "GW",
+   "deleted": false,
+   "nameZh": "威尔士"
+  },
+  {
+   "dxcc": 295,
+   "name": "Vatican",
+   "prefix": "HV",
+   "deleted": false,
+   "nameZh": "梵蒂冈"
+  },
+  {
+   "dxcc": 296,
+   "name": "Serbia",
+   "prefix": "YU",
+   "deleted": false,
+   "nameZh": "塞尔维亚"
+  },
+  {
+   "dxcc": 297,
+   "name": "Wake I.",
+   "prefix": "KH9",
+   "deleted": false,
+   "nameZh": "威克岛"
+  },
+  {
+   "dxcc": 298,
+   "name": "Wallis & Futuna Is.",
+   "prefix": "FW",
+   "deleted": false,
+   "nameZh": "瓦利斯和富图纳群岛"
+  },
+  {
+   "dxcc": 299,
+   "name": "West Malaysia",
+   "prefix": "9M2",
+   "deleted": false,
+   "nameZh": "西马来西亚"
+  },
+  {
+   "dxcc": 301,
+   "name": "W. Kiribati (Gilbert Is. )",
+   "prefix": "T30",
+   "deleted": false,
+   "nameZh": "西基里巴斯（吉尔伯特群岛）"
+  },
+  {
+   "dxcc": 302,
+   "name": "Western Sahara",
+   "prefix": "S0",
+   "deleted": false,
+   "nameZh": "西撒哈拉"
+  },
+  {
+   "dxcc": 303,
+   "name": "Willis I.",
+   "prefix": "VK9W",
+   "deleted": false,
+   "nameZh": "威利斯岛"
+  },
+  {
+   "dxcc": 304,
+   "name": "Bahrain",
+   "prefix": "A9",
+   "deleted": false,
+   "nameZh": "巴林"
+  },
+  {
+   "dxcc": 305,
+   "name": "Bangladesh",
+   "prefix": "S2",
+   "deleted": false,
+   "nameZh": "孟加拉国"
+  },
+  {
+   "dxcc": 306,
+   "name": "Bhutan",
+   "prefix": "A5",
+   "deleted": false,
+   "nameZh": "不丹"
+  },
+  {
+   "dxcc": 307,
+   "name": "Zanzibar",
+   "prefix": "",
+   "deleted": true
+  },
+  {
+   "dxcc": 308,
+   "name": "Costa Rica",
+   "prefix": "TI",
+   "deleted": false,
+   "nameZh": "哥斯达黎加"
+  },
+  {
+   "dxcc": 309,
+   "name": "Myanmar",
+   "prefix": "XZ",
+   "deleted": false,
+   "nameZh": "缅甸"
+  },
+  {
+   "dxcc": 312,
+   "name": "Cambodia",
+   "prefix": "XU",
+   "deleted": false,
+   "nameZh": "柬埔寨"
+  },
+  {
+   "dxcc": 315,
+   "name": "Sri Lanka",
+   "prefix": "4S",
+   "deleted": false,
+   "nameZh": "斯里兰卡"
+  },
+  {
+   "dxcc": 318,
+   "name": "China",
+   "prefix": "BY",
+   "deleted": false,
+   "nameZh": "中国"
+  },
+  {
+   "dxcc": 321,
+   "name": "Hong Kong",
+   "prefix": "VR",
+   "deleted": false,
+   "nameZh": "香港"
+  },
+  {
+   "dxcc": 324,
+   "name": "India",
+   "prefix": "VU",
+   "deleted": false,
+   "nameZh": "印度"
+  },
+  {
+   "dxcc": 327,
+   "name": "Indonesia",
+   "prefix": "YB",
+   "deleted": false,
+   "nameZh": "印度尼西亚"
+  },
+  {
+   "dxcc": 330,
+   "name": "Iran",
+   "prefix": "EP",
+   "deleted": false,
+   "nameZh": "伊朗"
+  },
+  {
+   "dxcc": 333,
+   "name": "Iraq",
+   "prefix": "YI",
+   "deleted": false,
+   "nameZh": "伊拉克"
+  },
+  {
+   "dxcc": 336,
+   "name": "Israel",
+   "prefix": "4X",
+   "deleted": false,
+   "nameZh": "以色列"
+  },
+  {
+   "dxcc": 339,
+   "name": "Japan",
+   "prefix": "JA",
+   "deleted": false,
+   "nameZh": "日本"
+  }
+ ]
+}

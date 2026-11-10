@@ -1,5 +1,6 @@
 import {fetchAnalysis, fetchPathAnalysis} from '../../shared/data/analysis.mjs';
 import {$} from '../ui.mjs';
+import {regionTitle} from '../../shared/dxcc/title.mjs';
 
 /**
  * 天线研判页：输入目标呼号与 UTC 时间窗，展示三分类概率、主朝向与判定依据。
@@ -32,6 +33,8 @@ export function createAnalysisPage(ctx) {
     const PATH_STALE_MS = 5 * 60 * 1000;
 
     const t = key => ctx.t(key);
+    const lang = () => (ctx.settings && ctx.settings.lang) || document.documentElement.lang || 'en';
+    const pathRegion = region => regionTitle(region, lang(), t('anUnknownRegion'));
 
     function element(tag, className, text) {
         const node = document.createElement(tag);
@@ -352,10 +355,8 @@ export function createAnalysisPage(ctx) {
     function pathCard(row) {
         const card = element('div', 'an-path-card');
         const head = element('div', 'an-path-head');
-        head.appendChild(element('span', 'an-path-region',
-            row.region.label + (row.region.grids && row.region.grids.length
-                ? ` · ${row.region.grids.join(' / ')}` : '')));
-        head.appendChild(element('span', 'an-path-band', row.band));
+        head.appendChild(element('span', 'an-path-region', pathRegion(row.region)));
+        head.appendChild(element('span', 'an-path-band', `· ${row.band}`));
         head.appendChild(element('span', `an-badge an-conf-${row.confidence.level}`,
             `${t('anConfidence')} ${t(`anPathConf.${row.confidence.level}`)}`));
         (row.opponents || []).forEach(call => {
@@ -388,7 +389,7 @@ export function createAnalysisPage(ctx) {
         if (table) {
             const details = element('details', 'an-path-detail');
             details.appendChild(element('summary', null,
-                `${t('anPathContributors')} (${row.region.label} · ${row.band})`));
+                `${t('anPathContributors')} (${pathRegion(row.region)} · ${row.band})`));
             details.appendChild(table);
             card.appendChild(details);
         }
