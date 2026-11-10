@@ -45,15 +45,39 @@ test('spot column migration is idempotent across sqlite row shapes', () => {
         'ALTER TABLE spots ADD COLUMN dxcc_sender INTEGER',
         'ALTER TABLE spots ADD COLUMN dxcc_receiver INTEGER'
     ]);
-    assert.deepEqual(storage.schema.addMissingColumns([]), [
+    // 值数组形态：[cid, name, type, notnull, dflt_value, pk]
+    assert.deepEqual(storage.schema.addMissingColumns([
+        [0, 'id', 'INTEGER', 0, null, 0],
+        [1, 'DXCC_SENDER', 'INTEGER', 0, null, 0],
+        [2, ' dxcc_receiver ', 'INTEGER', 0, null, 0]
+    ]), [
         'ALTER TABLE spots ADD COLUMN band TEXT',
         'ALTER TABLE spots ADD COLUMN dx_lat REAL',
         'ALTER TABLE spots ADD COLUMN dx_lon REAL',
         'ALTER TABLE spots ADD COLUMN sender_grid TEXT',
-        'ALTER TABLE spots ADD COLUMN receiver_grid TEXT',
-        'ALTER TABLE spots ADD COLUMN dxcc_sender INTEGER',
-        'ALTER TABLE spots ADD COLUMN dxcc_receiver INTEGER'
+        'ALTER TABLE spots ADD COLUMN receiver_grid TEXT'
     ]);
+});
+
+test('column migration never guesses when the PRAGMA result is unreadable', () => {
+    for (const rows of [[], null, undefined, '', [{cols: null}], [{}], [null], 42]) {
+        assert.deepEqual(storage.schema.addMissingColumns(rows), [],
+            'unreadable column list must not emit blind ALTERs: ' + JSON.stringify(rows));
+    }
+    assert.deepEqual(storage.schema.columnNames([{cols: 'id, BAND ,band'}]), ['id', 'band']);
+    assert.deepEqual(storage.schema.columnNames([['0', 'Id'], ['1', 'band']]), ['id', 'band']);
+    assert.deepEqual(storage.schema.columnNames({sender_grid: 'TEXT', dxcc_sender: 'INTEGER'}),
+        ['sender_grid', 'dxcc_sender']);
+    assert.equal(storage.schema.columnNames([]).length, 0);
+});
+
+test('duplicate column errors are treated as already-migrated, not failures', () => {
+    assert.equal(storage.schema.isDuplicateColumnError(
+        'SQLITE_ERROR: duplicate column name: dxcc_sender'), true);
+    assert.equal(storage.schema.isDuplicateColumnError(
+        new Error('SQLITE_ERROR: duplicate column name: receiver_grid')), true);
+    assert.equal(storage.schema.isDuplicateColumnError('SQLITE_ERROR: no such table: neighbors'), false);
+    assert.equal(storage.schema.isDuplicateColumnError(null), false);
 });
 
 test('neighbor schema rebuilds triggers idempotently', () => {

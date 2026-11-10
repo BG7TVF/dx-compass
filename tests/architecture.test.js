@@ -153,8 +153,16 @@ test('DB startup migrates columns and creates neighbor schema in independent bra
         assert.deepEqual(node.wires, [[]], name + ' must end its branch');
     }
     const warn = byName('Log DB migration error');
-    assert.ok(warn && /node\.warn\(/.test(warn.func || ''),
+    assert.ok(warn && /\bnode\.warn\(/.test(warn.func || ''),
         'migration failures must be logged with node.warn');
+    assert.match(warn.func, /isDuplicateColumnError/,
+        'duplicate column errors must be recognised as already migrated');
+    assert.match(warn.func, /node\.log\('DB migration skipped/, 'duplicates log at info level');
+    const addColumns = byName('Add missing columns');
+    assert.ok(addColumns, 'Add missing columns node must exist');
+    assert.match(addColumns.func, /columnNames\(/, 'node must read the column list explicitly');
+    assert.match(addColumns.func, /ALTER skipped/,
+        'an unreadable column list must skip ALTERs and warn');
     const catcher = flow.find(node => node.type === 'catch' &&
         (node.wires || []).flat().includes(warn.id));
     assert.ok(catcher, 'a catch node must feed the migration log');
@@ -221,7 +229,7 @@ test('startup self-check warns when neighbors schema is missing', () => {
     const schema = require('../lib/storage/schema.js');
     const sql = schema.selfCheckQuery();
     assert.match(sql, /pragma_table_info\('spots'\)/);
-    assert.match(sql, /name IN \('sender_grid','receiver_grid','dxcc_sender','dxcc_receiver'\)/);
+    assert.match(sql, /'column' AS kind/);
     assert.match(sql, /name='neighbors'/);
     assert.match(sql, /trg_spots_neighbor_%/);
     const check = flow.find(node => node.name === 'Check DB self-check result');
@@ -229,6 +237,8 @@ test('startup self-check warns when neighbors schema is missing', () => {
     for (const token of ['sender_grid', 'receiver_grid', 'dxcc_sender', 'dxcc_receiver', 'neighbors']) {
         assert.match(check.func, new RegExp(token));
     }
+    assert.match(check.func, /MISSING/, 'missing items must be named explicitly');
+    assert.match(check.func, /actual spots columns/, 'log the actual column list for reconciliation');
     assert.match(check.func, /node\.warn\(/);
 });
 
