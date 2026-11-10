@@ -175,6 +175,10 @@ test('评估：同一 call|band 在去重窗口内只提醒一次，频率超出
         state: {now: NOW + 60, dedupe: first.dedupe, lastAlertAt: first.lastAlertAt}, resolve
     });
     assert.equal(repeat.reason, 'duplicate');
+    assert.equal(repeat.alert, null);
+    assert.equal(repeat.hit.suppressed, 'duplicate');
+    assert.equal(repeat.hit.notified, false);
+    assert.deepEqual(repeat.hit.notify, {popup: false, voice: false, sound: false});
     const moved = service.evaluate(spot({freq: 14040.0}), {
         settings: baseSettings(), rules,
         state: {now: NOW + 120, dedupe: first.dedupe, lastAlertAt: first.lastAlertAt}, resolve
@@ -204,6 +208,9 @@ test('评估：全局最短间隔只节流，不写入去重表', () => {
         state: {now: NOW + 30, dedupe: first.dedupe, lastAlertAt: first.lastAlertAt}, resolve
     });
     assert.equal(throttled.reason, 'throttled');
+    assert.equal(throttled.alert, null);
+    assert.equal(throttled.hit.suppressed, 'throttled');
+    assert.equal(throttled.hit.notified, false);
     assert.deepEqual(throttled.dedupe, first.dedupe);
 });
 
@@ -270,18 +277,56 @@ test('窗口：优先设置，其次按最近一届赛事推断', () => {
     assert.equal(fromSettings.from, Date.parse('2026-11-10T00:00:00Z') / 1000);
 });
 
-test('聚合：同一 call|band 跨来源折叠并累计上报次数', () => {
-    const alerts = [
-        {at: '2026-11-11T11:59:00Z', call: 'K1ABC', band: '20m', source: 'rbn', priority: 1, state: 'newBand', rules: [{id: 1, name: 'A'}]},
-        {at: '2026-11-11T11:59:30Z', call: 'K1ABC', band: '20m', source: 'dxwatch', priority: 1, state: 'newBand', rules: [{id: 1, name: 'A'}]},
-        {at: '2026-11-11T11:58:00Z', call: 'DL1ABC', band: '40m', source: 'pskr', priority: 0, state: 'newMultiplier', rules: [{id: 2, name: 'B'}]}
-    ];
-    const grouped = rank.aggregate(alerts, 600, NOW);
-    assert.equal(grouped.length, 2);
-    assert.equal(grouped[0].call, 'DL1ABC');
-    assert.equal(grouped[1].reports, 2);
-    assert.deepEqual(grouped[1].sources.sort(), ['dxwatch', 'rbn']);
-    assert.equal(grouped[1].ruleNames, 'A');
+test('聚合：recordHit 同一 call|band 在窗口内折叠并累计来源与次数', () => {
+    let hits = [];
+    hits = rank.recordHit(hits, {
+        at: '2026-11-11T11:59:00Z', call: 'K1ABC', band: '20m', source: 'rbn',
+        priority: 1, state: 'newBand', rules: [{id: 1, name: 'A'}], notified: true
+    }, 50, 600, NOW);
+    hits = rank.recordHit(hits, {
+        at: '2026-11-11T11:59:30Z', call: 'k1abc', band: '20M', source: 'dxwatch',
+        priority: 1, state: 'newBand', rules: [{id: 1, name: 'A'}], notified: false
+    }, 50, 600, NOW);
+    hits = rank.recordHit(hits, {
+        at: '2026-11-11T11:58:00Z', call: 'DL1ABC', band: '40m', source: 'pskr',
+        priority: 0, state: 'newMultiplier', rules: [{id: 2, name: 'B'}], notified: true
+    }, 50, 600, NOW);
+    assert.equal(hits.length, 2);
+    assert.equal(hits[0].call, 'DL1ABC');
+    const grouped = hits[1];
+    assert.equal(grouped.reports, 2);
+    assert.deepEqual(grouped.sources.sort(), ['dxwatch', 'rbn']);
+    assert.equal(grouped.ruleNames, 'A');
+    assert.equal(grouped.notified, true);
+    assert.equal(grouped.at, '2026-11-11T11:59:30Z');
+});
+
+test('聚合：窗口外不合并，规则合并，priority 取更优先，cap 截断', () => {
+    const base = {
+        call: 'K1ABC', band: '20m', source: 'rbn', priority: 2,
+        rules: [{id: 1, name: 'A'}], notified: true
+    };
+    const first = rank.recordHit([], Object.assign({}, base, {at: '2026-11-11T11:55:00Z'}), 50, 600, NOW);
+    const old = rank.recordHit([], Object.assign({}, base, {at: '2026-11-11T11:40:00Z'}), 50, 600, NOW);
+    const reopened = rank.recordHit(old, Object.assign({}, base, {at: '2026-11-11T11:59:00Z'}), 50, 600, NOW);
+    assert.equal(reopened.length, 2);
+
+    const upgraded = rank.recordHit(first, Object.assign({}, base, {
+        at: '2026-11-11T11:59:00Z', priority: 0, state: 'newMultiplier', rules: [{id: 2, name: 'B'}]
+    }), 50, 600, NOW);
+    assert.equal(upgraded.length, 1);
+    assert.equal(upgraded[0].priority, 0);
+    assert.equal(upgraded[0].state, 'newMultiplier');
+    assert.equal(upgraded[0].ruleNames, 'A, B');
+
+    let many = [];
+    for (let i = 0; i < 5; i += 1) {
+        many = rank.recordHit(many, {
+            at: new Date((NOW + i) * 1000).toISOString(), call: `K${i}ABC`, band: '20m',
+            source: 'rbn', priority: 3, rules: [{id: 1, name: 'A'}], notified: true
+        }, 3, 600, NOW + i);
+    }
+    assert.equal(many.length, 3);
 });
 
 test('排序：优先级升序，同优先级时间新者在前', () => {
