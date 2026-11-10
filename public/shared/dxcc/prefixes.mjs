@@ -40,7 +40,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 4,
-        "name": "Agaléga and Saint Brandon",
+        "name": "Agalega & St. Brandon Is.",
         "prefix": "3B6",
         "prefixes": [
             "3B6",
@@ -50,7 +50,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 5,
-        "name": "Åland Islands",
+        "name": "Aland Is.",
         "prefix": "OH0",
         "prefixes": [
             "OH0"
@@ -98,7 +98,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 10,
-        "name": "Amsterdam and Saint-Paul Islands",
+        "name": "Amsterdam & St. Paul Is.",
         "prefix": "FT5Z",
         "prefixes": [
             "FT/Z",
@@ -108,7 +108,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 11,
-        "name": "Andaman and Nicobar Islands",
+        "name": "Andaman & Nicobar Is.",
         "prefix": "VU4",
         "prefixes": [
             "VU4"
@@ -215,7 +215,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 17,
-        "name": "Isla de Aves",
+        "name": "Aves I.",
         "prefix": "YV0",
         "prefixes": [
             "YV0"
@@ -243,7 +243,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 20,
-        "name": "Baker and Howland Islands",
+        "name": "Baker & Howland Is.",
         "prefix": "KH1",
         "prefixes": [
             "KH1"
@@ -252,7 +252,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 21,
-        "name": "Balearic Islands",
+        "name": "Balearic Is.",
         "prefix": "EA6",
         "prefixes": [
             "EA6",
@@ -277,7 +277,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 24,
-        "name": "Bouvet Island",
+        "name": "Bouvet",
         "prefix": "3Y/B",
         "prefixes": [
             "3Y",
@@ -316,7 +316,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 28,
-        "name": "Panama Canal Zone",
+        "name": "Canal Zone",
         "prefix": "KZ5",
         "prefixes": [
             "KZ5"
@@ -325,7 +325,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 29,
-        "name": "Canary Islands",
+        "name": "Canary Is.",
         "prefix": "EA8",
         "prefixes": [
             "EA8",
@@ -341,7 +341,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 30,
-        "name": "Celebes and the Molucca Islands",
+        "name": "Celebe & Molucca Is.",
         "prefix": "PK6",
         "prefixes": [
             "PK6"
@@ -350,7 +350,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 31,
-        "name": "Phoenix Islands",
+        "name": "C. Kiribati (British Phoenix Is.)",
         "prefix": "T31",
         "prefixes": [
             "T31"
@@ -359,7 +359,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 32,
-        "name": "Ceuta and Melilla",
+        "name": "Ceuta & Melilla",
         "prefix": "EA9",
         "prefixes": [
             "EA9",
@@ -375,7 +375,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 33,
-        "name": "Chagos Islands",
+        "name": "Chagos Is.",
         "prefix": "VQ9",
         "prefixes": [
             "VQ9"
@@ -384,7 +384,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 34,
-        "name": "Chatham Islands",
+        "name": "Chatham Is.",
         "prefix": "ZL7",
         "prefixes": [
             "ZL7"
@@ -393,7 +393,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 35,
-        "name": "Christmas Island",
+        "name": "Christmas I.",
         "prefix": "VK9X",
         "prefixes": [
             "VK9X"
@@ -402,7 +402,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 36,
-        "name": "Clipperton Island",
+        "name": "Clipperton I.",
         "prefix": "FO/C",
         "prefixes": [
             "FO",
@@ -413,7 +413,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 37,
-        "name": "Cocos Island",
+        "name": "Cocos I.",
         "prefix": "TI9",
         "prefixes": [
             "TI9"
@@ -422,7 +422,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 38,
-        "name": "Cocos (Keeling) Islands",
+        "name": "Cocos (Keeling) Is.",
         "prefix": "VK9C",
         "prefixes": [
             "VK9C"
@@ -452,7 +452,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 41,
-        "name": "Crozet Islands",
+        "name": "Crozet I.",
         "prefix": "FT5W",
         "prefixes": [
             "FT/W",
@@ -462,7 +462,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 42,
-        "name": "Daman and Diu",
+        "name": "Damao, Diu",
         "prefix": "CR8",
         "prefixes": [
             "CR8"
@@ -471,7 +471,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 43,
-        "name": "Desecheo Island",
+        "name": "Desecheo I.",
         "prefix": "KP5",
         "prefixes": [
             "KP5"
@@ -480,7 +480,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 44,
-        "name": "Desroches Island",
+        "name": "Desroches",
         "prefix": "VQ9",
         "prefixes": [
             "VQ9"
@@ -509,7 +509,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 47,
-        "name": "Easter Island",
+        "name": "Easter I.",
         "prefix": "CE0Y",
         "prefixes": [
             "CE0",
@@ -519,7 +519,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 48,
-        "name": "Line Islands",
+        "name": "E. Kiribati (Line Is.)",
         "prefix": "T32",
         "prefixes": [
             "T32"
@@ -679,7 +679,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 55,
-        "name": "Farquhar Group",
+        "name": "Farquhar",
         "prefix": "VQ9",
         "prefixes": [
             "VQ9"
@@ -816,7 +816,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 69,
-        "name": "Cayman Islands",
+        "name": "Cayman Is.",
         "prefix": "ZF",
         "prefixes": [
             "ZF"
@@ -836,7 +836,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 71,
-        "name": "Galápagos Islands",
+        "name": "Galapagos Is.",
         "prefix": "HC8",
         "prefixes": [
             "HC8",
@@ -922,7 +922,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 81,
-        "name": "West Germany",
+        "name": "Germany",
         "prefix": "DL",
         "prefixes": [
             "DA",
@@ -961,7 +961,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 85,
-        "name": "Bonaire and Curaçao",
+        "name": "Bonaire, Curacao",
         "prefix": "PJ",
         "prefixes": [
             "PJ"
@@ -992,7 +992,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 89,
-        "name": "Turks and Caicos Islands",
+        "name": "Turks & Caicos Is.",
         "prefix": "VP5",
         "prefixes": [
             "VP5"
@@ -1001,7 +1001,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 90,
-        "name": "Trinidad and Tobago",
+        "name": "Trinidad & Tobago",
         "prefix": "9Y",
         "prefixes": [
             "9Y",
@@ -1020,7 +1020,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 94,
-        "name": "Antigua and Barbuda",
+        "name": "Antigua & Barbuda",
         "prefix": "V2",
         "prefixes": [
             "V2"
@@ -1047,7 +1047,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 97,
-        "name": "Saint Lucia",
+        "name": "St. Lucia",
         "prefix": "J6",
         "prefixes": [
             "J6"
@@ -1056,7 +1056,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 98,
-        "name": "Saint Vincent and the Grenadines",
+        "name": "St. Vincent",
         "prefix": "J8",
         "prefixes": [
             "J8"
@@ -1065,7 +1065,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 99,
-        "name": "Glorioso Islands",
+        "name": "Glorioso Is.",
         "prefix": "FT/G",
         "prefixes": [
             "FT/G",
@@ -1101,7 +1101,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 102,
-        "name": "British Togoland",
+        "name": "Gold Coast, Togoland",
         "prefix": "ZD4",
         "prefixes": [
             "ZD4"
@@ -1198,7 +1198,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 111,
-        "name": "Heard Island and McDonald Islands",
+        "name": "Heard I.",
         "prefix": "VK0H",
         "prefixes": [
             "VK0",
@@ -1261,7 +1261,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 117,
-        "name": "International Telecommunication Union Headquarters",
+        "name": "ITU HQ",
         "prefix": "4U1I",
         "prefixes": [
             "4U",
@@ -1311,7 +1311,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 123,
-        "name": "Johnston Atoll",
+        "name": "Johnston I.",
         "prefix": "KH3",
         "prefixes": [
             "KH3"
@@ -1320,7 +1320,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 124,
-        "name": "Juan de Nova and Europa Islands",
+        "name": "Juan de Nova, Europa",
         "prefix": "FT/J",
         "prefixes": [
             "FT/J",
@@ -1331,7 +1331,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 125,
-        "name": "Juan Fernández Islands",
+        "name": "Juan Fernandez Is.",
         "prefix": "CE0Z",
         "prefixes": [
             "CE0",
@@ -1351,7 +1351,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 127,
-        "name": "Kamaran Island",
+        "name": "Kamaran Is.",
         "prefix": "VS9K",
         "prefixes": [
             "VS9K"
@@ -1360,7 +1360,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 128,
-        "name": "Karelo-Finnish Soviet Socialist Republic",
+        "name": "Karelo-Finnish Republic",
         "prefix": "UN1",
         "prefixes": [
             "UN1"
@@ -1390,7 +1390,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 131,
-        "name": "Kerguelen Islands",
+        "name": "Kerguelen Is.",
         "prefix": "FT5X",
         "prefixes": [
             "FT/X",
@@ -1409,7 +1409,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 133,
-        "name": "Kermadec Islands",
+        "name": "Kermadec Is.",
         "prefix": "ZL8",
         "prefixes": [
             "ZL8"
@@ -1447,7 +1447,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 137,
-        "name": "South Korea",
+        "name": "Republic of Korea",
         "prefix": "HL",
         "prefixes": [
             "HL",
@@ -1460,7 +1460,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 138,
-        "name": "Kure Atoll",
+        "name": "Kure I.",
         "prefix": "KH7K",
         "prefixes": [
             "KH7K"
@@ -1469,7 +1469,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 139,
-        "name": "Khuriya Muriya Islands",
+        "name": "Kuria Muria I.",
         "prefix": "VS9H",
         "prefixes": [
             "VS9H"
@@ -1487,7 +1487,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 141,
-        "name": "Falkland Islands",
+        "name": "Falkland Is.",
         "prefix": "VP8",
         "prefixes": [
             "VP8"
@@ -1496,7 +1496,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 142,
-        "name": "Lakshadweep",
+        "name": "Lakshadweep Is.",
         "prefix": "VU7",
         "prefixes": [
             "VU7"
@@ -1543,7 +1543,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 147,
-        "name": "Lord Howe Island",
+        "name": "Lord Howe I.",
         "prefix": "VK9L",
         "prefixes": [
             "VK9L"
@@ -1584,7 +1584,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 151,
-        "name": "Maly Vysotsky Island",
+        "name": "Malyj Vysotskij I.",
         "prefix": "R1/M",
         "prefixes": [
             "R1/M"
@@ -1602,7 +1602,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 153,
-        "name": "Macquarie Island",
+        "name": "Macquarie I.",
         "prefix": "VK0M",
         "prefixes": [
             "VK0",
@@ -1668,7 +1668,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 161,
-        "name": "Malpelo Island",
+        "name": "Malpelo I.",
         "prefix": "HK0/M",
         "prefixes": [
             "HK0",
@@ -1715,7 +1715,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 166,
-        "name": "Mariana Islands",
+        "name": "Mariana Is.",
         "prefix": "KH0",
         "prefixes": [
             "KH0"
@@ -1724,7 +1724,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 167,
-        "name": "Märket Island",
+        "name": "Market Reef",
         "prefix": "OJ0",
         "prefixes": [
             "OJ0"
@@ -1733,7 +1733,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 168,
-        "name": "Marshall Islands",
+        "name": "Marshall Is.",
         "prefix": "V7",
         "prefixes": [
             "V7"
@@ -1772,7 +1772,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 172,
-        "name": "Pitcairn Islands",
+        "name": "Pitcairn I.",
         "prefix": "VP6",
         "prefixes": [
             "VP6"
@@ -1790,7 +1790,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 174,
-        "name": "Midway Atoll",
+        "name": "Midway I.",
         "prefix": "KH4",
         "prefixes": [
             "KH4"
@@ -1818,7 +1818,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 177,
-        "name": "Minami-Tori-shima",
+        "name": "Minami Torishima",
         "prefix": "JD/M",
         "prefixes": [
             "JD1",
@@ -1828,7 +1828,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 178,
-        "name": "Minerva Reefs",
+        "name": "Minerva Reef",
         "prefix": "1M",
         "prefixes": [
             "1M"
@@ -1865,7 +1865,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 182,
-        "name": "Navassa Island",
+        "name": "Navassa I.",
         "prefix": "KP1",
         "prefixes": [
             "KP1"
@@ -1892,7 +1892,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 185,
-        "name": "Solomon Islands",
+        "name": "Solomon Is.",
         "prefix": "H4",
         "prefixes": [
             "H4"
@@ -1928,7 +1928,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 189,
-        "name": "Norfolk Island",
+        "name": "Norfolk I.",
         "prefix": "VK9N",
         "prefixes": [
             "VK9N"
@@ -1946,7 +1946,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 191,
-        "name": "North Cook Islands",
+        "name": "North Cook Is.",
         "prefix": "E5/N",
         "prefixes": [
             "E5",
@@ -1956,7 +1956,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 192,
-        "name": "Ogasawara Islands",
+        "name": "Ogasawara",
         "prefix": "JD/O",
         "prefixes": [
             "JD1",
@@ -1966,7 +1966,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 193,
-        "name": "Ryukyu Islands",
+        "name": "Okinawa (Ryukyu Is.)",
         "prefix": "KR6",
         "prefixes": [
             "KR6",
@@ -1978,7 +1978,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 194,
-        "name": "Okinotorishima",
+        "name": "Okino Tori-Shima",
         "prefix": "7J1",
         "prefixes": [
             "7J1"
@@ -1987,7 +1987,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 195,
-        "name": "Annobón",
+        "name": "Annobon I.",
         "prefix": "3C0",
         "prefixes": [
             "3C0"
@@ -2007,7 +2007,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 197,
-        "name": "Palmyra and Jarvis Islands",
+        "name": "Palmyra & Jarvis Is.",
         "prefix": "KH5",
         "prefixes": [
             "KH5"
@@ -2026,7 +2026,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 199,
-        "name": "Peter I Island",
+        "name": "Peter 1 I.",
         "prefix": "3Y/P",
         "prefixes": [
             "3Y",
@@ -2046,7 +2046,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 201,
-        "name": "Prince Edward and Marion Islands",
+        "name": "Prince Edward & Marion Is.",
         "prefix": "ZS8",
         "prefixes": [
             "ZS8"
@@ -2074,7 +2074,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 204,
-        "name": "Revillagigedo Islands",
+        "name": "Revillagigedo",
         "prefix": "XF4",
         "prefixes": [
             "XA4",
@@ -2091,7 +2091,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 205,
-        "name": "Ascension Island",
+        "name": "Ascension I.",
         "prefix": "ZD8",
         "prefixes": [
             "ZD8"
@@ -2109,7 +2109,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 207,
-        "name": "Rodrigues Island",
+        "name": "Rodrigues I.",
         "prefix": "3B9",
         "prefixes": [
             "3B9"
@@ -2151,7 +2151,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 211,
-        "name": "Sable Island",
+        "name": "Sable I.",
         "prefix": "CY0",
         "prefixes": [
             "CY0"
@@ -2199,7 +2199,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 216,
-        "name": "San Andrés and Providencia",
+        "name": "San Andres & Providencia",
         "prefix": "HK0/A",
         "prefixes": [
             "HK0",
@@ -2209,7 +2209,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 217,
-        "name": "Desventuradas Islands",
+        "name": "San Felix & San Ambrosio",
         "prefix": "CE0X",
         "prefixes": [
             "CE0",
@@ -2230,7 +2230,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 219,
-        "name": "Sao Tome and Principe",
+        "name": "Sao Tome & Principe",
         "prefix": "S9",
         "prefixes": [
             "S9"
@@ -2260,7 +2260,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 222,
-        "name": "Faroe Islands",
+        "name": "Faroe Is.",
         "prefix": "OY",
         "prefixes": [
             "OY"
@@ -2332,7 +2332,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 229,
-        "name": "East Germany",
+        "name": "German Democratic Republic",
         "prefix": "DM",
         "prefixes": [
             "DM",
@@ -2404,7 +2404,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 234,
-        "name": "South Cook Islands",
+        "name": "South Cook Is.",
         "prefix": "E5/S",
         "prefixes": [
             "E5",
@@ -2414,7 +2414,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 235,
-        "name": "South Georgia Island",
+        "name": "South Georgia I.",
         "prefix": "VP8/G",
         "prefixes": [
             "VP0",
@@ -2449,7 +2449,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 238,
-        "name": "South Orkney Islands",
+        "name": "South Orkney Is.",
         "prefix": "VP8/O",
         "prefixes": [
             "VP0",
@@ -2471,7 +2471,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 240,
-        "name": "South Sandwich Islands",
+        "name": "South Sandwich Is.",
         "prefix": "VP8/S",
         "prefixes": [
             "VP0",
@@ -2483,7 +2483,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 241,
-        "name": "South Shetland Islands",
+        "name": "South Shetland Is.",
         "prefix": "VP8/H",
         "prefixes": [
             "VP0",
@@ -2555,7 +2555,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 249,
-        "name": "Saint Kitts and Nevis",
+        "name": "St. Kitts & Nevis",
         "prefix": "V4",
         "prefixes": [
             "V4"
@@ -2582,7 +2582,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 252,
-        "name": "St. Paul Island",
+        "name": "St. Paul I.",
         "prefix": "CY9",
         "prefixes": [
             "CY9"
@@ -2591,7 +2591,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 253,
-        "name": "Saint Peter and Saint Paul Archipelago",
+        "name": "St. Peter & St. Paul Rocks",
         "prefix": "PY0S",
         "prefixes": [
             "PP0S",
@@ -2627,7 +2627,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 256,
-        "name": "Madeira",
+        "name": "Madeira Is.",
         "prefix": "CT3",
         "prefixes": [
             "CT3"
@@ -2780,7 +2780,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 270,
-        "name": "Tokelau",
+        "name": "Tokelau Is.",
         "prefix": "ZK3",
         "prefixes": [
             "ZK3"
@@ -2810,7 +2810,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 273,
-        "name": "Trindade and Martin Vaz",
+        "name": "Trindade & Martim Vaz Is.",
         "prefix": "PY0T",
         "prefixes": [
             "PP0T",
@@ -2828,7 +2828,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 274,
-        "name": "Tristan da Cunha and Gough Islands",
+        "name": "Tristan da Cunha & Gough I.",
         "prefix": "ZD9",
         "prefixes": [
             "ZD9"
@@ -2849,7 +2849,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 276,
-        "name": "Tromelin Island",
+        "name": "Tromelin I.",
         "prefix": "FT/T",
         "prefixes": [
             "FT/T",
@@ -2859,7 +2859,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 277,
-        "name": "Saint Pierre and Miquelon",
+        "name": "St. Pierre & Miquelon",
         "prefix": "FP",
         "prefixes": [
             "FP"
@@ -2921,7 +2921,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 283,
-        "name": "Sovereign Base Areas of Akrotiri and Dhekelia",
+        "name": "UK Sovereign Base Areas on Cyprus",
         "prefix": "ZC4",
         "prefixes": [
             "ZC4"
@@ -2953,7 +2953,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 285,
-        "name": "US Virgin Islands",
+        "name": "Virgin Is.",
         "prefix": "KP2",
         "prefixes": [
             "KP2"
@@ -3000,7 +3000,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 289,
-        "name": "United Nations Headquarters",
+        "name": "United Nations HQ",
         "prefix": "4U1U",
         "prefixes": [
             "4U",
@@ -3010,7 +3010,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 291,
-        "name": "United States of America",
+        "name": "United States",
         "prefix": "K",
         "prefixes": [
             "K",
@@ -3083,7 +3083,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 297,
-        "name": "Wake Island",
+        "name": "Wake I.",
         "prefix": "KH9",
         "prefixes": [
             "KH9"
@@ -3092,7 +3092,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 298,
-        "name": "Wallis and Futuna Islands",
+        "name": "Wallis & Futuna Is.",
         "prefix": "FW",
         "prefixes": [
             "FW"
@@ -3111,7 +3111,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 301,
-        "name": "Gilbert Islands",
+        "name": "W. Kiribati (Gilbert Is. )",
         "prefix": "T30",
         "prefixes": [
             "T30"
@@ -3129,7 +3129,7 @@ export const PREFIX_ENTRIES = [
     },
     {
         "dxcc": 303,
-        "name": "Willis Island",
+        "name": "Willis I.",
         "prefix": "VK9W",
         "prefixes": [
             "VK9W"
