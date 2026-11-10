@@ -96,6 +96,20 @@
             scope: 'both', label: 'My grid', zh: '我的网格',
             desc: 'Maidenhead locator (4 or 6 chars); home position on QSO map and propagation DE.'
         }),
+        field('txPowerW', 'ui', 'int', 0, {
+            min: 0, max: 1500, scope: 'both', label: 'TX power (W)', zh: '发射功率（W）',
+            desc: '0 = unknown. Only used to normalise this station to 100 W for CW/SSB path analysis.'
+        }),
+        field('txPowerOverrides', 'ui', 'string', '', {
+            allowEmpty: true, maxLen: 2000, upper: true, scope: 'both',
+            label: 'Per-station TX power', zh: '单台功率覆盖',
+            desc: '"CALL=W, CALL=W"; overrides power for monitored opponents and local neighbours.'
+        }),
+        field('pskWindowMin', 'ui', 'enum', '15', {
+            values: ['15', '30'], scope: 'both',
+            label: 'PSKReporter window (min)', zh: 'PSKReporter 聚合窗口（分钟）',
+            desc: 'Aggregation window for FT8 path analysis; 15 by default, 30 optional.'
+        }),
         field('layout', 'ui', 'enum', '1x1', {
             values: LAYOUTS, storage: 'local', label: 'Layout', zh: '布局',
             desc: 'Map grid layout; deliberately browser-local so phones and wall keep their own.'

@@ -2453,6 +2453,12 @@ body.prop-mode .status-group .sep { display: none; }
     gap: 12px;
     align-content: start;
 }
+#pathBody {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-top: 0;
+}
 .an-section {
     background: var(--panel);
     border: 1px solid var(--border);
@@ -2498,3 +2504,56 @@ body.prop-mode .status-group .sep { display: none; }
 }
 .an-table td { padding: 3px 4px; border-bottom: 1px solid rgba(127, 127, 127, 0.12); }
 .an-table th:nth-child(3), .an-table td:nth-child(3) { text-align: right; }
+.an-path-title {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    color: var(--accent);
+    text-transform: uppercase;
+}
+.an-path-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 10px;
+}
+.an-path-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+}
+.an-path-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.an-path-region { font-size: 12px; font-weight: 600; }
+.an-path-band { font-size: 11px; color: var(--text-dim); }
+.an-badge {
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    white-space: nowrap;
+}
+.an-conf-high { color: #3fb950; border-color: #3fb950; }
+.an-conf-medium { color: #d29922; border-color: #d29922; }
+.an-conf-low { color: #e5484d; border-color: #e5484d; }
+.an-opponent { color: var(--accent); border-color: var(--accent); }
+.an-path-dirs { display: flex; flex-direction: column; gap: 4px; }
+.an-path-dir { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.an-dir-label { flex: 0 0 118px; font-size: 10px; color: var(--text-dim); }
+.an-chip {
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: rgba(127, 127, 127, 0.14);
+    white-space: nowrap;
+}
+.an-chip.workable { color: #3fb950; background: rgba(63, 185, 80, 0.14); }
+.an-chip.marginal { color: #d29922; background: rgba(210, 153, 34, 0.14); }
+.an-chip.unworkable { color: #e5484d; background: rgba(229, 72, 77, 0.14); }
+.an-chip.unknown { color: var(--text-dim); }
+.an-dir-meta { font-size: 10px; color: var(--text-dim); }
+.an-path-self { border-left: 2px solid var(--border); padding-left: 6px; }

@@ -17,3 +17,16 @@ export async function fetchAnalysis({call, from, to, limit, transport = defaultT
     if (!report || typeof report !== 'object') throw new TypeError('invalid analysis response');
     return report;
 }
+
+/** CW/SSB 可通性研判；身份与功率来自服务端设置，这里只传时间范围。 */
+export async function fetchPathAnalysis({from, to, limit, transport = defaultTransport, ...options} = {}) {
+    const query = new URLSearchParams();
+    if (from) query.set('from', from);
+    if (to) query.set('to', to);
+    if (limit) query.set('limit', String(limit));
+    const suffix = query.toString();
+    const report = await transport.getJson(
+        '/api/analysis/paths' + (suffix ? `?${suffix}` : ''), options);
+    if (!report || typeof report !== 'object') throw new TypeError('invalid path analysis response');
+    return report;
+}

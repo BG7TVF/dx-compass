@@ -14,7 +14,8 @@ class Context {
 
 function env(overrides = {}) {
     return {
-        global: new Context({monitoredCalls: ['K1ABC'], uiSettings: {myCall: 'N0CALL'},
+        global: new Context({monitoredCalls: ['K1ABC'],
+            uiSettings: {myCall: 'N0CALL', grid: 'OL42ET'},
             monitoring: true, recording: {active: false}}),
         flow: new Context(),
         now: NOW,
@@ -93,7 +94,7 @@ test('RBN shares dedup keys and resets a stale version hash on non-200', () => {
 
 test('PSKR keeps old records for SQLite but suppresses their live output', () => {
     const e = env();
-    const raw = {sq: 123, f: 14074000, md: 'FT8', rp: -8,
+    const raw = {sq: 123, f: 14074000, md: 'FT8', rp: -8, sa: 291, ra: 230,
         t: Math.floor(NOW / 1000) - 3700, sc: 'K1ABC', sl: 'PM95', rc: 'DE.1', rl: 'JN58'};
     const result = spots.ingest('pskr', raw, e);
     assert.equal(result.records.length, 1);
@@ -102,9 +103,28 @@ test('PSKR keeps old records for SQLite but suppresses their live output', () =>
     assert.equal(result.records[0].de, 'DE/1');
     assert.equal(result.records[0].freq, 14074);
     assert.equal(result.records[0].mode, 'DIGI');
+    assert.equal(result.records[0].sender_grid, 'PM95');
+    assert.equal(result.records[0].receiver_grid, 'JN58');
+    assert.equal(result.records[0].dxcc_sender, 291);
+    assert.equal(result.records[0].dxcc_receiver, 230);
     assert.equal(spots.ingest('pskr', raw, e).records.length, 0);
     e.global.set('monitoring', false);
     assert.equal(spots.liveRequest(e), null);
+});
+
+test('PSKR intake accepts local-neighbour spots and rejects unrelated pairs', () => {
+    const e = env();
+    // 发送方不是监控呼号，但落在本台大网格 OL42 内 → 属于本地邻近台，必须入库。
+    const neighbour = {sq: 201, f: 14074000, md: 'FT8', rp: -15, sa: 291, ra: 230,
+        t: Math.floor(NOW / 1000) - 60, sc: 'K9NEI', sl: 'OL42AA', rc: 'DE.9', rl: 'JO22'};
+    const kept = spots.ingest('pskr', neighbour, e);
+    assert.equal(kept.records.length, 1);
+    assert.equal(kept.records[0].monitored_call, 'DE/9');
+
+    // 两端都既不在监控列表，也不在 OL42 大网格内 → 拒收。
+    const unrelated = {sq: 202, f: 14074000, md: 'FT8', rp: -10,
+        t: Math.floor(NOW / 1000) - 60, sc: 'AA1AA', sl: 'FN42', rc: 'DE.9', rl: 'JO22'};
+    assert.equal(spots.ingest('pskr', unrelated, e).records.length, 0);
 });
 
 test('PSKR subscriptions include own call and unsubscribe removed topics', () => {
@@ -112,7 +132,11 @@ test('PSKR subscriptions include own call and unsubscribe removed topics', () =>
     e.flow.set('pskrSubs', {'pskr/filter/v2/+/+/OLD/#': {qos: 0}});
     const result = spots.syncPskrSubscriptions(e);
     assert.deepEqual(result.actions[0], {action: 'unsubscribe', topic: 'pskr/filter/v2/+/+/OLD/#'});
-    assert.ok(result.actions.some(a => a.topic === 'pskr/filter/v2/+/+/N0CALL/#'));
+    const topics = result.actions.map(a => a.topic);
+    assert.ok(topics.includes('pskr/filter/v2/+/+/N0CALL/#'));
+    assert.ok(topics.includes('pskr/filter/v2/+/+/+/N0CALL/#'));
+    assert.ok(topics.includes('pskr/filter/v2_field/+/+/OL/+'));
+    assert.ok(topics.includes('pskr/filter/v2_field/+/+/+/OL'));
 });
 
 test('source switches and poll intervals gate requests and ingestion', () => {

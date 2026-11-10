@@ -11,7 +11,7 @@ test('spot SQL retains column order, escaping and numeric NULL handling', () => 
         band: '20m', dx_lat: null, dx_lon: null});
     assert.match(sql, /^INSERT OR IGNORE INTO spots \(spot_id, timestamp, monitored_call,/);
     assert.match(sql, /'O''CALL'/);
-    assert.match(sql, /NULL, NULL, 1, 2, 3, 2, '20m', NULL, NULL\);$/);
+    assert.match(sql, /NULL, NULL, 1, 2, 3, 2, '20m', NULL, NULL, NULL, NULL, NULL, NULL\);$/);
     assert.equal(storage.spots.query("k'1", '25'),
         "SELECT * FROM spots WHERE monitored_call = 'K''1' OR spot_call = 'K''1' ORDER BY id DESC LIMIT 25");
 });
@@ -22,7 +22,11 @@ test('schema migration emits only missing columns in original order', () => {
     assert.equal(storage.schema.migrateLegacyDb([{c: 0}]), 'ALTER TABLE spots ADD COLUMN spot_id INTEGER');
     assert.deepEqual(storage.schema.addMissingColumns([{cols: 'id,band'}]), [
         'ALTER TABLE spots ADD COLUMN dx_lat REAL',
-        'ALTER TABLE spots ADD COLUMN dx_lon REAL'
+        'ALTER TABLE spots ADD COLUMN dx_lon REAL',
+        'ALTER TABLE spots ADD COLUMN sender_grid TEXT',
+        'ALTER TABLE spots ADD COLUMN receiver_grid TEXT',
+        'ALTER TABLE spots ADD COLUMN dxcc_sender INTEGER',
+        'ALTER TABLE spots ADD COLUMN dxcc_receiver INTEGER'
     ]);
 });
 

@@ -2678,5 +2678,87 @@
         "x": 1100,
         "y": 1560,
         "wires": []
+    },
+    {
+        "id": "dxp0000000000001",
+        "type": "http in",
+        "z": "dxc0000000000001",
+        "name": "GET /api/analysis/paths",
+        "url": "/api/analysis/paths",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 130,
+        "y": 1680,
+        "wires": [
+            [
+                "dxp0000000000002"
+            ]
+        ]
+    },
+    {
+        "id": "dxp0000000000002",
+        "type": "function",
+        "z": "dxc0000000000001",
+        "name": "Build path query",
+        "func": "const dx = global.get('dx');\nconst prepared = dx.analysis.pathService.prepare(msg.req.query, global);\nmsg.topic = prepared.sql;\nmsg.pathError = prepared.error;\nmsg.pathRequest = prepared.request;\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 370,
+        "y": 1680,
+        "wires": [
+            [
+                "dxp0000000000003"
+            ]
+        ]
+    },
+    {
+        "id": "dxp0000000000003",
+        "type": "sqlite",
+        "z": "dxc0000000000001",
+        "mydb": "dxc0000000000027",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "Query path spots",
+        "x": 610,
+        "y": 1680,
+        "wires": [
+            [
+                "dxp0000000000004"
+            ]
+        ]
+    },
+    {
+        "id": "dxp0000000000004",
+        "type": "function",
+        "z": "dxc0000000000001",
+        "name": "Analyze paths",
+        "func": "const dx = global.get('dx');\nconst prepared = {\n    ok: !msg.pathError,\n    error: msg.pathError || null,\n    request: msg.pathRequest\n};\nconst result = dx.analysis.pathService.complete(prepared, msg.payload);\ndelete msg.pathRequest;\nmsg.headers = {'Content-Type': 'application/json'};\nmsg.statusCode = result.error ? 400 : 200;\nmsg.payload = result;\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 850,
+        "y": 1680,
+        "wires": [
+            [
+                "dxp0000000000005"
+            ]
+        ]
+    },
+    {
+        "id": "dxp0000000000005",
+        "type": "http response",
+        "z": "dxc0000000000001",
+        "name": "",
+        "statusCode": "",
+        "headers": {},
+        "x": 1100,
+        "y": 1680,
+        "wires": []
     }
 ]
