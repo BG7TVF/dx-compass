@@ -123,6 +123,24 @@ test('analysis HTTP routes are registered and wired end to end', () => {
     }
 });
 
+test('multi-statement function nodes emit every message on output 1', () => {
+    // Node-RED 会把 return 的数组按 index 映射到输出；单输出节点必须用 [[msg1,msg2]]
+    // 包一层，否则除了第一条，其余语句会被丢弃（列迁移、邻台触发器、清理都踩过）。
+    const flow = JSON.parse(read('flow.json'));
+    const expected = {
+        'Add missing columns': /return \[topics\.map\(/,
+        'Create neighbors schema': /return \[dx\.storage\.schema\.createNeighbors\(\)\.map\(/,
+        'Build retention SQL': /return \[statements\.map\(/
+    };
+    for (const [name, pattern] of Object.entries(expected)) {
+        const node = flow.find(item => item.name === name);
+        assert.ok(node, name + ' must exist');
+        assert.equal(Number(node.outputs), 1, name + ' must keep a single output');
+        assert.match(node.func, pattern,
+            name + ' must wrap its message list so every statement is delivered');
+    }
+});
+
 test('DB startup migrates columns and creates neighbor schema in independent branches', () => {
     const flow = JSON.parse(read('flow.json'));
     const byName = name => flow.find(node => node.name === name);
