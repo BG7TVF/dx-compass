@@ -435,8 +435,8 @@ export function createAnalysisPage(ctx) {
             results.appendChild(element('div', 'an-empty',
                 neighborCount ? t('anPathNoRows') : t('anPathNoNeighbors')));
         } else {
-            // 只在展示层隐藏“双向都不可通”的卡片，算法结果与排序保持原样。
-            const {visible, hidden} = visiblePathRows(rows);
+            // 只在展示层隐藏“双向不可通”和“双向无数据”的卡片，算法结果与排序保持原样。
+            const {visible, hiddenUnworkable, hiddenNoData} = visiblePathRows(rows);
             if (!visible.length) {
                 results.appendChild(element('div', 'an-empty', t('anPathNoWorkable')));
             } else {
@@ -444,9 +444,18 @@ export function createAnalysisPage(ctx) {
                 visible.forEach(item => grid.appendChild(pathCard(item)));
                 results.appendChild(grid);
             }
-            if (hidden) {
+            const hiddenParts = [];
+            if (hiddenUnworkable) {
+                hiddenParts.push(t('anPathHiddenUnworkable')
+                    .replace('{n}', String(hiddenUnworkable)));
+            }
+            if (hiddenNoData) {
+                hiddenParts.push(t('anPathHiddenNoData').replace('{n}', String(hiddenNoData)));
+            }
+            if (hiddenParts.length) {
+                const zh = String(lang()).toLowerCase().startsWith('zh');
                 results.appendChild(element('div', 'an-note',
-                    t('anPathHidden').replace('{n}', String(hidden))));
+                    hiddenParts.join(zh ? '，' : '; ') + (zh ? '。' : '.')));
             }
             if (report.observations && report.observations.truncated) {
                 results.appendChild(element('div', 'an-note', t('anPathTruncated')));

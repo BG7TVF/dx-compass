@@ -1,8 +1,10 @@
 /**
  * 可通性卡片的展示层过滤。
  *
- * 只有两个方向都明确判为“不可通”时才隐藏；任一侧为可通/边缘，或该侧样本不足、
- * 无法判定，都必须保留——缺数据不能被误判成不可通。
+ * 隐藏只有两类，且都要求“两侧”同时成立：
+ *  - 双向不可通：aToB 与 bToA 都可用，且 CW/SSB 全部判为不可通；
+ *  - 双向无数据：aToB 与 bToA 都不可用（样本不足或没有报告）。
+ * 单侧有数据（另一侧不可用）必须保留——方向差异本身是研判信息。
  * 这里只决定展示哪些行，不修改、不丢算法结果。
  */
 
@@ -13,15 +15,34 @@ function directionUnworkable(direction) {
     return MODES.every(mode => direction.verdicts[mode] === 'unworkable');
 }
 
-export function isUnworkableCard(row) {
-    const directions = row && row.directions;
-    if (!directions) return false;
-    return directionUnworkable(directions.aToB) && directionUnworkable(directions.bToA);
+function directionUnavailable(direction) {
+    return !direction || direction.available === false;
 }
 
-/** 保持传入顺序（服务端已按可利用性排序），并返回被隐藏的条数。 */
+/** 返回 null（显示）、'unworkable'（双向不可通）或 'no-data'（双向无数据）。 */
+export function hiddenReason(row) {
+    const directions = row && row.directions;
+    if (!directions) return null;
+    if (directionUnworkable(directions.aToB) && directionUnworkable(directions.bToA)) {
+        return 'unworkable';
+    }
+    if (directionUnavailable(directions.aToB) && directionUnavailable(directions.bToA)) {
+        return 'no-data';
+    }
+    return null;
+}
+
+/** 保持传入顺序（服务端已按可利用性排序），并分别返回两类被隐藏的数量。 */
 export function visiblePathRows(rows) {
     const list = Array.isArray(rows) ? rows : [];
-    const visible = list.filter(item => !isUnworkableCard(item));
-    return {visible, hidden: list.length - visible.length};
+    let hiddenUnworkable = 0;
+    let hiddenNoData = 0;
+    const visible = [];
+    list.forEach(item => {
+        const reason = hiddenReason(item);
+        if (reason === 'unworkable') hiddenUnworkable += 1;
+        else if (reason === 'no-data') hiddenNoData += 1;
+        else visible.push(item);
+    });
+    return {visible, hiddenUnworkable, hiddenNoData};
 }
