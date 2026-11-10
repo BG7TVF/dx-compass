@@ -165,6 +165,46 @@ test('source switches and poll intervals gate requests and ingestion', () => {
     assert.equal(spots.ingest('pskr', raw, pskrOff).records.length, 0);
 });
 
+test('PSKR regional intake works with the monitor switch off and no monitored calls', () => {
+    // 分析页邻台来自本台大网格的区域采集，不能被“开始监控”开关或监控列表挡住。
+    const e = env();
+    e.global.set('uiSettings', {myCall: 'BG7TVF', grid: 'OL53OP'});
+    e.global.set('monitoredCalls', []);
+    e.global.set('monitoring', false);
+    const t = Math.floor(NOW / 1000) - 60;
+
+    const localRow = {sq: 401, f: 14074000, md: 'FT8', rp: -11, t,
+        sc: 'K9OL53', sl: 'OL53AA', rc: 'DE.9', rl: 'JO22'};
+    const kept = spots.ingest('pskr', localRow, e);
+    assert.equal(kept.records.length, 1);
+    assert.equal(kept.records[0].sender_grid, 'OL53AA');
+
+    const remoteRow = {sq: 402, f: 14074000, md: 'FT8', rp: -11, t,
+        sc: 'AA1AA', sl: 'FN42', rc: 'DE.9', rl: 'JO22'};
+    assert.equal(spots.ingest('pskr', remoteRow, e).records.length, 0);
+
+    // 监控呼号仍然只在“开始监控”后入库。
+    e.global.set('monitoredCalls', ['K1ABC']);
+    const watched = {sq: 403, f: 14074000, md: 'FT8', rp: -11, t,
+        sc: 'K1ABC', sl: 'PM95', rc: 'DE.9', rl: 'JN58'};
+    assert.equal(spots.ingest('pskr', watched, e).records.length, 0);
+    e.global.set('monitoring', true);
+    assert.equal(spots.ingest('pskr', watched, e).records.length, 1);
+});
+
+test('PSKR subscriptions rebuild immediately when the grid field changes', () => {
+    const e = env();
+    const first = spots.syncPskrSubscriptions(e).actions.map(a => a.topic);
+    assert.ok(first.includes('pskr/filter/v2_field/+/+/OL/+'));
+    // 同步间隔未到，但大网格由 OL 变为 OM：必须立刻重建，不能等 pollPskrSyncSec。
+    e.global.set('uiSettings', {myCall: 'N0CALL', grid: 'OM53OP'});
+    const second = spots.syncPskrSubscriptions({...e, now: NOW + 1000});
+    const topics = second.actions.map(a => a.topic);
+    assert.ok(topics.includes('pskr/filter/v2_field/+/+/OM/+'));
+    assert.ok(topics.includes('pskr/filter/v2_field/+/+/+/OM'));
+    assert.ok(second.actions.some(a => a.action === 'unsubscribe' && a.topic.endsWith('/OL/+')));
+});
+
 test('fresh window follows freshSec instead of the former one-hour constant', () => {
     const stale = {s: {900: ['DE-X', '14074', 'K1ABC', 'CW', '', '3700']}, ci: {}};
     const wide = env();
