@@ -30,6 +30,41 @@ test('schema migration emits only missing columns in original order', () => {
     ]);
 });
 
+test('spot column migration is idempotent across sqlite row shapes', () => {
+    const all = 'id,spot_id,timestamp,monitored_call,de,freq,spot_call,comment,spot_time,mode,' +
+        'signal,snr,lat,lon,distance_km,distance_miles,band,dx_lat,dx_lon,' +
+        'sender_grid,receiver_grid,dxcc_sender,dxcc_receiver';
+    assert.deepEqual(storage.schema.addMissingColumns([{cols: all}]), []);
+    assert.deepEqual(storage.schema.addMissingColumns(all), []);
+    assert.deepEqual(storage.schema.addMissingColumns([
+        {name: 'id'}, {name: 'band'}, {name: 'sender_grid'}
+    ]), [
+        'ALTER TABLE spots ADD COLUMN dx_lat REAL',
+        'ALTER TABLE spots ADD COLUMN dx_lon REAL',
+        'ALTER TABLE spots ADD COLUMN receiver_grid TEXT',
+        'ALTER TABLE spots ADD COLUMN dxcc_sender INTEGER',
+        'ALTER TABLE spots ADD COLUMN dxcc_receiver INTEGER'
+    ]);
+    assert.deepEqual(storage.schema.addMissingColumns([]), [
+        'ALTER TABLE spots ADD COLUMN band TEXT',
+        'ALTER TABLE spots ADD COLUMN dx_lat REAL',
+        'ALTER TABLE spots ADD COLUMN dx_lon REAL',
+        'ALTER TABLE spots ADD COLUMN sender_grid TEXT',
+        'ALTER TABLE spots ADD COLUMN receiver_grid TEXT',
+        'ALTER TABLE spots ADD COLUMN dxcc_sender INTEGER',
+        'ALTER TABLE spots ADD COLUMN dxcc_receiver INTEGER'
+    ]);
+});
+
+test('neighbor schema rebuilds triggers idempotently', () => {
+    const statements = storage.schema.createNeighbors();
+    assert.equal(statements[0], storage.schema.CREATE_NEIGHBORS);
+    assert.match(statements[1], /^DROP TRIGGER IF EXISTS trg_spots_neighbor_tx;/);
+    assert.match(statements[3], /^DROP TRIGGER IF EXISTS trg_spots_neighbor_rx;/);
+    assert.match(statements[2], /^CREATE TRIGGER IF NOT EXISTS trg_spots_neighbor_tx/);
+    assert.match(statements[4], /^CREATE TRIGGER IF NOT EXISTS trg_spots_neighbor_rx/);
+});
+
 test('recording and QSO SQL constructors remain centralized', () => {
     assert.equal(storage.recording.purge(), "DELETE FROM recording_spots WHERE date < date('now', '-2 months');");
     assert.equal(storage.qso.query('10'), 'SELECT * FROM qsos ORDER BY id DESC LIMIT 10;');

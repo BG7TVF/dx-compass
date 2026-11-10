@@ -87,6 +87,12 @@
         "y": 60,
         "wires": [
             [
+                "dxc0000000000050"
+            ],
+            [
+                "dxc0000000000054"
+            ],
+            [
                 "dxc0000000000030"
             ]
         ]
@@ -191,9 +197,7 @@
         "x": 1600,
         "y": 100,
         "wires": [
-            [
-                "dxc0000000000050"
-            ]
+            []
         ]
     },
     {
@@ -261,9 +265,7 @@
         "x": 2420,
         "y": 100,
         "wires": [
-            [
-                "dxc0000000000054"
-            ]
+            []
         ]
     },
     {
@@ -2830,5 +2832,45 @@
         "x": 1100,
         "y": 1680,
         "wires": []
+    },
+    {
+        "id": "dxc00000000000c1",
+        "type": "catch",
+        "z": "dxc0000000000001",
+        "name": "Catch DB migration errors",
+        "scope": [
+            "dxc0000000000065",
+            "dxc0000000000051",
+            "dxc0000000000053",
+            "dxc0000000000031",
+            "dxc0000000000033",
+            "dxc0000000000035",
+            "dxc0000000000055"
+        ],
+        "uncaught": false,
+        "x": 3080,
+        "y": 180,
+        "wires": [
+            [
+                "dxc00000000000c2"
+            ]
+        ]
+    },
+    {
+        "id": "dxc00000000000c2",
+        "type": "function",
+        "z": "dxc0000000000001",
+        "name": "Log DB migration error",
+        "func": "const err = msg.error || {};\nnode.warn('DB migration failed: ' + (err.message || err));\nreturn null;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 3300,
+        "y": 180,
+        "wires": [
+            []
+        ]
     }
 ]

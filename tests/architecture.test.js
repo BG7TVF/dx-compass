@@ -123,6 +123,31 @@ test('analysis HTTP routes are registered and wired end to end', () => {
     }
 });
 
+test('DB startup migrates columns and creates neighbor schema in independent branches', () => {
+    const flow = JSON.parse(read('flow.json'));
+    const byName = name => flow.find(node => node.name === name);
+    const createTable = byName('Create table');
+    assert.ok(createTable, 'Create table sqlite node must exist');
+    const targets = (createTable.wires || []).flat();
+    for (const name of ['Check extra columns', 'Create neighbors schema', 'Check spot_id column']) {
+        const node = byName(name);
+        assert.ok(node, name + ' must exist');
+        assert.ok(targets.includes(node.id), 'Create table must fan out to ' + name);
+    }
+    for (const name of ['Apply column migrations', 'Apply neighbors schema', 'Create index']) {
+        const node = byName(name);
+        assert.ok(node, name + ' must exist');
+        assert.deepEqual(node.wires, [[]], name + ' must end its branch');
+    }
+    const warn = byName('Log DB migration error');
+    assert.ok(warn && /node\.warn\(/.test(warn.func || ''),
+        'migration failures must be logged with node.warn');
+    const catcher = flow.find(node => node.type === 'catch' &&
+        (node.wires || []).flat().includes(warn.id));
+    assert.ok(catcher, 'a catch node must feed the migration log');
+    assert.ok((catcher.scope || []).length >= 3, 'catch must cover the migration sqlite nodes');
+});
+
 test('read-only wall keeps an exact static whitelist and GET/HEAD boundary', () => {
     const source = read('bigscreen', 'server.js');
     assert.match(source, /const\s+STATIC\s*=\s*\{/);

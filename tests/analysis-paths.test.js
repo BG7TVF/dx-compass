@@ -438,13 +438,15 @@ test('清理只删过期行：默认删除 60 分钟前的邻台', () => {
     assert.match(neighborSql.purge(90), /-90 minutes/);
 });
 
-test('邻台表不做历史回填：建表脚本只有建表与两条触发器', () => {
+test('邻台表不做历史回填：建表脚本只有建表、重建触发器，没有回填', () => {
     const schema = require('../lib/storage/schema.js');
     const statements = schema.createNeighbors();
-    assert.equal(statements.length, 3);
+    assert.equal(statements.length, 5);
     assert.match(statements[0], /^CREATE TABLE IF NOT EXISTS neighbors/);
-    assert.match(statements[1], /^CREATE TRIGGER IF NOT EXISTS trg_spots_neighbor_tx/);
-    assert.match(statements[2], /^CREATE TRIGGER IF NOT EXISTS trg_spots_neighbor_rx/);
+    assert.match(statements[1], /^DROP TRIGGER IF EXISTS trg_spots_neighbor_tx/);
+    assert.match(statements[2], /^CREATE TRIGGER IF NOT EXISTS trg_spots_neighbor_tx/);
+    assert.match(statements[3], /^DROP TRIGGER IF EXISTS trg_spots_neighbor_rx/);
+    assert.match(statements[4], /^CREATE TRIGGER IF NOT EXISTS trg_spots_neighbor_rx/);
     for (const sql of statements) {
         assert.ok(!/INSERT[^;]*INTO neighbors[\s\S]*SELECT/i.test(sql),
             'neighbors must not be backfilled from historical spots');
