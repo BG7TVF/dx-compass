@@ -1,6 +1,7 @@
 import {fetchAnalysis, fetchPathAnalysis} from '../../shared/data/analysis.mjs';
 import {$} from '../ui.mjs';
 import {regionTitle} from '../../shared/dxcc/title.mjs';
+import {visiblePathRows} from '../../shared/analysis/card-filter.mjs';
 
 /**
  * 天线研判页：输入目标呼号与 UTC 时间窗，展示三分类概率、主朝向与判定依据。
@@ -434,9 +435,19 @@ export function createAnalysisPage(ctx) {
             results.appendChild(element('div', 'an-empty',
                 neighborCount ? t('anPathNoRows') : t('anPathNoNeighbors')));
         } else {
-            const grid = element('div', 'an-path-grid');
-            rows.forEach(item => grid.appendChild(pathCard(item)));
-            results.appendChild(grid);
+            // 只在展示层隐藏“双向都不可通”的卡片，算法结果与排序保持原样。
+            const {visible, hidden} = visiblePathRows(rows);
+            if (!visible.length) {
+                results.appendChild(element('div', 'an-empty', t('anPathNoWorkable')));
+            } else {
+                const grid = element('div', 'an-path-grid');
+                visible.forEach(item => grid.appendChild(pathCard(item)));
+                results.appendChild(grid);
+            }
+            if (hidden) {
+                results.appendChild(element('div', 'an-note',
+                    t('anPathHidden').replace('{n}', String(hidden))));
+            }
             if (report.observations && report.observations.truncated) {
                 results.appendChild(element('div', 'an-note', t('anPathTruncated')));
             }
