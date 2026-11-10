@@ -18,10 +18,12 @@ test('retention purge follows settings and skips disabled scopes', () => {
     }});
     const {statements} = maintenance.purge(ctx);
     const scopes = statements.map(s => s.scope);
-    assert.deepEqual(scopes, ['spots', 'qsos', 'recordings']);
+    assert.deepEqual(scopes, ['spots', 'qsos', 'recordings', 'neighbors']);
     assert.match(statements[0].topic, /-7 days/);
     assert.match(statements[1].topic, /-3 days/);
     assert.match(statements[2].topic, /-6 months/);
+    assert.match(statements[3].topic, /DELETE FROM neighbors/);
+    assert.match(statements[3].topic, /-60 minutes/);
 
     const off = new Context({uiSettings: {autoPurge: false}});
     assert.deepEqual(maintenance.purge(off), {statements: []});
@@ -31,7 +33,7 @@ test('retention purge follows settings and skips disabled scopes', () => {
         autoPurge: true, retentionSpotsDays: 'many', retentionQsoDays: -5
     }});
     const fallback = maintenance.purge(bad);
-    assert.deepEqual(fallback.statements.map(s => s.scope), ['recordings']);
+    assert.deepEqual(fallback.statements.map(s => s.scope), ['recordings', 'neighbors']);
 });
 
 test('disk check honours the alert switch and its own check interval', () => {

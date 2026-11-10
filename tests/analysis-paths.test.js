@@ -302,18 +302,57 @@ test('被排除的点分别计数：非 FT8、无 SNR、无时间、同侧、本
     assert.equal(excluded.selfReference, 1);
 });
 
-test('邻台注册表：按大网格与时效过滤，过期邻台失效', () => {
+test('邻台注册表：按大网格与 30 分钟时效过滤，过期邻台失效', () => {
     const neighbors = [
-        {call: 'N1AA', grid4: 'OL42', lastSeen: '2026-11-10T12:00:00Z', reports: 9},
-        {call: 'N9OLD', grid4: 'OL42', lastSeen: '2026-07-01T12:00:00Z', reports: 50},
-        {call: 'N8FAR', grid4: 'JO22', lastSeen: '2026-11-10T12:00:00Z', reports: 4},
-        {call: 'BG7TV', grid4: 'OL42', lastSeen: '2026-11-10T12:00:00Z', reports: 3}
+        {call: 'N1AA', grid4: 'OL42', lastSeen: '2026-11-10T12:31:00Z', reports: 9},
+        {call: 'N9OLD', grid4: 'OL42', lastSeen: '2026-11-10T12:29:00Z', reports: 50},
+        {call: 'N8FAR', grid4: 'JO22', lastSeen: '2026-11-10T12:59:00Z', reports: 4},
+        {call: 'BG7TV', grid4: 'OL42', lastSeen: '2026-11-10T12:59:00Z', reports: 3}
     ];
     const report = analyze(baseRows(), {neighbors});
     assert.equal(report.local.neighborCount, 1);
     assert.equal(report.local.neighbors[0].call, 'N1AA');
+    assert.equal(report.neighborTtlMinutes, 30);
     assert.ok(!report.local.neighbors.some(item => item.call === 'N9OLD'));
     assert.ok(!report.local.neighbors.some(item => item.call === 'N8FAR'));
+});
+
+test('有效期边界：29 分钟内仍在，31 分钟失效（30 分钟整仍有效）', () => {
+    const neighbors = [
+        {call: 'N1AA', grid4: 'OL42', lastSeen: '2026-11-10T12:31:00Z', reports: 1},
+        {call: 'N2BB', grid4: 'OL42', lastSeen: '2026-11-10T12:29:00Z', reports: 1},
+        {call: 'N3CC', grid4: 'OL42', lastSeen: '2026-11-10T12:30:00Z', reports: 1}
+    ];
+    const report = analyze([], {neighbors});
+    assert.deepEqual(report.local.neighbors.map(item => item.call).sort(), ['N1AA', 'N3CC']);
+});
+
+test('邻台列表按最近出现时间排序，失效台站不参与统计与排序', () => {
+    const neighbors = [
+        {call: 'N1AA', grid4: 'OL42', lastSeen: '2026-11-10T12:40:00Z', reports: 1},
+        {call: 'N2BB', grid4: 'OL42', lastSeen: '2026-11-10T12:55:00Z', reports: 2},
+        {call: 'N3CC', grid4: 'OL42', lastSeen: '2026-11-10T12:50:00Z', reports: 3}
+    ];
+    const report = analyze([], {neighbors});
+    assert.deepEqual(report.local.neighbors.map(item => item.call), ['N2BB', 'N3CC', 'N1AA']);
+});
+
+test('失效邻台的历史报告不进入统计与贡献列表', () => {
+    const neighbors = [
+        {call: 'N1AA', grid4: 'OL42', lastSeen: '2026-11-10T12:59:00Z', reports: 1},
+        {call: 'N2BB', grid4: 'OL42', lastSeen: '2026-11-10T12:00:00Z', reports: 1},
+        {call: 'N3CC', grid4: 'OL42', lastSeen: '2026-11-10T12:00:00Z', reports: 1}
+    ];
+    const report = analyze(baseRows(), {neighbors});
+    const a = report.rows[0].directions.aToB;
+    // 只有 N1AA 的 2 条报告进入统计；N2BB / N3CC 虽有历史报告，但已失效。
+    assert.equal(a.samples, 2);
+    assert.equal(a.stations, 1);
+    assert.equal(a.available, false);
+    assert.equal(a.reason, 'too-few-stations');
+    assert.deepEqual(a.contributors, []);
+    assert.deepEqual(report.local.neighbors.map(item => item.call), ['N1AA']);
+    assert.ok(!(report.rows[0].remoteCalls || []).includes('N2BB'));
 });
 
 test('无任何邻台时给出空态，不虚构结论', () => {
@@ -334,9 +373,9 @@ test('邻台存在但只有单向数据时，另一方向明确为空', () => {
     ];
     const report = analyze(rows, {
         neighbors: [
-            {call: 'N1AA', grid4: 'OL42', lastSeen: '2026-11-10T12:00:00Z', reports: 4},
-            {call: 'N2BB', grid4: 'OL42', lastSeen: '2026-11-10T12:00:00Z', reports: 4},
-            {call: 'N3CC', grid4: 'OL42', lastSeen: '2026-11-10T12:00:00Z', reports: 4}
+            {call: 'N1AA', grid4: 'OL42', lastSeen: '2026-11-10T12:50:00Z', reports: 4},
+            {call: 'N2BB', grid4: 'OL42', lastSeen: '2026-11-10T12:50:00Z', reports: 4},
+            {call: 'N3CC', grid4: 'OL42', lastSeen: '2026-11-10T12:50:00Z', reports: 4}
         ]
     });
     const rowOut = report.rows[0];
@@ -383,13 +422,33 @@ test('按可利用性排序：可通区域排在不可通区域之前', () => {
     assert.ok(report.rows[0].usability > report.rows[1].usability);
 });
 
-test('邻台 SQL：只取本大网格且未过期的记录', () => {
+test('邻台 SQL：只取本大网格且 30 分钟内活跃的记录', () => {
     const sql = neighborSql.freshQuery('OL42', 30, 240);
     assert.match(sql, /FROM neighbors/);
     assert.match(sql, /grid4 = 'OL42'/);
-    assert.match(sql, /datetime\('now', '-30 days'\)/);
+    assert.match(sql, /datetime\('now', '-30 minutes'\)/);
     assert.match(sql, /LIMIT 240/);
     assert.match(neighborSql.freshQuery('', 30), /1=0/);
+});
+
+test('清理只删过期行：默认删除 60 分钟前的邻台', () => {
+    const sql = neighborSql.purge();
+    assert.match(sql, /^DELETE FROM neighbors/);
+    assert.match(sql, /datetime\('now', '-60 minutes'\)/);
+    assert.match(neighborSql.purge(90), /-90 minutes/);
+});
+
+test('邻台表不做历史回填：建表脚本只有建表与两条触发器', () => {
+    const schema = require('../lib/storage/schema.js');
+    const statements = schema.createNeighbors();
+    assert.equal(statements.length, 3);
+    assert.match(statements[0], /^CREATE TABLE IF NOT EXISTS neighbors/);
+    assert.match(statements[1], /^CREATE TRIGGER IF NOT EXISTS trg_spots_neighbor_tx/);
+    assert.match(statements[2], /^CREATE TRIGGER IF NOT EXISTS trg_spots_neighbor_rx/);
+    for (const sql of statements) {
+        assert.ok(!/INSERT[^;]*INTO neighbors[\s\S]*SELECT/i.test(sql),
+            'neighbors must not be backfilled from historical spots');
+    }
 });
 
 class Ctx {
@@ -405,6 +464,8 @@ test('path-service 全自动：准备两段查询、并入邻台、补时间窗'
     const prepared = pathService.prepare({}, global);
     assert.equal(prepared.ok, true);
     assert.equal(prepared.request.windowMinutes, 30);
+    assert.equal(prepared.request.neighborTtlMinutes, 30);
+    assert.match(prepared.neighborSql, /-30 minutes/);
     assert.match(prepared.neighborSql, /FROM neighbors/);
     assert.match(prepared.sql, /PSKR FT8%/);
     assert.match(prepared.sql, /OL42%/);
@@ -438,10 +499,15 @@ test('页面无需任何输入即可产出结果：prepare({}) 直接可用', ()
     });
     const prepared = pathService.prepare({}, global);
     assert.equal(prepared.ok, true);
-    const spots = pathService.prepareSpots(prepared, []);
+    // 邻台注册表只保留 30 分钟内活跃台站，这里用“刚刚出现过”的实时行。
+    const recent = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    const spots = pathService.prepareSpots(prepared, ['N1AA', 'N2BB', 'N3CC'].map(call => ({
+        call, grid4: 'OL42', last_seen: recent, reports: 4
+    })));
     const result = pathService.complete({ok: true, request: spots.request}, baseRows());
     assert.equal(result.ok, true);
     assert.equal(result.local.largeGrid, 'OL42');
+    assert.equal(result.local.neighborCount, 3);
     assert.ok(result.rows.length >= 1);
     assert.ok(result.rows[0].directions.aToB.samples > 0);
 });
