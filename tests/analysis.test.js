@@ -2,23 +2,33 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const {parseSValue, sMeterToDbm, normalizeStrength} = require('../lib/analysis/strength.js');
-const {loadReferences, gainForAntennaType, callVariants} = require('../lib/analysis/references.js');
-const {medianPathLossDb} = require('../lib/analysis/path-loss.js');
 const {
-    median, robustSigma, angularDiff, sectorStats, classifyAntenna, mapToClass,
-    estimateTarget, POWER_CLASSES
+    median, robustSigma, angularDiff, circularMedian, sectorStats, classifyAntenna,
+    relativeLevelEvidence, callVariants, groupByPeriod, analyzeTarget,
+    MIN_ANTENNA_POINTS, MAX_WINDOW_HOURS
 } = require('../lib/analysis/estimate.js');
 const {analysisQuery} = require('../lib/storage/spot-sql.js');
 const service = require('../lib/analysis/service.js');
 
 const TARGET = 'K1T';
-const REF = 'K1R';
+
+/** 以目标台 (0,0) 为原点，按方位角与距离（度）放置一个报告点。 */
+function spotAt(bearingDeg, distanceDeg) {
+    const br = bearingDeg * Math.PI / 180;
+    const d = (distanceDeg === undefined ? 10 : distanceDeg) * Math.PI / 180;
+    return {
+        lat: Math.asin(Math.sin(d) * Math.cos(br)) * 180 / Math.PI,
+        lon: Math.atan2(Math.sin(br) * Math.sin(d), Math.cos(d)) * 180 / Math.PI
+    };
+}
 
 function row(overrides) {
     return Object.assign({
-        timestamp: '2026-11-08 12:00:00',
+        timestamp: '2026-11-08T12:00:00Z',
         de: 'W1RX',
         spot_call: TARGET,
         freq: 14025,
@@ -32,19 +42,22 @@ function row(overrides) {
     }, overrides);
 }
 
-function emptyTable() {
-    return {loaded: false, path: '(test)', error: 'missing', references: [], receivers: [], warnings: []};
+/** RBN 风格：只有 SNR，没有 RST。 */
+function snrRow(bearing, overrides) {
+    const pos = spotAt(bearing);
+    return row(Object.assign({
+        de: `R${bearing}`,
+        snr: 20,
+        lat: pos.lat,
+        lon: pos.lon,
+        dx_lat: 0,
+        dx_lon: 0
+    }, overrides));
 }
 
-function refTable(references, receivers) {
-    return {
-        loaded: true,
-        path: '(test)',
-        error: null,
-        references: references || [],
-        receivers: receivers || [],
-        warnings: []
-    };
+function directionalRows() {
+    const bearings = [245, 248, 251, 254, 257, 260, 263, 266, 90, 160];
+    return bearings.map(bearing => snrRow(bearing, {de: `R${bearing}`}));
 }
 
 test('RST 解析取 S 位而不是 R 位，未知强度不强行换算', () => {
@@ -116,176 +129,6 @@ test('样本不足时天线判定为 unknown 且给出证据缺口', () => {
     assert.equal(result.evidence.mainShare > 0.9, true);
 });
 
-test('绝对法下 D3/D4/D5 必须合并，不给单一确定档', () => {
-    const merged = mapToClass(58, 8.8, 'absolute');
-    assert.equal(merged.mainClass, 'D3-D5');
-    assert.ok(merged.possibleClasses.some(c => c.id === 'D3-D5'));
-    assert.equal(merged.possibleClasses.some(c => c.id === 'D4'), false);
-    assert.ok(merged.confidence > 0 && merged.confidence < 1);
-
-    const low = mapToClass(41, 8.8, 'absolute');
-    assert.equal(low.mainClass, 'D1');
-    assert.ok(!low.possibleClasses.some(c => c.id === 'D5'));
-});
-
-test('线路 A 精度下不合并 D3/D4/D5，但仍给相邻档', () => {
-    const result = mapToClass(62, 3.5, 'lineA');
-    assert.equal(result.mergedHigh, false);
-    assert.equal(result.mainClass, 'D5');
-    assert.ok(result.possibleClasses.some(c => c.id === 'D4'));
-    assert.equal(result.possibleClasses.some(c => c.id === 'D3-D5'), false);
-    assert.ok(result.confidence < 1);
-});
-
-test('热力峰值不参与强度：最强点被替换，估计值不被带动', () => {
-    const build = signalOfPeak => [0, 2, 4, 6, 8, 10, 12].map((hour, i) => row({
-        de: 'R' + i,
-        timestamp: `2026-11-08 ${String(hour).padStart(2, '0')}:00:00`,
-        signal: i === 0 ? signalOfPeak : 'S5',
-        lat: 40,
-        lon: -100
-    }));
-    const normal = estimateTarget({call: TARGET, rows: build('S5'), references: emptyTable()});
-    const withPeak = estimateTarget({call: TARGET, rows: build('S9'), references: emptyTable()});
-    // 7 个单点组，中位数不受单个极端峰值影响；均值则会被拉高。
-    assert.equal(normal.power.estimateDbm, withPeak.power.estimateDbm);
-    assert.equal(normal.observations.medianLevelDbm, -97);
-    assert.equal(withPeak.observations.medianLevelDbm, -97);
-});
-
-test('绝对法：S 表点可估功率，样本量翻倍不缩小误差地板', () => {
-    const rows = [1, 2, 3, 4].map((n, i) => row({
-        de: 'R' + n,
-        timestamp: `2026-11-08 1${i}:30:00`,
-        signal: 'S6',
-        lat: 0,
-        lon: -45,
-        dx_lat: 0,
-        dx_lon: 0
-    }));
-    const few = estimateTarget({call: TARGET, rows, references: emptyTable()});
-    const manyRows = [];
-    for (let k = 0; k < 12; k += 1) manyRows.push(...rows);
-    const many = estimateTarget({call: TARGET, rows: manyRows, references: emptyTable()});
-
-    assert.equal(few.method, 'absolute');
-    assert.equal(few.power.ok, true);
-    const expectedLp = medianPathLossDb(14.025, 5003.6);
-    const expected = -91 - 3 + expectedLp - few.methodDetail.gainAssumptionDbi;
-    assert.ok(Math.abs(few.power.estimateDbm - expected) < 1.2);
-    assert.ok(few.power.sigma >= 8.5 && few.power.sigma <= 9);
-    assert.equal(few.power.sigma, many.power.sigma);
-});
-
-test('无可用强度（全部 SNR）时不输出档位，只保留方位观测', () => {
-    const rows = Array.from({length: 10}, (_, i) => row({
-        de: 'R' + i,
-        timestamp: `2026-11-08 ${String(10 + (i % 4)).padStart(2, '0')}:00:00`,
-        snr: 20 + i,
-        lat: 35,
-        lon: -100 - i * 3
-    }));
-    const result = estimateTarget({call: TARGET, rows, references: emptyTable()});
-    assert.equal(result.power.ok, false);
-    assert.equal(result.power.insufficient, true);
-    assert.ok(result.observations.excluded.snrOnly >= 10);
-    assert.equal(result.power.mainClass, undefined);
-    assert.ok(result.warnings.includes('insufficient-samples'));
-});
-
-test('配对条件不满足时回退绝对法并声明原因', () => {
-    const rows = [1, 2, 3, 4].map((n, i) => row({
-        de: 'R' + n,
-        timestamp: `2026-11-08 1${i}:30:00`,
-        signal: 'S6',
-        lat: 0,
-        lon: -45,
-        dx_lat: 0,
-        dx_lon: 0
-    }));
-    const table = refTable([{call: REF, powerW: 100, antennaType: 'dipole', powerDbm: 50}]);
-    const result = estimateTarget({call: TARGET, rows, references: table});
-    assert.equal(result.method, 'absolute');
-    assert.ok(result.warnings.includes('no-qualified-pairs'));
-    assert.equal(result.power.refsUsed, undefined);
-});
-
-test('参照表缺失/为空时不编造参照台，只走绝对法', () => {
-    const missing = loadReferences('tests/__does_not_exist__.json');
-    assert.equal(missing.loaded, false);
-    assert.deepEqual(missing.references, []);
-    assert.equal(missing.error, 'missing');
-
-    const rows = [1, 2, 3, 4].map((n, i) => row({
-        de: 'R' + n,
-        timestamp: `2026-11-08 1${i}:30:00`,
-        signal: 'S6',
-        lat: 0,
-        lon: -45,
-        dx_lat: 0,
-        dx_lon: 0
-    }));
-    const result = estimateTarget({call: TARGET, rows, references: missing});
-    assert.equal(result.references.referenceCount, 0);
-    assert.equal(result.references.loaded, false);
-    assert.ok(result.warnings.includes('reference-table-unavailable'));
-    assert.equal(result.method, 'absolute');
-    assert.equal(JSON.stringify(result).includes('"powerDbm":50'), false);
-});
-
-test('线路 A：同接收站配对取差分，参照台功率作为锚点', () => {
-    const rows = [];
-    for (let r = 0; r < 3; r += 1) {
-        const de = 'R' + (r + 1);
-        const lon = -100 - r * 4;
-        const t = `2026-11-08 1${r}:00:00`;
-        rows.push(row({de, timestamp: t, spot_call: TARGET, signal: 'S9', lat: 40, lon, dx_lat: 40, dx_lon: -90}));
-        rows.push(row({de, timestamp: t, spot_call: REF, signal: 'S7', lat: 40, lon, dx_lat: 40, dx_lon: -90.5}));
-    }
-    const table = refTable([{
-        call: REF, powerW: 100, powerDbm: 50, gainDbi: 8, antennaType: 'directional'
-    }]);
-    const result = estimateTarget({call: TARGET, rows, references: table});
-    assert.equal(result.method, 'lineA');
-    assert.equal(result.power.ok, true);
-    assert.equal(result.observations.pairs, 3);
-    const gainT = result.methodDetail.gainAssumptionDbi;
-    const expected = 50 + (sMeterToDbm(9) - sMeterToDbm(7)) + (8 - gainT);
-    assert.ok(Math.abs(result.power.estimateDbm - expected) < 0.01);
-    assert.equal(result.power.estimateDbm, 68);
-    assert.ok(result.power.sigma >= 3.4 && result.power.sigma <= 3.6);
-    assert.ok(result.warnings.includes('reference-table-empty') === false);
-});
-
-test('线路 A 不满足条件（时间差过大）时该配对不成立', () => {
-    const rows = [
-        row({de: 'R1', timestamp: '2026-11-08 10:00:00', spot_call: TARGET, signal: 'S9'}),
-        row({de: 'R1', timestamp: '2026-11-08 12:30:00', spot_call: REF, signal: 'S7', dx_lon: -90.5})
-    ];
-    const table = refTable([{call: REF, powerW: 100, powerDbm: 50, antennaType: 'dipole'}]);
-    const result = estimateTarget({call: TARGET, rows, references: table});
-    assert.equal(result.method, 'absolute');
-    assert.equal(result.observations.pairs, 0);
-});
-
-test('方位差超出 20° 的配对被拒绝', () => {
-    const rows = [
-        row({de: 'R1', timestamp: '2026-11-08 10:00:00', spot_call: TARGET, signal: 'S9'}),
-        row({de: 'R1', timestamp: '2026-11-08 10:10:00', spot_call: REF, signal: 'S7', dx_lat: 20, dx_lon: -90})
-    ];
-    const table = refTable([{call: REF, powerW: 100, powerDbm: 50, antennaType: 'dipole'}]);
-    const result = estimateTarget({call: TARGET, rows, references: table});
-    assert.equal(result.method, 'absolute');
-});
-
-test('呼号变体匹配 RBN 的 -# 后缀', () => {
-    assert.deepEqual(callVariants('DL8WR-#'), ['DL8WR-#', 'DL8WR']);
-    assert.deepEqual(callVariants('N0CALL-5'), ['N0CALL-5', 'N0CALL']);
-    assert.equal(gainForAntennaType('directional'), 8);
-    assert.equal(gainForAntennaType('dipole'), 2);
-    assert.equal(gainForAntennaType('omni'), 1.5);
-});
-
 test('扇区统计的 12 桶覆盖全部方位且份额归一', () => {
     const stats = sectorStats([0, 10, 20, 100, 190, 350]);
     assert.equal(stats.bins.length, 12);
@@ -293,43 +136,200 @@ test('扇区统计的 12 桶覆盖全部方位且份额归一', () => {
     assert.ok(stats.share > 0 && stats.share <= 1);
 });
 
-test('analysisQuery 同时取回目标与参照台并按时间窗过滤', () => {
-    const sql = analysisQuery(TARGET, '2026-11-08 00:00:00', '2026-11-09 00:00:00', 5000, [REF]);
-    assert.match(sql, /monitored_call IN \('K1T', 'K1R'\)/);
-    assert.match(sql, /spot_call IN \('K1T', 'K1R'\)/);
+test('圆中位数对跨 0° 的方位不会算成 180°', () => {
+    assert.ok(angularDiff(circularMedian([355, 5, 350, 10]), 0) < 5);
+});
+
+test('呼号变体匹配 RBN 的 -# 后缀', () => {
+    assert.deepEqual(callVariants('DL8WR-#'), ['DL8WR-#', 'DL8WR']);
+    assert.deepEqual(callVariants('N0CALL-5'), ['N0CALL-5', 'N0CALL']);
+});
+
+test('分组只做样本量追溯：同波段同 2 小时合并为一组', () => {
+    const points = [
+        {band: '20m', epoch: 0},
+        {band: '20m', epoch: 3600},
+        {band: '40m', epoch: 3600},
+        {band: '20m', epoch: 7200}
+    ];
+    const groups = groupByPeriod(points);
+    assert.equal(groups.length, 3);
+    assert.deepEqual(groups.map(g => g.n), [2, 1, 1]);
+});
+
+test('相对电平只在同一报告站内部比较方位差，且只作辅助证据', () => {
+    const point = (spotter, bearing, signal) => ({
+        spotter,
+        bearing,
+        strength: normalizeStrength({signal})
+    });
+    const points = [
+        point('R1', 90, '599'), point('R1', 110, '599'), point('R1', 70, '599'),
+        point('R1', 210, 'S5'), point('R1', 270, 'S5'),
+        point('R2', 60, 'S7'), point('R2', 90, '599'),
+        point('R2', 240, 'S5'), point('R2', 300, 'S5')
+    ];
+    const result = relativeLevelEvidence(points, 90);
+    assert.equal(result.available, true);
+    assert.equal(result.receivers, 2);
+    assert.equal(result.usablePoints, 9);
+    assert.equal(result.usage, 'auxiliary-only');
+    // R1: -73 - (-97) = 24 dB；R2: -79 - (-97) = 18 dB；取中位 21 dB。
+    assert.equal(result.deltaDb, 21);
+    assert.deepEqual(
+        result.perReceiver.map(item => [item.spotter, item.deltaDb]),
+        [['R1', 24], ['R2', 18]]
+    );
+});
+
+test('SNR 点不参与相对电平，单站也不足以形成结论', () => {
+    const snrPoint = (spotter, bearing) => ({
+        spotter,
+        bearing,
+        strength: normalizeStrength({signal: null, snr: 20})
+    });
+    const snrOnly = relativeLevelEvidence(
+        [snrPoint('R1', 90), snrPoint('R1', 200), snrPoint('R1', 300),
+            snrPoint('R2', 90), snrPoint('R2', 200), snrPoint('R2', 300)],
+        90
+    );
+    assert.equal(snrOnly.available, false);
+    assert.equal(snrOnly.reason, 'no-usable-strength');
+    assert.equal(snrOnly.usablePoints, 0);
+
+    const point = (spotter, bearing, signal) => ({
+        spotter,
+        bearing,
+        strength: normalizeStrength({signal})
+    });
+    const oneReceiver = relativeLevelEvidence([
+        point('R1', 90, '599'), point('R1', 110, 'S7'), point('R1', 210, 'S5'), point('R1', 270, 'S5')
+    ], 90);
+    assert.equal(oneReceiver.available, false);
+    assert.equal(oneReceiver.reason, 'too-few-receivers');
+    assert.equal(oneReceiver.receivers, 1);
+});
+
+test('完全没有信号强度时仍能给出天线类型与朝向', () => {
+    const report = analyzeTarget({
+        call: TARGET,
+        rows: directionalRows(),
+        from: '2026-11-08 00:00:00',
+        to: '2026-11-09 00:00:00'
+    });
+    assert.equal(report.method, 'bearing-distribution');
+    assert.equal(report.antenna.ok, true);
+    assert.equal(report.antenna.type, 'directional');
+    assert.ok(report.antenna.probabilities.directional > 0.5);
+    assert.ok(angularDiff(report.antenna.azimuthDeg, 255) < 20);
+    assert.equal(report.relative.available, false);
+    assert.equal(report.relative.reason, 'no-usable-strength');
+    assert.equal(report.observations.strengthSources.snrOnly, 10);
+    assert.equal(report.observations.strengthSources.rst, 0);
+    assert.equal(report.observations.positioned, 10);
+    assert.equal(report.observations.sectorCoverage, 3);
+});
+
+test('输出中不存在任何功率、EIRP 或路径损耗结论', () => {
+    const report = analyzeTarget({
+        call: TARGET,
+        rows: directionalRows(),
+        from: '2026-11-08 00:00:00',
+        to: '2026-11-09 00:00:00'
+    });
+    assert.equal(report.power, undefined);
+    assert.equal(report.powerClass, undefined);
+    assert.equal(report.estimateDbm, undefined);
+    assert.equal(report.disclaimer.noPower, 'antenna-only');
+    assert.equal(report.disclaimer.strengthUsage, 'relative-only');
+    const text = JSON.stringify(report);
+    for (const token of ['dbm', 'dBm', 'EIRP', 'eirp', 'pathLoss', 'path-loss', 'watts', 'Watt', 'mainClass', 'estimateDbm']) {
+        assert.equal(text.includes(token), false, `report leaks "${token}"`);
+    }
+    // 相对电平是 dB 差（此处不可用，为 null），不是绝对电平。
+    assert.equal(report.relative.deltaDb, null);
+});
+
+test('功率反算模块已彻底移除：文件不存在、导出为空', () => {
+    for (const file of ['path-loss.js', 'references.js', 'reference-stations.json']) {
+        assert.equal(fs.existsSync(path.join(__dirname, '..', 'lib', 'analysis', file)), false);
+    }
+    const estimate = require('../lib/analysis/estimate.js');
+    for (const name of ['estimateTarget', 'mapToClass', 'POWER_CLASSES', 'absoluteMethod', 'lineAMethod']) {
+        assert.equal(estimate[name], undefined, `${name} should be gone`);
+    }
+    const analysis = require('../lib/analysis/index.js');
+    assert.equal(analysis.estimateTarget, undefined);
+});
+
+test('无 spot 时给出 insufficient 与 no-spots 告警', () => {
+    const report = analyzeTarget({call: TARGET, rows: [], from: '2026-11-08 00:00:00', to: '2026-11-09 00:00:00'});
+    assert.equal(report.antenna.ok, false);
+    assert.equal(report.antenna.type, 'unknown');
+    assert.ok(report.warnings.includes('antenna-insufficient'));
+    assert.ok(report.warnings.includes('no-spots'));
+});
+
+test('时间窗超过 7 天只告警，不阻断研判', () => {
+    const report = analyzeTarget({
+        call: TARGET,
+        rows: directionalRows(),
+        from: '2026-11-01 00:00:00',
+        to: '2026-11-09 00:00:00'
+    });
+    assert.equal(report.window.hours > MAX_WINDOW_HOURS, true);
+    assert.ok(report.warnings.includes('window-too-long'));
+    assert.equal(report.antenna.ok, true);
+});
+
+test('非目标台的点计入排除，不进入天线判断', () => {
+    const rows = directionalRows().concat([snrRow(10, {
+        de: 'OTHER', spot_call: 'K9X', snr: 30
+    })]);
+    const report = analyzeTarget({call: TARGET, rows, from: '2026-11-08 00:00:00', to: '2026-11-09 00:00:00'});
+    assert.equal(report.observations.excluded.otherCall, 1);
+    assert.equal(report.observations.targetRows, 10);
+    assert.equal(report.observations.positioned, 10);
+});
+
+test('analysisQuery 只按目标呼号取点，不接收参照台列表', () => {
+    const sql = analysisQuery(TARGET, '2026-11-08 00:00:00', '2026-11-09 00:00:00', 5000);
+    assert.match(sql, /\(monitored_call = 'K1T' OR spot_call = 'K1T'\)/);
     assert.match(sql, /datetime\('2026-11-08 00:00:00'\)/);
     assert.match(sql, /ORDER BY id ASC/);
     assert.match(sql, /LIMIT 5000/);
-    assert.equal(analysisQuery('', null, null, 10, []), 'SELECT * FROM spots WHERE 1=0;');
+    assert.equal(sql.includes('IN ('), false);
+    assert.equal(analysisQuery('', null, null, 10), 'SELECT * FROM spots WHERE 1=0;');
 });
 
-test('功率档位定义与档间距符合规格', () => {
-    const db = POWER_CLASSES.map(c => c.dbm);
-    assert.equal(Math.round(db[1] - db[0]), 10);
-    assert.equal(Math.round(db[2] - db[1]), 7);
-    assert.equal(Math.round(db[3] - db[2]), 3);
-    assert.equal(Math.round(db[4] - db[3]), 3);
-});
-
-test('接口服务层：缺少呼号返回 400 语义，正常请求组装 SQL 并产出报告', () => {
-    const table = refTable([{call: REF, powerW: 100, powerDbm: 50, antennaType: 'dipole'}]);
-    const missing = service.prepare({}, table);
+test('接口服务层：缺少呼号返回 400 语义，正常请求组装 SQL 并产出天线报告', () => {
+    const missing = service.prepare({});
     assert.equal(missing.ok, false);
     assert.equal(missing.error, 'call-required');
     assert.match(missing.sql, /WHERE 1=0/);
     assert.deepEqual(service.complete(missing, []), {error: 'call-required'});
 
-    const prepared = service.prepare({call: ' k1t ', from: '2026-11-08 00:00', to: '2026-11-09 00:00'}, table);
+    const prepared = service.prepare({call: ' k1t ', from: '2026-11-08 00:00', to: '2026-11-09 00:00'});
     assert.equal(prepared.ok, true);
-    assert.match(prepared.sql, /monitored_call IN \('K1T', 'K1R'\)/);
+    assert.match(prepared.sql, /\(monitored_call = 'K1T' OR spot_call = 'K1T'\)/);
     assert.match(prepared.sql, /datetime\('2026-11-08 00:00:00'\)/);
-    assert.deepEqual(prepared.request.refCalls, ['K1R']);
+    assert.deepEqual(prepared.request, {
+        call: 'K1T',
+        from: '2026-11-08 00:00:00',
+        to: '2026-11-09 00:00:00',
+        limit: 20000
+    });
+    assert.equal('refCalls' in prepared.request, false);
 
-    const report = service.complete(prepared, []);
+    const report = service.complete(prepared, directionalRows());
     assert.equal(report.target, 'K1T');
     assert.equal(report.window.from, '2026-11-08 00:00:00');
-    assert.equal(report.power.ok, false);
-    assert.ok(report.warnings.includes('insufficient-samples'));
+    assert.equal(report.antenna.type, 'directional');
+    assert.equal(report.power, undefined);
+
+    const empty = service.complete(prepared, []);
+    assert.equal(empty.antenna.ok, false);
+    assert.ok(empty.warnings.includes('antenna-insufficient'));
 });
 
 test('时间参数解析：非法值回落到默认窗口而不是抛错', () => {
@@ -337,4 +337,15 @@ test('时间参数解析：非法值回落到默认窗口而不是抛错', () =>
     assert.equal(service.parseTime('2026-11-08'), '2026-11-08 00:00:00');
     assert.equal(service.parseTime('2026-11-08T12:30:00Z'), '2026-11-08 12:30:00');
     assert.equal(service.parseTime(null), null);
+});
+
+test('最小数据条件：至少 MIN_ANTENNA_POINTS 个带坐标的方位点才给三分类', () => {
+    const rows = Array.from({length: MIN_ANTENNA_POINTS - 1}, (_, i) => snrRow(250 + i * 2));
+    const short = analyzeTarget({call: TARGET, rows, from: '2026-11-08 00:00:00', to: '2026-11-09 00:00:00'});
+    assert.equal(short.antenna.ok, false);
+
+    rows.push(snrRow(270));
+    const enough = analyzeTarget({call: TARGET, rows, from: '2026-11-08 00:00:00', to: '2026-11-09 00:00:00'});
+    assert.equal(enough.antenna.ok, true);
+    assert.notEqual(enough.antenna.type, 'unknown');
 });

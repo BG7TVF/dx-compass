@@ -2,9 +2,8 @@ import {fetchAnalysis} from '../../shared/data/analysis.mjs';
 import {$} from '../ui.mjs';
 
 /**
- * 分析研判页：输入目标呼号与 UTC 时间窗，渲染结构化研判报告。
- * 数值全部来自 /api/analysis/estimate，前端不做任何估算，
- * 只负责把可追溯明细（分组、剔除、σ 分项）呈现出来。
+ * 天线研判页：输入目标呼号与 UTC 时间窗，展示三分类概率、主朝向与判定依据。
+ * 本页不展示任何功率、EIRP 或绝对场强结论——服务端也不计算。
  */
 
 const SECTOR_LABELS = ['0°', '30°', '60°', '90°', '120°', '150°', '180°', '210°', '240°', '270°', '300°', '330°'];
@@ -13,33 +12,13 @@ function utcInputValue(offsetMs) {
     return new Date(Date.now() + offsetMs).toISOString().slice(0, 16);
 }
 
-function fmtDb(value, t) {
-    return Number.isFinite(value) ? `${value.toFixed(1)} dB` : t('anNone');
-}
-
-function fmtDbm(value, t) {
-    return Number.isFinite(value) ? `${value.toFixed(1)} dBm` : t('anNone');
-}
-
 function fmtPct(value) {
     return Number.isFinite(value) ? `${Math.round(value * 100)}%` : '—';
-}
-
-function fmtWatts(value) {
-    if (!Number.isFinite(value) || value <= 0) return '—';
-    if (value >= 1000) return `${(value / 1000).toFixed(value >= 10000 ? 0 : 1)} kW`;
-    if (value >= 10) return `${Math.round(value)} W`;
-    return `${value.toFixed(1)} W`;
 }
 
 function fmtWindow(epochSeconds) {
     if (!Number.isFinite(epochSeconds)) return '—';
     return new Date(epochSeconds * 1000).toISOString().slice(11, 16) + 'Z';
-}
-
-function classText(item) {
-    if (!item) return '—';
-    return item.id === 'D3-D5' ? item.label : `${item.id} · ${item.label}`;
 }
 
 export function createAnalysisPage(ctx) {
@@ -165,8 +144,7 @@ export function createAnalysisPage(ctx) {
     function renderError(error) {
         const body = $('#analysisBody');
         body.replaceChildren(element('div', 'an-empty', t('anRequestFailed')));
-        const detail = element('div', 'an-hint', error && error.message ? error.message : '');
-        body.appendChild(detail);
+        if (error && error.message) body.appendChild(element('div', 'an-hint', error.message));
     }
 
     function render(report) {
@@ -177,45 +155,34 @@ export function createAnalysisPage(ctx) {
         body.appendChild(renderMethod(report));
         body.appendChild(renderAntenna(report));
         body.appendChild(renderObservations(report));
-        body.appendChild(renderPower(report));
-        body.appendChild(renderError(report));
-        body.appendChild(renderDisclaimer(report));
+        body.appendChild(renderConfidence(report));
     }
 
     function renderTarget(report) {
         const values = sectionBlock(
             row('anTarget', report.target),
-            row('anFrom', report.window && report.window.from ? report.window.from : '—'),
-            row('anTo', report.window && report.window.to ? report.window.to : '—')
+            row('anFrom', (report.window && report.window.from) || '—'),
+            row('anTo', (report.window && report.window.to) || '—')
         );
         return section('anSecTarget', [values]);
     }
 
     function renderMethod(report) {
-        const methodKey = report.method === 'lineA' ? 'anMethodLineA' : 'anMethodAbs';
-        const nodes = [row('anMethod', t(methodKey))];
-        if (report.method === 'absolute') {
-            if (!report.references || !report.references.loaded || report.references.referenceCount === 0) {
-                nodes.push(element('div', 'an-note', t('anWarn.refEmpty')));
-            } else {
-                nodes.push(element('div', 'an-note', t('anWarn.noPairs')));
-            }
-            nodes.push(element('div', 'an-note', t('anMethodAbsCaveat')));
-        } else {
-            const pairs = report.power && Array.isArray(report.power.pairs) ? report.power.pairs.length : 0;
-            const refs = (report.references && report.references.used) || [];
-            nodes.push(row('anReferences', refs.length ? refs.join(', ') : t('anNone')));
-            nodes.push(row('anPairs', String(pairs)));
-        }
-        return section('anSecMethod', [sectionBlock(nodes)]);
+        return section('anSecMethod', [sectionBlock(
+            row('anMethod', t('anMethodDistribution')),
+            element('div', 'an-note', t('anMethodNoPower')),
+            element('div', 'an-note', t('anHint'))
+        )]);
     }
 
     function renderAntenna(report) {
         const antenna = report.antenna || {};
         const probs = antenna.probabilities || {};
         const nodes = [];
-        const typeLabel = t(`anType.${antenna.type || 'unknown'}`);
-        nodes.push(row('anType', `${typeLabel} (${fmtPct(probs[antenna.type])})`));
+        if (!antenna.ok || antenna.type === 'unknown') {
+            nodes.push(element('div', 'an-empty', t('anInsufficient')));
+        }
+        nodes.push(row('anType', `${t(`anType.${antenna.type || 'unknown'}`)} (${fmtPct(antenna.confidence)})`));
         if (probs.directional !== undefined) {
             nodes.push(row('anProbability', [
                 `${t('anDir')} ${fmtPct(probs.directional)}`,
@@ -223,7 +190,9 @@ export function createAnalysisPage(ctx) {
                 `${t('anOmni')} ${fmtPct(probs.omni)}`
             ].join(' · ')));
         }
-        nodes.push(row('anAzimuth', Number.isFinite(antenna.azimuthDeg) ? `${Math.round(antenna.azimuthDeg)}°` : t('anNone')));
+        nodes.push(row('anAzimuth', Number.isFinite(antenna.azimuthDeg)
+            ? `${Math.round(antenna.azimuthDeg)}°`
+            : t('anNone')));
         const evidence = antenna.evidence;
         if (evidence) {
             nodes.push(row('anBasis', [
@@ -233,6 +202,19 @@ export function createAnalysisPage(ctx) {
                 `${t('anMedianDistance')} ${Number.isFinite(evidence.medianDistanceKm) ? Math.round(evidence.medianDistanceKm) + ' km' : '—'}`
             ].join(' · ')));
             nodes.push(sectorChart(evidence.sectors || []));
+        }
+        const relative = report.relative;
+        if (relative) {
+            if (relative.available) {
+                nodes.push(row('anRelative', [
+                    `${Number.isFinite(relative.deltaDb) ? relative.deltaDb.toFixed(1) : '—'} dB`,
+                    `${t('anRelativeReceivers')} ${relative.receivers}`,
+                    `${t('anRelativePoints')} ${relative.usablePoints}`,
+                    t('anRelativeOnly')
+                ].join(' · ')));
+            } else {
+                nodes.push(row('anRelative', `${t('anRelativeUnavailable')} (${relative.reason})`));
+            }
         }
         (antenna.notes || []).forEach(code => {
             const key = `anNote.${code}`;
@@ -247,7 +229,8 @@ export function createAnalysisPage(ctx) {
         const chart = element('div', 'an-sectors');
         sectors.forEach(sector => {
             const line = element('div', 'an-sector');
-            line.appendChild(element('span', 'an-sector-label', SECTOR_LABELS[Math.round(sector.fromDeg / 30)] || `${sector.fromDeg}°`));
+            line.appendChild(element('span', 'an-sector-label',
+                SECTOR_LABELS[Math.round(sector.fromDeg / 30)] || `${sector.fromDeg}°`));
             const track = element('div', 'an-sector-track');
             const fill = element('div', 'an-sector-fill');
             fill.style.width = `${Math.round((sector.count / max) * 100)}%`;
@@ -262,29 +245,26 @@ export function createAnalysisPage(ctx) {
     function renderObservations(report) {
         const observations = report.observations || {};
         const groups = observations.groups || [];
-        const isLineA = report.method === 'lineA';
-        const nodes = [
-            row(isLineA ? 'anPairs' : 'anGroups', String(isLineA ? (observations.pairs || 0) : (observations.groupCount || 0))),
-            row('anPoints', String(observations.totalPointsUsed || 0)),
-            row('anTotalRows', String(observations.totalRows || 0)),
-            row('anMedianLevel', fmtDbm(observations.medianLevelDbm, t))
-        ];
-        const excluded = observations.excluded || {};
-        const excludedText = Object.entries(excluded)
+        const sources = observations.strengthSources || {};
+        const excludedText = Object.entries(observations.excluded || {})
             .filter(([, count]) => count)
             .map(([code, count]) => `${t(`anExcl.${code}`)} ${count}`)
             .join(' · ') || t('anNone');
-        nodes.push(row('anExcluded', excludedText));
-        if (observations.powerExcluded) {
-            const powerExcluded = Object.entries(observations.powerExcluded)
-                .filter(([, count]) => count)
-                .map(([code, count]) => `${t(`anExcl.${code}`)} ${count}`);
-            if (powerExcluded.length) nodes.push(element('div', 'an-note', powerExcluded.join(' · ')));
-        }
-
+        const nodes = [
+            row('anGroups', String(observations.groupCount || 0)),
+            row('anPoints', String(observations.positioned || 0)),
+            row('anTotalRows', String(observations.totalRows || 0)),
+            row('anCoverage', `${observations.sectorCoverage || 0}/12`),
+            row('anExcluded', excludedText),
+            row('anStrength', [
+                `${t('anStrengthRst')} ${sources.rst || 0}`,
+                `${t('anStrengthSnr')} ${sources.snrOnly || 0}`,
+                `${t('anStrengthNone')} ${sources.none || 0}`
+            ].join(' · '))
+        ];
         const table = element('table', 'an-table');
         const head = element('tr');
-        ['anThBand', 'anThGroup', 'anThN', 'anThMedian'].forEach(key => {
+        ['anThBand', 'anThGroup', 'anThN'].forEach(key => {
             head.appendChild(element('th', null, t(key)));
         });
         table.appendChild(head);
@@ -293,88 +273,29 @@ export function createAnalysisPage(ctx) {
             rowNode.appendChild(element('td', null, group.band || '—'));
             rowNode.appendChild(element('td', null, `${fmtWindow(group.startEpoch)}–${fmtWindow(group.endEpoch)}`));
             rowNode.appendChild(element('td', null, String(group.n)));
-            rowNode.appendChild(element('td', null, fmtDbm(group.medianDbm, t)));
             table.appendChild(rowNode);
         });
         if (groups.length) nodes.push(table);
         return section('anSecObs', [sectionBlock(nodes)]);
     }
 
-    function renderPower(report) {
-        const power = report.power || {};
-        if (!power.ok) {
-            const empty = element('div', 'an-empty', t('anInsufficient'));
-            const notes = element('div', 'an-hint', [
-                `${t('anPoints')}: ${(report.observations && report.observations.totalPointsUsed) || 0}`,
-                `${t('anThN')}: ${(report.observations && report.observations.groupCount) || 0}`
-            ].join(' · '));
-            return section('anSecPower', [empty, notes]);
-        }
-        const classes = power.classes || {};
+    function renderConfidence(report) {
+        const antenna = report.antenna || {};
         const nodes = [
-            row('anEstimate', `${fmtDbm(power.estimateDbm, t)} / ${fmtWatts(power.watts)}`),
-            row('anMainClass', classText(classes.mainClass)),
-            row('anPossible', (classes.possibleClasses || []).map(classText).join(' · ') || t('anNone')),
-            row('anConfidence', fmtPct(classes.confidence)),
-            row('anInterval', Number.isFinite(power.sigma)
-                ? `${power.intervalDbm[0].toFixed(1)} … ${power.intervalDbm[1].toFixed(1)} dBm (±${power.sigma.toFixed(1)} dB)`
-                : t('anNone'))
+            row('anConfidence', fmtPct(antenna.confidence)),
+            element('div', 'an-note', t('anConfidenceNote')),
+            element('div', 'an-note', t('anDisc.noPower'))
         ];
-        const sepKey = classes.separability === 'absolute-merged-high' ? 'anSep.absolute' : 'anSep.lineA';
-        nodes.push(element('div', 'an-note', t(sepKey)));
-        if (power.outliers && power.outliers.length) {
-            nodes.push(row('anOutliers', String(power.outliers.length)));
-            nodes.push(element('div', 'an-note', power.outliers.slice(0, 8).map(pair =>
-                `${pair.receiver}→${pair.reference}: ${pair.ptDbm.toFixed(1)} dBm`).join(' · ')));
+        const relative = report.relative;
+        if (relative && relative.usage === 'auxiliary-only') {
+            nodes.push(element('div', 'an-note', t('anDisc.strengthUsage')));
         }
-        if (power.rejectedPairs && power.rejectedPairs.length) {
-            nodes.push(row('anRejected', String(power.rejectedPairs.length)));
-        }
-        return section('anSecPower', [sectionBlock(nodes)]);
-    }
-
-    function renderError(report) {
-        const power = report.power || {};
-        const breakdown = power.breakdown;
-        if (!breakdown) {
-            return section('anSecError', [element('div', 'an-hint', t('anInsufficient'))]);
-        }
-        const nodes = [];
-        Object.entries(breakdown).forEach(([key, item]) => {
-            const labelKey = `anSig.${key}`;
-            const label = t(labelKey);
-            nodes.push(row(labelKey, `${fmtDb(item.value, t)}${label && label !== labelKey ? ` · ${label}` : ''}`));
-        });
-        nodes.push(row('anSigma', fmtDb(power.sigma, t)));
-        if (power.paramDetail) {
-            const params = power.paramDetail;
-            nodes.push(element('div', 'an-note', [
-                `${t('anParam.gain')} ${params.gainT} dBi`,
-                `${t('anParam.group')} ${params.groupSeconds / 3600} h`,
-                `${t('anParam.crossPol')} ${params.crossPolDb} dB`,
-                `${t('anParam.pathLoss')} ${params.pathLoss}`
-            ].join(' · ')));
-        }
-        nodes.push(element('div', 'an-note', t('anDisc.errorFloor')));
-        return section('anSecError', [sectionBlock(nodes)]);
-    }
-
-    function renderDisclaimer(report) {
-        const nodes = [
-            element('div', 'an-note', t('anDisc.errorFloor')),
-            element('div', 'an-note', t('anDisc.threeDb'))
-        ];
         (report.warnings || []).forEach(code => {
-            const node = element('div', 'an-warn');
             const key = `anWarn.${code}`;
             const label = t(key);
-            node.textContent = label && label !== key ? label : code;
-            nodes.push(node);
+            nodes.push(element('div', 'an-warn', label && label !== key ? label : code));
         });
-        if (report.method === 'absolute') {
-            nodes.push(element('div', 'an-note', t('anMethodAbsCaveat')));
-        }
-        return section('anSecDisclaimer', [sectionBlock(nodes)]);
+        return section('anSecConfidence', [sectionBlock(nodes)]);
     }
 
     return {

@@ -1,6 +1,0 @@
-{
-  "version": 1,
-  "_readme": "人工维护表。references: 已知功率/天线的参照台（线路 A 必需，单位 W/dBi/度）。receivers: 已知接收机/接收天线（可选，用于绝对法增益归一）。没有把握的条目宁可不填，模块会自动回退到绝对法并声明。",
-  "references": [],
-  "receivers": []
-}
