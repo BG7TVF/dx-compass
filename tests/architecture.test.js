@@ -153,12 +153,12 @@ test('DB startup migrates columns and creates neighbor schema in independent bra
     assert.ok(createTable, 'Create table sqlite node must exist');
     const fanout = byName('Fan out DB init');
     assert.ok(fanout, 'a function node must fan out the DB init branches');
-    assert.ok(Number(fanout.outputs) >= 3, 'fan-out node needs an output per branch');
+    assert.ok(Number(fanout.outputs) >= 2, 'fan-out node needs an output per branch');
     assert.match(fanout.func, /return\s*\[\[/,
         'fan-out must return nested arrays, otherwise every message goes to output 1');
     assert.deepEqual(createTable.wires, [[fanout.id]],
         'Create table must hand off to the fan-out node');
-    for (const name of ['Check extra columns', 'Create neighbors schema', 'Check spot_id column']) {
+    for (const name of ['Check extra columns', 'Check spot_id column']) {
         const node = byName(name);
         assert.ok(node, name + ' must exist');
         assert.ok((fanout.wires || []).flat().includes(node.id),
@@ -167,6 +167,18 @@ test('DB startup migrates columns and creates neighbor schema in independent bra
         assert.ok(outputIndex >= 0 && outputIndex < Number(fanout.outputs),
             name + ' must be reachable on a real fan-out output');
     }
+    // 邻台建表只能跑一次：Create table 会被多条建表消息重复触发，
+    // 若跟着扇出一起跑，多次并发 DROP/CREATE 触发器会让触发器随机缺失。
+    const neighborsNode = byName('Create neighbors schema');
+    assert.ok(neighborsNode, 'Create neighbors schema must exist');
+    assert.ok(!(fanout.wires || []).flat().includes(neighborsNode.id),
+        'neighbors schema must not be driven by the multi-message fan-out');
+    const schemaInject = flow.find(node => node.type === 'inject' &&
+        (node.wires || []).flat().includes(neighborsNode.id));
+    assert.ok(schemaInject, 'neighbors schema needs its own inject');
+    assert.equal(schemaInject.once, true, 'neighbors schema inject must fire once per start');
+    assert.ok(Number(schemaInject.onceDelay) >= 1,
+        'neighbors schema must wait until the spots table exists');
     for (const name of ['Apply column migrations', 'Apply neighbors schema', 'Create index']) {
         const node = byName(name);
         assert.ok(node, name + ' must exist');
