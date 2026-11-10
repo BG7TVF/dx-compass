@@ -214,7 +214,10 @@ export function createAnalysisPage(ctx) {
             const results = $('#pathResults');
             results.replaceChildren(element('div', 'an-empty', t(key)));
             if (key === 'anRequestFailed' && error && error.message) {
-                results.appendChild(element('div', 'an-hint', error.message));
+                // 服务端 5xx 会带 detail（缺表/缺列的原始错误），直接展示，避免只看到 HTTP 500。
+                const detail = error.body && typeof error.body === 'object' ? error.body.detail : '';
+                results.appendChild(element('div', 'an-hint',
+                    detail ? `${error.message} (${detail})` : error.message));
             }
             setPathStatus(key === 'anRequestFailed' ? t('anRequestFailed') : '', true);
         } finally {

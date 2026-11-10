@@ -126,13 +126,26 @@ test('analysis HTTP routes are registered and wired end to end', () => {
 test('DB startup migrates columns and creates neighbor schema in independent branches', () => {
     const flow = JSON.parse(read('flow.json'));
     const byName = name => flow.find(node => node.name === name);
+    // node-red-node-sqlite 只在使用 output 1，多输出接线等于永远不触发。
+    for (const node of flow.filter(item => item.type === 'sqlite')) {
+        assert.ok((node.wires || []).length <= 1,
+            node.name + ' is an sqlite node and cannot fan out on extra outputs');
+    }
     const createTable = byName('Create table');
     assert.ok(createTable, 'Create table sqlite node must exist');
-    const targets = (createTable.wires || []).flat();
+    const fanout = byName('Fan out DB init');
+    assert.ok(fanout, 'a function node must fan out the DB init branches');
+    assert.ok(Number(fanout.outputs) >= 3, 'fan-out node needs an output per branch');
+    assert.deepEqual(createTable.wires, [[fanout.id]],
+        'Create table must hand off to the fan-out node');
     for (const name of ['Check extra columns', 'Create neighbors schema', 'Check spot_id column']) {
         const node = byName(name);
         assert.ok(node, name + ' must exist');
-        assert.ok(targets.includes(node.id), 'Create table must fan out to ' + name);
+        assert.ok((fanout.wires || []).flat().includes(node.id),
+            'fan-out must wire to ' + name);
+        const outputIndex = (fanout.wires || []).findIndex(wire => wire.includes(node.id));
+        assert.ok(outputIndex >= 0 && outputIndex < Number(fanout.outputs),
+            name + ' must be reachable on a real fan-out output');
     }
     for (const name of ['Apply column migrations', 'Apply neighbors schema', 'Create index']) {
         const node = byName(name);
@@ -146,6 +159,77 @@ test('DB startup migrates columns and creates neighbor schema in independent bra
         (node.wires || []).flat().includes(warn.id));
     assert.ok(catcher, 'a catch node must feed the migration log');
     assert.ok((catcher.scope || []).length >= 3, 'catch must cover the migration sqlite nodes');
+});
+
+test('flow node ids are unique', () => {
+    const flow = JSON.parse(read('flow.json'));
+    const seen = new Set();
+    for (const node of flow) {
+        assert.ok(!seen.has(node.id), 'duplicate node id ' + node.id + ' (' + node.name + ')');
+        seen.add(node.id);
+    }
+});
+
+test('analysis routes always answer with a JSON error instead of hanging', () => {
+    const flow = JSON.parse(read('flow.json'));
+    const byId = new Map(flow.map(node => [node.id, node]));
+    const downstream = id => {
+        const out = [];
+        const queue = [id];
+        const seen = new Set([id]);
+        while (queue.length) {
+            const node = byId.get(queue.shift());
+            if (!node) continue;
+            out.push(node);
+            for (const next of (node.wires || []).flat()) {
+                if (!seen.has(next)) {
+                    seen.add(next);
+                    queue.push(next);
+                }
+            }
+        }
+        return out;
+    };
+
+    for (const url of ['/api/analysis/estimate', '/api/analysis/paths']) {
+        const route = flow.find(node => node.type === 'http in' && node.url === url);
+        assert.ok(route, url + ' route must exist');
+        const chain = downstream(route.id);
+        const catcher = flow.find(node => node.type === 'catch' &&
+            (node.scope || []).some(id => chain.some(item => item.id === id)));
+        assert.ok(catcher, url + ' must have a catch node covering its chain');
+        const handler = (catcher.wires || []).flat()
+            .map(id => byId.get(id))
+            .find(node => node && node.type === 'function' &&
+                /msg\.statusCode\s*=\s*500/.test(node.func || ''));
+        assert.ok(handler, url + ' catch must build a 500 JSON response');
+        assert.match(handler.func, /error:\s*'query-failed'/);
+        const response = (handler.wires || []).flat()
+            .map(id => byId.get(id))
+            .find(node => node && node.type === 'http response');
+        assert.ok(response, url + ' error handler must end at an http response node');
+    }
+});
+
+test('startup self-check warns when neighbors schema is missing', () => {
+    const flow = JSON.parse(read('flow.json'));
+    const inject = flow.find(node => node.type === 'inject' && node.name === 'DB self-check on startup');
+    assert.ok(inject && inject.once === true, 'self-check must run once on startup');
+    const query = flow.find(node => node.name === 'Build DB self-check query');
+    assert.ok(query, 'self-check query builder must exist');
+    assert.match(query.func, /dx\.storage\.schema\.selfCheckQuery\(\)/);
+    const schema = require('../lib/storage/schema.js');
+    const sql = schema.selfCheckQuery();
+    assert.match(sql, /pragma_table_info\('spots'\)/);
+    assert.match(sql, /name IN \('sender_grid','receiver_grid','dxcc_sender','dxcc_receiver'\)/);
+    assert.match(sql, /name='neighbors'/);
+    assert.match(sql, /trg_spots_neighbor_%/);
+    const check = flow.find(node => node.name === 'Check DB self-check result');
+    assert.ok(check, 'self-check result handler must exist');
+    for (const token of ['sender_grid', 'receiver_grid', 'dxcc_sender', 'dxcc_receiver', 'neighbors']) {
+        assert.match(check.func, new RegExp(token));
+    }
+    assert.match(check.func, /node\.warn\(/);
 });
 
 test('read-only wall keeps an exact static whitelist and GET/HEAD boundary', () => {

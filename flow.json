@@ -87,6 +87,25 @@
         "y": 60,
         "wires": [
             [
+                "dxc00000000000e51"
+            ]
+        ]
+    },
+    {
+        "id": "dxc00000000000e51",
+        "type": "function",
+        "z": "dxc0000000000001",
+        "name": "Fan out DB init",
+        "func": "// sqlite 节点只有 1 个输出，建表完成后由这里扇出到三条独立支路。\n// 每条支路拿到独立副本，避免并发覆盖 msg.topic / msg.payload。\nreturn [0, 1, 2].map(() => Object.assign({}, msg));",
+        "outputs": 3,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 770,
+        "y": 60,
+        "wires": [
+            [
                 "dxc0000000000050"
             ],
             [
@@ -2834,7 +2853,7 @@
         "wires": []
     },
     {
-        "id": "dxc00000000000c1",
+        "id": "dxc00000000000f11",
         "type": "catch",
         "z": "dxc0000000000001",
         "name": "Catch DB migration errors",
@@ -2845,19 +2864,21 @@
             "dxc0000000000031",
             "dxc0000000000033",
             "dxc0000000000035",
-            "dxc0000000000055"
+            "dxc0000000000055",
+            "dxc00000000000e31",
+            "dxc00000000000e51"
         ],
         "uncaught": false,
         "x": 3080,
         "y": 180,
         "wires": [
             [
-                "dxc00000000000c2"
+                "dxc00000000000f21"
             ]
         ]
     },
     {
-        "id": "dxc00000000000c2",
+        "id": "dxc00000000000f21",
         "type": "function",
         "z": "dxc0000000000001",
         "name": "Log DB migration error",
@@ -2869,6 +2890,137 @@
         "libs": [],
         "x": 3300,
         "y": 180,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "dxc00000000000d11",
+        "type": "catch",
+        "z": "dxc0000000000001",
+        "name": "Catch analysis errors",
+        "scope": [
+            "dxa0000000000002",
+            "dxa0000000000003",
+            "dxa0000000000004",
+            "dxp0000000000002",
+            "dxp0000000000003",
+            "dxp0000000000006",
+            "dxp0000000000007",
+            "dxp0000000000004"
+        ],
+        "uncaught": false,
+        "x": 3080,
+        "y": 280,
+        "wires": [
+            [
+                "dxc00000000000d2"
+            ]
+        ]
+    },
+    {
+        "id": "dxc00000000000d2",
+        "type": "function",
+        "z": "dxc0000000000001",
+        "name": "Build analysis error response",
+        "func": "const err = msg.error || {};\nconst detail = String(err.message || err);\nnode.warn('analysis request failed: ' + detail);\nmsg.statusCode = 500;\nmsg.headers = Object.assign({}, msg.headers, {'content-type': 'application/json; charset=utf-8'});\nmsg.payload = {ok: false, error: 'query-failed', detail: detail};\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 3300,
+        "y": 280,
+        "wires": [
+            [
+                "dxc00000000000d3"
+            ]
+        ]
+    },
+    {
+        "id": "dxc00000000000d3",
+        "type": "http response",
+        "z": "dxc0000000000001",
+        "name": "Analysis error response",
+        "statusCode": "",
+        "headers": {},
+        "x": 3540,
+        "y": 280,
+        "wires": []
+    },
+    {
+        "id": "dxc00000000000e11",
+        "type": "inject",
+        "z": "dxc0000000000001",
+        "name": "DB self-check on startup",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "3",
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 130,
+        "y": 380,
+        "wires": [
+            [
+                "dxc00000000000e21"
+            ]
+        ]
+    },
+    {
+        "id": "dxc00000000000e21",
+        "type": "function",
+        "z": "dxc0000000000001",
+        "name": "Build DB self-check query",
+        "func": "const dx = global.get('dx');\nmsg.topic = dx.storage.schema.selfCheckQuery();\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 360,
+        "y": 380,
+        "wires": [
+            [
+                "dxc00000000000e31"
+            ]
+        ]
+    },
+    {
+        "id": "dxc00000000000e31",
+        "type": "sqlite",
+        "z": "dxc0000000000001",
+        "mydb": "dxc0000000000027",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "Query DB self-check",
+        "x": 580,
+        "y": 380,
+        "wires": [
+            [
+                "dxc00000000000e41"
+            ]
+        ]
+    },
+    {
+        "id": "dxc00000000000e41",
+        "type": "function",
+        "z": "dxc0000000000001",
+        "name": "Check DB self-check result",
+        "func": "const rows = Array.isArray(msg.payload) ? msg.payload : [];\nconst found = new Set(rows.map(row => String(row.value)));\nconst required = ['sender_grid', 'receiver_grid', 'dxcc_sender', 'dxcc_receiver',\n    'neighbors', 'trg_spots_neighbor_tx', 'trg_spots_neighbor_rx'];\nconst missing = required.filter(name => !found.has(name));\nif (missing.length) {\n    node.warn('DB self-check: missing ' + missing.join(', '));\n} else {\n    node.log('DB self-check ok: spots columns, neighbors table, triggers');\n}\nreturn null;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 800,
+        "y": 380,
         "wires": [
             []
         ]
