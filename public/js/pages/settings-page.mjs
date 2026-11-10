@@ -703,7 +703,7 @@ export function createSettingsPage(ctx) {
             '#resetAllLabel': 'resetAll', '#btnResetAll': 'resetAll', '#qtLFreq': 'lblFreq',
             '#qtLCall': 'lblCall', '#qtLRst': 'lblRst', '#qtLExch': 'lblExch', '#qtLBand': 'lblBand',
             '#qtLMode': 'lblMode', '#qtLOp': 'lblOp', '#qtLAge': 'lblAge', '#btnSpotView': 'spotView',
-            '#btnQsoView': 'qsoView', '#btnPropView': 'propView', '#propProjLabel': 'propProjection',
+            '#btnQsoView': 'qsoView', '#btnPropView': 'propView', '#btnAnalysisView': 'analysisView', '#propProjLabel': 'propProjection',
             '#propLayerLabel': 'propLayer', '#qsoPanelTitle': 'stPanel', '#qLastTitle': 'stLastQso',
             '#qRateTitle': 'qsoRate', '#qMinTitle': 'qsoPerMin', '#qOpTitle': 'qsoByOp',
             '#qBandTitle': 'qsoByBand', '#qLQsos': 'stQsos', '#qLMults': 'stMults',
@@ -717,7 +717,8 @@ export function createSettingsPage(ctx) {
         $('#btnMenu').title = t('menu');
         const tooltips = {
             '#btnSpotView': 'nav.spotGrid', '#btnQsoView': 'nav.qsoMap',
-            '#btnPropView': 'nav.propMap', '#connDot': 'nav.conn',
+            '#btnPropView': 'nav.propMap', '#btnAnalysisView': 'nav.analysis',
+            '#connDot': 'nav.conn',
             '#rotateGroup': 'nav.rotateHint', '#btnClearDb': 'nav.clearDbHint',
             '#saClose': 'nav.close'
         };
@@ -770,6 +771,7 @@ export function createSettingsPage(ctx) {
         ctx.qso.renderQsoPanel();
         ctx.records.applyLang();
         ctx.prop.applyLang();
+        ctx.analysis?.applyLang();
     }
 
     function setValue(selector, value) {
@@ -1090,6 +1092,7 @@ export function createSettingsPage(ctx) {
         $('#btnSpotView').addEventListener('click', () => { closeConfig(); ctx.qso.setViewMode('spots'); });
         $('#btnQsoView').addEventListener('click', () => { closeConfig(); ctx.qso.setViewMode('qso'); });
         $('#btnPropView').addEventListener('click', () => { closeConfig(); ctx.qso.setViewMode('prop'); });
+        $('#btnAnalysisView').addEventListener('click', () => { closeConfig(); ctx.qso.setViewMode('analysis'); });
         $('#configForm').addEventListener('submit', saveConfig);
 
         $('#btnExportSettings').addEventListener('click', exportSettings);

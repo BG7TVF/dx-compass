@@ -2596,5 +2596,87 @@
         "x": 640,
         "y": 220,
         "wires": []
+    },
+    {
+        "id": "dxa0000000000001",
+        "type": "http in",
+        "z": "dxc0000000000001",
+        "name": "GET /api/analysis/estimate",
+        "url": "/api/analysis/estimate",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 140,
+        "y": 1560,
+        "wires": [
+            [
+                "dxa0000000000002"
+            ]
+        ]
+    },
+    {
+        "id": "dxa0000000000002",
+        "type": "function",
+        "z": "dxc0000000000001",
+        "name": "Build analysis query",
+        "func": "const dx = global.get('dx');\nconst prepared = dx.analysis.service.prepare(msg.req.query);\nmsg.topic = prepared.sql;\nmsg.analysisError = prepared.error;\nmsg.analysisRequest = prepared.request;\nmsg.analysisTable = prepared.table;\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 380,
+        "y": 1560,
+        "wires": [
+            [
+                "dxa0000000000003"
+            ]
+        ]
+    },
+    {
+        "id": "dxa0000000000003",
+        "type": "sqlite",
+        "z": "dxc0000000000001",
+        "mydb": "dxc0000000000027",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "Query analysis spots",
+        "x": 620,
+        "y": 1560,
+        "wires": [
+            [
+                "dxa0000000000004"
+            ]
+        ]
+    },
+    {
+        "id": "dxa0000000000004",
+        "type": "function",
+        "z": "dxc0000000000001",
+        "name": "Estimate power class",
+        "func": "const dx = global.get('dx');\nconst prepared = {\n    ok: !msg.analysisError,\n    error: msg.analysisError || null,\n    request: msg.analysisRequest,\n    table: msg.analysisTable\n};\nconst result = dx.analysis.service.complete(prepared, msg.payload);\ndelete msg.analysisRequest;\ndelete msg.analysisTable;\nmsg.headers = {'Content-Type': 'application/json'};\nmsg.statusCode = result.error ? 400 : 200;\nmsg.payload = result;\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 860,
+        "y": 1560,
+        "wires": [
+            [
+                "dxa0000000000005"
+            ]
+        ]
+    },
+    {
+        "id": "dxa0000000000005",
+        "type": "http response",
+        "z": "dxc0000000000001",
+        "name": "",
+        "statusCode": "",
+        "headers": {},
+        "x": 1100,
+        "y": 1560,
+        "wires": []
     }
 ]

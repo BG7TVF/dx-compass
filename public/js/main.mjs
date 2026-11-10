@@ -10,6 +10,7 @@ import {createQsoPage} from './pages/qso-page.mjs';
 import {createRecordsPage} from './pages/records-page.mjs';
 import {createSettingsPage} from './pages/settings-page.mjs';
 import {createPropagationPage} from './pages/propagation-page.mjs';
+import {createAnalysisPage} from './pages/analysis-page.mjs';
 
 async function start() {
     const i18n = createI18n({lang: 'zh'});
@@ -24,6 +25,7 @@ async function start() {
     ctx.qso = createQsoPage(ctx);
     ctx.records = createRecordsPage(ctx);
     ctx.prop = createPropagationPage(ctx);
+    ctx.analysis = createAnalysisPage(ctx);
     ctx.settingsPage = createSettingsPage(ctx);
     ctx.saveSettings = () => ctx.settingsPage.save();
 
@@ -32,6 +34,7 @@ async function start() {
     ctx.spot.init();
     ctx.qso.init();
     ctx.prop.init();
+    ctx.analysis.init();
     ctx.settingsPage.bind();
     ctx.settingsPage.applyLang();
     ctx.records.init();
