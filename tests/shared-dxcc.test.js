@@ -29,9 +29,10 @@ test('DXCC 实体表覆盖 318/339/291/110 的国家与主字头', () => {
     assert.equal(entity(291).name, 'United States');
     assert.equal(entity(291).prefix, 'K');
     assert.equal(entity(110).prefix, 'KH6');
-    assert.ok(entitiesFile.entities.length > 300, '应覆盖 ADIF DXCC 1-340 的全部实体');
+    assert.ok(entitiesFile.entities.length > 300, '应覆盖 ADIF/ARRL DXCC 实体');
     assert.ok(entitiesFile.source.includes('ADIF'), '数据文件必须标注 ADIF 来源');
-    assert.equal(entitiesFile.fetched, '2026-11-10');
+    assert.ok(entitiesFile.source.includes('ARRL'), '补充实体必须标注 ARRL 来源');
+    assert.equal(entitiesFile.fetched, '2026-11-11');
 });
 
 test('卡片标题按语言渲染国家与主字头，不再拼接网格', async () => {
