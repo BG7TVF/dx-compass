@@ -2557,3 +2557,22 @@ body.prop-mode .status-group .sep { display: none; }
 .an-chip.unknown { color: var(--text-dim); }
 .an-dir-meta { font-size: 10px; color: var(--text-dim); }
 .an-path-self { border-left: 2px solid var(--border); padding-left: 6px; }
+.an-path-info {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 18px;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+}
+.an-path-info-item { display: flex; align-items: baseline; gap: 6px; font-size: 11px; }
+.an-path-info-item .an-label { color: var(--text-dim); }
+.an-path-detail { margin-top: 2px; }
+.an-path-detail summary {
+    cursor: pointer;
+    font-size: 10px;
+    color: var(--accent);
+    user-select: none;
+}
+.an-contrib { margin-top: 4px; width: 100%; }
+.an-contrib td { font-size: 10px; }
+.an-contrib td:last-child, .an-contrib td:nth-child(2) { white-space: nowrap; }

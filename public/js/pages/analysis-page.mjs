@@ -27,7 +27,9 @@ export function createAnalysisPage(ctx) {
     let pathBusy = false;
     let lastReport = null;
     let lastPathReport = null;
+    let lastPathAt = 0;
     let liveText = null;
+    const PATH_STALE_MS = 5 * 60 * 1000;
 
     const t = key => ctx.t(key);
 
@@ -103,26 +105,27 @@ export function createAnalysisPage(ctx) {
         pathBody.id = 'pathBody';
         const pathBar = element('div', 'analysis-bar');
         const pathTitle = element('span', 'an-path-title', t('anSecPaths'));
-        const pathRun = element('button', 'primary-btn an-run', t('anPathRun'));
-        pathRun.id = 'anPathRun';
-        pathRun.type = 'button';
+        const pathRefresh = element('button', 'primary-btn an-run', t('anPathRefresh'));
+        pathRefresh.id = 'anPathRun';
+        pathRefresh.type = 'button';
         const pathStatus = element('span', 'analysis-status');
         pathStatus.id = 'pathStatus';
-        pathBar.append(pathTitle, pathRun, pathStatus);
+        pathBar.append(pathTitle, pathRefresh, pathStatus);
         pathBody.appendChild(pathBar);
-        const pathHint = element('div', 'an-hint', t('anPathHint'));
-        pathBody.appendChild(pathHint);
+        const pathInfo = element('div', 'an-path-info');
+        pathInfo.id = 'pathInfo';
+        pathBody.appendChild(pathInfo);
         const pathResults = element('div', 'an-list');
         pathResults.id = 'pathResults';
         pathBody.appendChild(pathResults);
         view.appendChild(pathBody);
-        liveText = {callLabel, fromLabel, toLabel, run, hint, pathRun, pathHint, pathTitle};
+        liveText = {callLabel, fromLabel, toLabel, run, hint, pathRefresh, pathTitle};
 
         run.addEventListener('click', () => runAnalysis());
         callInput.addEventListener('keydown', event => {
             if (event.key === 'Enter') runAnalysis();
         });
-        pathRun.addEventListener('click', () => runPaths());
+        pathRefresh.addEventListener('click', () => runPaths());
         built = true;
         if (lastReport) render(lastReport);
         if (lastPathReport) renderPaths(lastPathReport);
@@ -179,13 +182,13 @@ export function createAnalysisPage(ctx) {
 
     async function runPaths() {
         if (pathBusy) return;
-        const from = $('#anFrom').value.replace('T', ' ');
-        const to = $('#anTo').value.replace('T', ' ');
         pathBusy = true;
         setPathStatus(t('anRunning'));
         try {
-            const report = await fetchPathAnalysis({from, to});
+            // 全自动：不传目标呼号，身份与大网格由服务端设置决定，默认回看 6 小时。
+            const report = await fetchPathAnalysis({});
             lastPathReport = report;
+            lastPathAt = Date.now();
             renderPaths(report);
             setPathStatus('');
         } catch (error) {
@@ -208,20 +211,34 @@ export function createAnalysisPage(ctx) {
         return `${margin > 0 ? '+' : ''}${margin.toFixed(1)} dB`;
     }
 
+    function fmtUtcTime(iso) {
+        const ms = Date.parse(iso || '');
+        if (!Number.isFinite(ms)) return '—';
+        return new Date(ms).toISOString().slice(0, 16).replace('T', ' ') + 'Z';
+    }
+
+    /** 功率口径两层表述：假设（50 W 标称，10–70 W 不对称）或实测覆盖值。 */
+    function powerText(power) {
+        if (!power) return '';
+        if (power.basis === 'override') {
+            return t('anPathPowerKnown').replace('{watts}', String(power.watts));
+        }
+        return t('anPathPowerUnknown');
+    }
+
     function verdictChip(mode, verdict, margin) {
-        const chip = element('span', `an-chip ${verdict}`, [
+        return element('span', `an-chip ${verdict}`, [
             mode,
             t(`anPathVerdict.${verdict}`),
             marginText(margin)
         ].join(' · '));
-        return chip;
     }
 
     function directionBlock(labelKey, direction) {
         const block = element('div', 'an-path-dir');
         block.appendChild(element('span', 'an-dir-label', t(labelKey)));
         if (!direction) {
-            block.appendChild(element('span', 'an-chip unknown', t('anNone')));
+            block.appendChild(element('span', 'an-chip unknown', t('anPathNoData')));
             return block;
         }
         if (!direction.available) {
@@ -233,18 +250,18 @@ export function createAnalysisPage(ctx) {
                 `${t('anPathSamples')} ${direction.samples}`
             ].filter(Boolean).join(' · ');
             block.appendChild(element('span', 'an-chip unknown', detail));
-        } else {
-            VERDICT_KEYS.forEach(mode => {
-                block.appendChild(verdictChip(mode, direction.verdicts[mode], direction.margins[mode]));
-            });
-            const meta = [
-                `${t('anPathSamples')} ${direction.samples}`,
-                `${t('anPathWindows')} ${direction.windows}`,
-                `${t('anPathStations')} ${direction.stations}`
-            ];
-            if (!direction.powerCorrected) meta.push(t('anPathPowerUnknown'));
-            block.appendChild(element('span', 'an-dir-meta', meta.join(' · ')));
+            return block;
         }
+        VERDICT_KEYS.forEach(mode => {
+            block.appendChild(verdictChip(mode, direction.verdicts[mode], direction.margins[mode]));
+        });
+        const meta = [
+            `${t('anPathSamples')} ${direction.samples}`,
+            `${t('anPathWindows')} ${direction.windows}`,
+            `${t('anPathStations')} ${direction.stations}`,
+            powerText(direction.power)
+        ].filter(Boolean);
+        block.appendChild(element('span', 'an-dir-meta', meta.join(' · ')));
         return block;
     }
 
@@ -257,8 +274,58 @@ export function createAnalysisPage(ctx) {
         ].join(' '));
         return [
             `${t('anPathSelf')}: ${parts.join(' · ')}`,
-            `（${t('anPathSamples')} ${self.samples}，${t('anPathSelfExcluded')}）`
+            `（${t('anPathSamples')} ${self.samples}，${t('anPathSelfExcluded')}；${powerText(self.power)}）`
         ].join(' ');
+    }
+
+    /** 下钻：把两个方向的参与邻台合并，按样本量排序。 */
+    function contributorTable(row) {
+        const merged = new Map();
+        ['aToB', 'bToA'].forEach(dirKey => {
+            const direction = row.directions[dirKey];
+            if (!direction || !Array.isArray(direction.contributors)) return;
+            direction.contributors.forEach(item => {
+                if (!merged.has(item.call)) {
+                    merged.set(item.call, {
+                        call: item.call,
+                        grid4: item.grid4,
+                        isOpponent: item.isOpponent,
+                        lastSeen: item.lastSeen,
+                        aToB: null,
+                        bToA: null,
+                        samples: 0
+                    });
+                }
+                const entry = merged.get(item.call);
+                entry[dirKey] = item;
+                entry.samples += item.samples;
+            });
+        });
+        const list = [...merged.values()].sort((a, b) => b.samples - a.samples);
+        if (!list.length) return null;
+        const table = element('table', 'an-table an-contrib');
+        const head = element('tr');
+        [t('anContribCall'), t('anContribSamples'), t('anPathAtoB'), t('anPathBtoA')]
+            .forEach(label => head.appendChild(element('th', null, label)));
+        table.appendChild(head);
+        list.forEach(entry => {
+            const tr = element('tr');
+            const nameCell = element('td', null,
+                entry.call + (entry.grid4 ? ` · ${entry.grid4}` : ''));
+            if (entry.isOpponent) {
+                nameCell.appendChild(element('span', 'an-badge an-opponent', t('anPathOpponent')));
+            }
+            tr.appendChild(nameCell);
+            tr.appendChild(element('td', null, String(entry.samples)));
+            ['aToB', 'bToA'].forEach(dirKey => {
+                const item = entry[dirKey];
+                tr.appendChild(element('td', null, item
+                    ? `CW ${t(`anPathVerdict.${item.verdicts.CW}`)} · SSB ${t(`anPathVerdict.${item.verdicts.SSB}`)} · n=${item.samples}`
+                    : '—'));
+            });
+            table.appendChild(tr);
+        });
+        return table;
     }
 
     function pathCard(row) {
@@ -295,14 +362,32 @@ export function createAnalysisPage(ctx) {
         [selfLine(row.self && row.self.aToB), selfLine(row.self && row.self.bToA)]
             .filter(Boolean)
             .forEach(text => card.appendChild(element('div', 'an-note an-path-self', text)));
+
+        const table = contributorTable(row);
+        if (table) {
+            const details = element('details', 'an-path-detail');
+            details.appendChild(element('summary', null,
+                `${t('anPathContributors')} (${row.region.label} · ${row.band})`));
+            details.appendChild(table);
+            card.appendChild(details);
+        }
         return card;
     }
 
+    function infoItem(labelKey, value) {
+        const item = element('div', 'an-path-info-item');
+        item.appendChild(element('span', 'an-label', t(labelKey)));
+        item.appendChild(element('span', 'an-value', value));
+        return item;
+    }
+
     function renderPaths(report) {
+        const info = $('#pathInfo');
         const results = $('#pathResults');
-        if (!results) return;
+        if (!info || !results) return;
         results.replaceChildren();
         if (!report || report.ok === false) {
+            info.replaceChildren();
             const code = report && report.error;
             const key = code === 'call-required' ? 'anPathErrorCall'
                 : code === 'grid-required' ? 'anPathErrorGrid' : 'anRequestFailed';
@@ -310,21 +395,29 @@ export function createAnalysisPage(ctx) {
             return;
         }
         const local = report.local || {};
-        results.appendChild(row('anPathLocal',
-            [local.call, local.grid, `${t('anPathLargeGrid')} ${local.largeGrid || '—'}`]
-                .filter(Boolean).join(' · ')));
-        results.appendChild(row('anPathNeighbors',
-            String((local.neighbors || []).length)));
-        results.appendChild(row('anPathWindow',
-            `${report.windowMinutes} min · ${t('anPathBandwidth')} ${t('anPathBandwidthNone')}`));
+        const neighborCount = Number.isFinite(local.neighborCount)
+            ? local.neighborCount : (local.neighbors || []).length;
+        info.replaceChildren(
+            infoItem('anPathLocal',
+                [local.call, local.grid].filter(Boolean).join(' · ') || '—'),
+            infoItem('anPathLargeGrid', local.largeGrid || '—'),
+            infoItem('anPathNeighbors', String(neighborCount)),
+            infoItem('anPathWindow', `${report.windowMinutes} min`),
+            infoItem('anPathUpdated', fmtUtcTime(report.generatedAt))
+        );
+        results.appendChild(element('div', 'an-hint', t('anPathHint')));
 
         const rows = report.rows || [];
         if (!rows.length) {
-            results.appendChild(element('div', 'an-empty', t('anPathNoRows')));
+            results.appendChild(element('div', 'an-empty',
+                neighborCount ? t('anPathNoRows') : t('anPathNoNeighbors')));
         } else {
             const grid = element('div', 'an-path-grid');
             rows.forEach(item => grid.appendChild(pathCard(item)));
             results.appendChild(grid);
+            if (report.observations && report.observations.truncated) {
+                results.appendChild(element('div', 'an-note', t('anPathTruncated')));
+            }
         }
         ['anPathCaveat1', 'anPathCaveat2', 'anPathCaveat3', 'anPathCaveat4']
             .forEach(key => results.appendChild(element('div', 'an-note', t(key))));
@@ -481,12 +574,21 @@ export function createAnalysisPage(ctx) {
         return section('anSecConfidence', [sectionBlock(nodes)]);
     }
 
+    /** 页面打开即出结果：有缓存且未过期则复用，否则自动请求。 */
+    function maybeAutoRunPaths() {
+        if (pathBusy) return;
+        if (lastPathReport && Date.now() - lastPathAt < PATH_STALE_MS) return;
+        runPaths();
+    }
+
     return {
         init() {
             if (!built) build();
+            maybeAutoRunPaths();
         },
         show() {
             if (!built) build();
+            maybeAutoRunPaths();
         },
         hide() {},
         resize() {},
@@ -498,8 +600,7 @@ export function createAnalysisPage(ctx) {
             liveText.run.textContent = t('anRun');
             liveText.hint.textContent = t('anHint');
             liveText.pathTitle.textContent = t('anSecPaths');
-            liveText.pathRun.textContent = t('anPathRun');
-            liveText.pathHint.textContent = t('anPathHint');
+            liveText.pathRefresh.textContent = t('anPathRefresh');
             if (lastReport) render(lastReport);
             if (lastPathReport) renderPaths(lastPathReport);
         }

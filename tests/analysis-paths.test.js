@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 const {largeGridFrom} = require('../lib/radio/maidenhead.js');
 const paths = require('../lib/analysis/paths.js');
 const pathService = require('../lib/analysis/path-service.js');
+const neighborSql = require('../lib/storage/neighbor-sql.js');
 
 const BASE = {
     myCall: 'BG7TV',
@@ -12,6 +13,7 @@ const BASE = {
     monitored: ['K1ABC'],
     windowMinutes: 15
 };
+const NOW_SEC = Math.floor(Date.parse('2026-11-10T13:00:00Z') / 1000);
 
 function row(overrides) {
     return Object.assign({
@@ -71,7 +73,7 @@ function baseRows() {
 }
 
 function analyze(rows, extra) {
-    return paths.analyzePaths(Object.assign({}, BASE, {rows}, extra || {}));
+    return paths.analyzePaths(Object.assign({}, BASE, {rows, now: NOW_SEC}, extra || {}));
 }
 
 test('largeGridFrom: 6→4, 4 原样, 非法退回空', () => {
@@ -91,24 +93,60 @@ test('缺少呼号或网格直接报错，不产出任何结论', () => {
     assert.equal(paths.analyzePaths({rows: [], myCall: 'BG7TV', myGrid: 'bad'}).error, 'grid-required');
 });
 
-test('不做 50 Hz→2500 Hz 的 -17 dB 换算，余量按 2500 Hz 基准直接相加', () => {
+test('功率标称 50 W：归一到 100 W 为 +3 dB，且不做 50 Hz→2500 Hz 的 −17 dB 换算', () => {
+    assert.ok(Math.abs(paths.powerOffsetDb() - 3.0103) < 0.001);
+    assert.ok(Math.abs(paths.normalizeTo100(-3, 500) - (-9.99)) < 0.01);
+    assert.ok(Math.abs(paths.normalizeTo100(-3, 50) - 0.01) < 0.01);
     const report = analyze(baseRows());
     const a = report.rows[0].directions.aToB;
-    assert.equal(a.snrDb, -5);
-    assert.equal(a.margins.CW, 4);
-    assert.equal(a.margins.SSB, -11);
-    assert.notEqual(a.margins.CW, 4 + 17);
+    // 原始中位数 −5 dB，加 3 dB 标称后约 −2 dB。
+    assert.equal(a.snrDb, -2);
+    assert.equal(a.margins.CW, 7);
+    assert.equal(a.margins.SSB, -8);
+    assert.notEqual(a.margins.CW, 4);
     assert.equal(report.snrReferenceHz, 2500);
     assert.equal(report.bandwidthConversion, 'none');
+    assert.equal(report.power.nominalWatts, 50);
+});
+
+test('功率假设区间 10–70 W 相对 50 W 不对称：−7.0 / +1.5 dB', () => {
+    const minus = paths.POWER_UNCERTAINTY_DB.minus;
+    const plus = paths.POWER_UNCERTAINTY_DB.plus;
+    assert.equal(minus, -7);
+    assert.equal(plus, 1.5);
+    assert.ok(Math.abs(10 * Math.log10(10 / 50) - minus) < 0.02);
+    assert.ok(Math.abs(10 * Math.log10(70 / 50) - plus) < 0.05);
+    // 功率差本身必须落在不对称带内，不能硬写成 ±4.5。
+    assert.ok(10 * Math.log10(10 / 50) > -7.1 && 10 * Math.log10(10 / 50) < -6.9);
+    assert.ok(10 * Math.log10(70 / 50) > 1.4 && 10 * Math.log10(70 / 50) < 1.6);
 });
 
 test('双向分别计算，不合并成单一中位数', () => {
     const report = analyze(baseRows());
     const directions = report.rows[0].directions;
-    assert.equal(directions.aToB.snrDb, -5);
-    assert.equal(directions.bToA.snrDb, 4.5);
+    assert.equal(directions.aToB.snrDb, -2);
+    // B→A 的接收方都在同一个远方台 R1XX，按“接收站×窗口”聚合后得 7.5。
+    assert.equal(directions.bToA.snrDb, 7.5);
     assert.equal(directions.aToB.samples, 6);
     assert.equal(directions.bToA.samples, 6);
+});
+
+test('功率为假设时置信度不得为高', () => {
+    const rows = [];
+    const stations = ['N1AA', 'N2BB', 'N3CC'];
+    for (const call of stations) {
+        for (let i = 0; i < 4; i += 1) {
+            rows.push(aToB(0, call, 'OL42' + call.slice(2), `2026-11-10T12:0${i}:10Z`));
+            rows.push(bToA(0, call, 'OL42' + call.slice(2), `2026-11-10T12:1${i}:10Z`));
+        }
+    }
+    const rowOut = analyze(rows).rows[0];
+    assert.ok(rowOut.directions.aToB.samples >= 10);
+    assert.ok(rowOut.directions.bToA.samples >= 10);
+    assert.equal(rowOut.directions.aToB.powerKnown, false);
+    assert.equal(rowOut.confidence.level, 'medium');
+    assert.notEqual(rowOut.confidence.level, 'high');
+    assert.ok(rowOut.confidence.notes.includes('power-assumed'));
 });
 
 test('跨接收站不直接比绝对值：中位数 = 各接收站中位数的中位数', () => {
@@ -122,8 +160,7 @@ test('跨接收站不直接比绝对值：中位数 = 各接收站中位数的�
     ];
     const a = analyze(rows).rows[0].directions.aToB;
     assert.equal(a.stations, 3);
-    assert.equal(a.snrDb, -10);
-    assert.notEqual(a.snrDb, -2);
+    assert.equal(a.snrDb, -7);
 });
 
 test('窗口先取中位再向上汇总，不把窗口内的点混成一个池', () => {
@@ -143,18 +180,7 @@ test('窗口先取中位再向上汇总，不把窗口内的点混成一个池',
     ];
     const a = analyze(rows).rows[0].directions.aToB;
     assert.equal(a.windows, 2);
-    assert.equal(a.snrDb, -13);
-});
-
-test('功率归一到 100 W：500 W 是 -7 dB，方向不能反', () => {
-    assert.ok(Math.abs(paths.normalizeTo100(-3, 500) - (-9.99)) < 0.01);
-    assert.ok(Math.abs(paths.normalizeTo100(-3, 50) - 0.01) < 0.01);
-    const report = analyze(baseRows(), {txPowerOverrides: 'N1AA=500, N2BB=500, N3CC=500'});
-    const directions = report.rows[0].directions;
-    assert.equal(directions.aToB.powerCorrected, false);
-    assert.equal(directions.bToA.powerCorrected, true);
-    assert.ok(directions.bToA.snrDb < 0, '500 W 必须把电平压低，不能抬高');
-    assert.equal(directions.bToA.snrDb, -2.5);
+    assert.equal(a.snrDb, -10);
 });
 
 test('双向不一致时以较差方向为下限并按较差方向建议', () => {
@@ -195,7 +221,7 @@ test('本台报告混入后区域中位数不变，且标记未计入', () => {
     assert.equal(rowOut.self.aToB.samples, 2);
     assert.equal(rowOut.self.aToB.includedInMedian, false);
     assert.equal(report.observations.excluded.selfReference, 2);
-    assert.ok(!report.local.neighbors.includes('BG7TV'));
+    assert.ok(!report.local.neighbors.some(item => item.call === 'BG7TV'));
 });
 
 test('本地邻近台不足时输出样本不足，不退回用本台数据凑', () => {
@@ -276,12 +302,102 @@ test('被排除的点分别计数：非 FT8、无 SNR、无时间、同侧、本
     assert.equal(excluded.selfReference, 1);
 });
 
+test('邻台注册表：按大网格与时效过滤，过期邻台失效', () => {
+    const neighbors = [
+        {call: 'N1AA', grid4: 'OL42', lastSeen: '2026-11-10T12:00:00Z', reports: 9},
+        {call: 'N9OLD', grid4: 'OL42', lastSeen: '2026-07-01T12:00:00Z', reports: 50},
+        {call: 'N8FAR', grid4: 'JO22', lastSeen: '2026-11-10T12:00:00Z', reports: 4},
+        {call: 'BG7TV', grid4: 'OL42', lastSeen: '2026-11-10T12:00:00Z', reports: 3}
+    ];
+    const report = analyze(baseRows(), {neighbors});
+    assert.equal(report.local.neighborCount, 1);
+    assert.equal(report.local.neighbors[0].call, 'N1AA');
+    assert.ok(!report.local.neighbors.some(item => item.call === 'N9OLD'));
+    assert.ok(!report.local.neighbors.some(item => item.call === 'N8FAR'));
+});
+
+test('无任何邻台时给出空态，不虚构结论', () => {
+    const report = analyze([], {neighbors: []});
+    assert.equal(report.ok, true);
+    assert.equal(report.local.neighborCount, 0);
+    assert.deepEqual(report.rows, []);
+});
+
+test('邻台存在但只有单向数据时，另一方向明确为空', () => {
+    const rows = [
+        aToB(-5, 'N1AA', 'OL42AA', '2026-11-10T12:00:10Z'),
+        aToB(-5, 'N1AA', 'OL42AA', '2026-11-10T12:20:10Z'),
+        aToB(-5, 'N2BB', 'OL42BB', '2026-11-10T12:01:10Z'),
+        aToB(-5, 'N2BB', 'OL42BB', '2026-11-10T12:21:10Z'),
+        aToB(-5, 'N3CC', 'OL42CC', '2026-11-10T12:02:10Z'),
+        aToB(-5, 'N3CC', 'OL42CC', '2026-11-10T12:22:10Z')
+    ];
+    const report = analyze(rows, {
+        neighbors: [
+            {call: 'N1AA', grid4: 'OL42', lastSeen: '2026-11-10T12:00:00Z', reports: 4},
+            {call: 'N2BB', grid4: 'OL42', lastSeen: '2026-11-10T12:00:00Z', reports: 4},
+            {call: 'N3CC', grid4: 'OL42', lastSeen: '2026-11-10T12:00:00Z', reports: 4}
+        ]
+    });
+    const rowOut = report.rows[0];
+    assert.equal(rowOut.directions.aToB.available, true);
+    assert.equal(rowOut.directions.bToA, null);
+    assert.equal(rowOut.confidence.level, 'low');
+    assert.ok(rowOut.confidence.notes.includes('single-direction'));
+});
+
+test('下钻：贡献邻台附带网格、时效与样本量，最多 12 个', () => {
+    const report = analyze(baseRows());
+    const a = report.rows[0].directions.aToB;
+    assert.equal(a.contributors.length, 3);
+    const first = a.contributors[0];
+    assert.equal(first.samples, 2);
+    assert.equal(first.grid4, 'OL42');
+    assert.ok(first.margins.CW !== null);
+    for (const item of a.contributors) {
+        assert.ok(item.samples >= 1);
+        assert.ok(item.call.startsWith('N'));
+    }
+});
+
+test('按可利用性排序：可通区域排在不可通区域之前', () => {
+    const rows = [];
+    const stations = ['N1AA', 'N2BB', 'N3CC'];
+    stations.forEach((call, index) => {
+        const grid = 'OL42' + call.slice(2);
+        [0, 20].forEach(minute => {
+            rows.push(aToB(10, call, grid, `2026-11-10T12:${String(minute + index).padStart(2, '0')}:10Z`,
+                {dxcc_sender: 291, band: '20m'}));
+            rows.push(bToA(10, call, grid, `2026-11-10T12:${String(minute + index).padStart(2, '0')}:20Z`,
+                {dxcc_sender: 291, band: '20m', dxcc_receiver: 291}));
+            rows.push(aToB(-30, call, grid, `2026-11-10T12:${String(minute + index).padStart(2, '0')}:30Z`,
+                {dxcc_sender: 230, band: '40m'}));
+            rows.push(bToA(-30, call, grid, `2026-11-10T12:${String(minute + index).padStart(2, '0')}:40Z`,
+                {dxcc_sender: 230, band: '40m', dxcc_receiver: 230}));
+        });
+    });
+    const report = analyze(rows);
+    assert.equal(report.rows.length, 2);
+    assert.equal(report.rows[0].region.key, 'dxcc:291');
+    assert.equal(report.rows[0].band, '20m');
+    assert.ok(report.rows[0].usability > report.rows[1].usability);
+});
+
+test('邻台 SQL：只取本大网格且未过期的记录', () => {
+    const sql = neighborSql.freshQuery('OL42', 30, 240);
+    assert.match(sql, /FROM neighbors/);
+    assert.match(sql, /grid4 = 'OL42'/);
+    assert.match(sql, /datetime\('now', '-30 days'\)/);
+    assert.match(sql, /LIMIT 240/);
+    assert.match(neighborSql.freshQuery('', 30), /1=0/);
+});
+
 class Ctx {
     constructor(values) { this.values = values; }
     get(key) { return this.values[key]; }
 }
 
-test('path-service 从设置取身份与窗口，缺设置时返回明确错误', () => {
+test('path-service 全自动：准备两段查询、并入邻台、补时间窗', () => {
     const global = new Ctx({
         uiSettings: {myCall: 'BG7TV', grid: 'OL42ET', pskWindowMin: '30', txPowerW: 100},
         monitoredCalls: ['K1ABC']
@@ -289,17 +405,43 @@ test('path-service 从设置取身份与窗口，缺设置时返回明确错误'
     const prepared = pathService.prepare({}, global);
     assert.equal(prepared.ok, true);
     assert.equal(prepared.request.windowMinutes, 30);
+    assert.match(prepared.neighborSql, /FROM neighbors/);
     assert.match(prepared.sql, /PSKR FT8%/);
     assert.match(prepared.sql, /OL42%/);
     assert.ok(prepared.sql.includes('K1ABC'));
 
-    const result = pathService.complete(prepared, []);
+    const spots = pathService.prepareSpots(prepared, [
+        {call: 'N1AA', grid4: 'OL42', first_seen: '2026-11-10T10:00:00Z',
+            last_seen: '2026-11-10T12:00:00Z', reports: 5}
+    ]);
+    assert.equal(spots.request.neighbors.length, 1);
+    assert.equal(spots.request.neighbors[0].lastSeen, '2026-11-10T12:00:00Z');
+
+    const result = pathService.complete({ok: true, request: spots.request}, []);
     assert.equal(result.ok, true);
     assert.equal(result.windowMinutes, 30);
+    assert.equal(result.window.minutes, 30);
+    assert.ok(result.generatedAt);
     assert.deepEqual(result.rows, []);
 
     const noCall = pathService.prepare({}, new Ctx({uiSettings: {grid: 'OL42ET'}}));
     assert.equal(noCall.error, 'call-required');
+    assert.equal(pathService.complete(noCall, []).error, 'call-required');
     const noGrid = pathService.prepare({}, new Ctx({uiSettings: {myCall: 'BG7TV'}}));
     assert.equal(noGrid.error, 'grid-required');
+});
+
+test('页面无需任何输入即可产出结果：prepare({}) 直接可用', () => {
+    const global = new Ctx({
+        uiSettings: {myCall: 'BG7TV', grid: 'OL42ET'},
+        monitoredCalls: []
+    });
+    const prepared = pathService.prepare({}, global);
+    assert.equal(prepared.ok, true);
+    const spots = pathService.prepareSpots(prepared, []);
+    const result = pathService.complete({ok: true, request: spots.request}, baseRows());
+    assert.equal(result.ok, true);
+    assert.equal(result.local.largeGrid, 'OL42');
+    assert.ok(result.rows.length >= 1);
+    assert.ok(result.rows[0].directions.aToB.samples > 0);
 });

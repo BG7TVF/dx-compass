@@ -261,6 +261,41 @@
         "x": 2420,
         "y": 100,
         "wires": [
+            [
+                "dxc0000000000054"
+            ]
+        ]
+    },
+    {
+        "id": "dxc0000000000054",
+        "type": "function",
+        "z": "dxc0000000000001",
+        "name": "Create neighbors schema",
+        "func": "const dx = global.get('dx');\nreturn dx.storage.schema.createNeighbors().map(topic => ({topic}));",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 2640,
+        "y": 100,
+        "wires": [
+            [
+                "dxc0000000000055"
+            ]
+        ]
+    },
+    {
+        "id": "dxc0000000000055",
+        "type": "sqlite",
+        "z": "dxc0000000000001",
+        "mydb": "dxc0000000000027",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "Apply neighbors schema",
+        "x": 2860,
+        "y": 100,
+        "wires": [
             []
         ]
     },
@@ -2701,7 +2736,7 @@
         "type": "function",
         "z": "dxc0000000000001",
         "name": "Build path query",
-        "func": "const dx = global.get('dx');\nconst prepared = dx.analysis.pathService.prepare(msg.req.query, global);\nmsg.topic = prepared.sql;\nmsg.pathError = prepared.error;\nmsg.pathRequest = prepared.request;\nreturn msg;",
+        "func": "const dx = global.get('dx');\nconst prepared = dx.analysis.pathService.prepare(msg.req.query, global);\nmsg.topic = prepared.neighborSql;\nmsg.pathError = prepared.error;\nmsg.pathRequest = prepared.request;\nmsg.pathSql = prepared.sql;\nreturn msg;",
         "outputs": 1,
         "noerr": 0,
         "initialize": "",
@@ -2722,8 +2757,43 @@
         "mydb": "dxc0000000000027",
         "sqlquery": "msg.topic",
         "sql": "",
+        "name": "Query neighbors",
+        "x": 600,
+        "y": 1680,
+        "wires": [
+            [
+                "dxp0000000000006"
+            ]
+        ]
+    },
+    {
+        "id": "dxp0000000000006",
+        "type": "function",
+        "z": "dxc0000000000001",
+        "name": "Build spots query",
+        "func": "const dx = global.get('dx');\nconst prepared = {\n    ok: !msg.pathError,\n    error: msg.pathError || null,\n    request: msg.pathRequest,\n    sql: msg.pathSql\n};\nconst spots = dx.analysis.pathService.prepareSpots(prepared, msg.payload);\nmsg.topic = spots.sql;\nmsg.pathRequest = spots.request;\ndelete msg.pathSql;\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 820,
+        "y": 1680,
+        "wires": [
+            [
+                "dxp0000000000007"
+            ]
+        ]
+    },
+    {
+        "id": "dxp0000000000007",
+        "type": "sqlite",
+        "z": "dxc0000000000001",
+        "mydb": "dxc0000000000027",
+        "sqlquery": "msg.topic",
+        "sql": "",
         "name": "Query path spots",
-        "x": 610,
+        "x": 1040,
         "y": 1680,
         "wires": [
             [

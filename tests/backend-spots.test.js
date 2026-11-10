@@ -137,6 +137,9 @@ test('PSKR subscriptions include own call and unsubscribe removed topics', () =>
     assert.ok(topics.includes('pskr/filter/v2/+/+/+/N0CALL/#'));
     assert.ok(topics.includes('pskr/filter/v2_field/+/+/OL/+'));
     assert.ok(topics.includes('pskr/filter/v2_field/+/+/+/OL'));
+    // locator 层不支持前缀匹配：不能出现 OL42* 这种非法主题。
+    assert.ok(!topics.some(topic => topic.includes('OL42')));
+    assert.ok(!topics.some(topic => /v2\/[^/]+\/[^/]+\/[^/]+\/[^/]+\/OL/.test(topic)));
 });
 
 test('source switches and poll intervals gate requests and ingestion', () => {

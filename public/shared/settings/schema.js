@@ -98,12 +98,7 @@
         }),
         field('txPowerW', 'ui', 'int', 0, {
             min: 0, max: 1500, scope: 'both', label: 'TX power (W)', zh: '发射功率（W）',
-            desc: '0 = unknown. Only used to normalise this station to 100 W for CW/SSB path analysis.'
-        }),
-        field('txPowerOverrides', 'ui', 'string', '', {
-            allowEmpty: true, maxLen: 2000, upper: true, scope: 'both',
-            label: 'Per-station TX power', zh: '单台功率覆盖',
-            desc: '"CALL=W, CALL=W"; overrides power for monitored opponents and local neighbours.'
+            desc: 'Optional override; empty/0 = assume 50 W (typical 10–70 W) for path analysis.'
         }),
         field('pskWindowMin', 'ui', 'enum', '15', {
             values: ['15', '30'], scope: 'both',
