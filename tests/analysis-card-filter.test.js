@@ -3,7 +3,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const paths = require('../lib/analysis/paths.js');
-const {hiddenReason, visiblePathRows} = require('../public/shared/analysis/card-filter.mjs');
+const {
+    hiddenReason, isBidirectionalWorkable, visiblePathRows
+} = require('../public/shared/analysis/card-filter.mjs');
 
 const NOW_SEC = Math.floor(Date.parse('2026-11-10T13:00:00Z') / 1000);
 
@@ -23,44 +25,72 @@ function card(aToB, bToA, region) {
     };
 }
 
-test('两个方向都不可通才隐藏', () => {
+test('同一模式双向可通才保留', () => {
+    const both = direction({CW: 'workable', SSB: 'workable'});
+    assert.equal(isBidirectionalWorkable(card(both, both)), true);
+    assert.equal(hiddenReason(card(both, both)), null);
+});
+
+test('仅 CW 双向可通或仅 SSB 双向可通都保留', () => {
+    const cwOnly = card(
+        direction({CW: 'workable', SSB: 'unworkable'}),
+        direction({CW: 'workable', SSB: 'unworkable'}));
+    assert.equal(hiddenReason(cwOnly), null);
+    const ssbOnly = card(
+        direction({CW: 'unworkable', SSB: 'workable'}),
+        direction({CW: 'unworkable', SSB: 'workable'}));
+    assert.equal(hiddenReason(ssbOnly), null);
+});
+
+test('单向可通（另一侧同模式不通）隐藏并计入 marginal', () => {
+    assert.equal(hiddenReason(card(
+        direction({CW: 'workable', SSB: 'unworkable'}), direction())), 'marginal');
+});
+
+test('双向边缘计入 marginal', () => {
+    const marginal = direction({CW: 'marginal', SSB: 'marginal'});
+    assert.equal(hiddenReason(card(marginal, marginal)), 'marginal');
+    // 一侧边缘、一侧不可通也归入 marginal（优先级高于 unworkable）。
+    assert.equal(hiddenReason(card(marginal, direction())), 'marginal');
+});
+
+test('双向不可通计入 unworkable', () => {
     assert.equal(hiddenReason(card(direction(), direction())), 'unworkable');
 });
 
-test('只要一侧是可通或边缘就保留', () => {
-    assert.equal(hiddenReason(card(
-        direction({CW: 'marginal', SSB: 'marginal'}), direction())), null);
-    assert.equal(hiddenReason(card(
-        direction(), direction({CW: 'workable', SSB: 'unworkable'}))), null);
-});
-
-test('两侧都不可用才隐藏，单侧有数据仍保留', () => {
+test('任一侧无数据计入 no-data，available 必须为 true 才算可通', () => {
     const insufficient = direction({CW: 'unknown', SSB: 'unknown'}, false);
-    // 两侧都样本不足/无数据：隐藏，单独归为“无数据”。
-    assert.equal(hiddenReason(card(insufficient, insufficient)), 'no-data');
-    assert.equal(hiddenReason(card(null, null)), 'no-data');
-    // 单侧有数据：即使是不可通，也保留用于呈现方向差异。
-    assert.equal(hiddenReason(card(insufficient, direction())), null);
-    assert.equal(hiddenReason(card(direction(), null)), null);
-    assert.equal(hiddenReason(card(direction({CW: 'unknown', SSB: 'unworkable'}), direction())), null);
+    assert.equal(hiddenReason(card(insufficient, direction())), 'no-data');
+    assert.equal(hiddenReason(card(null, direction())), 'no-data');
+    // 即使 verdict 写着 workable，available=false 也不能算可通。
+    const claimed = direction({CW: 'workable', SSB: 'workable'}, false);
+    assert.equal(isBidirectionalWorkable(card(claimed, claimed)), false);
+    assert.equal(hiddenReason(card(claimed, claimed)), 'no-data');
 });
 
-test('过滤保持原有顺序，两类隐藏分别计数', () => {
-    const first = card(direction(), direction({CW: 'marginal', SSB: 'marginal'}), {dxcc: 291});
-    const unworkable = card(direction(), direction(), {dxcc: 339});
-    const noData = card(direction(null, false), direction(null, false), {dxcc: 110});
-    const last = card(direction(), direction({CW: 'workable', SSB: 'workable'}), {dxcc: 318});
-    const result = visiblePathRows([first, unworkable, noData, last]);
+test('三类分别计数且保持原有顺序', () => {
+    const bothWorkable = direction({CW: 'workable', SSB: 'workable'});
+    const soft = direction({CW: 'marginal', SSB: 'unworkable'});
+    const off = direction({CW: 'unknown', SSB: 'unknown'}, false);
+    const rows = [
+        card(bothWorkable, bothWorkable, {dxcc: 291}),
+        card(soft, soft, {dxcc: 224}),
+        card(direction(), direction(), {dxcc: 339}),
+        card(off, off, {dxcc: 110}),
+        card(direction({CW: 'workable', SSB: 'unworkable'}),
+            direction({CW: 'workable', SSB: 'unworkable'}), {dxcc: 318})
+    ];
+    const result = visiblePathRows(rows);
+    assert.equal(result.hiddenMarginal, 1);
     assert.equal(result.hiddenUnworkable, 1);
     assert.equal(result.hiddenNoData, 1);
     assert.deepEqual(result.visible.map(item => item.region.dxcc), [291, 318]);
     assert.deepEqual(visiblePathRows(null),
-        {visible: [], hiddenUnworkable: 0, hiddenNoData: 0});
+        {visible: [], hiddenMarginal: 0, hiddenUnworkable: 0, hiddenNoData: 0});
 });
 
 /**
- * 同一份数据覆盖三种卡片：弱信号（双向不可通）、强信号（双向可通）、
- * 仅单方向一条报告（双向都不可用，归入无数据）。
+ * 同一份数据覆盖四类卡片：双向可通、边缘、双向不可通、双向无数据。
  */
 function reportRows() {
     const rows = [];
@@ -89,6 +119,7 @@ function reportRows() {
     };
     add(339, 'JA1XX', -20);
     add(291, 'K1ABC', 10);
+    add(224, 'F1XX', -10);
     rows.push({
         spot_call: 'KH6ZZ', de: 'N1AA', band: '40m', snr: -10,
         comment: 'PSKR FT8 -10 dB', mode: 'DIGI', timestamp: '2026-11-10T12:00:10Z',
@@ -101,26 +132,30 @@ function reportRows() {
     });
 }
 
-test('真实研判结果：双向不可通与双向无数据分别隐藏并计数，算法结果不受影响', () => {
+test('真实研判结果：白名单保留双向可通，其余三类分别计数，算法结果不受影响', () => {
     const report = reportRows();
-    assert.equal(report.rows.length, 3);
+    assert.equal(report.rows.length, 4);
     const weak = report.rows.find(item => item.region.dxcc === 339);
     const strong = report.rows.find(item => item.region.dxcc === 291);
+    const soft = report.rows.find(item => item.region.dxcc === 224);
     const noData = report.rows.find(item => item.region.dxcc === 110);
     assert.equal(weak.directions.aToB.available, true);
     assert.equal(weak.directions.bToA.available, true);
     assert.equal(weak.modes.CW.lower, 'unworkable');
     assert.equal(weak.modes.SSB.lower, 'unworkable');
     assert.equal(strong.modes.CW.lower, 'workable');
+    assert.equal(strong.modes.SSB.lower, 'workable');
+    assert.equal(soft.modes.CW.lower, 'marginal');
     // 只有一条单方向报告：该方向样本不足，另一方向完全没有数据。
     assert.equal(noData.directions.aToB.available, false);
     assert.equal(noData.directions.bToA, null);
 
     const filtered = visiblePathRows(report.rows);
+    assert.equal(filtered.hiddenMarginal, 1);
     assert.equal(filtered.hiddenUnworkable, 1);
     assert.equal(filtered.hiddenNoData, 1);
     assert.deepEqual(filtered.visible.map(item => item.region.dxcc), [291]);
     // 展示层过滤不修改原始报告。
-    assert.equal(report.rows.length, 3);
-    assert.equal(report.observations.totalRows, 3);
+    assert.equal(report.rows.length, 4);
+    assert.equal(report.observations.totalRows, 4);
 });

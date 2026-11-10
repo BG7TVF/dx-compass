@@ -435,8 +435,9 @@ export function createAnalysisPage(ctx) {
             results.appendChild(element('div', 'an-empty',
                 neighborCount ? t('anPathNoRows') : t('anPathNoNeighbors')));
         } else {
-            // 只在展示层隐藏“双向不可通”和“双向无数据”的卡片，算法结果与排序保持原样。
-            const {visible, hiddenUnworkable, hiddenNoData} = visiblePathRows(rows);
+            // 白名单：只展示两个方向同一模式都可通的卡片，算法结果与排序保持原样。
+            const {visible, hiddenMarginal, hiddenUnworkable, hiddenNoData} =
+                visiblePathRows(rows);
             if (!visible.length) {
                 results.appendChild(element('div', 'an-empty', t('anPathNoWorkable')));
             } else {
@@ -445,6 +446,10 @@ export function createAnalysisPage(ctx) {
                 results.appendChild(grid);
             }
             const hiddenParts = [];
+            if (hiddenMarginal) {
+                hiddenParts.push(t('anPathHiddenMarginal')
+                    .replace('{n}', String(hiddenMarginal)));
+            }
             if (hiddenUnworkable) {
                 hiddenParts.push(t('anPathHiddenUnworkable')
                     .replace('{n}', String(hiddenUnworkable)));
