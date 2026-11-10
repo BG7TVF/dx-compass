@@ -203,10 +203,11 @@ export function createAnalysisPage(ctx) {
         } catch (error) {
             lastPathReport = null;
             lastPathAt = 0;
-            // 服务端 400 时 body 里带 error 码，直接给出“去设置里填呼号/网格”的明确提示，
-            // 不能只显示笼统的“请求失败”让人以为功能坏了。
+            // 404 说明运行中的 Node-RED 没有注册该 http-in 路由（flow 未重新加载），
+            // 400 则在 body 里带 error 码。两种情况都要给出可执行的明确提示。
             const code = error && error.body && error.body.error;
-            const key = code === 'call-required' ? 'anPathErrorCall'
+            const key = error && error.status === 404 ? 'anPathNotLoaded'
+                : code === 'call-required' ? 'anPathErrorCall'
                 : code === 'grid-required' ? 'anPathErrorGrid' : 'anRequestFailed';
             const info = $('#pathInfo');
             if (info) info.replaceChildren();

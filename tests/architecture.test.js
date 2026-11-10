@@ -87,6 +87,42 @@ test('domain Node-RED function nodes are thin dx adapters', () => {
     }
 });
 
+test('analysis HTTP routes are registered and wired end to end', () => {
+    const flow = JSON.parse(read('flow.json'));
+    const byId = new Map(flow.map(node => [node.id, node]));
+    const tabs = new Map(flow.filter(node => node.type === 'tab').map(node => [node.id, node]));
+    const routes = flow.filter(node => node.type === 'http in' &&
+        /^\/api\/analysis(?:\/|$)/.test(node.url || ''));
+    const urls = routes.map(node => `${node.method} ${node.url}`).sort();
+    assert.deepEqual(urls, ['get /api/analysis/estimate', 'get /api/analysis/paths']);
+
+    for (const route of routes) {
+        assert.notEqual(route.disabled, true, `${route.url} must not be disabled`);
+        const tab = tabs.get(route.z);
+        assert.ok(tab && !tab.disabled, `${route.url} must live in an enabled tab`);
+        let pending = [...(route.wires || [])].flat();
+        const seen = new Set();
+        const functions = [];
+        let endsAtResponse = false;
+        while (pending.length) {
+            const id = pending.shift();
+            assert.ok(byId.has(id), `${route.url} wires to missing node ${id}`);
+            if (seen.has(id)) continue;
+            seen.add(id);
+            const node = byId.get(id);
+            assert.notEqual(node.disabled, true, `${route.url} chain has disabled node ${id}`);
+            if (node.type === 'function') functions.push(node);
+            if (node.type === 'http response') endsAtResponse = true;
+            pending = pending.concat([...(node.wires || [])].flat());
+        }
+        assert.ok(functions.length > 0, `${route.url} must run through function nodes`);
+        assert.ok(endsAtResponse, `${route.url} must terminate at an http response node`);
+        for (const node of functions) {
+            assert.match(node.func || '', /\bdx\./, `${node.name} must call the dx facade`);
+        }
+    }
+});
+
 test('read-only wall keeps an exact static whitelist and GET/HEAD boundary', () => {
     const source = read('bigscreen', 'server.js');
     assert.match(source, /const\s+STATIC\s*=\s*\{/);

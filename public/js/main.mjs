@@ -10,7 +10,7 @@ import {createQsoPage} from './pages/qso-page.mjs';
 import {createRecordsPage} from './pages/records-page.mjs';
 import {createSettingsPage} from './pages/settings-page.mjs';
 import {createPropagationPage} from './pages/propagation-page.mjs';
-import {createAnalysisPage} from './pages/analysis-page.mjs?v=2.3.2';
+import {createAnalysisPage} from './pages/analysis-page.mjs?v=2.3.3';
 
 async function start() {
     const i18n = createI18n({lang: 'zh'});
