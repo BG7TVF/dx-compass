@@ -85,6 +85,16 @@ export function postJson(url, body, options = {}) {
     return requestJson('POST', url, body, body !== undefined, options);
 }
 
+/** PUT a JSON value. */
+export function putJson(url, body, options = {}) {
+    return requestJson('PUT', url, body, body !== undefined, options);
+}
+
+/** DELETE a resource; returns the parsed JSON body when the server sends one. */
+export function deleteJson(url, options = {}) {
+    return requestJson('DELETE', url, undefined, false, options);
+}
+
 /** Resolve /ws against the current page, preserving an absolute ws(s) URL. */
 export function resolveWebSocketUrl(url = '/ws', locationImpl = globalThis.location) {
     if (/^wss?:\/\//i.test(url)) return url;

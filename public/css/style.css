@@ -2794,3 +2794,78 @@ body.prop-mode .status-group .sep { display: none; }
 .mx-call { font-weight: 600; color: var(--accent); }
 .mx-more { padding-top: 6px; font-size: 11px; color: var(--text-dim); }
 
+/* ---- Conditional alerts page */
+.alert-view {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    background: var(--map-bg);
+    overflow: hidden;
+}
+.alert-view .mx-shell { overflow: auto; }
+.alert-view .mx-grid { flex: 0 1 auto; max-height: 32vh; }
+.al-section-title {
+    margin-top: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .5px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+}
+.al-form {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 10px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+}
+.al-form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+    gap: 8px;
+}
+.al-field { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.al-field-label { font-size: 11px; color: var(--text-dim); }
+.al-input {
+    width: 100%;
+    padding: 5px 7px;
+    background: var(--input-bg, var(--head-2));
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    color: var(--text);
+    font-size: 12px;
+}
+.al-advanced { padding: 6px 8px 8px; border: 1px solid var(--border); border-radius: var(--r-sm); }
+.al-advanced summary { cursor: pointer; font-size: 11px; color: var(--text-dim); }
+.al-advanced .al-form-grid { margin-top: 8px; }
+.al-notify { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; }
+.al-check { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text); }
+.al-actions { display: flex; gap: 8px; }
+.al-table td { padding: 7px 8px; border-bottom: 1px solid var(--row-border); vertical-align: middle; }
+.al-table tbody tr:hover td { background: var(--row-hover); }
+.al-row-off { opacity: .55; }
+.al-chip { display: inline-block; margin-left: 8px; padding: 1px 6px; border-radius: 8px; font-size: 10px; }
+.al-on { background: rgba(46, 204, 113, .18); color: var(--green); }
+.al-off { background: rgba(231, 76, 60, .16); color: var(--red); }
+.al-row-actions { display: flex; gap: 6px; white-space: nowrap; }
+.al-row-actions .ghost-btn { padding: 3px 7px; font-size: 11px; }
+.al-row-actions .danger { color: var(--red); }
+.al-conditions { max-width: 380px; font-size: 11px; color: var(--text-dim); }
+.al-rules { color: var(--yellow); }
+.al-state-newMultiplier { color: #ffd166; }
+.al-state-newBand { color: #4cc9f0; }
+.al-state-rare { color: #e0aaff; }
+.al-state-unknown { color: var(--yellow); }
+.sa-row3 {
+    margin-top: 7px;
+    padding-top: 6px;
+    border-top: 1px solid rgba(255, 255, 255, .14);
+    font-size: 11px;
+    color: var(--yellow);
+}
+

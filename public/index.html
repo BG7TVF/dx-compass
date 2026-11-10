@@ -18,6 +18,7 @@
                 <button class="menu-item view-btn" id="btnPropView" title="Propagation map">Propagation</button>
                 <button class="menu-item view-btn" id="btnAnalysisView" title="Antenna type &amp; bearing">Analysis</button>
                 <button class="menu-item view-btn" id="btnMultView" title="DXCC x band multiplier matrix">Multipliers</button>
+                <button class="menu-item view-btn" id="btnAlertView" title="Conditional alert rules">Alerts</button>
                 <div class="menu-sep"></div>
                 <button class="menu-item" id="btnConfig" title="Settings">Settings</button>
             </div>
@@ -107,6 +108,8 @@
         <div id="analysisView" class="analysis-view hidden"></div>
 
         <div id="multView" class="mult-view hidden"></div>
+
+        <div id="alertView" class="alert-view hidden"></div>
 
         <!-- Records Panel: docked on the right, always visible -->
         <div id="recordsPanel" class="dock-panel">
@@ -560,6 +563,7 @@
             <span class="sa-snr" id="saSnr"></span>
             <span class="sa-time" id="saTime"></span>
         </div>
+        <div class="sa-row3 hidden" id="saRules"></div>
     </div>
 
     <!-- Custom dark-theme confirm modal -->

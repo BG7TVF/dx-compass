@@ -52,7 +52,8 @@
             [
                 "dxc0000000000025",
                 "dxc0000000000070",
-                "dxc00000000000b2"
+                "dxc00000000000b2",
+                "dxl0000000000001"
             ]
         ]
     },
@@ -490,7 +491,7 @@
         "type": "function",
         "z": "dxc0000000000001",
         "name": "Format for WS",
-        "func": "// The enriched spot object in msg.payload is JSON-encoded by the websocket out node.\nreturn msg;",
+        "func": "// The enriched spot object in msg.payload is JSON-encoded by the websocket out node.\n// 条件告警只对 fresh spot 评估，历史回填不触发。\nmsg.alertSpot = msg.payload;\nreturn msg;",
         "outputs": 1,
         "noerr": 0,
         "initialize": "",
@@ -500,7 +501,8 @@
         "y": 260,
         "wires": [
             [
-                "dxc000000000000e"
+                "dxc000000000000e",
+                "dxl0000000000011"
             ]
         ]
     },
@@ -3177,5 +3179,617 @@
         "wires": [
             []
         ]
+    },
+    {
+        "id": "dxl0000000000001",
+        "type": "function",
+        "z": "dxc0000000000001",
+        "name": "Create alert rules table",
+        "func": "const dx = global.get('dx');\nmsg.topic = dx.storage.alerts.createTable();\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 340,
+        "y": 1900,
+        "wires": [
+            [
+                "dxl0000000000002"
+            ]
+        ]
+    },
+    {
+        "id": "dxl0000000000002",
+        "type": "sqlite",
+        "z": "dxc0000000000001",
+        "mydb": "dxc0000000000027",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "Create alert rules",
+        "x": 570,
+        "y": 1900,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "dxl0000000000003",
+        "type": "inject",
+        "z": "dxc0000000000001",
+        "name": "Load alert rules",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "60",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "2",
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 130,
+        "y": 1970,
+        "wires": [
+            [
+                "dxl0000000000004"
+            ]
+        ]
+    },
+    {
+        "id": "dxl0000000000004",
+        "type": "function",
+        "z": "dxc0000000000001",
+        "name": "Build alert rules query",
+        "func": "const dx = global.get('dx');\nmsg.topic = dx.storage.alerts.list();\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 360,
+        "y": 1970,
+        "wires": [
+            [
+                "dxl0000000000005"
+            ]
+        ]
+    },
+    {
+        "id": "dxl0000000000005",
+        "type": "sqlite",
+        "z": "dxc0000000000001",
+        "mydb": "dxc0000000000027",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "Query alert rules",
+        "x": 580,
+        "y": 1970,
+        "wires": [
+            [
+                "dxl0000000000006"
+            ]
+        ]
+    },
+    {
+        "id": "dxl0000000000006",
+        "type": "function",
+        "z": "dxc0000000000001",
+        "name": "Cache alert rules",
+        "func": "const dx = global.get('dx');\nconst rows = Array.isArray(msg.payload) ? msg.payload : [];\nconst rules = rows.map(dx.alerts.service.fromRow).filter(Boolean);\nflow.set('alertRules', rules);\nnode.status({fill: 'green', shape: 'dot', text: rules.length + ' rules'});\nreturn null;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 800,
+        "y": 1970,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "dxl0000000000007",
+        "type": "inject",
+        "z": "dxc0000000000001",
+        "name": "Refresh alert index",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "60",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "2.4",
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 130,
+        "y": 2040,
+        "wires": [
+            [
+                "dxl0000000000008"
+            ]
+        ]
+    },
+    {
+        "id": "dxl0000000000008",
+        "type": "function",
+        "z": "dxc0000000000001",
+        "name": "Build alert index query",
+        "func": "const dx = global.get('dx');\nmsg.alertConfig = dx.settings.runtime(global);\nmsg.topic = dx.storage.alerts.qsoSnapshot(20000);\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 370,
+        "y": 2040,
+        "wires": [
+            [
+                "dxl0000000000009"
+            ]
+        ]
+    },
+    {
+        "id": "dxl0000000000009",
+        "type": "sqlite",
+        "z": "dxc0000000000001",
+        "mydb": "dxc0000000000027",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "Query alert index QSOs",
+        "x": 600,
+        "y": 2040,
+        "wires": [
+            [
+                "dxl0000000000010"
+            ]
+        ]
+    },
+    {
+        "id": "dxl0000000000010",
+        "type": "function",
+        "z": "dxc0000000000001",
+        "name": "Build alert worked index",
+        "func": "const dx = global.get('dx');\nconst cfg = msg.alertConfig || dx.settings.runtime(global);\nconst rows = Array.isArray(msg.payload) ? msg.payload : [];\nconst window = dx.alerts.service.windowFor(rows, cfg);\nconst resolve = await dx.alerts.service.resolver();\nconst index = dx.alerts.rank.buildIndex(rows, resolve, window.from, window.to);\nflow.set('alertWorkedIndex', index);\nflow.set('alertWindow', window);\nnode.status({fill: 'green', shape: 'dot', text: index.windowDxcc.size + ' DXCC in window'});\nreturn null;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 830,
+        "y": 2040,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "dxl0000000000011",
+        "type": "function",
+        "z": "dxc0000000000001",
+        "name": "Evaluate alert rules",
+        "func": "const dx = global.get('dx');\nconst spot = msg.alertSpot;\nif (!spot) return null;\nconst cfg = dx.settings.runtime(global);\nif (!cfg.alertsEnabled) return null;\nconst rules = flow.get('alertRules') || [];\nif (!rules.length) return null;\nconst index = flow.get('alertWorkedIndex');\nif (!index) return null;\nconst resolve = await dx.alerts.service.resolver();\nconst now = Math.floor(Date.now() / 1000);\nconst outcome = dx.alerts.service.evaluate(spot, {\n    settings: cfg,\n    rules: rules,\n    index: flow.get('alertWorkedIndex') || null,\n    resolve: resolve,\n    state: {\n        now: now,\n        dedupe: flow.get('alertDedupe') || {},\n        lastAlertAt: flow.get('alertLastAt') || 0\n    }\n});\nflow.set('alertDedupe', outcome.dedupe);\nflow.set('alertLastAt', outcome.lastAlertAt);\nif (!outcome.alert) return null;\nflow.set('alertHits', [outcome.alert].concat(flow.get('alertHits') || []).slice(0, 49));\nnode.status({fill: 'green', shape: 'dot', text: outcome.alert.call + ' ' + outcome.alert.state});\nreturn {payload: outcome.alert};",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1420,
+        "y": 260,
+        "wires": [
+            [
+                "dxl0000000000012"
+            ]
+        ]
+    },
+    {
+        "id": "dxl0000000000012",
+        "type": "websocket out",
+        "z": "dxc0000000000001",
+        "name": "Broadcast alerts",
+        "server": "dxc0000000000028",
+        "client": "",
+        "x": 1640,
+        "y": 260,
+        "wires": []
+    },
+    {
+        "id": "dxl0000000000021",
+        "type": "http in",
+        "z": "dxc0000000000001",
+        "name": "GET /api/alert-rules",
+        "url": "/api/alert-rules",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 140,
+        "y": 2130,
+        "wires": [
+            [
+                "dxl0000000000022"
+            ]
+        ]
+    },
+    {
+        "id": "dxl0000000000022",
+        "type": "function",
+        "z": "dxc0000000000001",
+        "name": "Build alert rules API query",
+        "func": "const dx = global.get('dx');\nmsg.topic = dx.storage.alerts.list();\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 380,
+        "y": 2130,
+        "wires": [
+            [
+                "dxl0000000000023"
+            ]
+        ]
+    },
+    {
+        "id": "dxl0000000000023",
+        "type": "sqlite",
+        "z": "dxc0000000000001",
+        "mydb": "dxc0000000000027",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "Query alert rules API",
+        "x": 610,
+        "y": 2130,
+        "wires": [
+            [
+                "dxl0000000000024"
+            ]
+        ]
+    },
+    {
+        "id": "dxl0000000000024",
+        "type": "function",
+        "z": "dxc0000000000001",
+        "name": "Reply alert rules",
+        "func": "const dx = global.get('dx');\nconst rows = Array.isArray(msg.payload) ? msg.payload : [];\nmsg.statusCode = 200;\nmsg.headers = {'content-type': 'application/json; charset=utf-8'};\nmsg.payload = {ok: true, rules: rows.map(dx.alerts.service.fromRow).filter(Boolean)};\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 840,
+        "y": 2130,
+        "wires": [
+            [
+                "dxl0000000000025"
+            ]
+        ]
+    },
+    {
+        "id": "dxl0000000000025",
+        "type": "http response",
+        "z": "dxc0000000000001",
+        "name": "",
+        "statusCode": "",
+        "headers": {},
+        "x": 1080,
+        "y": 2130,
+        "wires": []
+    },
+    {
+        "id": "dxl0000000000031",
+        "type": "http in",
+        "z": "dxc0000000000001",
+        "name": "POST /api/alert-rules",
+        "url": "/api/alert-rules",
+        "method": "post",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 140,
+        "y": 2200,
+        "wires": [
+            [
+                "dxl0000000000032"
+            ]
+        ]
+    },
+    {
+        "id": "dxl0000000000041",
+        "type": "http in",
+        "z": "dxc0000000000001",
+        "name": "PUT /api/alert-rules/:id",
+        "url": "/api/alert-rules/:id",
+        "method": "put",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 150,
+        "y": 2260,
+        "wires": [
+            [
+                "dxl0000000000032"
+            ]
+        ]
+    },
+    {
+        "id": "dxl0000000000032",
+        "type": "function",
+        "z": "dxc0000000000001",
+        "name": "Prepare alert rule save",
+        "func": "const dx = global.get('dx');\nconst method = String((msg.req && msg.req.method) || 'POST').toUpperCase();\nconst body = msg.payload && typeof msg.payload === 'object' ? msg.payload : {};\nconst input = Object.assign({}, body);\nif (msg.req && msg.req.params && msg.req.params.id) input.id = msg.req.params.id;\nconst result = dx.alerts.service.normalizeRule(input);\nif (!result.ok) {\n    msg.statusCode = 400;\n    msg.headers = {'content-type': 'application/json; charset=utf-8'};\n    msg.payload = {ok: false, error: result.error};\n    return [null, msg];\n}\nconst sql = method === 'PUT' ? dx.storage.alerts.update(result.rule) : dx.storage.alerts.insert(result.rule);\nif (!sql) {\n    msg.statusCode = 400;\n    msg.headers = {'content-type': 'application/json; charset=utf-8'};\n    msg.payload = {ok: false, error: 'invalid-rule'};\n    return [null, msg];\n}\nmsg.topic = sql;\nmsg.alertRule = result.rule;\nmsg.alertMethod = method;\nreturn [msg, null];",
+        "outputs": 2,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 400,
+        "y": 2230,
+        "wires": [
+            [
+                "dxl0000000000033"
+            ],
+            [
+                "dxl0000000000073"
+            ]
+        ]
+    },
+    {
+        "id": "dxl0000000000033",
+        "type": "sqlite",
+        "z": "dxc0000000000001",
+        "mydb": "dxc0000000000027",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "Save alert rule",
+        "x": 640,
+        "y": 2230,
+        "wires": [
+            [
+                "dxl0000000000034",
+                "dxl0000000000036"
+            ]
+        ]
+    },
+    {
+        "id": "dxl0000000000034",
+        "type": "function",
+        "z": "dxc0000000000001",
+        "name": "Reply alert rule saved",
+        "func": "msg.statusCode = 200;\nmsg.headers = {'content-type': 'application/json; charset=utf-8'};\nmsg.payload = {ok: true, rule: msg.alertRule};\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 890,
+        "y": 2230,
+        "wires": [
+            [
+                "dxl0000000000035"
+            ]
+        ]
+    },
+    {
+        "id": "dxl0000000000035",
+        "type": "http response",
+        "z": "dxc0000000000001",
+        "name": "",
+        "statusCode": "",
+        "headers": {},
+        "x": 1130,
+        "y": 2230,
+        "wires": []
+    },
+    {
+        "id": "dxl0000000000036",
+        "type": "function",
+        "z": "dxc0000000000001",
+        "name": "Reload alert rules",
+        "func": "const dx = global.get('dx');\nmsg.topic = dx.storage.alerts.list();\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 860,
+        "y": 2290,
+        "wires": [
+            [
+                "dxl0000000000005"
+            ]
+        ]
+    },
+    {
+        "id": "dxl0000000000051",
+        "type": "http in",
+        "z": "dxc0000000000001",
+        "name": "DELETE /api/alert-rules/:id",
+        "url": "/api/alert-rules/:id",
+        "method": "delete",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 160,
+        "y": 2320,
+        "wires": [
+            [
+                "dxl0000000000052"
+            ]
+        ]
+    },
+    {
+        "id": "dxl0000000000052",
+        "type": "function",
+        "z": "dxc0000000000001",
+        "name": "Prepare alert rule delete",
+        "func": "const dx = global.get('dx');\nconst id = msg.req && msg.req.params ? msg.req.params.id : null;\nconst sql = dx.storage.alerts.remove(id);\nif (!sql) {\n    msg.statusCode = 400;\n    msg.headers = {'content-type': 'application/json; charset=utf-8'};\n    msg.payload = {ok: false, error: 'id-required'};\n    return [null, msg];\n}\nmsg.topic = sql;\nmsg.alertId = Number(id);\nreturn [msg, null];",
+        "outputs": 2,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 410,
+        "y": 2320,
+        "wires": [
+            [
+                "dxl0000000000053"
+            ],
+            [
+                "dxl0000000000073"
+            ]
+        ]
+    },
+    {
+        "id": "dxl0000000000053",
+        "type": "sqlite",
+        "z": "dxc0000000000001",
+        "mydb": "dxc0000000000027",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "Delete alert rule",
+        "x": 640,
+        "y": 2320,
+        "wires": [
+            [
+                "dxl0000000000054",
+                "dxl0000000000036"
+            ]
+        ]
+    },
+    {
+        "id": "dxl0000000000054",
+        "type": "function",
+        "z": "dxc0000000000001",
+        "name": "Reply alert rule deleted",
+        "func": "msg.statusCode = 200;\nmsg.headers = {'content-type': 'application/json; charset=utf-8'};\nmsg.payload = {ok: true, id: msg.alertId};\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 890,
+        "y": 2320,
+        "wires": [
+            [
+                "dxl0000000000055"
+            ]
+        ]
+    },
+    {
+        "id": "dxl0000000000055",
+        "type": "http response",
+        "z": "dxc0000000000001",
+        "name": "",
+        "statusCode": "",
+        "headers": {},
+        "x": 1130,
+        "y": 2320,
+        "wires": []
+    },
+    {
+        "id": "dxl0000000000061",
+        "type": "http in",
+        "z": "dxc0000000000001",
+        "name": "GET /api/alert-rules/hits",
+        "url": "/api/alert-rules/hits",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 170,
+        "y": 2390,
+        "wires": [
+            [
+                "dxl0000000000062"
+            ]
+        ]
+    },
+    {
+        "id": "dxl0000000000062",
+        "type": "function",
+        "z": "dxc0000000000001",
+        "name": "Reply alert hits",
+        "func": "const dx = global.get('dx');\nconst cfg = dx.settings.runtime(global);\nconst now = Math.floor(Date.now() / 1000);\nconst ttl = Math.max(60, (Number(cfg.alertDedupeMin) || 10) * 60);\nconst hits = dx.alerts.rank.aggregate(flow.get('alertHits') || [], ttl, now);\nmsg.statusCode = 200;\nmsg.headers = {'content-type': 'application/json; charset=utf-8'};\nmsg.payload = {ok: true, hits: hits};\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 400,
+        "y": 2390,
+        "wires": [
+            [
+                "dxl0000000000063"
+            ]
+        ]
+    },
+    {
+        "id": "dxl0000000000063",
+        "type": "http response",
+        "z": "dxc0000000000001",
+        "name": "",
+        "statusCode": "",
+        "headers": {},
+        "x": 640,
+        "y": 2390,
+        "wires": []
+    },
+    {
+        "id": "dxl0000000000071",
+        "type": "catch",
+        "z": "dxc0000000000001",
+        "name": "Catch alert errors",
+        "scope": [
+            "dxl0000000000010",
+            "dxl0000000000011",
+            "dxl0000000000022",
+            "dxl0000000000023",
+            "dxl0000000000024",
+            "dxl0000000000032",
+            "dxl0000000000033",
+            "dxl0000000000034",
+            "dxl0000000000052",
+            "dxl0000000000053",
+            "dxl0000000000054",
+            "dxl0000000000062"
+        ],
+        "uncaught": false,
+        "x": 3080,
+        "y": 480,
+        "wires": [
+            [
+                "dxl0000000000072"
+            ]
+        ]
+    },
+    {
+        "id": "dxl0000000000072",
+        "type": "function",
+        "z": "dxc0000000000001",
+        "name": "Handle alert error",
+        "func": "const err = msg.error || {};\nconst detail = String(err.message || err);\nnode.warn('alert pipeline failed: ' + detail);\nif (!msg.res) return null;\nmsg.statusCode = 500;\nmsg.headers = Object.assign({}, msg.headers, {'content-type': 'application/json; charset=utf-8'});\nmsg.payload = {ok: false, error: 'alert-failed', detail: detail};\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 3300,
+        "y": 480,
+        "wires": [
+            [
+                "dxl0000000000073"
+            ]
+        ]
+    },
+    {
+        "id": "dxl0000000000073",
+        "type": "http response",
+        "z": "dxc0000000000001",
+        "name": "Alert error response",
+        "statusCode": "",
+        "headers": {},
+        "x": 3540,
+        "y": 480,
+        "wires": []
     }
 ]

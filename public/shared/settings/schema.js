@@ -481,6 +481,31 @@
             scope: 'server', wired: true, label: 'Disk alert', zh: '磁盘告警',
             desc: 'Emit a Node-RED warning when free space crosses the threshold.'
         }),
+        field('alertsEnabled', 'data', 'bool', false, {
+            scope: 'server', wired: true,
+            label: 'Conditional alerts', zh: '条件告警',
+            desc: 'Master switch for rule-based spot alerts; off by default so a new install never beeps.'
+        }),
+        field('alertMinIntervalSec', 'data', 'int', 60, {
+            min: 0, max: 3600, scope: 'server', wired: true,
+            label: 'Alert min interval (s)', zh: '告警最短间隔（秒）',
+            desc: 'Global floor between two rule alerts; 0 disables the throttle.'
+        }),
+        field('alertDedupeMin', 'data', 'int', 10, {
+            min: 1, max: 1440, scope: 'server', wired: true,
+            label: 'Alert dedupe window (min)', zh: '告警去重窗口（分钟）',
+            desc: 'The same call + band is announced at most once inside this window (frequency inside freqDeltaKhz counts as the same spot).'
+        }),
+        field('alertPopup', 'data', 'bool', true, {
+            scope: 'both', wired: true,
+            label: 'Rule alert popup', zh: '规则告警弹窗',
+            desc: 'Allow the in-page alert card for rule hits; still muted by quiet hours.'
+        }),
+        field('alertVoiceRepeats', 'data', 'bool', false, {
+            scope: 'both', wired: true,
+            label: 'Voice for repeated slots', zh: '重复格子也语音',
+            desc: 'Off by default: only new multipliers and new band slots are spoken; popup still shows every rule hit.'
+        }),
         field('monitoring', 'data', 'bool', false, {
             storage: 'external', scope: 'both', exportable: false, importable: false,
             label: 'Monitoring', zh: '监控开关',

@@ -585,8 +585,13 @@ export function createQsoPage(ctx) {
         if ('speechSynthesis' in window) speechSynthesis.cancel();
     }
 
-    function fillAlert(spot, call, own) {
+    function fillAlert(spot, call, own, ruleNames) {
         const box = $('#spotAlert');
+        const rules = $('#saRules');
+        if (rules) {
+            rules.textContent = ruleNames ? `${ctx.t('alTriggeredBy')}: ${ruleNames}` : '';
+            rules.classList.toggle('hidden', !ruleNames);
+        }
         $('#saCall').textContent = own ? ctx.settings.myCall || '—' : call || spot.call || '—';
         $('#saBand').textContent = spot.band || '';
         $('#saMode').textContent = spot.mode || '';
@@ -634,18 +639,44 @@ export function createQsoPage(ctx) {
         if (ctx.settings.qsoVoiceAlert) speakAlert(String(phrase).replace(/\{call\}/g, spellCall(call)));
     }
 
+    /* Server-side rule alert: reuses the existing card, tone, speech and quiet
+     * hours. The server already applied the dedupe window and minimum interval,
+     * so this only renders what it decided to deliver. */
+    function showRuleAlert(alert) {
+        if (!alert || state.view !== 'qso') return;
+        if (inQuietHours()) return;
+        const notify = alert.notify || {};
+        if (notify.sound) playAlertTone();
+        if (notify.popup !== false) {
+            fillAlert({
+                band: alert.band,
+                mode: alert.mode,
+                freq: alert.freq,
+                de: alert.de,
+                snr: alert.snr,
+                timestamp: alert.at
+            }, alert.call, false, alert.ruleNames);
+        }
+        if (notify.voice) {
+            const key = alert.state === 'newMultiplier' ? 'voiceAlertNewMult'
+                : alert.state === 'newBand' ? 'voiceAlertNewBand' : 'voiceAlertRule';
+            speakAlert(String(ctx.t(key)).replace(/\{call\}/g, spellCall(alert.call)));
+        }
+    }
+
     function setViewMode(mode) {
         if (state.view === mode) return;
         const leaving = state.view;
         state.view = mode;
         const isQso = mode === 'qso', isProp = mode === 'prop', isAnalysis = mode === 'analysis';
-        const isMult = mode === 'mult';
-        const isFull = isQso || isProp || isAnalysis || isMult;
+        const isMult = mode === 'mult', isAlert = mode === 'alert';
+        const isFull = isQso || isProp || isAnalysis || isMult || isAlert;
         $('#grid').classList.toggle('hidden', isFull);
         $('#qsoView').classList.toggle('hidden', !isQso);
         $('#propView').classList.toggle('hidden', !isProp);
         $('#analysisView').classList.toggle('hidden', !isAnalysis);
         $('#multView').classList.toggle('hidden', !isMult);
+        $('#alertView').classList.toggle('hidden', !isAlert);
         $('#recordsPanel').classList.toggle('hidden', isFull);
         $('#qsoPanel').classList.toggle('hidden', !isQso);
         $('#btnSpotView').classList.toggle('active', mode === 'spots');
@@ -653,17 +684,22 @@ export function createQsoPage(ctx) {
         $('#btnPropView').classList.toggle('active', isProp);
         $('#btnAnalysisView').classList.toggle('active', isAnalysis);
         $('#btnMultView').classList.toggle('active', isMult);
+        $('#btnAlertView').classList.toggle('active', isAlert);
         document.body.classList.toggle('qso-mode', isQso);
         document.body.classList.toggle('prop-mode', isProp);
         document.body.classList.toggle('analysis-mode', isAnalysis);
         document.body.classList.toggle('mult-mode', isMult);
+        document.body.classList.toggle('alert-mode', isAlert);
         if (leaving === 'prop' && !isProp) ctx.prop?.hide();
         if (leaving === 'analysis' && !isAnalysis) ctx.analysis?.hide();
         if (leaving === 'mult' && !isMult) ctx.mult?.hide();
+        if (leaving === 'alert' && !isAlert) ctx.alerts?.hide();
         if (isAnalysis) {
             ctx.analysis?.show();
         } else if (isMult) {
             ctx.mult?.show();
+        } else if (isAlert) {
+            ctx.alerts?.show();
         } else if (isQso) {
             state.map.invalidateSize();
             fitQsoMap();
@@ -705,7 +741,7 @@ export function createQsoPage(ctx) {
         state, store, init, loadStation, handleQso, handleQsoDelete, handleStationMessage,
         renderQsoPanel, renderLastQso, updateQsoAge, rebuildQsoMap, rebuildHome,
         fitQsoMap, refreshMap, setViewMode, setTileProvider: key => state.base.setTileProvider(key),
-        addMySpot, clearMySpots, applyMySpotLimits, showSpotAlert, applyDisplaySettings,
+        addMySpot, clearMySpots, applyMySpotLimits, showSpotAlert, showRuleAlert, applyDisplaySettings,
         hideSpotAlert, hideSpotAlertAndVoice, tick
     };
 }

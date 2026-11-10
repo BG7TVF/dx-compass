@@ -12,6 +12,7 @@ import {createSettingsPage} from './pages/settings-page.mjs';
 import {createPropagationPage} from './pages/propagation-page.mjs';
 import {createAnalysisPage} from './pages/analysis-page.mjs?v=2.3.8';
 import {createMultiplierPage} from './pages/mult-page.mjs';
+import {createAlertsPage} from './pages/alerts-page.mjs';
 
 async function start() {
     const i18n = createI18n({lang: 'zh'});
@@ -28,6 +29,7 @@ async function start() {
     ctx.prop = createPropagationPage(ctx);
     ctx.analysis = createAnalysisPage(ctx);
     ctx.mult = createMultiplierPage(ctx);
+    ctx.alerts = createAlertsPage(ctx);
     ctx.settingsPage = createSettingsPage(ctx);
     ctx.saveSettings = () => ctx.settingsPage.save();
 
@@ -38,6 +40,7 @@ async function start() {
     ctx.prop.init();
     ctx.analysis.init();
     ctx.mult.init();
+    ctx.alerts.init();
     ctx.settingsPage.bind();
     ctx.settingsPage.applyLang();
     ctx.records.init();
@@ -63,6 +66,10 @@ async function start() {
                     break;
                 case 'settings':
                     ctx.settingsPage.applyRemote(message);
+                    break;
+                case 'alert':
+                    ctx.qso.showRuleAlert(message);
+                    ctx.alerts.handleAlert(message);
                     break;
                 default:
                     ctx.spot.handleSpot(message);
