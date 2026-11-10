@@ -1,4 +1,6 @@
 import {getJson, postJson} from '../../shared/core/transport.mjs';
+import {clockOptions, formatClockDateTime, parseUtcDateTime} from '../../shared/core/clock.mjs';
+import {fetchContests, refreshContests} from '../../shared/data/contests.mjs';
 import {
     getSettings as getSharedSettings, saveSettingsPatch, resetSettingsDomain, settingsFromMessage
 } from '../../shared/data/settings.mjs';
@@ -13,7 +15,7 @@ import {$, $$, showConfirm, showToast} from '../ui.mjs';
 
 const FIELD_CONTAINERS = {
     ui: '#globalAdvanced', map: '#spotAdvanced', qso: '#qsoAdvanced',
-    wall: '#wallAdvanced', data: '#dataFields', prop: '#propFields'
+    contest: '#contestFields', wall: '#wallAdvanced', data: '#dataFields', prop: '#propFields'
 };
 
 /* Keys with a hand-written control in index.html; generated schema fields
@@ -23,7 +25,8 @@ const LEGACY_FIELD_KEYS = new Set([
     'category', 'qsoMax', 'qsoLines', 'qsoAutoFit', 'qsoSpotAlert', 'qsoVoiceAlert',
     'mySpotTtl', 'mySpotMax', 'mySpotPopup', 'mySpotVoice',
     'wallTitle', 'wallLayers', 'wallMode', 'wallTimerOn', 'wallTimerStart', 'wallTimerEnd',
-    'ttl', 'bandColors'
+    'multPerBand',
+    'ttl', 'bandColors', 'contestId', 'contestUpdatedAt'
 ]);
 
 /* Short descriptions come from the dictionary (settings.field.<key>.desc,
@@ -142,11 +145,137 @@ export function createSettingsPage(ctx) {
         'propProj', 'propLayer', 'propDxLat', 'propDxLon',
         'mufOpacity', 'nightOpacity', 'propPollSec'
     ]);
-    const MULT_SETTING_KEYS = new Set(['wallTimerStart', 'wallTimerEnd', 'multPerBand']);
+    const MULT_SETTING_KEYS = new Set([
+        'wallTimerStart', 'wallTimerEnd', 'multPerBand', 'contestStart', 'contestEnd'
+    ]);
     const LIVE_SETTING_KEYS = new Set([
         ...CLOCK_SETTING_KEYS, ...MAP_SETTING_KEYS, ...QSO_SETTING_KEYS, ...PROP_SETTING_KEYS,
         ...MULT_SETTING_KEYS
     ]);
+
+    let contestCalendar = null;
+    const t = (key, params) => ctx.t(key, params);
+
+    function contestTime(value) {
+        return formatClockDateTime(value, clockOptions(ctx.settings));
+    }
+
+    function safeLink(value) {
+        try {
+            const url = new URL(String(value || ''));
+            return /^https?:$/.test(url.protocol) ? url.href : '';
+        } catch {
+            return '';
+        }
+    }
+
+    function renderContestDetail(entry) {
+        const detail = $('#contestDetail');
+        if (!detail) return;
+        if (!entry) { detail.textContent = ''; return; }
+        const missing = t('settings.hint.contestMissing');
+        const modes = Array.isArray(entry.modes) && entry.modes.length ? entry.modes.join(', ') : missing;
+        const bands = Array.isArray(entry.bands) && entry.bands.length ? entry.bands.join(', ') : missing;
+        const link = safeLink(entry.rulesUrl || entry.sourceUrl);
+        const rules = link ? ` · <a href="${escapeHtml(link)}" target="_blank" rel="noopener">${escapeHtml(t('settings.calendar.rules'))}</a>` : '';
+        detail.innerHTML =
+            `${escapeHtml(t('settings.calendar.start'))} ${escapeHtml(contestTime(entry.startUtc))}` +
+            ` · ${escapeHtml(t('settings.calendar.end'))} ${escapeHtml(contestTime(entry.endUtc))}<br>` +
+            `${escapeHtml(t('settings.calendar.modes'))} ${escapeHtml(modes)}` +
+            ` · ${escapeHtml(t('settings.calendar.bands'))} ${escapeHtml(bands)}` +
+            ` · ${escapeHtml(missing)}${rules}`;
+    }
+
+    function renderContestCalendar() {
+        const select = $('#contestPick');
+        if (!select) return;
+        const now = Date.now();
+        const entries = (contestCalendar && Array.isArray(contestCalendar.contests) ? contestCalendar.contests : [])
+            .filter(entry => parseUtcDateTime(entry.endUtc) >= now);
+        select.replaceChildren(new Option(t('settings.calendar.pick'), ''));
+        for (const entry of entries) {
+            select.appendChild(new Option(`${entry.name} · ${contestTime(entry.startUtc)}`, entry.id));
+        }
+        if (entries.some(entry => entry.id === ctx.settings.contestId)) select.value = ctx.settings.contestId;
+        const meta = $('#contestMeta');
+        if (meta) {
+            const info = contestCalendar && contestCalendar.meta;
+            meta.textContent = info && info.fetchedAt
+                ? t('settings.hint.contestUpdated', {
+                    time: contestTime(info.fetchedAt), count: Number(info.count) || 0
+                })
+                : t('settings.hint.contestEmpty');
+        }
+        renderContestDetail(entries.find(entry => entry.id === select.value) || null);
+    }
+
+    async function loadContests() {
+        try {
+            const data = await fetchContests();
+            if (data && Array.isArray(data.contests)) contestCalendar = data;
+        } catch {
+            // Keep any previously loaded calendar; the bundled snapshot is the offline fallback.
+        }
+        renderContestCalendar();
+    }
+
+    function applyContest(entry) {
+        if (!entry) return;
+        const start = String(entry.startUtc || '').slice(0, 16);
+        const end = String(entry.endUtc || '').slice(0, 16);
+        const patch = {
+            contestId: entry.id,
+            contestName: entry.name,
+            contestStart: start,
+            contestEnd: end,
+            contestModes: Array.isArray(entry.modes) ? entry.modes.join(', ') : '',
+            contestBands: Array.isArray(entry.bands) ? entry.bands.join(', ') : '',
+            contestRulesUrl: entry.rulesUrl || entry.sourceUrl || '',
+            contestUpdatedAt: String((contestCalendar && contestCalendar.meta && contestCalendar.meta.fetchedAt) ||
+                new Date().toISOString()).slice(0, 19),
+            wallTimerStart: start,
+            wallTimerEnd: end
+        };
+        Object.assign(ctx.settings, patch);
+        save(patch);
+        syncGeneratedFields();
+        renderContestDetail(entry);
+        showToast(t('settings.calendar.applied'));
+    }
+
+    function clearContest() {
+        const patch = {
+            contestId: '', contestName: '', contestStart: '', contestEnd: '',
+            contestModes: '', contestBands: '', contestRulesUrl: '', contestUpdatedAt: '',
+            wallTimerStart: '', wallTimerEnd: ''
+        };
+        Object.assign(ctx.settings, patch);
+        save(patch);
+        syncGeneratedFields();
+        $('#contestPick').value = '';
+        renderContestDetail(null);
+        showToast(t('settings.calendar.cleared'));
+    }
+
+    async function refreshCalendar() {
+        const button = $('#btnContestRefresh');
+        if (button) { button.disabled = true; button.textContent = t('settings.calendar.refreshing'); }
+        try {
+            const result = await refreshContests();
+            if (result && result.ok) {
+                await loadContests();
+                showToast(t('settings.calendar.refreshed', {
+                    count: Number(result.meta && result.meta.count) || 0
+                }));
+            } else {
+                showToast(t('settings.calendar.failed'));
+            }
+        } catch {
+            showToast(t('settings.calendar.failed'));
+        } finally {
+            if (button) { button.disabled = false; button.textContent = t('settings.calendar.refresh'); }
+        }
+    }
 
     /** Push only the affected display groups into the live pages. */
     function applyLiveSettings(keys = LIVE_SETTING_KEYS) {
@@ -743,6 +872,7 @@ export function createSettingsPage(ctx) {
 
         setText('#tabData', t('settings.tab.data'));
         setText('#tabProp', t('settings.tab.prop'));
+        setText('#tabContest', t('settings.tab.contest'));
         setText('#globalAdvancedTitle', t('settings.section.advanced'));
         setText('#basicSectionTitle', t('settings.section.basic'));
         setText('#spotAdvancedTitle', t('settings.section.display'));
@@ -750,6 +880,14 @@ export function createSettingsPage(ctx) {
         setText('#wallAdvancedTitle', t('settings.section.advanced'));
         setText('#dataTitle', t('settings.section.data'));
         setText('#propTitle', t('settings.section.prop'));
+        setText('#contestCalendarTitle', t('settings.section.calendar'));
+        setText('#contestWindowTitle', t('settings.section.contestWindow'));
+        setText('#contestPickLabel', t('settings.calendar.pick'));
+        setText('#contestSourceHint', t('settings.hint.contestSource'));
+        setText('#btnContestRefresh', t('settings.calendar.refresh'));
+        setText('#btnContestClear', t('settings.calendar.clear'));
+        setText('#contestResetLabel', t('settings.reset.contest'));
+        setText('#contestMultBandLabel', t('settings.field.multPerBand.label'));
         setText('#backupTitle', t('settings.section.backup'));
         setText('#backupHint', t('settings.hint.backup'));
         setText('#btnExportSettings', t('settings.action.export'));
@@ -771,6 +909,7 @@ export function createSettingsPage(ctx) {
 
         renderThemeOptions();
         renderSchemaFields();
+        renderContestCalendar();
         ctx.spot.applyLang();
         ctx.qso.renderLastQso();
         ctx.qso.renderQsoPanel();
@@ -822,7 +961,7 @@ export function createSettingsPage(ctx) {
                 ['#setQsoLines', 'qsoLines'], ['#setQsoAutoFit', 'qsoAutoFit'],
                 ['#setQsoSpotAlert', 'qsoSpotAlert'], ['#setQsoVoice', 'qsoVoiceAlert'],
                 ['#setMySpotPopup', 'mySpotPopup'], ['#setMySpotVoice', 'mySpotVoice'],
-                ['#setWallTimerOn', 'wallTimerOn']
+                ['#setWallTimerOn', 'wallTimerOn'], ['#setContestMultPerBand', 'multPerBand']
             ]) setChecked(selector, ctx.settings[key]);
             for (const [selector, key] of [
                 ['#setMySpotTtl', 'mySpotTtl'], ['#setMySpotMax', 'mySpotMax'],
@@ -867,6 +1006,7 @@ export function createSettingsPage(ctx) {
         } finally {
             applyingRemote = false;
         }
+        renderContestCalendar();
         if (authoritative) syncedSettings = cloneSettings(ctx.settings);
     }
 
@@ -902,6 +1042,7 @@ export function createSettingsPage(ctx) {
     }
 
     async function loadConfig() {
+        void loadContests();
         try {
             const calls = await getJson('/api/callsigns');
             if (!Array.isArray(calls)) return;
@@ -1094,6 +1235,7 @@ export function createSettingsPage(ctx) {
             ['#setWallTimerStart', 'wallTimerStart'], ['#setWallTimerEnd', 'wallTimerEnd']
         ]) bindTextSetting(selector, key);
         bindCheckedSetting('#setWallTimerOn', 'wallTimerOn');
+        bindCheckedSetting('#setContestMultPerBand', 'multPerBand');
 
         $('#saClose').addEventListener('click', ctx.qso.hideSpotAlertAndVoice);
         $('#btnSpotView').addEventListener('click', () => { closeConfig(); ctx.qso.setViewMode('spots'); });
@@ -1167,6 +1309,18 @@ export function createSettingsPage(ctx) {
                 save({ttl: {...ctx.settings.ttl}});
             });
         }
+        const contestPick = $('#contestPick');
+        if (contestPick) {
+            contestPick.addEventListener('change', () => {
+                const entry = (contestCalendar && Array.isArray(contestCalendar.contests)
+                    ? contestCalendar.contests : []).find(item => item.id === contestPick.value);
+                if (entry) applyContest(entry);
+                else renderContestDetail(null);
+            });
+        }
+        $('#btnContestRefresh')?.addEventListener('click', () => { void refreshCalendar(); });
+        $('#btnContestClear')?.addEventListener('click', clearContest);
+
         buildBandColorInputs();
         renderSchemaFields();
     }

@@ -1,5 +1,6 @@
 import {createI18n} from '../shared/core/i18n.mjs';
 import {formatClock, clockOptions} from '../shared/core/clock.mjs';
+import {contestCountdown} from '../shared/contest/countdown.mjs';
 import {subscribeWS} from '../shared/core/transport.mjs';
 import {createMonitoringClient} from '../shared/monitoring/client.mjs';
 import {loadLocalSettings} from './settings-model.mjs';
@@ -84,7 +85,29 @@ async function start() {
     }
     ctx.refreshClock = refreshClock;
 
+    /* Header countdown mirrors the selected contest. The server owns the
+     * ended -> cleared transition; the client only hides a stale window. */
+    function refreshCountdown() {
+        const box = $('#contestCountdown');
+        if (!box) return;
+        const state = contestCountdown(ctx.settings);
+        if (state.phase === 'before' || state.phase === 'running') {
+            const text = state.phase === 'before'
+                ? ctx.t('contest.countdown.toStart', {d: state.days, h: state.hours, m: state.minutes})
+                : ctx.t('contest.countdown.toEnd', {h: state.hours, m: state.minutes, s: state.seconds});
+            box.textContent = state.window.name ? `${state.window.name} · ${text}` : text;
+            box.dataset.phase = state.phase;
+            box.classList.remove('hidden');
+            return;
+        }
+        box.textContent = '';
+        delete box.dataset.phase;
+        box.classList.add('hidden');
+    }
+    ctx.refreshCountdown = refreshCountdown;
+
     let lastClock = 0;
+    let lastCountdown = 0;
     let lastTick = 0;
     let lastPrune = 0;
     const clampSec = (value, fallback, min, max) => {
@@ -97,6 +120,10 @@ async function start() {
         if (now - lastClock >= clampSec(ctx.settings.clockSec, 1, 1, 60) * 1000) {
             lastClock = now;
             refreshClock();
+        }
+        if (now - lastCountdown >= 1000) {
+            lastCountdown = now;
+            refreshCountdown();
         }
         if (ctx.qso.state.view === 'qso') ctx.qso.updateQsoAge();
     }, 250);

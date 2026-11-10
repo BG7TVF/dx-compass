@@ -60,6 +60,7 @@
         {key: 'qso', pane: 'qso', title: 'QSO Map', titleZh: 'QSO 地图', desc: 'QSO map display and alert thresholds.'},
         {key: 'wall', pane: 'wall', title: 'Wall', titleZh: '大屏', desc: 'Read-only wall overlay and rotation.'},
         {key: 'data', pane: 'data', title: 'Data & Alerts', titleZh: '数据与告警', desc: 'Upstream polling, retention and diagnostics.'},
+        {key: 'contest', pane: 'contest', title: 'Contest', titleZh: '比赛', desc: 'Contest calendar, rules summary and the selected contest window.'},
         {key: 'prop', pane: 'prop', title: 'Propagation', titleZh: '传播', desc: 'Propagation collection and condition thresholds.'}
     ];
 
@@ -318,7 +319,7 @@
             pattern: /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/, allowEmpty: true, maxLen: 19,
             label: 'Countdown end (UTC)', zh: '倒计时结束（UTC）', desc: 'UTC end of the contest window.'
         }),
-        field('multPerBand', 'wall', 'bool', true, {
+        field('multPerBand', 'contest', 'bool', true, {
             label: 'DXCC multiplier per band', zh: 'DXCC 倍率按波段计算',
             desc: 'On = one DXCC slot per band; off = one DXCC slot across all bands.'
         }),
@@ -510,6 +511,53 @@
             storage: 'external', scope: 'both', exportable: false, importable: false,
             label: 'Monitoring', zh: '监控开关',
             desc: 'Runtime switch; stored in dxcompass-monitoring and global.monitoring, never in uiSettings.'
+        }),
+
+        // ---- contest / Contest
+        field('contestId', 'contest', 'string', '', {
+            maxLen: 80, allowEmpty: true, scope: 'both',
+            label: 'Contest id', zh: '赛事标识',
+            desc: 'Calendar entry id; empty for a hand-entered contest.'
+        }),
+        field('contestName', 'contest', 'string', '', {
+            maxLen: 120, allowEmpty: true, scope: 'both',
+            label: 'Contest name', zh: '比赛名称',
+            desc: 'Shown in the header countdown and used as the contest label.'
+        }),
+        field('contestStart', 'contest', 'datetime', '', {
+            pattern: /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/, allowEmpty: true, maxLen: 19,
+            scope: 'both', label: 'Contest start (UTC)', zh: '比赛开始（UTC）',
+            desc: 'UTC start; takes priority over the wall countdown for the multiplier window.'
+        }),
+        field('contestEnd', 'contest', 'datetime', '', {
+            pattern: /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/, allowEmpty: true, maxLen: 19,
+            scope: 'both', label: 'Contest end (UTC)', zh: '比赛结束（UTC）',
+            desc: 'UTC end; the server clears the contest automatically once this time passes.'
+        }),
+        field('contestModes', 'contest', 'string', '', {
+            maxLen: 80, allowEmpty: true, scope: 'both',
+            label: 'Allowed modes', zh: '允许模式',
+            desc: 'Free text when the calendar/rules summary does not provide it.'
+        }),
+        field('contestBands', 'contest', 'string', '', {
+            maxLen: 120, allowEmpty: true, scope: 'both',
+            label: 'Allowed bands', zh: '允许波段',
+            desc: 'Free text when the calendar/rules summary does not provide it.'
+        }),
+        field('contestRulesUrl', 'contest', 'string', '', {
+            maxLen: 300, allowEmpty: true, scope: 'both',
+            label: 'Rules link', zh: '规则链接',
+            desc: 'Official rules page; calendar entries link to the WA7BNM detail page.'
+        }),
+        field('contestUpdatedAt', 'contest', 'datetime', '', {
+            pattern: /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/, allowEmpty: true, maxLen: 19,
+            scope: 'both', label: 'Calendar date', zh: '数据日期',
+            desc: 'When the selected contest entry was read from the calendar.'
+        }),
+        field('contestRefreshHours', 'contest', 'int', 168, {
+            min: 1, max: 720, scope: 'server',
+            label: 'Calendar refresh (hours)', zh: '日历刷新间隔（小时）',
+            desc: 'Automatic WA7BNM ICS refresh interval; the manual button always refreshes. Needs a restart? No.'
         }),
 
         // ---- prop / Propagation

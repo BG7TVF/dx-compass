@@ -45,11 +45,24 @@ export function tickClock(settings, now = new Date()) {
 function renderTimer(settings, now) {
     const box = $('#wallTimer');
     if (!box) return;
-    const start = parseUtcDateTime(settings.wallTimerStart);
-    const end = parseUtcDateTime(settings.wallTimerEnd);
+    /* A selected contest wins over the legacy wall countdown; when it ends the
+     * server clears it on the next sync, so hide it meanwhile. */
+    const contestStart = parseUtcDateTime(settings.contestStart);
+    const contestEnd = parseUtcDateTime(settings.contestEnd);
+    const contestOn = isFinite(contestStart) && isFinite(contestEnd) && contestEnd > contestStart;
+    const start = contestOn ? contestStart : parseUtcDateTime(settings.wallTimerStart);
+    const end = contestOn ? contestEnd : parseUtcDateTime(settings.wallTimerEnd);
     const time = now.getTime();
     let label = '', target = 0, ended = false;
-    if (settings.wallTimerOn) {
+    if (contestOn) {
+        if (time < start) {
+            label = t('wall.timer.toStart');
+            target = start;
+        } else if (time < end) {
+            label = t('wall.timer.toEnd');
+            target = end;
+        }
+    } else if (settings.wallTimerOn) {
         if (isFinite(start) && time < start) {
             label = t('wall.timer.toStart');
             target = start;

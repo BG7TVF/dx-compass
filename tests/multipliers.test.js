@@ -46,6 +46,23 @@ test('没有查询窗口时回落到设置里的赛事时间', () => {
     assert.equal(prepared.request.from, Math.floor(Date.parse('2026-11-04T00:00:00Z') / 1000));
 });
 
+test('当前比赛窗口优先于墙钟倒计时窗口', () => {
+    const prepared = service.prepare({}, {
+        contestStart: '2026-11-08T00:00', contestEnd: '2026-11-09T12:00',
+        wallTimerStart: '2026-11-04T00:00', wallTimerEnd: '2026-11-06T00:00'
+    });
+    assert.equal(prepared.request.windowSource, 'contest');
+    assert.equal(prepared.request.from, Math.floor(Date.parse('2026-11-08T00:00:00Z') / 1000));
+    assert.equal(prepared.request.to, Math.floor(Date.parse('2026-11-09T12:00:00Z') / 1000));
+});
+
+test('查询参数仍然压过当前比赛窗口', () => {
+    const prepared = service.prepare({from: '2026-11-01T00:00', to: '2026-11-02T00:00'}, {
+        contestStart: '2026-11-08T00:00', contestEnd: '2026-11-09T12:00'
+    });
+    assert.equal(prepared.request.windowSource, 'query');
+});
+
 test('worked / new / pending / unknown 四种结果', async () => {
     const result = await matrix({mode: 'ALL'});
     assert.equal(result.ok, true);

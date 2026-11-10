@@ -29,6 +29,7 @@
             <span class="subtitle">Spot &amp; Contest Monitor</span>
         </div>
 
+        <span class="toolbar-countdown hidden" id="contestCountdown" aria-live="polite"></span>
         <span class="toolbar-clock" id="utcClock">UTC: --:--:--</span>
     </div>
 
@@ -257,6 +258,7 @@
                         <button type="button" class="cfg-tab active" data-pane="global" id="tabGlobal" role="tab" aria-selected="true" aria-controls="paneGlobal">Global</button>
                         <button type="button" class="cfg-tab" data-pane="spot" id="tabSpot" role="tab" aria-selected="false" aria-controls="paneSpot">Spot Map</button>
                         <button type="button" class="cfg-tab" data-pane="qso" id="tabQso" role="tab" aria-selected="false" aria-controls="paneQso">QSO Map</button>
+                        <button type="button" class="cfg-tab" data-pane="contest" id="tabContest" role="tab" aria-selected="false" aria-controls="paneContest">Contest</button>
                         <button type="button" class="cfg-tab" data-pane="wall" id="tabWall" role="tab" aria-selected="false" aria-controls="paneWall">Wall</button>
                         <button type="button" class="cfg-tab" data-pane="data" id="tabData" role="tab" aria-selected="false" aria-controls="paneData">Data</button>
                         <button type="button" class="cfg-tab" data-pane="prop" id="tabProp" role="tab" aria-selected="false" aria-controls="paneProp">Propagation</button>
@@ -441,6 +443,38 @@
                             <button type="button" class="mini-btn danger-btn" data-reset-domain="qso" id="btnResetQso">Reset group</button>
                         </div>
                     </div>
+                    <!-- Contest calendar / window -->
+                    <div class="cfg-pane" id="paneContest" role="tabpanel" aria-labelledby="tabContest">
+                        <div class="form-section">
+                            <div class="section-title" id="contestCalendarTitle">Contest calendar</div>
+                            <div class="form-row">
+                                <label id="contestPickLabel" for="contestPick">Calendar contest</label>
+                                <select id="contestPick" class="set-input">
+                                    <option value="">Loading calendar...</option>
+                                </select>
+                            </div>
+                            <p class="hint" id="contestMeta"></p>
+                            <p class="hint" id="contestDetail"></p>
+                            <div class="btn-row">
+                                <button type="button" class="mini-btn" id="btnContestRefresh">Refresh calendar</button>
+                                <button type="button" class="mini-btn danger-btn" id="btnContestClear">Clear contest</button>
+                            </div>
+                            <p class="hint" id="contestSourceHint"></p>
+                        </div>
+                        <div class="form-section">
+                            <div class="section-title" id="contestWindowTitle">Contest window</div>
+                            <div class="set-grid" id="contestFields"></div>
+                            <div class="form-row">
+                                <label id="contestMultBandLabel" for="setContestMultPerBand">DXCC multiplier per band</label>
+                                <input type="checkbox" id="setContestMultPerBand" class="set-check" data-key="multPerBand">
+                            </div>
+                        </div>
+                        <div class="form-row reset-row">
+                            <label id="contestResetLabel">Reset contest settings</label>
+                            <button type="button" class="mini-btn danger-btn" data-reset-domain="contest" id="btnResetContest">Reset group</button>
+                        </div>
+                    </div>
+
                     <!-- Wall display settings (bigscreen page on port 5859) -->
                     <div class="cfg-pane" id="paneWall" role="tabpanel" aria-labelledby="tabWall">
                         <div class="form-section">
