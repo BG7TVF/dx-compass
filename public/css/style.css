@@ -2431,6 +2431,15 @@ body.prop-mode .status-group .sep { display: none; }
     text-transform: uppercase;
 }
 .analysis-bar .set-input { width: auto; }
+.an-manual { flex: 0 0 auto; border-top: 1px solid var(--border); }
+.an-manual > summary {
+    cursor: pointer;
+    padding: 8px 12px;
+    font-size: 11px;
+    color: var(--text-dim);
+    user-select: none;
+}
+.an-manual > summary:hover { color: var(--text); }
 .an-call { width: 110px; text-transform: uppercase; }
 .an-time { width: 172px; }
 .an-run { padding: 6px 14px; }

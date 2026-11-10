@@ -65,6 +65,33 @@ export function createAnalysisPage(ctx) {
         const view = $('#analysisView');
         view.innerHTML = '';
 
+        // 自动研判放在最前：打开页面即按本台设置与实时邻台出结果，不要求任何输入。
+        const pathBody = element('div', 'analysis-body');
+        pathBody.id = 'pathBody';
+        const pathBar = element('div', 'analysis-bar');
+        const pathTitle = element('span', 'an-path-title', t('anSecPaths'));
+        const pathRefresh = element('button', 'primary-btn an-run', t('anPathRefresh'));
+        pathRefresh.id = 'anPathRun';
+        pathRefresh.type = 'button';
+        const pathStatus = element('span', 'analysis-status');
+        pathStatus.id = 'pathStatus';
+        pathBar.append(pathTitle, pathRefresh, pathStatus);
+        pathBody.appendChild(pathBar);
+        const pathInfo = element('div', 'an-path-info');
+        pathInfo.id = 'pathInfo';
+        pathBody.appendChild(pathInfo);
+        const pathResults = element('div', 'an-list');
+        pathResults.id = 'pathResults';
+        pathBody.appendChild(pathResults);
+        view.appendChild(pathBody);
+
+        // 手动研判属于可选功能：按指定目标呼号做天线朝向分析，默认折叠，
+        // 避免让用户误以为必须先填呼号才能出结果。
+        const manual = element('details', 'an-manual');
+        manual.id = 'anManual';
+        const manualSummary = element('summary', 'an-manual-summary', t('anManualTitle'));
+        manual.appendChild(manualSummary);
+
         const bar = element('div', 'analysis-bar');
         const callLabel = element('label', 'an-field', t('anCall'));
         callLabel.setAttribute('for', 'anCall');
@@ -92,34 +119,20 @@ export function createAnalysisPage(ctx) {
         const run = element('button', 'primary-btn an-run', t('anRun'));
         run.id = 'anRun';
         run.type = 'button';
+        const status = element('span', 'analysis-status');
+        status.id = 'analysisStatus';
 
-        bar.append(callLabel, callInput, fromLabel, fromInput, toLabel, toInput, run);
-        view.appendChild(bar);
+        bar.append(callLabel, callInput, fromLabel, fromInput, toLabel, toInput, run, status);
+        manual.appendChild(bar);
         const hint = element('div', 'an-hint', t('anHint'));
-        view.appendChild(hint);
+        manual.appendChild(hint);
         const body = element('div', 'analysis-body');
         body.id = 'analysisBody';
-        view.appendChild(body);
-
-        const pathBody = element('div', 'analysis-body');
-        pathBody.id = 'pathBody';
-        const pathBar = element('div', 'analysis-bar');
-        const pathTitle = element('span', 'an-path-title', t('anSecPaths'));
-        const pathRefresh = element('button', 'primary-btn an-run', t('anPathRefresh'));
-        pathRefresh.id = 'anPathRun';
-        pathRefresh.type = 'button';
-        const pathStatus = element('span', 'analysis-status');
-        pathStatus.id = 'pathStatus';
-        pathBar.append(pathTitle, pathRefresh, pathStatus);
-        pathBody.appendChild(pathBar);
-        const pathInfo = element('div', 'an-path-info');
-        pathInfo.id = 'pathInfo';
-        pathBody.appendChild(pathInfo);
-        const pathResults = element('div', 'an-list');
-        pathResults.id = 'pathResults';
-        pathBody.appendChild(pathResults);
-        view.appendChild(pathBody);
-        liveText = {callLabel, fromLabel, toLabel, run, hint, pathRefresh, pathTitle};
+        manual.appendChild(body);
+        view.appendChild(manual);
+        liveText = {
+            callLabel, fromLabel, toLabel, run, hint, pathRefresh, pathTitle, manualSummary
+        };
 
         run.addEventListener('click', () => runAnalysis());
         callInput.addEventListener('keydown', event => {
@@ -132,12 +145,8 @@ export function createAnalysisPage(ctx) {
     }
 
     function setStatus(text, isError) {
-        const status = $('#analysisStatus') || (() => {
-            const node = element('span', 'analysis-status');
-            node.id = 'analysisStatus';
-            $('#analysisView').querySelector('.analysis-bar').appendChild(node);
-            return node;
-        })();
+        const status = $('#analysisStatus');
+        if (!status) return;
         status.textContent = text || '';
         status.classList.toggle('error', Boolean(isError));
     }
@@ -193,12 +202,20 @@ export function createAnalysisPage(ctx) {
             setPathStatus('');
         } catch (error) {
             lastPathReport = null;
+            lastPathAt = 0;
+            // 服务端 400 时 body 里带 error 码，直接给出“去设置里填呼号/网格”的明确提示，
+            // 不能只显示笼统的“请求失败”让人以为功能坏了。
+            const code = error && error.body && error.body.error;
+            const key = code === 'call-required' ? 'anPathErrorCall'
+                : code === 'grid-required' ? 'anPathErrorGrid' : 'anRequestFailed';
+            const info = $('#pathInfo');
+            if (info) info.replaceChildren();
             const results = $('#pathResults');
-            results.replaceChildren(element('div', 'an-empty', t('anRequestFailed')));
-            if (error && error.message) {
+            results.replaceChildren(element('div', 'an-empty', t(key)));
+            if (key === 'anRequestFailed' && error && error.message) {
                 results.appendChild(element('div', 'an-hint', error.message));
             }
-            setPathStatus(t('anRequestFailed'), true);
+            setPathStatus(key === 'anRequestFailed' ? t('anRequestFailed') : '', true);
         } finally {
             pathBusy = false;
         }
@@ -601,6 +618,7 @@ export function createAnalysisPage(ctx) {
             liveText.hint.textContent = t('anHint');
             liveText.pathTitle.textContent = t('anSecPaths');
             liveText.pathRefresh.textContent = t('anPathRefresh');
+            liveText.manualSummary.textContent = t('anManualTitle');
             if (lastReport) render(lastReport);
             if (lastPathReport) renderPaths(lastPathReport);
         }
