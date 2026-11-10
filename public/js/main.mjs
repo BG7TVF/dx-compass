@@ -11,6 +11,7 @@ import {createRecordsPage} from './pages/records-page.mjs';
 import {createSettingsPage} from './pages/settings-page.mjs';
 import {createPropagationPage} from './pages/propagation-page.mjs';
 import {createAnalysisPage} from './pages/analysis-page.mjs?v=2.3.8';
+import {createMultiplierPage} from './pages/mult-page.mjs';
 
 async function start() {
     const i18n = createI18n({lang: 'zh'});
@@ -26,6 +27,7 @@ async function start() {
     ctx.records = createRecordsPage(ctx);
     ctx.prop = createPropagationPage(ctx);
     ctx.analysis = createAnalysisPage(ctx);
+    ctx.mult = createMultiplierPage(ctx);
     ctx.settingsPage = createSettingsPage(ctx);
     ctx.saveSettings = () => ctx.settingsPage.save();
 
@@ -35,6 +37,7 @@ async function start() {
     ctx.qso.init();
     ctx.prop.init();
     ctx.analysis.init();
+    ctx.mult.init();
     ctx.settingsPage.bind();
     ctx.settingsPage.applyLang();
     ctx.records.init();

@@ -142,8 +142,10 @@ export function createSettingsPage(ctx) {
         'propProj', 'propLayer', 'propDxLat', 'propDxLon',
         'mufOpacity', 'nightOpacity', 'propPollSec'
     ]);
+    const MULT_SETTING_KEYS = new Set(['wallTimerStart', 'wallTimerEnd', 'multPerBand']);
     const LIVE_SETTING_KEYS = new Set([
-        ...CLOCK_SETTING_KEYS, ...MAP_SETTING_KEYS, ...QSO_SETTING_KEYS, ...PROP_SETTING_KEYS
+        ...CLOCK_SETTING_KEYS, ...MAP_SETTING_KEYS, ...QSO_SETTING_KEYS, ...PROP_SETTING_KEYS,
+        ...MULT_SETTING_KEYS
     ]);
 
     /** Push only the affected display groups into the live pages. */
@@ -153,6 +155,7 @@ export function createSettingsPage(ctx) {
         if (changed.some(key => MAP_SETTING_KEYS.has(key))) ctx.spot?.applyMapSettings?.();
         if (changed.some(key => QSO_SETTING_KEYS.has(key))) ctx.qso?.applyDisplaySettings?.();
         if (changed.some(key => PROP_SETTING_KEYS.has(key))) ctx.prop?.applySettings?.();
+        if (changed.some(key => MULT_SETTING_KEYS.has(key))) ctx.mult?.applySettings?.();
     }
 
     function save(patch) {
@@ -703,7 +706,7 @@ export function createSettingsPage(ctx) {
             '#resetAllLabel': 'resetAll', '#btnResetAll': 'resetAll', '#qtLFreq': 'lblFreq',
             '#qtLCall': 'lblCall', '#qtLRst': 'lblRst', '#qtLExch': 'lblExch', '#qtLBand': 'lblBand',
             '#qtLMode': 'lblMode', '#qtLOp': 'lblOp', '#qtLAge': 'lblAge', '#btnSpotView': 'spotView',
-            '#btnQsoView': 'qsoView', '#btnPropView': 'propView', '#btnAnalysisView': 'analysisView', '#propProjLabel': 'propProjection',
+            '#btnQsoView': 'qsoView', '#btnPropView': 'propView', '#btnAnalysisView': 'analysisView', '#btnMultView': 'multView', '#propProjLabel': 'propProjection',
             '#propLayerLabel': 'propLayer', '#qsoPanelTitle': 'stPanel', '#qLastTitle': 'stLastQso',
             '#qRateTitle': 'qsoRate', '#qMinTitle': 'qsoPerMin', '#qOpTitle': 'qsoByOp',
             '#qBandTitle': 'qsoByBand', '#qLQsos': 'stQsos', '#qLMults': 'stMults',
@@ -718,6 +721,7 @@ export function createSettingsPage(ctx) {
         const tooltips = {
             '#btnSpotView': 'nav.spotGrid', '#btnQsoView': 'nav.qsoMap',
             '#btnPropView': 'nav.propMap', '#btnAnalysisView': 'nav.analysis',
+            '#btnMultView': 'nav.multipliers',
             '#connDot': 'nav.conn',
             '#rotateGroup': 'nav.rotateHint', '#btnClearDb': 'nav.clearDbHint',
             '#saClose': 'nav.close'
@@ -772,6 +776,7 @@ export function createSettingsPage(ctx) {
         ctx.records.applyLang();
         ctx.prop.applyLang();
         ctx.analysis?.applyLang();
+        ctx.mult?.applyLang();
     }
 
     function setValue(selector, value) {
@@ -1093,6 +1098,7 @@ export function createSettingsPage(ctx) {
         $('#btnQsoView').addEventListener('click', () => { closeConfig(); ctx.qso.setViewMode('qso'); });
         $('#btnPropView').addEventListener('click', () => { closeConfig(); ctx.qso.setViewMode('prop'); });
         $('#btnAnalysisView').addEventListener('click', () => { closeConfig(); ctx.qso.setViewMode('analysis'); });
+        $('#btnMultView').addEventListener('click', () => { closeConfig(); ctx.qso.setViewMode('mult'); });
         $('#configForm').addEventListener('submit', saveConfig);
 
         $('#btnExportSettings').addEventListener('click', exportSettings);

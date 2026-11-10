@@ -639,23 +639,31 @@ export function createQsoPage(ctx) {
         const leaving = state.view;
         state.view = mode;
         const isQso = mode === 'qso', isProp = mode === 'prop', isAnalysis = mode === 'analysis';
-        $('#grid').classList.toggle('hidden', isQso || isProp || isAnalysis);
+        const isMult = mode === 'mult';
+        const isFull = isQso || isProp || isAnalysis || isMult;
+        $('#grid').classList.toggle('hidden', isFull);
         $('#qsoView').classList.toggle('hidden', !isQso);
         $('#propView').classList.toggle('hidden', !isProp);
         $('#analysisView').classList.toggle('hidden', !isAnalysis);
-        $('#recordsPanel').classList.toggle('hidden', isQso || isProp || isAnalysis);
+        $('#multView').classList.toggle('hidden', !isMult);
+        $('#recordsPanel').classList.toggle('hidden', isFull);
         $('#qsoPanel').classList.toggle('hidden', !isQso);
         $('#btnSpotView').classList.toggle('active', mode === 'spots');
         $('#btnQsoView').classList.toggle('active', isQso);
         $('#btnPropView').classList.toggle('active', isProp);
         $('#btnAnalysisView').classList.toggle('active', isAnalysis);
+        $('#btnMultView').classList.toggle('active', isMult);
         document.body.classList.toggle('qso-mode', isQso);
         document.body.classList.toggle('prop-mode', isProp);
         document.body.classList.toggle('analysis-mode', isAnalysis);
+        document.body.classList.toggle('mult-mode', isMult);
         if (leaving === 'prop' && !isProp) ctx.prop?.hide();
         if (leaving === 'analysis' && !isAnalysis) ctx.analysis?.hide();
+        if (leaving === 'mult' && !isMult) ctx.mult?.hide();
         if (isAnalysis) {
             ctx.analysis?.show();
+        } else if (isMult) {
+            ctx.mult?.show();
         } else if (isQso) {
             state.map.invalidateSize();
             fitQsoMap();

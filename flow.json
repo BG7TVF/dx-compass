@@ -2875,6 +2875,137 @@
         "wires": []
     },
     {
+        "id": "dxm0000000000001",
+        "type": "http in",
+        "z": "dxc0000000000001",
+        "name": "GET /api/multipliers",
+        "url": "/api/multipliers",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 140,
+        "y": 1800,
+        "wires": [
+            [
+                "dxm0000000000002"
+            ]
+        ]
+    },
+    {
+        "id": "dxm0000000000002",
+        "type": "function",
+        "z": "dxc0000000000001",
+        "name": "Build multiplier query",
+        "func": "const dx = global.get('dx');\nconst prepared = dx.multipliers.service.prepare(msg.req.query, dx.settings.runtime(global));\nmsg.topic = prepared.sql;\nmsg.multiplierError = prepared.error;\nmsg.multiplierRequest = prepared.request;\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 380,
+        "y": 1800,
+        "wires": [
+            [
+                "dxm0000000000003"
+            ]
+        ]
+    },
+    {
+        "id": "dxm0000000000003",
+        "type": "sqlite",
+        "z": "dxc0000000000001",
+        "mydb": "dxc0000000000027",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "Query multiplier QSOs",
+        "x": 620,
+        "y": 1800,
+        "wires": [
+            [
+                "dxm0000000000004"
+            ]
+        ]
+    },
+    {
+        "id": "dxm0000000000004",
+        "type": "function",
+        "z": "dxc0000000000001",
+        "name": "Build multiplier matrix",
+        "func": "const dx = global.get('dx');\nconst prepared = {\n    ok: !msg.multiplierError,\n    error: msg.multiplierError || null,\n    request: msg.multiplierRequest\n};\nconst rows = msg.payload;\ndelete msg.multiplierRequest;\nconst result = await dx.multipliers.service.complete(prepared, rows);\nmsg.headers = {'Content-Type': 'application/json'};\nmsg.statusCode = result.error ? 400 : 200;\nmsg.payload = result;\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 860,
+        "y": 1800,
+        "wires": [
+            [
+                "dxm0000000000005"
+            ]
+        ]
+    },
+    {
+        "id": "dxm0000000000005",
+        "type": "http response",
+        "z": "dxc0000000000001",
+        "name": "",
+        "statusCode": "",
+        "headers": {},
+        "x": 1100,
+        "y": 1800,
+        "wires": []
+    },
+    {
+        "id": "dxm0000000000006",
+        "type": "catch",
+        "z": "dxc0000000000001",
+        "name": "Catch multiplier errors",
+        "scope": [
+            "dxm0000000000002",
+            "dxm0000000000003",
+            "dxm0000000000004"
+        ],
+        "uncaught": false,
+        "x": 3060,
+        "y": 380,
+        "wires": [
+            [
+                "dxm0000000000007"
+            ]
+        ]
+    },
+    {
+        "id": "dxm0000000000007",
+        "type": "function",
+        "z": "dxc0000000000001",
+        "name": "Build multiplier error response",
+        "func": "const err = msg.error || {};\nconst detail = String(err.message || err);\nnode.warn('multiplier request failed: ' + detail);\nmsg.statusCode = 500;\nmsg.headers = Object.assign({}, msg.headers, {'content-type': 'application/json; charset=utf-8'});\nmsg.payload = {ok: false, error: 'query-failed', detail: detail};\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 3300,
+        "y": 380,
+        "wires": [
+            [
+                "dxm0000000000008"
+            ]
+        ]
+    },
+    {
+        "id": "dxm0000000000008",
+        "type": "http response",
+        "z": "dxc0000000000001",
+        "name": "Multiplier error response",
+        "statusCode": "",
+        "headers": {},
+        "x": 3540,
+        "y": 380,
+        "wires": []
+    },
+    {
         "id": "dxc00000000000f11",
         "type": "catch",
         "z": "dxc0000000000001",

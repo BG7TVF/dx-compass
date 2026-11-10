@@ -318,6 +318,10 @@
             pattern: /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/, allowEmpty: true, maxLen: 19,
             label: 'Countdown end (UTC)', zh: '倒计时结束（UTC）', desc: 'UTC end of the contest window.'
         }),
+        field('multPerBand', 'wall', 'bool', true, {
+            label: 'DXCC multiplier per band', zh: 'DXCC 倍率按波段计算',
+            desc: 'On = one DXCC slot per band; off = one DXCC slot across all bands.'
+        }),
         field('cycleSec', 'wall', 'int', 10, {
             min: 3, max: 60, label: 'Layer dwell (s)', zh: '图层停留（秒）',
             desc: 'Per-layer dwell in cycle mode.'
