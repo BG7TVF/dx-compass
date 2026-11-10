@@ -96,7 +96,7 @@
         "type": "function",
         "z": "dxc0000000000001",
         "name": "Fan out DB init",
-        "func": "// sqlite 节点只有 1 个输出，建表完成后由这里扇出到三条独立支路。\n// 每条支路拿到独立副本，避免并发覆盖 msg.topic / msg.payload。\nreturn [0, 1, 2].map(() => Object.assign({}, msg));",
+        "func": "// sqlite 节点只有 1 个输出，建表完成后由这里扇出到三条独立支路。\n// Node-RED 中 [a,b,c] 是往第 1 个输出发 3 条；要发到多个输出必须返回嵌套数组。\n// 每条支路拿到独立副本，避免并发覆盖 msg.topic / msg.payload。\nconst clone = () => Object.assign({}, msg);\nreturn [[clone()], [clone()], [clone()]];",
         "outputs": 3,
         "noerr": 0,
         "initialize": "",

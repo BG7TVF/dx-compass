@@ -136,6 +136,8 @@ test('DB startup migrates columns and creates neighbor schema in independent bra
     const fanout = byName('Fan out DB init');
     assert.ok(fanout, 'a function node must fan out the DB init branches');
     assert.ok(Number(fanout.outputs) >= 3, 'fan-out node needs an output per branch');
+    assert.match(fanout.func, /return\s*\[\[/,
+        'fan-out must return nested arrays, otherwise every message goes to output 1');
     assert.deepEqual(createTable.wires, [[fanout.id]],
         'Create table must hand off to the fan-out node');
     for (const name of ['Check extra columns', 'Create neighbors schema', 'Check spot_id column']) {
