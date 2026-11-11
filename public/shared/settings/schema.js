@@ -222,6 +222,11 @@
             min: 200, max: 4000, label: 'QSO markers limit', zh: 'QSO 标记上限',
             desc: 'Oldest QSO markers are dropped beyond this count.'
         }),
+        field('n1mmToken', 'qso', 'string', '', {
+            allowEmpty: true, maxLen: 200,
+            label: 'N1MM HTTP ingest token', zh: 'N1MM HTTP 接入令牌',
+            desc: 'Required by POST /api/n1mm/ingest (X-DX-Token header). Empty disables HTTP ingest; UDP is unaffected.'
+        }),
         field('qsoLines', 'qso', 'bool', true, {
             label: 'Home -> QSO lines', zh: '本台→QSO 连线', desc: 'Draw great-circle lines from home to each QSO.'
         }),

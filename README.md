@@ -345,6 +345,23 @@ sudo chown -R root:root /opt/dx-compass
 4. （可选）大屏 **Settings** 填入 **QRZ.com 用户名 / 密码**（需 QRZ XML Data 订阅），QSO 坐标将优先从 QRZ.com 查询；凭据保存在服务器端 Node-RED 上下文中，密码不会回显
 5. N1MM+ 产生 QSO、频率变化或记分更新时大屏实时刷新
 
+### 远程 relay（N1MM 与服务器不在同一网段）
+
+N1MM 的 UDP 广播不出公网时，在本机运行 relay：它监听 UDP 12060，把原始 XML 包转发到服务器的 HTTP 接入端点。
+
+1. 服务器 **Settings → QSO 地图 → N1MM HTTP 接入令牌** 填一个随机字符串（或给服务设置环境变量 `DX_N1MM_TOKEN`）；留空则 HTTP 接入关闭，UDP 直连不受影响
+2. 本机安装 Node.js 18+，在仓库目录运行：
+
+```bash
+node scripts/n1mm-relay.mjs --host <服务器IP> --token <同一个令牌>
+# 或使用环境变量
+#   DX_N1MM_HOST / DX_N1MM_PORT / DX_N1MM_TOKEN
+```
+
+3. N1MM+：**Config → Configure Ports… → Broadcast Data**，把 Contacts / Radio / Score 的目标改为本机 `127.0.0.1`，端口分别为 `12061` / `12060` / `12062`
+4. Windows 防火墙需允许 `node.exe` 监听 UDP 12060（首次运行会弹窗）
+5. relay 自带断线缓存与指数退避；`--help` 可查看全部参数。服务器返回 401 表示令牌不一致，503 表示服务器尚未配置令牌
+
 ## 传播地图（Propagation）
 
 菜单中的 **Propagation** 是独立于 Spot / QSO 的第三个全屏视图：左侧为 Canvas 世界地图，右侧停靠传播数据面板。进入该视图后自动隐藏 Spot 专用控件（布局、轮询、开始监控、Spot 计数）。

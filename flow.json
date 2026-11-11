@@ -315,7 +315,7 @@
         "type": "function",
         "z": "dxc0000000000001",
         "name": "Create neighbors schema",
-        "func": "const dx = global.get('dx');\nconst s = dx.storage.schema;\nconst list = s.createNeighbors().concat(s.createActivity ? s.createActivity() : []);\nreturn [list.map(topic => ({topic}))];",
+        "func": "const dx = global.get('dx');\nconst s = dx.storage.schema;\nconst list = s.createNeighbors()\n    .concat(s.createActivity ? s.createActivity() : [])\n    .concat(s.createN1mm ? s.createN1mm() : []);\nreturn [list.map(topic => ({topic}))];",
         "outputs": 1,
         "noerr": 0,
         "initialize": "",
@@ -1535,8 +1535,8 @@
         "type": "function",
         "z": "dxc0000000000090",
         "name": "Parse RadioInfo",
-        "func": "const dx = global.get('dx');\nconst radio = dx.qso.saveRadio(global, msg.payload, new Date());\nif (!radio) return null;\nmsg.payload = radio;\nreturn msg;",
-        "outputs": 1,
+        "func": "const dx = global.get('dx');\nconst radio = dx.qso.saveRadio(global, msg.payload, new Date());\nif (!radio) return null;\nmsg.payload = radio;\nreturn [[msg], [{topic: dx.storage.n1mm.radioUpsert(radio)}]];",
+        "outputs": 2,
         "timeout": "",
         "noerr": 0,
         "initialize": "",
@@ -1547,6 +1547,9 @@
         "wires": [
             [
                 "dxc000000000000e"
+            ],
+            [
+                "dxn1mm00000000b5"
             ]
         ]
     },
@@ -1830,8 +1833,8 @@
         "type": "function",
         "z": "dxc0000000000090",
         "name": "Parse Score",
-        "func": "const dx = global.get('dx');\nconst score = dx.qso.saveScore(global, msg.payload, new Date());\nif (!score) return null;\nmsg.payload = score;\nreturn msg;",
-        "outputs": 1,
+        "func": "const dx = global.get('dx');\nconst score = dx.qso.saveScore(global, msg.payload, new Date());\nif (!score) return null;\nmsg.payload = score;\nreturn [[msg], [{topic: dx.storage.n1mm.scoreUpsert(score)}]];",
+        "outputs": 2,
         "timeout": "",
         "noerr": 0,
         "initialize": "",
@@ -1842,6 +1845,9 @@
         "wires": [
             [
                 "dxc000000000000e"
+            ],
+            [
+                "dxn1mm00000000b6"
             ]
         ]
     },
@@ -4240,5 +4246,271 @@
         "x": 1070,
         "y": 2100,
         "wires": []
+    },
+    {
+        "id": "dxn1mm00000000a1",
+        "type": "http in",
+        "z": "dxc0000000000090",
+        "name": "POST /api/n1mm/ingest",
+        "url": "/api/n1mm/ingest",
+        "method": "post",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 160,
+        "y": 900,
+        "wires": [
+            [
+                "dxn1mm00000000a2"
+            ]
+        ]
+    },
+    {
+        "id": "dxn1mm00000000a2",
+        "type": "function",
+        "z": "dxc0000000000090",
+        "name": "N1MM ingest auth",
+        "outputs": 2,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 380,
+        "y": 900,
+        "func": "const dx = global.get('dx');\nconst settings = dx.settings.runtime(global);\nconst expected = String(settings.n1mmToken || env.get('DX_N1MM_TOKEN') || '');\nif (!expected) {\n    msg.statusCode = 503;\n    msg.headers = {'Content-Type': 'application/json'};\n    msg.payload = {ok: false, error: 'ingest-token-not-configured'};\n    return [null, msg];\n}\nif (!dx.qso.authorized(dx.qso.tokenFrom(msg.req), expected)) {\n    msg.statusCode = 401;\n    msg.headers = {'Content-Type': 'application/json'};\n    msg.payload = {ok: false, error: 'unauthorized'};\n    return [null, msg];\n}\nlet body = msg.payload;\nif (Buffer.isBuffer(body)) body = body.toString('utf8');\nif (body && typeof body === 'object' && !Array.isArray(body)) body = body.xml || body.payload;\nif (typeof body !== 'string' || !body.trim()) {\n    msg.statusCode = 400;\n    msg.headers = {'Content-Type': 'application/json'};\n    msg.payload = {ok: false, error: 'empty-body'};\n    return [null, msg];\n}\nmsg.payload = body;\nreturn [msg, null];",
+        "wires": [
+            [
+                "dxn1mm00000000a3"
+            ],
+            [
+                "dxn1mm00000000a7"
+            ]
+        ]
+    },
+    {
+        "id": "dxn1mm00000000a3",
+        "type": "xml",
+        "z": "dxc0000000000090",
+        "name": "",
+        "attr": "$",
+        "chr": "_",
+        "x": 600,
+        "y": 900,
+        "wires": [
+            [
+                "dxn1mm00000000a4"
+            ]
+        ]
+    },
+    {
+        "id": "dxn1mm00000000a4",
+        "type": "function",
+        "z": "dxc0000000000090",
+        "name": "N1MM ingest normalize",
+        "outputs": 2,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 820,
+        "y": 900,
+        "func": "const dx = global.get('dx');\nconst result = dx.qso.ingest(global, msg.payload, new Date());\nif (!result.ok) {\n    msg.statusCode = result.statusCode || 400;\n    msg.headers = {'Content-Type': 'application/json'};\n    msg.payload = {ok: false, error: result.error};\n    return [null, msg];\n}\nmsg.topic = result.sql;\nmsg._kind = result.kind;\nmsg._event = result.event;\nreturn [msg, null];",
+        "wires": [
+            [
+                "dxn1mm00000000a5"
+            ],
+            [
+                "dxn1mm00000000a7"
+            ]
+        ]
+    },
+    {
+        "id": "dxn1mm00000000a5",
+        "type": "sqlite",
+        "z": "dxc0000000000090",
+        "mydb": "dxc0000000000027",
+        "sqlquery": "batch",
+        "sql": "",
+        "name": "N1MM ingest write",
+        "x": 1060,
+        "y": 900,
+        "wires": [
+            [
+                "dxn1mm00000000a6"
+            ]
+        ]
+    },
+    {
+        "id": "dxn1mm00000000a6",
+        "type": "function",
+        "z": "dxc0000000000090",
+        "name": "N1MM ingest reply",
+        "outputs": 2,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1260,
+        "y": 900,
+        "func": "msg.statusCode = 202;\nmsg.headers = {'Content-Type': 'application/json'};\nmsg.payload = {ok: true, kind: msg._kind, event: msg._event};\nreturn [msg, {payload: msg._event}];",
+        "wires": [
+            [
+                "dxn1mm00000000a7"
+            ],
+            [
+                "dxc000000000000e"
+            ]
+        ]
+    },
+    {
+        "id": "dxn1mm00000000a7",
+        "type": "http response",
+        "z": "dxc0000000000090",
+        "name": "",
+        "x": 1500,
+        "y": 900,
+        "wires": []
+    },
+    {
+        "id": "dxn1mm00000000a8",
+        "type": "catch",
+        "z": "dxc0000000000090",
+        "name": "N1MM ingest errors",
+        "scope": [
+            "dxn1mm00000000a2",
+            "dxn1mm00000000a4",
+            "dxn1mm00000000a5"
+        ],
+        "uncaught": false,
+        "x": 1060,
+        "y": 980,
+        "wires": [
+            [
+                "dxn1mm00000000a9"
+            ]
+        ]
+    },
+    {
+        "id": "dxn1mm00000000a9",
+        "type": "function",
+        "z": "dxc0000000000090",
+        "name": "N1MM ingest failure",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1280,
+        "y": 980,
+        "func": "msg.statusCode = 500;\nmsg.headers = {'Content-Type': 'application/json'};\nmsg.payload = {ok: false, error: 'ingest-failed', detail: String(msg.error && msg.error.message || msg.error || '')};\nreturn msg;",
+        "wires": [
+            [
+                "dxn1mm00000000a7"
+            ]
+        ]
+    },
+    {
+        "id": "dxn1mm00000000b1",
+        "type": "inject",
+        "z": "dxc0000000000090",
+        "name": "Restore station state",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "6",
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 170,
+        "y": 1040,
+        "wires": [
+            [
+                "dxn1mm00000000b2"
+            ]
+        ]
+    },
+    {
+        "id": "dxn1mm00000000b2",
+        "type": "function",
+        "z": "dxc0000000000090",
+        "name": "Station state query",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 400,
+        "y": 1040,
+        "func": "const dx = global.get('dx');\nmsg.topic = dx.storage.n1mm.stateQuery();\nreturn msg;",
+        "wires": [
+            [
+                "dxn1mm00000000b3"
+            ]
+        ]
+    },
+    {
+        "id": "dxn1mm00000000b3",
+        "type": "sqlite",
+        "z": "dxc0000000000090",
+        "mydb": "dxc0000000000027",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "Read station state",
+        "x": 620,
+        "y": 1040,
+        "wires": [
+            [
+                "dxn1mm00000000b4"
+            ]
+        ]
+    },
+    {
+        "id": "dxn1mm00000000b4",
+        "type": "function",
+        "z": "dxc0000000000090",
+        "name": "Restore station state",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 850,
+        "y": 1040,
+        "func": "const dx = global.get('dx');\nconst changed = dx.qso.restore(global, msg.payload);\nnode.status({text: changed ? 'state restored' : 'state already live'});\nreturn null;",
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "dxn1mm00000000b5",
+        "type": "sqlite",
+        "z": "dxc0000000000090",
+        "mydb": "dxc0000000000027",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "Persist radio state",
+        "x": 520,
+        "y": 140,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "dxn1mm00000000b6",
+        "type": "sqlite",
+        "z": "dxc0000000000090",
+        "mydb": "dxc0000000000027",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "Persist score state",
+        "x": 520,
+        "y": 420,
+        "wires": [
+            []
+        ]
     }
 ]
