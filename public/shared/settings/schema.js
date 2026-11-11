@@ -214,10 +214,6 @@
         }),
 
         // ---- qso / QSO Map
-        field('category', 'qso', 'enum', 'SO1R', {
-            values: CONTEST_CATEGORIES, label: 'Contest category', zh: '比赛类别',
-            desc: 'Decides whether multi-radio station cards are shown.'
-        }),
         field('qsoMax', 'qso', 'int', 1500, {
             min: 200, max: 4000, label: 'QSO markers limit', zh: 'QSO 标记上限',
             desc: 'Oldest QSO markers are dropped beyond this count.'
@@ -558,6 +554,25 @@
         }),
 
         // ---- contest / Contest
+        field('category', 'contest', 'enum', 'SO1R', {
+            values: CONTEST_CATEGORIES, scope: 'both', label: 'Contest category', zh: '比赛类别',
+            desc: 'Entry category; decides which tactical rules and station lanes apply.'
+        }),
+        field('operators', 'contest', 'string', '', {
+            maxLen: 200, allowEmpty: true, scope: 'both',
+            label: 'Operator list', zh: '操作员名单',
+            desc: 'Comma-separated operator callsigns, in seat order when no live N1MM operator is reported.'
+        }),
+        field('seatCount', 'contest', 'int', 1, {
+            min: 1, max: 12, scope: 'both',
+            label: 'Seat count', zh: '席位数',
+            desc: 'Number of operating seats; each seat is one operator on one radio.'
+        }),
+        field('seatRadios', 'contest', 'string', '', {
+            maxLen: 80, allowEmpty: true, scope: 'both',
+            label: 'Seat-radio binding', zh: '席位-电台绑定',
+            desc: 'RadioNr per seat in order, comma separated (e.g. 1,2). Empty = follow the live radios.'
+        }),
         field('contestName', 'contest', 'string', '', {
             maxLen: 120, allowEmpty: true, scope: 'both',
             label: 'Contest name', zh: '比赛名称',
@@ -611,7 +626,7 @@
         field('bandChangeRule', 'contest', 'enum', 'none', {
             values: BAND_CHANGE_RULES, scope: 'both',
             label: 'Band-change rule', zh: '换波段约束',
-            desc: 'none = unlimited; time-lock = 10 minutes; hourly-quota = N changes per clock hour.'
+            desc: 'none = follow the contest rules file; time-lock = 10 minutes; hourly-quota = N changes per clock hour.'
         }),
         field('bandChangeLimit', 'contest', 'int', 0, {
             min: 0, max: 60, scope: 'both',

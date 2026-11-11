@@ -110,11 +110,10 @@
             <header class="op-top">
                 <div class="op-top-id">
                     <span class="op-kicker" id="opKicker">OP VIEW</span>
-                    <label class="op-cat-label" for="opCategory" id="opCategoryLabel">Category</label>
-                    <select id="opCategory" class="op-cat-select"></select>
+                    <label class="op-cat-label" for="opSeat" id="opSeatLabel">Seat</label>
+                    <select id="opSeat" class="op-cat-select"></select>
                     <span class="op-subtitle" id="opSubtitle"></span>
                 </div>
-                <div class="op-station-tabs" id="opStationTabs" role="tablist"></div>
                 <div class="op-metrics" id="opMetrics"></div>
             </header>
 
@@ -445,15 +444,6 @@
                         <div class="form-section">
                             <div class="section-title" id="qsoSectionTitle">QSO Map</div>
                             <div class="form-row">
-                                <label id="catLabel" for="setCategory">Contest category</label>
-                                <select id="setCategory" class="set-input">
-                                    <option value="SO1R">SO1R</option>
-                                    <option value="SO2R">SO2R</option>
-                                    <option value="MS">MS</option>
-                                    <option value="MM">MM</option>
-                                </select>
-                            </div>
-                            <div class="form-row">
                                 <label id="qsoAutoFitLabel" for="setQsoAutoFit">Auto zoom to fit QSOs</label>
                                 <input type="checkbox" id="setQsoAutoFit" class="set-check">
                             </div>
@@ -513,11 +503,17 @@
                     <div class="cfg-pane" id="paneContest" role="tabpanel" aria-labelledby="tabContest">
                         <div class="form-section">
                             <div class="section-title" id="contestWindowTitle">Contest window</div>
-                            <div class="set-grid" id="contestFields"></div>
                             <div class="form-row">
-                                <label id="contestMultBandLabel" for="setContestMultPerBand">DXCC multiplier per band</label>
-                                <input type="checkbox" id="setContestMultPerBand" class="set-check" data-key="multPerBand">
+                                <label id="catLabel" for="setCategory">Contest category</label>
+                                <select id="setCategory" class="set-input">
+                                    <option value="SO1R">SO1R</option>
+                                    <option value="SO2R">SO2R</option>
+                                    <option value="MS">MS</option>
+                                    <option value="M2">M2</option>
+                                    <option value="MM">MM</option>
+                                </select>
                             </div>
+                            <div class="set-grid" id="contestFields"></div>
                         </div>
                         <div class="form-row reset-row">
                             <label id="contestResetLabel">Reset contest settings</label>

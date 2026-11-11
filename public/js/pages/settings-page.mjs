@@ -752,7 +752,6 @@ export function createSettingsPage(ctx) {
         setText('#propTitle', t('settings.section.prop'));
         setText('#contestWindowTitle', t('settings.section.contestWindow'));
         setText('#contestResetLabel', t('settings.reset.contest'));
-        setText('#contestMultBandLabel', t('settings.field.multPerBand.label'));
         setText('#backupTitle', t('settings.section.backup'));
         setText('#backupHint', t('settings.hint.backup'));
         setText('#btnExportSettings', t('settings.action.export'));
@@ -823,7 +822,7 @@ export function createSettingsPage(ctx) {
                 ['#setQsoLines', 'qsoLines'], ['#setQsoAutoFit', 'qsoAutoFit'],
                 ['#setQsoVoice', 'qsoVoiceAlert'],
                 ['#setMySpotPopup', 'mySpotPopup'], ['#setMySpotVoice', 'mySpotVoice'],
-                ['#setWallTimerOn', 'wallTimerOn'], ['#setContestMultPerBand', 'multPerBand']
+                ['#setWallTimerOn', 'wallTimerOn']
             ]) setChecked(selector, ctx.settings[key]);
             for (const [selector, key] of [
                 ['#setMySpotTtl', 'mySpotTtl'], ['#setMySpotMax', 'mySpotMax'],
@@ -1093,7 +1092,6 @@ export function createSettingsPage(ctx) {
             ['#setWallTimerStart', 'wallTimerStart'], ['#setWallTimerEnd', 'wallTimerEnd']
         ]) bindTextSetting(selector, key);
         bindCheckedSetting('#setWallTimerOn', 'wallTimerOn');
-        bindCheckedSetting('#setContestMultPerBand', 'multPerBand');
 
         $('#saClose').addEventListener('click', ctx.qso.hideSpotAlertAndVoice);
         $('#btnSpotView').addEventListener('click', () => { closeConfig(); ctx.qso.setViewMode('spots'); });

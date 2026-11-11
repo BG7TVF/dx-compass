@@ -1,0 +1,384 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-11-11T16:46:10.917Z",
+  "contests": {
+    "CQWW": {
+      "family": "CQWW",
+      "name": "The 2026 CQ World-Wide DX Contest",
+      "year": 2026,
+      "modes": [
+        "CW",
+        "SSB"
+      ],
+      "bands": [
+        "160m",
+        "80m",
+        "40m",
+        "20m",
+        "15m",
+        "10m"
+      ],
+      "periods": [
+        {
+          "mode": "SSB",
+          "start": "2026-10-24T00:00:00.000Z",
+          "end": "2026-10-25T23:59:59.000Z",
+          "durationHours": 48
+        },
+        {
+          "mode": "CW",
+          "start": "2026-11-28T00:00:00.000Z",
+          "end": "2026-11-29T23:59:59.000Z",
+          "durationHours": 48
+        }
+      ],
+      "qsoPoints": {
+        "sameCountry": 0,
+        "sameContinent": 1,
+        "differentContinent": 3,
+        "northAmericaException": 2
+      },
+      "multiplierCounting": "dxcc-per-band",
+      "categories": {
+        "SO1R": {
+          "name": "Single Operator",
+          "simultaneousSignals": 1,
+          "bandChange": {
+            "rule": "none"
+          },
+          "multiplierStationRole": "none"
+        },
+        "MS": {
+          "name": "Multi-Single",
+          "simultaneousSignals": 1,
+          "bandChange": {
+            "rule": "time-lock",
+            "minutes": 10
+          },
+          "multiplierStationRole": "mult"
+        },
+        "M2": {
+          "name": "Multi-Two",
+          "simultaneousSignals": 2,
+          "bandChange": {
+            "rule": "hourly-quota",
+            "limitPerHour": 8
+          },
+          "multiplierStationRole": "none"
+        },
+        "MM": {
+          "name": "Multi-Multi",
+          "simultaneousSignals": 6,
+          "bandChange": "unknown",
+          "multiplierStationRole": "none"
+        }
+      },
+      "simultaneousSignals": 6,
+      "sources": [
+        {
+          "url": "https://www.cqww.com/rules.htm",
+          "modes": [
+            "CW",
+            "SSB"
+          ],
+          "fetchedAt": "2026-11-11T16:46:10.917Z",
+          "ok": true
+        }
+      ],
+      "generatedAt": "2026-11-11T16:46:10.917Z",
+      "unknowns": [
+        {
+          "field": "categories.MM.bandChange",
+          "reason": "no quota or time lock found",
+          "source": "https://www.cqww.com/rules.htm"
+        }
+      ]
+    },
+    "CQWPX": {
+      "family": "CQWPX",
+      "name": "2026 CQ World-Wide WPX Contest",
+      "year": 2026,
+      "modes": [
+        "CW",
+        "SSB",
+        "RTTY"
+      ],
+      "bands": [
+        "160m",
+        "80m",
+        "40m",
+        "20m",
+        "15m",
+        "10m"
+      ],
+      "periods": [
+        {
+          "mode": "SSB",
+          "start": "2025-03-28T00:00:00.000Z",
+          "end": "2025-03-29T23:59:59.000Z",
+          "durationHours": 48
+        },
+        {
+          "mode": "CW",
+          "start": "2026-05-30T00:00:00.000Z",
+          "end": "2026-05-31T23:59:59.000Z",
+          "durationHours": 48
+        }
+      ],
+      "qsoPoints": {
+        "high": {
+          "differentContinent": 3,
+          "sameContinent": 1,
+          "sameCountry": 1
+        },
+        "low": {
+          "differentContinent": 6,
+          "sameContinent": 2,
+          "sameCountry": 1
+        }
+      },
+      "multiplierCounting": "wpx",
+      "categories": {
+        "SO1R": {
+          "name": "Single Operator",
+          "simultaneousSignals": "unknown",
+          "bandChange": "unknown",
+          "multiplierStationRole": "none"
+        },
+        "M2": {
+          "name": "Multi-Two",
+          "simultaneousSignals": "unknown",
+          "bandChange": "unknown",
+          "multiplierStationRole": "none"
+        }
+      },
+      "simultaneousSignals": "unknown",
+      "sources": [
+        {
+          "url": "https://www.cqwpx.com/rules.htm",
+          "modes": [
+            "CW",
+            "SSB"
+          ],
+          "fetchedAt": "2026-11-11T16:46:10.917Z",
+          "ok": true
+        },
+        {
+          "url": "https://www.cqwpxrtty.com/rules.htm",
+          "modes": [
+            "RTTY"
+          ],
+          "fetchedAt": "2026-11-11T16:46:10.917Z",
+          "ok": true
+        }
+      ],
+      "generatedAt": "2026-11-11T16:46:10.917Z",
+      "unknowns": [
+        {
+          "field": "qsoPoints",
+          "reason": "point table not matched",
+          "source": "https://www.cqwpx.com/rules.htm"
+        },
+        {
+          "field": "categories.SO1R.simultaneousSignals",
+          "reason": "not stated near the category heading",
+          "source": "https://www.cqwpx.com/rules.htm"
+        },
+        {
+          "field": "categories.SO1R.bandChange",
+          "reason": "no quota or time lock found",
+          "source": "https://www.cqwpx.com/rules.htm"
+        },
+        {
+          "field": "categories.M2.simultaneousSignals",
+          "reason": "not stated near the category heading",
+          "source": "https://www.cqwpx.com/rules.htm"
+        },
+        {
+          "field": "categories.M2.bandChange",
+          "reason": "no quota or time lock found",
+          "source": "https://www.cqwpx.com/rules.htm"
+        },
+        {
+          "field": "categories.SO1R.simultaneousSignals",
+          "reason": "not stated near the category heading",
+          "source": "https://www.cqwpxrtty.com/rules.htm"
+        },
+        {
+          "field": "categories.SO1R.bandChange",
+          "reason": "no quota or time lock found",
+          "source": "https://www.cqwpxrtty.com/rules.htm"
+        },
+        {
+          "field": "categories.M2.simultaneousSignals",
+          "reason": "not stated near the category heading",
+          "source": "https://www.cqwpxrtty.com/rules.htm"
+        },
+        {
+          "field": "categories.M2.bandChange",
+          "reason": "no quota or time lock found",
+          "source": "https://www.cqwpxrtty.com/rules.htm"
+        }
+      ]
+    },
+    "ARRL_DX": {
+      "family": "ARRL_DX",
+      "name": "ARRL International DX Contest",
+      "year": 2026,
+      "modes": [
+        "CW",
+        "SSB"
+      ],
+      "bands": [
+        "160m",
+        "80m",
+        "40m",
+        "20m",
+        "15m",
+        "10m"
+      ],
+      "periods": "unknown",
+      "qsoPoints": "unknown",
+      "multiplierCounting": "unknown",
+      "categories": {},
+      "simultaneousSignals": "unknown",
+      "sources": [
+        {
+          "url": "https://www.arrl.org/arrl-dx",
+          "modes": [
+            "CW",
+            "SSB"
+          ],
+          "fetchedAt": "2026-11-11T16:46:10.917Z",
+          "ok": true
+        }
+      ],
+      "generatedAt": "2026-11-11T16:46:10.917Z",
+      "unknowns": [
+        {
+          "field": "qsoPoints",
+          "reason": "point table not matched",
+          "source": "https://www.arrl.org/arrl-dx"
+        },
+        {
+          "field": "multiplierCounting",
+          "reason": "multiplier rule not matched",
+          "source": "https://www.arrl.org/arrl-dx"
+        },
+        {
+          "field": "categories",
+          "reason": "no category heading matched on the fetched page",
+          "source": "https://www.arrl.org/arrl-dx"
+        }
+      ]
+    },
+    "IARU": {
+      "family": "IARU",
+      "name": "IARU HF World Championship",
+      "year": "unknown",
+      "modes": [
+        "CW",
+        "SSB"
+      ],
+      "bands": [
+        "160m",
+        "80m",
+        "40m",
+        "20m",
+        "15m",
+        "10m"
+      ],
+      "periods": "unknown",
+      "qsoPoints": "unknown",
+      "multiplierCounting": "unknown",
+      "categories": {},
+      "simultaneousSignals": "unknown",
+      "sources": [
+        {
+          "url": "https://www.iaru.org/on-the-air/iaru-contests/rules/",
+          "modes": [
+            "CW",
+            "SSB"
+          ],
+          "fetchedAt": "2026-11-11T16:46:10.917Z",
+          "ok": true
+        }
+      ],
+      "generatedAt": "2026-11-11T16:46:10.917Z",
+      "unknowns": [
+        {
+          "field": "year",
+          "reason": "no four-digit year on the page",
+          "source": "https://www.iaru.org/on-the-air/iaru-contests/rules/"
+        },
+        {
+          "field": "qsoPoints",
+          "reason": "point table not matched",
+          "source": "https://www.iaru.org/on-the-air/iaru-contests/rules/"
+        },
+        {
+          "field": "multiplierCounting",
+          "reason": "multiplier rule not matched",
+          "source": "https://www.iaru.org/on-the-air/iaru-contests/rules/"
+        },
+        {
+          "field": "categories",
+          "reason": "no category heading matched on the fetched page",
+          "source": "https://www.iaru.org/on-the-air/iaru-contests/rules/"
+        }
+      ]
+    },
+    "CQ160": {
+      "family": "CQ160",
+      "name": "The 2026 CQ World Wide 160-Meter Contest",
+      "year": 2026,
+      "modes": [
+        "CW",
+        "SSB"
+      ],
+      "bands": [
+        "160m"
+      ],
+      "periods": [
+        {
+          "mode": "CW",
+          "start": "2026-01-23T22:00:00.000Z",
+          "end": "2026-01-25T22:00:00.000Z",
+          "durationHours": 48
+        }
+      ],
+      "qsoPoints": {
+        "perQso": 2
+      },
+      "multiplierCounting": "dxcc-per-band",
+      "categories": {
+        "SO1R": {
+          "name": "Single operator",
+          "simultaneousSignals": 1,
+          "bandChange": "unknown",
+          "multiplierStationRole": "none"
+        }
+      },
+      "simultaneousSignals": "unknown",
+      "sources": [
+        {
+          "url": "https://www.cq160.com/rules.htm",
+          "modes": [
+            "CW",
+            "SSB"
+          ],
+          "fetchedAt": "2026-11-11T16:46:10.917Z",
+          "ok": true
+        }
+      ],
+      "generatedAt": "2026-11-11T16:46:10.917Z",
+      "unknowns": [
+        {
+          "field": "categories.SO1R.bandChange",
+          "reason": "no quota or time lock found",
+          "source": "https://www.cq160.com/rules.htm"
+        }
+      ]
+    }
+  }
+}

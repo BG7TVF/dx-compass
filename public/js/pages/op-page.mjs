@@ -43,7 +43,7 @@ export function createOpPage(ctx) {
     const state = {
         active: false,
         map: null,
-        selectedRadio: 'all',
+        selectedSeat: 'all',
         qsos: new Map(),
         mySpots: [],
         allSpots: [],
@@ -104,20 +104,75 @@ export function createOpPage(ctx) {
         return radios()[String(key)] || null;
     }
 
-    function currentRadioKey() {
-        if (category() === 'SO2R' || category() === 'M2') return 'all';
-        const keys = radioKeys();
-        return keys.includes(String(state.selectedRadio)) ? String(state.selectedRadio) : keys[0];
+    /* 席位来自服务端 seats DTO；没有实时数据时按设置席位数与
+       seatRadios 绑定生成占位，保证 M2/MM 在 N1MM 接入前也能选席位。 */
+    function liveSeats() {
+        const station = ctx.qso && ctx.qso.state && ctx.qso.state.station;
+        return station && Array.isArray(station.seats) ? station.seats : [];
     }
 
-    function visibleRadioKeys() {
-        const key = currentRadioKey();
-        return key === 'all' ? radioKeys() : [key];
+    function configuredSeatRadios() {
+        const bound = String(ctx.settings.seatRadios || '')
+            .split(',').map(value => value.trim()).filter(Boolean);
+        const count = Math.max(1, Math.min(12, Number(ctx.settings.seatCount) || 1));
+        const out = [];
+        for (let i = 0; i < count; i += 1) out.push(bound[i] || String(i + 1));
+        return out;
+    }
+
+    function operatorRoster() {
+        return String(ctx.settings.operators || '')
+            .split(',').map(value => value.trim().toUpperCase()).filter(Boolean);
+    }
+
+    function seatChoices() {
+        const live = liveSeats();
+        if (live.length) {
+            return live.map((item, index) => ({
+                value: String(item.seat || item.radioNr || index + 1),
+                radioNr: item.radioNr || '',
+                stationName: item.stationName || '',
+                operator: item.operator || '',
+                index
+            }));
+        }
+        const roster = operatorRoster();
+        return configuredSeatRadios().map((radioNr, index) => ({
+            value: String(radioNr), radioNr, stationName: '',
+            operator: roster[index] || '', index
+        }));
+    }
+
+    function seatLabel(choice) {
+        if (!choice) return '';
+        const parts = [choice.stationName || t('op.seat.n', {n: choice.index + 1})];
+        if (choice.radioNr) parts.push(t('op.seat.radio', {n: choice.radioNr}));
+        if (choice.operator) parts.push(choice.operator);
+        return parts.join(' · ');
+    }
+
+    function seatNameOf(key) {
+        const choice = seatChoices().find(item => item.value === String(key));
+        return choice ? seatLabel(choice) : t('op.radio.n', {n: radioNrOfKey(key)});
+    }
+
+    function currentSeat() {
+        const choices = seatChoices();
+        if (!choices.length) return '1';
+        if (state.selectedSeat === 'all' && choices.length > 1) return 'all';
+        const values = choices.map(choice => choice.value);
+        return values.includes(String(state.selectedSeat))
+            ? String(state.selectedSeat) : values[0];
+    }
+
+    function visibleSeats() {
+        const key = currentSeat();
+        return key === 'all' ? seatChoices().map(choice => choice.value) : [key];
     }
 
     function radioTheme(key) {
         // M2/MM 多台实例可能都报 RadioNr=1，主题色按席位顺序分配才分得清。
-        const index = radioKeys().indexOf(String(key));
+        const index = seatChoices().findIndex(choice => choice.value === String(key));
         if (index >= 0) return RADIO_THEME[index + 1] || 'r6';
         return RADIO_THEME[radioNrOfKey(key)] || 'r1';
     }
@@ -126,7 +181,7 @@ export function createOpPage(ctx) {
         const radio = radioOf(key);
         if (radio && (radio.radioName || radio.name)) return radio.radioName || radio.name;
         if (radio && radio.stationName) return radio.stationName;
-        return t('op.radio.n', {n: radioNrOfKey(key)});
+        return seatNameOf(key);
     }
 
     /* 与服务端 seatOfRow 同口径：优先 n1mm_id 命名空间，回退 stationname。 */
@@ -237,8 +292,7 @@ export function createOpPage(ctx) {
     }
 
     function renderTop() {
-        const cat = category();
-        const keys = visibleRadioKeys();
+        const keys = visibleSeats();
         const globalRate = rateFor('all');
         const parts = [];
         for (const key of keys) {
@@ -285,25 +339,25 @@ export function createOpPage(ctx) {
         $('#opMetrics').innerHTML = parts.join('');
         $('#opKicker').textContent = t('op.title');
         $('#opSubtitle').textContent = t('op.subtitle');
-        renderStationTabs();
+        renderSeatOptions();
     }
 
-    function renderStationTabs() {
-        const host = $('#opStationTabs');
-        const cat = category();
-        const keys = radioKeys();
-        if (!(cat === 'MS' || cat === 'MM') || keys.length < 2) {
-            host.innerHTML = '';
-            return;
+    function renderSeatOptions() {
+        const select = $('#opSeat');
+        const label = $('#opSeatLabel');
+        if (!select) return;
+        const choices = seatChoices();
+        const show = choices.length > 1;
+        select.classList.toggle('hidden', !show);
+        if (label) {
+            label.classList.toggle('hidden', !show);
+            label.textContent = t('op.seat');
         }
-        const current = currentRadioKey();
-        host.innerHTML = keys.map(key => {
-            const radio = radioOf(key);
-            const label = radio && radio.radioName || t('op.radio.n', {n: key});
-            return '<button type="button" role="tab" class="op-station-tab ' + radioTheme(key) +
-                (key === current ? ' active' : '') + '" data-op-radio="' + esc(key) + '">' +
-                esc(label) + '</button>';
-        }).join('');
+        const current = currentSeat();
+        select.innerHTML = (show ? '<option value="all">' + esc(t('op.seat.all')) + '</option>' : '') +
+            choices.map(choice => '<option value="' + esc(choice.value) + '">' +
+                esc(seatLabel(choice)) + '</option>').join('');
+        select.value = current === 'all' && show ? 'all' : current;
     }
 
     function renderBands() {
@@ -519,8 +573,8 @@ export function createOpPage(ctx) {
     }
 
     function currentBand() {
-        const key = currentRadioKey();
-        const radio = key === 'all' ? radioOf(radioKeys()[0]) : radioOf(key);
+        const key = currentSeat();
+        const radio = key === 'all' ? radioOf(visibleSeats()[0]) : radioOf(key);
         const band = radio && radio.freqKhz ? bandOf(radio.freqKhz) : '';
         if (band) return band.toLowerCase();
         const latest = lastQsoFor(key);
@@ -628,7 +682,7 @@ export function createOpPage(ctx) {
         const limit = Math.max(2, Number(ctx.settings.opRunIdleMin) || 10);
         const now = Date.now();
         const out = [];
-        for (const key of visibleRadioKeys()) {
+        for (const key of visibleSeats()) {
             const radio = radioOf(key);
             if (!radio || radio.isRunning !== true) continue;
             const last = lastQsoFor(key);
@@ -639,7 +693,7 @@ export function createOpPage(ctx) {
                 kind: 'run',
                 key: 'run|' + key,
                 text: t('op.advice.runIdle', {
-                    radio: t('op.radio.n', {n: key}),
+                    radio: seatNameOf(key),
                     min: Math.floor(minutes)
                 })
             });
@@ -676,9 +730,14 @@ export function createOpPage(ctx) {
     function engineAdvice() {
         const data = state.adviceEngine;
         if (!data || !data.ok) return [];
-        const lanes = Array.isArray(data.seats) && data.seats.length > 1
+        let lanes = Array.isArray(data.seats) && data.seats.length > 1
             ? data.seats
             : [{seat: data.seat, radio: null, gates: data.gates, advice: data.advice}];
+        const selected = currentSeat();
+        if (selected !== 'all') {
+            const matched = lanes.filter(lane => String(lane.seat) === selected);
+            if (matched.length) lanes = matched;
+        }
         const multi = lanes.length > 1;
         const out = [];
         for (const lane of lanes) {
@@ -746,7 +805,12 @@ export function createOpPage(ctx) {
             return;
         }
         try {
-            state.adviceEngine = await fetchAdvice();
+            const seat = currentSeat();
+            // 只有服务端真实席位键（DXI 复合键）才按席位请求；占位电台号
+            // 传过去会凭空多出一个 lane。
+            state.adviceEngine = await fetchAdvice({
+                seat: seat !== 'all' && seat.includes(':') ? seat : ''
+            });
         } catch (error) {
             state.adviceEngine = null;
         }
@@ -793,14 +857,14 @@ export function createOpPage(ctx) {
     }
 
     function renderMapLegend() {
-        const keys = visibleRadioKeys();
+        const keys = visibleSeats();
         const parts = ['<span><i style="background:var(--op-r1)"></i>' + esc(t('op.map.legend.radio1')) + '</span>'];
         if (category() === 'SO2R') {
             parts.push('<span><i style="background:var(--op-r2);border-radius:1px"></i>' +
                 esc(t('op.map.legend.radio2')) + '</span>');
         } else if (keys.length && keys[0] !== '1') {
             parts[0] = '<span><i style="background:var(--op-r1)"></i>' +
-                esc(t('op.radio.n', {n: keys[0]})) + '</span>';
+                esc(seatNameOf(keys[0])) + '</span>';
         }
         parts.push('<span><i style="background:#00e08a"></i>' + esc(t('op.map.legend.home')) + '</span>');
         parts.push('<span><i style="background:#8fe3ff;border-radius:1px"></i>' +
@@ -817,7 +881,7 @@ export function createOpPage(ctx) {
         const spots = state.mySpots.filter(spot => timeOf(spot.timestamp) >= cutoff);
         const limit = Math.min(600, Math.max(60, Number(ctx.settings.qsoMax) || 1500));
         const all = [...state.qsos.values()].slice(-limit);
-        const key = currentRadioKey();
+        const key = currentSeat();
         state.map.setData({
             qsos: all,
             spots,
@@ -868,7 +932,7 @@ export function createOpPage(ctx) {
             host.innerHTML = devices.map(device => deviceCard(device)).join('');
             return;
         }
-        const keys = visibleRadioKeys();
+        const keys = visibleSeats();
         const cards = keys.map(key => {
             const radio = radioOf(key);
             return '<div class="op-radio-card ' + radioTheme(key) + '"><b>' +
@@ -1345,17 +1409,12 @@ export function createOpPage(ctx) {
     }
 
     function applyLang() {
-        renderCategoryOptions();
+        renderTitles();
+        renderSeatOptions();
         if (state.active) refreshAll();
     }
 
-    function renderCategoryOptions() {
-        const select = $('#opCategory');
-        select.innerHTML = CONTEST_CATEGORIES.map(value =>
-            '<option value="' + esc(value) + '">' + esc(t('op.category.' + value.toLowerCase())) +
-            '</option>').join('');
-        select.value = category();
-        $('#opCategoryLabel').textContent = t('op.category');
+    function renderTitles() {
         $('#opBandsTitle').textContent = t('op.left.bands');
         $('#opSpaceTitle').textContent = t('op.left.space');
         $('#opOppTitle').textContent = t('op.left.opponents');
@@ -1375,21 +1434,12 @@ export function createOpPage(ctx) {
             state.adviceDismissed.add(close.dataset.opAdvice);
             renderAdvice();
         });
-        $('#opCategory')?.addEventListener('change', event => {
-            ctx.settings.category = event.target.value;
-            if (ctx.saveSettings) ctx.saveSettings();
-            state.selectedRadio = 'all';
+        $('#opSeat')?.addEventListener('change', event => {
+            state.selectedSeat = event.target.value;
             refreshAll();
             renderMap();
             renderMultipliers();
-        });
-        $('#opStationTabs')?.addEventListener('click', event => {
-            const button = event.target.closest('[data-op-radio]');
-            if (!button) return;
-            state.selectedRadio = button.dataset.opRadio;
-            refreshAll();
-            renderMap();
-            renderMultipliers();
+            loadAdvice();
         });
         $('#opAddPeripheral')?.addEventListener('click', event => {
             event.stopPropagation();
@@ -1435,7 +1485,8 @@ export function createOpPage(ctx) {
     }
 
     function init() {
-        renderCategoryOptions();
+        renderTitles();
+        renderSeatOptions();
         bind();
     }
 
