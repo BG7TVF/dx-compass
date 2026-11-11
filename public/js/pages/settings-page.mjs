@@ -708,6 +708,7 @@ export function createSettingsPage(ctx) {
             '#qtLCall': 'lblCall', '#qtLRst': 'lblRst', '#qtLExch': 'lblExch', '#qtLBand': 'lblBand',
             '#qtLMode': 'lblMode', '#qtLOp': 'lblOp', '#qtLAge': 'lblAge', '#btnSpotView': 'spotView',
             '#btnQsoView': 'qsoView', '#btnPropView': 'propView', '#btnOpView': 'op.title',
+            '#btnDevView': 'dev.title',
             '#propProjLabel': 'propProjection',
             '#propLayerLabel': 'propLayer', '#qsoPanelTitle': 'stPanel', '#qLastTitle': 'stLastQso',
             '#qRateTitle': 'qsoRate', '#qMinTitle': 'qsoPerMin', '#qOpTitle': 'qsoByOp',
@@ -724,6 +725,7 @@ export function createSettingsPage(ctx) {
             '#btnSpotView': 'nav.spotGrid', '#btnQsoView': 'nav.qsoMap',
             '#btnPropView': 'nav.propMap',
             '#btnOpView': 'op.title',
+            '#btnDevView': 'dev.title',
             '#connDot': 'nav.conn',
             '#rotateGroup': 'nav.rotateHint', '#btnClearDb': 'nav.clearDbHint',
             '#saClose': 'nav.close'
@@ -1102,6 +1104,7 @@ export function createSettingsPage(ctx) {
         $('#btnQsoView').addEventListener('click', () => { closeConfig(); ctx.qso.setViewMode('qso'); });
         $('#btnPropView').addEventListener('click', () => { closeConfig(); ctx.qso.setViewMode('prop'); });
         $('#btnOpView').addEventListener('click', () => { closeConfig(); ctx.qso.setViewMode('op'); });
+        $('#btnDevView').addEventListener('click', () => { closeConfig(); ctx.qso.setViewMode('dev'); });
         $('#configForm').addEventListener('submit', saveConfig);
 
         $('#btnExportSettings').addEventListener('click', exportSettings);

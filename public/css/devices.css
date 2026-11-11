@@ -1,0 +1,319 @@
+/* Devices view: flat tree on the left, read-only panels on the right. */
+
+.dev-view {
+    position: fixed;
+    inset: var(--toolbar-h) 0 0 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px 18px 12px;
+    background: var(--bg);
+    overflow: hidden;
+    z-index: 5;
+}
+
+.dev-top {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.dev-top-id {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.dev-kicker {
+    font-size: 10px;
+    letter-spacing: .18em;
+    color: var(--text-dim);
+}
+
+.dev-top h2 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 600;
+}
+
+.dev-subtitle,
+.dev-summary {
+    color: var(--text-dim);
+    font-size: 12px;
+}
+
+.dev-summary {
+    margin: 0;
+}
+
+.dev-top-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.dev-seat-label {
+    color: var(--text-dim);
+    font-size: 12px;
+}
+
+.dev-seat-select {
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    padding: 5px 8px;
+    font-size: 12px;
+    max-width: 180px;
+}
+
+.dev-btn {
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    padding: 6px 12px;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.dev-btn:hover { background: var(--hover); }
+.dev-btn.primary { border-color: var(--accent); color: var(--accent); }
+.dev-btn.danger { border-color: var(--red); color: var(--red); }
+
+.dev-body {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(320px, 1fr) minmax(420px, 1.25fr);
+    gap: 12px;
+}
+
+.dev-tree-panel,
+.dev-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+}
+
+.dev-tree-panel {
+    overflow: auto;
+    padding: 8px;
+}
+
+.dev-tree {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.dev-node {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 3px;
+    padding: 7px 10px 7px calc(10px + var(--depth, 0) * 18px);
+    border-radius: var(--r-sm);
+    border: 1px solid transparent;
+    cursor: pointer;
+}
+
+.dev-node:hover { background: var(--hover); }
+.dev-node.active { border-color: var(--accent); background: var(--row-hover); }
+.dev-node:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
+
+.dev-node-main {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.dev-node-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-strong);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.dev-node-type {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    color: var(--text-dim);
+}
+
+.dev-node-meta {
+    font-size: 11px;
+    color: var(--text-dim);
+    min-height: 1em;
+}
+
+.dev-node-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--text-dim);
+    flex-wrap: wrap;
+}
+
+.dev-node-report { color: var(--text-dim); opacity: .75; }
+
+.dev-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--text-dim);
+    flex: none;
+}
+.dev-dot-online { background: var(--green); }
+.dev-dot-offline { background: var(--red); }
+.dev-dot-unknown { background: var(--yellow); }
+
+.dev-chip {
+    display: inline-block;
+    padding: 1px 7px;
+    border-radius: 999px;
+    font-size: 10px;
+    border: 1px solid var(--border);
+    color: var(--text);
+    background: var(--well);
+    white-space: nowrap;
+}
+.dev-chip-muted { color: var(--text-dim); }
+.dev-color-red { border-color: var(--red); color: var(--red); }
+.dev-color-yellow { border-color: var(--yellow); color: var(--yellow); }
+.dev-color-green { border-color: var(--green); color: var(--green); }
+
+.dev-detail {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 0;
+    overflow: auto;
+}
+
+.dev-card {
+    padding: 12px 14px;
+}
+
+.dev-card h3 {
+    margin: 0 0 10px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.dev-empty {
+    margin: 6px 0;
+    color: var(--text-dim);
+    font-size: 12px;
+}
+
+.dev-form h3 { margin: 0 0 10px; }
+
+.dev-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 10px;
+}
+
+.dev-form label,
+.dev-seat-label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 11px;
+    color: var(--text-dim);
+}
+
+.dev-seat-label { display: inline; }
+
+.dev-form input,
+.dev-form select {
+    background: var(--well);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    padding: 6px 8px;
+    font-size: 12px;
+    width: 100%;
+}
+
+.dev-form input:focus,
+.dev-form select:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.dev-check {
+    flex-direction: row !important;
+    align-items: center;
+    gap: 6px !important;
+    margin-top: 10px;
+}
+
+.dev-check input { width: auto; }
+
+.dev-form-error {
+    margin: 8px 0 0;
+    color: var(--red);
+    font-size: 12px;
+}
+
+.dev-form-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.dev-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+
+.dev-table th,
+.dev-table td {
+    text-align: left;
+    padding: 5px 8px;
+    border-bottom: 1px solid var(--row-border);
+    vertical-align: top;
+}
+
+.dev-table th {
+    color: var(--text-dim);
+    font-weight: 500;
+    font-size: 11px;
+}
+
+.dev-table tr.active { background: var(--row-hover); }
+.dev-table tbody tr { cursor: pointer; }
+
+.dev-note {
+    margin: 6px 0 0;
+    color: var(--text-dim);
+    font-size: 11px;
+}
+
+.dev-tx-headline {
+    margin: 0 0 8px;
+    font-size: 13px;
+    color: var(--text);
+}
+.dev-tx-none { color: var(--text-dim); }
+.dev-tx-interrupted { color: var(--red); }
+.dev-tx-ok { color: var(--green); }
+
+.dev-foot {
+    color: var(--text-dim);
+    font-size: 11px;
+}
+
+@media (max-width: 980px) {
+    .dev-body { grid-template-columns: 1fr; }
+}

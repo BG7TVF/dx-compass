@@ -12,6 +12,7 @@ import {createRecordsPage} from './pages/records-page.mjs';
 import {createSettingsPage} from './pages/settings-page.mjs';
 import {createPropagationPage} from './pages/propagation-page.mjs';
 import {createOpPage} from './pages/op-page.mjs';
+import {createDevicesPage} from './pages/devices-page.mjs';
 
 async function start() {
     const i18n = createI18n({lang: 'zh'});
@@ -27,6 +28,7 @@ async function start() {
     ctx.records = createRecordsPage(ctx);
     ctx.prop = createPropagationPage(ctx);
     ctx.op = createOpPage(ctx);
+    ctx.devices = createDevicesPage(ctx);
     ctx.settingsPage = createSettingsPage(ctx);
     ctx.saveSettings = () => ctx.settingsPage.save();
 
@@ -36,6 +38,7 @@ async function start() {
     ctx.qso.init();
     ctx.prop.init();
     ctx.op.init();
+    ctx.devices.init();
     ctx.settingsPage.bind();
     ctx.settingsPage.applyLang();
     ctx.records.init();
@@ -69,6 +72,9 @@ async function start() {
                 case 'alert':
                     ctx.qso.showRuleAlert(message);
                     ctx.op.showRuleAlert(message);
+                    break;
+                case 'devices':
+                    if (ctx.qso.state.view === 'dev') void ctx.devices.refresh();
                     break;
                 default:
                     ctx.spot.handleSpot(message);
@@ -142,6 +148,7 @@ async function start() {
         if (ctx.qso.state.view === 'spots') ctx.spot.refreshMaps();
         else if (ctx.qso.state.view === 'qso') ctx.qso.refreshMap();
         else if (ctx.qso.state.view === 'op') ctx.op.resize();
+        else if (ctx.qso.state.view === 'dev') ctx.devices.resize?.();
         else ctx.prop.resize();
     });
 }

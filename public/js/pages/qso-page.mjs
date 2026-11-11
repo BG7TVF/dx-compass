@@ -691,23 +691,27 @@ export function createQsoPage(ctx) {
         if (state.view === mode) return;
         const leaving = state.view;
         state.view = mode;
-        const isQso = mode === 'qso', isProp = mode === 'prop', isOp = mode === 'op';
-        const isFull = isQso || isProp || isOp;
+        const isQso = mode === 'qso', isProp = mode === 'prop', isOp = mode === 'op', isDev = mode === 'dev';
+        const isFull = isQso || isProp || isOp || isDev;
         $('#grid').classList.toggle('hidden', isFull);
         $('#qsoView').classList.toggle('hidden', !isQso);
         $('#propView').classList.toggle('hidden', !isProp);
         $('#opView').classList.toggle('hidden', !isOp);
+        $('#devView').classList.toggle('hidden', !isDev);
         $('#recordsPanel').classList.toggle('hidden', isFull);
         $('#qsoPanel').classList.toggle('hidden', !isQso);
         $('#btnSpotView').classList.toggle('active', mode === 'spots');
         $('#btnQsoView').classList.toggle('active', isQso);
         $('#btnPropView').classList.toggle('active', isProp);
         $('#btnOpView').classList.toggle('active', isOp);
+        $('#btnDevView').classList.toggle('active', isDev);
         document.body.classList.toggle('qso-mode', isQso);
         document.body.classList.toggle('prop-mode', isProp);
         document.body.classList.toggle('op-mode', isOp);
+        document.body.classList.toggle('dev-mode', isDev);
         if (leaving === 'prop' && !isProp) ctx.prop?.hide();
         if (leaving === 'op' && !isOp) ctx.op?.hide();
+        if (leaving === 'dev' && !isDev) ctx.devices?.hide();
         if (isQso) {
             state.map.invalidateSize();
             fitQsoMap();
@@ -717,6 +721,9 @@ export function createQsoPage(ctx) {
         } else if (isOp) {
             hideSpotAlertAndVoice();
             ctx.op?.show();
+        } else if (isDev) {
+            hideSpotAlertAndVoice();
+            ctx.devices?.show();
         } else {
             hideSpotAlertAndVoice();
             ctx.spot.refreshMaps();

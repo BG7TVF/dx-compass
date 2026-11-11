@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
     <link rel="stylesheet" href="css/style.css?v=2.3.4">
     <link rel="stylesheet" href="css/op.css?v=1.0.0">
+    <link rel="stylesheet" href="css/devices.css?v=1.0.0">
 </head>
 <body>
     <div class="toolbar">
@@ -18,6 +19,7 @@
                 <button class="menu-item view-btn" id="btnQsoView" title="QSO map">QSO</button>
                 <button class="menu-item view-btn" id="btnPropView" title="Propagation map">Propagation</button>
                 <button class="menu-item view-btn" id="btnOpView" title="Operator position view">OP View</button>
+                <button class="menu-item view-btn" id="btnDevView" title="Devices">Devices</button>
                 <div class="menu-sep"></div>
                 <button class="menu-item" id="btnConfig" title="Settings">Settings</button>
             </div>
@@ -180,6 +182,33 @@
                 </div>
                 <div class="op-bottom-body" id="opBottom"></div>
             </footer>
+        </div>
+
+        <!-- Devices view: unified tree + read-only status (no device control in this phase) -->
+        <div id="devView" class="dev-view hidden">
+            <header class="dev-top">
+                <div class="dev-top-id">
+                    <span class="dev-kicker">DEVICES</span>
+                    <h2 id="devTitle">Devices</h2>
+                    <span class="dev-subtitle" id="devSubtitle"></span>
+                </div>
+                <div class="dev-top-actions">
+                    <label class="dev-seat-label" for="devSeat" id="devSeatLabel">Seat</label>
+                    <select id="devSeat" class="dev-seat-select"></select>
+                    <button class="dev-btn" id="devRefresh" type="button">Refresh</button>
+                    <button class="dev-btn primary" id="devNew" type="button">Add device</button>
+                </div>
+            </header>
+            <p class="dev-summary" id="devSummary"></p>
+            <div class="dev-body">
+                <aside class="dev-tree-panel"><div id="devTree" class="dev-tree"></div></aside>
+                <section class="dev-detail">
+                    <section class="dev-card" id="devForm"></section>
+                    <section class="dev-card" id="devSeats"></section>
+                    <section class="dev-card" id="devTx"></section>
+                </section>
+            </div>
+            <footer class="dev-foot"><span id="devHint"></span></footer>
         </div>
 
         <!-- Records Panel: docked on the right, always visible -->
