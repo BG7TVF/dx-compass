@@ -10,6 +10,7 @@ import {
     validateSettingsPatch, writeLocalExtras
 } from '../settings-model.mjs';
 import {$, $$, showConfirm, showToast} from '../ui.mjs';
+import {changeSeatIdentity, getSeatIdentities} from '../../shared/data/station.mjs';
 
 const FIELD_CONTAINERS = {
     ui: '#globalAdvanced', map: '#spotAdvanced', qso: '#qsoAdvanced',
@@ -673,6 +674,7 @@ export function createSettingsPage(ctx) {
     function applyLang() {
         const t = ctx.t;
         ctx.i18n.setLanguage(ctx.settings.lang);
+        renderSeatIdentities();
         document.documentElement.lang = ctx.settings.lang;
         /* Keep the map dashboard LTR (Leaflet is not mirrored) but render the
          * settings pane right-to-left for Arabic. */
@@ -891,6 +893,7 @@ export function createSettingsPage(ctx) {
         closeAppMenu();
         $('#configPanel').classList.remove('hidden');
         void loadConfig();
+        void loadSeatIdentities();
     }
 
     function closeConfig() {
@@ -1036,6 +1039,7 @@ export function createSettingsPage(ctx) {
                 pane.id === `pane${button.dataset.pane.charAt(0).toUpperCase()}${button.dataset.pane.slice(1)}`));
         }));
         // Section headers collapse their card; keyboard and pointer share one path.
+        ensureSeatSection();
         $$('.form-section').forEach(section => {
             const title = section.querySelector('.section-title');
             if (!title) return;
@@ -1165,6 +1169,142 @@ export function createSettingsPage(ctx) {
         }
         buildBandColorInputs();
         renderSchemaFields();
+    }
+
+    // ------------------------------------------------ seat auto identification
+    let seatData = null;
+    let seatBusy = false;
+
+    function ensureSeatSection() {
+        const pane = $('#paneContest');
+        if (!pane) return null;
+        const existing = $('#seatIdentitiesSection');
+        if (existing) return existing;
+        const section = document.createElement('div');
+        section.className = 'form-section';
+        section.id = 'seatIdentitiesSection';
+        section.innerHTML =
+            '<div class="section-title" id="seatIdentitiesTitle"></div>' +
+            '<p class="hint" id="seatIdentitiesHint"></p>' +
+            '<div id="seatIdentityRows"></div>' +
+            '<div class="form-row"><button type="button" class="mini-btn" id="btnSeatRefresh"></button></div>' +
+            '<p class="hint" id="seatUnidentifiedHint"></p>' +
+            '<p class="hint" id="seatHistoryHint"></p>';
+        const reset = pane.querySelector('.reset-row');
+        pane.insertBefore(section, reset || null);
+        $('#btnSeatRefresh').addEventListener('click', () => void loadSeatIdentities(true));
+        section.addEventListener('click', event => {
+            const button = event.target.closest('button[data-seat-action]');
+            if (!button) return;
+            const row = button.closest('[data-seat-identity]');
+            if (row) void applySeatAction(row, button.dataset.seatAction);
+        });
+        return section;
+    }
+
+    function seatEvidence(labelKey, value) {
+        return '<div class="hint">' + escapeHtml(t(labelKey)) + ': ' +
+            escapeHtml(value || t('settings.seat.none')) + '</div>';
+    }
+
+    function renderSeatIdentities() {
+        const section = ensureSeatSection();
+        if (!section) return;
+        setText('#seatIdentitiesTitle', t('settings.seat.title'));
+        setText('#seatIdentitiesHint', t('settings.seat.hint'));
+        setText('#btnSeatRefresh', t('settings.seat.refresh'));
+        const rows = $('#seatIdentityRows');
+        if (!rows) return;
+        const seats = seatData && Array.isArray(seatData.seats) ? seatData.seats : [];
+        if (!seats.length) {
+            rows.innerHTML = '<p class="hint">' + escapeHtml(t('settings.seat.empty')) + '</p>';
+        } else {
+            rows.innerHTML = seats.map(record => {
+                const ruleKey = 'settings.seat.rule.' + (record.rule || 'unknown');
+                const ruleLabel = t(ruleKey) === ruleKey ? t('settings.seat.rule.unknown') : t(ruleKey);
+                const badge = (record.unbound ? t('settings.seat.unbound') + ' · ' : '') + ruleLabel;
+                return '<div class="form-row" data-seat-identity="' + escapeHtml(record.identity) + '">' +
+                    '<div style="flex:1;min-width:0">' +
+                        '<div><b>' + escapeHtml(record.seatKey || '') + '</b> · ' + escapeHtml(badge) + '</div>' +
+                        '<input class="set-input seat-name" maxlength="40" value="' + escapeHtml(record.displayName || '') +
+                            '" placeholder="' + escapeHtml(t('settings.seat.namePlaceholder')) + '">' +
+                        '<input class="set-input seat-key" maxlength="80" value="' + escapeHtml(record.seatKey || '') +
+                            '" placeholder="' + escapeHtml(t('settings.seat.keyPlaceholder')) + '">' +
+                        seatEvidence('settings.seat.computerName', record.computerName) +
+                        seatEvidence('settings.seat.radioName', record.radioName) +
+                        seatEvidence('settings.seat.radioNr', record.radioNr) +
+                        seatEvidence('settings.seat.source', record.source) +
+                        seatEvidence('settings.seat.lastSeen', record.lastSeen) +
+                        '<div class="form-row">' +
+                            '<button type="button" class="mini-btn" data-seat-action="save">' +
+                                escapeHtml(t('settings.seat.save')) + '</button>' +
+                            '<button type="button" class="mini-btn" data-seat-action="' +
+                                (record.unbound ? 'bind' : 'unbind') + '">' +
+                                escapeHtml(t(record.unbound ? 'settings.seat.bind' : 'settings.seat.unbind')) + '</button>' +
+                        '</div>' +
+                    '</div>' +
+                '</div>';
+            }).join('');
+        }
+        const bucket = seatData && seatData.unidentified ? seatData.unidentified : null;
+        const bucketHint = $('#seatUnidentifiedHint');
+        if (bucketHint) {
+            bucketHint.textContent = bucket && Number(bucket.count)
+                ? t('settings.seat.unidentified', {n: Number(bucket.count), at: bucket.lastSeen || '-'})
+                : t('settings.seat.unidentifiedNone');
+        }
+        const historyHint = $('#seatHistoryHint');
+        if (historyHint) {
+            const history = seatData && Array.isArray(seatData.history) ? seatData.history.slice(0, 5) : [];
+            historyHint.textContent = history.length
+                ? t('settings.seat.history', {n: history.length}) + ' ' +
+                    history.map(item => `${item.at || ''} ${item.action || ''} ${item.seatKey || ''}`.trim()).join(' | ')
+                : '';
+        }
+    }
+
+    async function loadSeatIdentities(manual) {
+        try {
+            seatData = await getSeatIdentities();
+            renderSeatIdentities();
+            if (manual) showToast(t('settings.seat.refreshed'));
+        } catch {
+            if (manual) showToast(t('settings.seat.failed'));
+        }
+    }
+
+    async function applySeatAction(row, action) {
+        if (seatBusy) return;
+        const identity = row.dataset.seatIdentity;
+        if (!identity) return;
+        const nameInput = row.querySelector('.seat-name');
+        const keyInput = row.querySelector('.seat-key');
+        const current = seatData && Array.isArray(seatData.seats)
+            ? seatData.seats.find(item => item.identity === identity) : null;
+        seatBusy = true;
+        try {
+            if (action === 'save') {
+                const displayName = nameInput ? nameInput.value.trim() : '';
+                const seatKey = keyInput ? keyInput.value.trim() : '';
+                if (displayName !== ((current && current.displayName) || '')) {
+                    await changeSeatIdentity({identity, action: 'rename', displayName});
+                }
+                if (seatKey && seatKey !== ((current && current.seatKey) || '')) {
+                    await changeSeatIdentity({identity, action: 'override', seatKey});
+                }
+            } else if (action === 'unbind') {
+                await changeSeatIdentity({identity, action: 'unbind'});
+            } else if (action === 'bind') {
+                const seatKey = keyInput ? keyInput.value.trim() : '';
+                await changeSeatIdentity({identity, action: 'bind', seatKey});
+            }
+            await loadSeatIdentities();
+            showToast(t('settings.seat.saved'));
+        } catch {
+            showToast(t('settings.seat.failed'));
+        } finally {
+            seatBusy = false;
+        }
     }
 
     return {

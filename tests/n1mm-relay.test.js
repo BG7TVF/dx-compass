@@ -51,6 +51,14 @@ test('--station 让多台 N1MM 实例带稳定席位身份', () => {
     assert.equal(core.parseArgs([], {DX_N1MM_STATION: 'MULT'}).station, 'MULT');
 });
 
+test('转发请求带原始 UDP 源，供服务器关联 ContactInfo 与 RadioInfo', () => {
+    const request = core.buildRequest({url: 'http://s/api', token: 'abc'}, '<radioinfo/>',
+        '192.168.1.9:52001');
+    assert.equal(request.init.headers['X-DX-Source'], '192.168.1.9:52001');
+    const noSource = core.buildRequest({url: 'http://s/api', token: 'abc'}, '<radioinfo/>');
+    assert.equal('X-DX-Source' in noSource.init.headers, false);
+});
+
 test('指数退避递增并封顶，抖动限制在 ±20%', () => {
     assert.equal(core.retryDelay(1, 500, 30000, () => 0.5), 500);
     assert.equal(core.retryDelay(2, 500, 30000, () => 0.5), 1000);

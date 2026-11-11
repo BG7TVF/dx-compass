@@ -40,17 +40,18 @@ socket.on('error', error => {
     stop(1);
 });
 
-socket.on('message', packet => {
+socket.on('message', (packet, rinfo) => {
     stats.received += 1;
     stats.bytes += packet.length;
     lastPacketAt = Date.now();
     idleWarned = false;
-    queue.push(packet.toString('utf8'));
+    const source = rinfo && rinfo.address ? rinfo.address + ':' + rinfo.port : '';
+    queue.push({body: packet.toString('utf8'), source});
     if (!sending) void drain();
 });
 
-async function post(body) {
-    const request = buildRequest(config, body);
+async function post(body, source) {
+    const request = buildRequest(config, body, source);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), config.timeoutMs);
     try {
@@ -71,8 +72,8 @@ async function drain() {
     if (sending) return;
     sending = true;
     while (running && queue.size) {
-        const body = queue.peek();
-        const result = await post(body);
+        const item = queue.peek();
+        const result = await post(item.body, item.source);
         if (result.ok) {
             queue.pop();
             stats.sent += 1;

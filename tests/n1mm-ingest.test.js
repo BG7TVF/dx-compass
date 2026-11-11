@@ -57,7 +57,7 @@ test('缺 ID 的 QSO 生成稳定键，重复投递不会新增行', () => {
     const first = ingestApi.ingest(ctx, payload, NOW);
     const second = ingestApi.ingest(ctx, payload, NOW);
     assert.equal(first.event.n1mmId, second.event.n1mmId);
-    assert.match(first.event.n1mmId, /^DXI\|LOCAL\|K1ABC\|/);
+    assert.match(first.event.n1mmId, /^DXI\|UNIDENTIFIED\|K1ABC\|/);
 });
 
 test('电台状态包按席位更新 global 与 radio_state', () => {
@@ -66,9 +66,9 @@ test('电台状态包按席位更新 global 与 radio_state', () => {
         Mode: 'CW', IsRunning: 'True'}}, NOW);
     assert.equal(result.kind, 'radio');
     assert.match(result.sql, /^INSERT OR REPLACE INTO radio_state/);
-    assert.match(result.sql, /'LOCAL:1'/);
+    assert.match(result.sql, /'UNIDENTIFIED'/);
     assert.equal(ctx.get('radioState').isRunning, true);
-    assert.equal(ctx.get('radioStates')['LOCAL:1'].freqKhz, 14025);
+    assert.equal(ctx.get('radioStates').UNIDENTIFIED.freqKhz, 14025);
 });
 
 test('分数包写入 score_state', () => {
@@ -85,7 +85,7 @@ test('分数包写入 score_state', () => {
 test('删除包按 n1mm_id 删除', () => {
     const result = ingestApi.ingest(new Context(), {contactdelete: {ID: '{9}', call: 'K1ABC'}}, NOW);
     assert.equal(result.kind, 'delete');
-    assert.match(result.sql, /^DELETE FROM qsos WHERE n1mm_id = 'DXI\|LOCAL\|\{9\}'/);
+    assert.match(result.sql, /^DELETE FROM qsos WHERE n1mm_id = 'DXI\|UNIDENTIFIED\|\{9\}'/);
 });
 
 test('未识别包返回 400，不写库', () => {

@@ -98,15 +98,18 @@ export class BoundedQueue {
     }
 }
 
-export function buildRequest(config, body) {
+export function buildRequest(config, body, source) {
     const headers = {
         'Content-Type': 'text/plain; charset=utf-8',
         'X-DX-Token': config.token,
         'User-Agent': 'dx-compass-n1mm-relay'
     };
-    // 多台 N1MM 实例走同一个服务器时，用 --station 给每台一个稳定身份，
-    // 服务器据此区分席位；不填则回退报文的 StationName / 来源 IP。
+    // 多台 N1MM 实例走同一个服务器时，用 --station 给每台一个稳定身份；
+    // 不填则由服务器的识别链按 ComputerName/RadioName/RadioNr 与 UDP 源自动判定。
     if (config.station) headers['X-DX-Station'] = config.station;
+    // 服务器需要原始 UDP 源（IP + 端口）把 ContactInfo 与 RadioInfo 关联起来，
+    // 两个实例在同一台机器上时只有端口能区分广播套接字。
+    if (source) headers['X-DX-Source'] = source;
     return {
         url: config.url,
         init: {method: 'POST', headers, body}
@@ -134,7 +137,8 @@ export function helpText() {
         '  --path <p>         默认 /api/n1mm/ingest',
         '  --url <url>        直接给出完整端点（优先于 host/port）',
         '  --token <t>        接入令牌（或 DX_N1MM_TOKEN）',
-        '  --station <name>   本实例的席位名（或 DX_N1MM_STATION）；多台 N1MM 必须不同',
+        '  --station <name>   本实例的席位名（或 DX_N1MM_STATION）；可省略，服务器会按',
+        '                     ComputerName + RadioName + RadioNr 自动识别',
         '  --udp-host <ip>    本机监听地址，默认 0.0.0.0（接收广播）',
         '  --udp-port <n>     本机监听端口，默认 12060',
         '  --timeout <ms>     单次 HTTP 超时，默认 8000',
@@ -147,8 +151,9 @@ export function helpText() {
         '  3. 在目标列表加入 127.0.0.1（N1MM 与 relay 同机）或 relay 所在电脑的局域网 IP，端口 12060',
         '  4. 确认三个数据源（Contact / Radio / Score）都已勾选',
         '',
-        '多台 N1MM 实例：每台用不同的 --station（如 RUN / MULT），否则服务器只能靠',
-        'StationName 或来源 IP 区分，可能出现席位合并。',
+        '多台 N1MM 实例：每个实例的广播套接字源端口不同，服务器据此区分；',
+        '仍可用 --station 显式指定席位名，显式配置优先级最高。',
+        '识别不到身份时归入「未识别席位」，不会顶替已有席位。',
         '',
         'Windows 首次运行需在防火墙提示中允许 node.exe 监听 UDP 12060。'
     ].join('\n');

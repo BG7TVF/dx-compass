@@ -4414,7 +4414,7 @@
         "libs": [],
         "x": 380,
         "y": 900,
-        "func": "const dx = global.get('dx');\nconst settings = dx.settings.runtime(global);\nconst expected = String(settings.n1mmToken || env.get('DX_N1MM_TOKEN') || '');\nif (!expected) {\n    msg.statusCode = 503;\n    msg.headers = {'Content-Type': 'application/json'};\n    msg.payload = {ok: false, error: 'ingest-token-not-configured'};\n    return [null, msg];\n}\nif (!dx.qso.authorized(dx.qso.tokenFrom(msg.req), expected)) {\n    msg.statusCode = 401;\n    msg.headers = {'Content-Type': 'application/json'};\n    msg.payload = {ok: false, error: 'unauthorized'};\n    return [null, msg];\n}\nlet body = msg.payload;\nif (Buffer.isBuffer(body)) body = body.toString('utf8');\nif (body && typeof body === 'object' && !Array.isArray(body)) body = body.xml || body.payload;\nif (typeof body !== 'string' || !body.trim()) {\n    msg.statusCode = 400;\n    msg.headers = {'Content-Type': 'application/json'};\n    msg.payload = {ok: false, error: 'empty-body'};\n    return [null, msg];\n}\nmsg.payload = body;\nconst headers = msg.req && msg.req.headers || {};\nconst query = msg.req && msg.req.query || {};\nconst station = headers['x-dx-station'] || headers['X-DX-Station'] || query.station || '';\nconst socket = msg.req && (msg.req.ip || msg.req.socket && msg.req.socket.remoteAddress) || '';\nmsg.n1mmMeta = {station: String(station || ''), ip: String(socket || '')};\nreturn [msg, null];",
+        "func": "const dx = global.get('dx');\nconst settings = dx.settings.runtime(global);\nconst expected = String(settings.n1mmToken || env.get('DX_N1MM_TOKEN') || '');\nif (!expected) {\n    msg.statusCode = 503;\n    msg.headers = {'Content-Type': 'application/json'};\n    msg.payload = {ok: false, error: 'ingest-token-not-configured'};\n    return [null, msg];\n}\nif (!dx.qso.authorized(dx.qso.tokenFrom(msg.req), expected)) {\n    msg.statusCode = 401;\n    msg.headers = {'Content-Type': 'application/json'};\n    msg.payload = {ok: false, error: 'unauthorized'};\n    return [null, msg];\n}\nlet body = msg.payload;\nif (Buffer.isBuffer(body)) body = body.toString('utf8');\nif (body && typeof body === 'object' && !Array.isArray(body)) body = body.xml || body.payload;\nif (typeof body !== 'string' || !body.trim()) {\n    msg.statusCode = 400;\n    msg.headers = {'Content-Type': 'application/json'};\n    msg.payload = {ok: false, error: 'empty-body'};\n    return [null, msg];\n}\nmsg.payload = body;\nconst headers = msg.req && msg.req.headers || {};\nconst query = msg.req && msg.req.query || {};\nconst station = headers['x-dx-station'] || headers['X-DX-Station'] || query.station || '';\nconst socket = msg.req && (msg.req.ip || msg.req.socket && msg.req.socket.remoteAddress) || '';\nconst forwarded = String(headers['x-dx-source'] || headers['X-DX-Source'] || query.source || '');\nlet ip = String(socket || '');\nlet port = '';\nif (forwarded) {\n    const cut = forwarded.lastIndexOf(':');\n    if (cut > 0) { ip = forwarded.slice(0, cut); port = forwarded.slice(cut + 1); }\n    else { ip = forwarded; }\n}\nmsg.n1mmMeta = {station: String(station || ''), ip, port};\nreturn [msg, null];",
         "wires": [
             [
                 "dxn1mm00000000a3"
@@ -4680,6 +4680,140 @@
         "y": 420,
         "wires": [
             []
+        ]
+    },
+    {
+        "id": "dxseat000000001",
+        "type": "http in",
+        "z": "dxc0000000000090",
+        "name": "GET /api/seats",
+        "url": "/api/seats",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 140,
+        "y": 1120,
+        "wires": [
+            [
+                "dxseat000000002"
+            ]
+        ]
+    },
+    {
+        "id": "dxseat000000002",
+        "type": "function",
+        "z": "dxc0000000000090",
+        "name": "List seat identities",
+        "func": "const dx = global.get('dx');\nmsg.statusCode = 200;\nmsg.headers = {'content-type': 'application/json; charset=utf-8'};\nmsg.payload = Object.assign({ok: true}, dx.qso.listSeatIdentities(global));\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 380,
+        "y": 1120,
+        "wires": [
+            [
+                "dxseat000000003"
+            ]
+        ]
+    },
+    {
+        "id": "dxseat000000003",
+        "type": "http response",
+        "z": "dxc0000000000090",
+        "name": "",
+        "statusCode": "",
+        "headers": {},
+        "x": 620,
+        "y": 1120,
+        "wires": []
+    },
+    {
+        "id": "dxseat000000011",
+        "type": "http in",
+        "z": "dxc0000000000090",
+        "name": "POST /api/seats",
+        "url": "/api/seats",
+        "method": "post",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 140,
+        "y": 1180,
+        "wires": [
+            [
+                "dxseat000000012"
+            ]
+        ]
+    },
+    {
+        "id": "dxseat000000012",
+        "type": "function",
+        "z": "dxc0000000000090",
+        "name": "Change seat identity",
+        "func": "const dx = global.get('dx');\nconst result = dx.qso.changeSeatIdentity(global, msg.payload, new Date());\nmsg.statusCode = result.status || 200;\ndelete result.status;\nmsg.headers = {'content-type': 'application/json; charset=utf-8'};\nmsg.payload = result;\nconst broadcast = result.ok\n    ? {payload: Object.assign({type: 'seatIdentities'}, dx.qso.summarySeatIdentities(global))}\n    : null;\nreturn [msg, broadcast];",
+        "outputs": 2,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 380,
+        "y": 1180,
+        "wires": [
+            [
+                "dxseat000000013"
+            ],
+            [
+                "dxc000000000000e"
+            ]
+        ]
+    },
+    {
+        "id": "dxseat000000013",
+        "type": "http response",
+        "z": "dxc0000000000090",
+        "name": "",
+        "statusCode": "",
+        "headers": {},
+        "x": 620,
+        "y": 1180,
+        "wires": []
+    },
+    {
+        "id": "dxseat000000021",
+        "type": "catch",
+        "z": "dxc0000000000090",
+        "name": "Seat API errors",
+        "scope": [
+            "dxseat000000002",
+            "dxseat000000012"
+        ],
+        "uncaught": false,
+        "x": 360,
+        "y": 1240,
+        "wires": [
+            [
+                "dxseat000000022"
+            ]
+        ]
+    },
+    {
+        "id": "dxseat000000022",
+        "type": "function",
+        "z": "dxc0000000000090",
+        "name": "Seat API failure",
+        "func": "msg.statusCode = 500;\nmsg.headers = {'content-type': 'application/json; charset=utf-8'};\nmsg.payload = {ok: false, error: 'seat-api-failed', detail: String(msg.error && msg.error.message || msg.error || '')};\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 600,
+        "y": 1240,
+        "wires": [
+            [
+                "dxseat000000013"
+            ]
         ]
     }
 ]

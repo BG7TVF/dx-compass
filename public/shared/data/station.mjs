@@ -14,6 +14,16 @@ export function changeFrequencyClaim(action, claim, {transport = defaultTranspor
     return transport.postJson('/api/frequency-claims/' + encodeURIComponent(action), claim, options);
 }
 
+/** Auto-identified seats with evidence, history and the unidentified bucket. */
+export function getSeatIdentities({transport = defaultTransport, ...options} = {}) {
+    return transport.getJson('/api/seats', options);
+}
+
+/** name / override / unbind / bind one identified seat. */
+export function changeSeatIdentity(change, {transport = defaultTransport, ...options} = {}) {
+    return transport.postJson('/api/seats', change, options);
+}
+
 /** Purely merge one live radio/score/claim message into a station snapshot. */
 export function applyStationMessage(state, message) {
     const current = state && typeof state === 'object' ? state : {radio: null, radios: {}, claims: [], score: null};

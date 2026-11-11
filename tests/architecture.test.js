@@ -229,6 +229,22 @@ test('alert seat migration and frequency claim API are wired end to end', () => 
     assert.ok(change.wires[1].includes(byName('Broadcast frequency claims').id));
 });
 
+test('seat identification API and UDP source header are wired end to end', () => {
+    const flow = JSON.parse(read('flow.json'));
+    const byName = name => flow.find(node => node.name === name);
+    const list = byName('List seat identities');
+    const change = byName('Change seat identity');
+    assert.deepEqual(byName('GET /api/seats').wires, [[list.id]]);
+    assert.match(list.func, /dx\.qso\.listSeatIdentities/);
+    assert.deepEqual(byName('POST /api/seats').wires, [[change.id]]);
+    assert.match(change.func, /dx\.qso\.changeSeatIdentity/);
+    assert.match(change.func, /type: 'seatIdentities'/);
+    assert.ok(change.wires[0].includes(byName('Change seat identity').wires[0][0]));
+    const auth = byName('N1MM ingest auth');
+    assert.match(auth.func, /x-dx-source/);
+    assert.match(auth.func, /msg\.n1mmMeta = \{station: String\(station \|\| ''\), ip, port\}/);
+});
+
 test('flow node ids are unique', () => {
     const flow = JSON.parse(read('flow.json'));
     const seen = new Set();
