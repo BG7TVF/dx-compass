@@ -4016,5 +4016,238 @@
         "wires": [
             []
         ]
+    },
+    {
+        "id": "dxo0000000000001",
+        "type": "http in",
+        "z": "dxc0000000000090",
+        "name": "GET /api/callsign/check",
+        "url": "/api/callsign/check",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 120,
+        "y": 1500,
+        "wires": [
+            [
+                "dxo0000000000002"
+            ]
+        ]
+    },
+    {
+        "id": "dxo0000000000002",
+        "type": "function",
+        "z": "dxc0000000000090",
+        "name": "Prepare call check",
+        "func": "const dx = global.get('dx');\nconst q = (msg.req && msg.req.query) || {};\nconst body = (msg.payload && typeof msg.payload === 'object') ? msg.payload : {};\nconst call = String(q.call || body.call || '').trim().toUpperCase();\nconst exclude = String(q.exclude || body.exclude || '').trim();\nconst qrzRaw = String(q.qrz !== undefined ? q.qrz : (body.qrz !== undefined ? body.qrz : '')).trim();\nmsg._qrz = !(qrzRaw === '0' || qrzRaw === 'false');\nif (!/^[A-Z0-9/]{3,20}$/.test(call)) {\n    msg.statusCode = 400;\n    msg.headers = {'Content-Type':'application/json'};\n    msg.payload = {ok:false, status:'error', error:'invalid-call'};\n    return [null, msg];\n}\nconst scpRaw = String(q.scp !== undefined ? q.scp : (body.scp !== undefined ? body.scp : '')).trim();\nconst scpRequested = !(scpRaw === '0' || scpRaw === 'false');\nlet scpEnabled = true;\ntry { scpEnabled = dx.settings.runtime(global).opScpCheck !== false; } catch (e) { scpEnabled = true; }\nmsg._scp = scpEnabled && scpRequested ? dx.scp.lookup(call) : {status:'disabled'};\nconst sql = dx.storage.qso.checkCall(call, exclude);\nif (!sql) {\n    msg.statusCode = 400;\n    msg.headers = {'Content-Type':'application/json'};\n    msg.payload = {ok:false, status:'error', error:'invalid-call'};\n    return [null, msg];\n}\nmsg._call = call;\nmsg._exclude = exclude;\nmsg.topic = sql;\nreturn [msg, null];",
+        "outputs": 2,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 340,
+        "y": 1500,
+        "wires": [
+            [
+                "dxo0000000000003"
+            ],
+            [
+                "dxo0000000000008"
+            ]
+        ]
+    },
+    {
+        "id": "dxo0000000000003",
+        "type": "sqlite",
+        "z": "dxc0000000000090",
+        "mydb": "dxc0000000000027",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "Check local call log",
+        "x": 590,
+        "y": 1470,
+        "wires": [
+            [
+                "dxo0000000000004"
+            ]
+        ]
+    },
+    {
+        "id": "dxo0000000000004",
+        "type": "function",
+        "z": "dxc0000000000090",
+        "name": "Resolve call check",
+        "func": "const dx = global.get('dx');\nconst rows = Array.isArray(msg.payload) ? msg.payload : [];\nconst first = rows[0] || {};\nconst n = Number(first.n !== undefined ? first.n : (first[0] !== undefined ? first[0] : 0)) || 0;\nconst call = msg._call;\nconst scp = msg._scp || {status:'unavailable'};\nconst base = {ok:true, call, scp, local:{known:n > 0, count:n}, qrz:null};\nif (scp.status === 'hit') {\n    msg.statusCode = 200;\n    msg.headers = {'Content-Type':'application/json'};\n    msg.payload = Object.assign({}, base, {status:'scp'});\n    return [null, msg];\n}\nif (msg._qrz === false) {\n    msg.statusCode = 200;\n    msg.headers = {'Content-Type':'application/json'};\n    msg.payload = Object.assign({}, base, {status:'unverified', reason:'qrz-disabled', qrz:{status:'skipped', reason:'qrz-disabled'}});\n    return [null, msg];\n}\nconst key = flow.get('qrzkey');\nconst request = dx.qso.lookupQuery(call, key);\nif (!request) {\n    msg.statusCode = 200;\n    msg.headers = {'Content-Type':'application/json'};\n    msg.payload = Object.assign({}, base, {status:'unverified', reason:'qrz-session-unavailable', qrz:{status:'error', reason:'qrz-session-unavailable'}});\n    return [null, msg];\n}\nmsg._base = base;\nObject.assign(msg, request);\nreturn [msg, null];",
+        "outputs": 2,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 830,
+        "y": 1470,
+        "wires": [
+            [
+                "dxo0000000000005"
+            ],
+            [
+                "dxo0000000000008"
+            ]
+        ]
+    },
+    {
+        "id": "dxo0000000000005",
+        "type": "http request",
+        "z": "dxc0000000000090",
+        "name": "QRZ call lookup",
+        "method": "GET",
+        "ret": "txt",
+        "paytoqs": "ignore",
+        "url": "",
+        "tls": "",
+        "persist": false,
+        "proxy": "",
+        "insecureHTTPParser": false,
+        "authType": "",
+        "senderr": false,
+        "headers": [],
+        "x": 1080,
+        "y": 1470,
+        "wires": [
+            [
+                "dxo0000000000006"
+            ]
+        ]
+    },
+    {
+        "id": "dxo0000000000006",
+        "type": "xml",
+        "z": "dxc0000000000090",
+        "name": "",
+        "attr": "$",
+        "chr": "_",
+        "x": 1270,
+        "y": 1470,
+        "wires": [
+            [
+                "dxo0000000000007"
+            ]
+        ]
+    },
+    {
+        "id": "dxo0000000000007",
+        "type": "function",
+        "z": "dxc0000000000090",
+        "name": "Resolve QRZ lookup",
+        "func": "const dx = global.get('dx');\nconst result = dx.qso.parseLookup(msg.payload);\nif (result.status === 'error' && /session|timeout|invalid|denied/i.test(result.error || '')) flow.set('qrzkey', null);\nmsg.statusCode = 200;\nmsg.headers = {'Content-Type':'application/json'};\nconst base = msg._base || {ok:true, call:msg._call, scp:{status:'unavailable'}};\nconst status = result.status === 'found' ? 'qrz-found'\n    : result.status === 'not-found' ? 'qrz-not-found' : 'unverified';\nconst reason = result.status === 'found' ? '' : (result.status === 'not-found' ? 'qrz-not-found' : 'qrz-error');\nmsg.payload = Object.assign({}, base, {status, reason, qrz: result});\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1460,
+        "y": 1470,
+        "wires": [
+            [
+                "dxo0000000000008"
+            ]
+        ]
+    },
+    {
+        "id": "dxo0000000000008",
+        "type": "http response",
+        "z": "dxc0000000000090",
+        "name": "",
+        "statusCode": "",
+        "headers": {},
+        "x": 1710,
+        "y": 1500,
+        "wires": []
+    },
+    {
+        "id": "dxo0000000000009",
+        "type": "catch",
+        "z": "dxc0000000000090",
+        "name": "Catch call check errors",
+        "scope": [
+            "dxo0000000000002",
+            "dxo0000000000004",
+            "dxo0000000000005",
+            "dxo0000000000006",
+            "dxo0000000000007"
+        ],
+        "uncaught": false,
+        "x": 1080,
+        "y": 1570,
+        "wires": [
+            [
+                "dxo0000000000010"
+            ]
+        ]
+    },
+    {
+        "id": "dxo0000000000010",
+        "type": "function",
+        "z": "dxc0000000000090",
+        "name": "Call check failure",
+        "func": "const base = msg._base || {ok:true, call:msg._call || ''};\nmsg.statusCode = 200;\nmsg.headers = {'Content-Type':'application/json'};\nmsg.payload = Object.assign({}, base, {\n    status:'error',\n    qrz:{status:'error', reason:'request-failed', error:String(msg.error && msg.error.message || msg.error || '')}\n});\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1300,
+        "y": 1570,
+        "wires": [
+            [
+                "dxo0000000000008"
+            ]
+        ]
+    },
+    {
+        "id": "dxo0000000000011",
+        "type": "inject",
+        "z": "dxc0000000000090",
+        "name": "SCP refresh",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "86400",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "20",
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 160,
+        "y": 1640,
+        "wires": [
+            [
+                "dxo0000000000012"
+            ]
+        ]
+    },
+    {
+        "id": "dxo0000000000012",
+        "type": "function",
+        "z": "dxc0000000000090",
+        "name": "SCP refresh",
+        "func": "const dx = global.get('dx');\nlet enabled = true;\ntry { enabled = dx.settings.runtime(global).opScpCheck !== false; } catch (e) { enabled = true; }\nif (!enabled) {\n    node.status({text:'SCP disabled'});\n    return null;\n}\nconst result = await dx.scp.refresh();\nconst st = result.status || {};\nnode.status({text: st.loaded ? 'SCP ' + st.release + ' (' + st.count + ')' : 'SCP unavailable'});\nif (!result.ok) node.warn('SCP refresh failed: ' + (result.error || result.reason));\nreturn null;",
+        "outputs": 0,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 380,
+        "y": 1640,
+        "wires": [
+            []
+        ]
     }
 ]

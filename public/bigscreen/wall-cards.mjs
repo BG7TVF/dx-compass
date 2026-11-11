@@ -90,7 +90,8 @@ function xrayClass(flux) {
         (mantissa >= 1 ? mantissa.toFixed(1) : '1.0');
 }
 
-export function renderSpaceWeather(data) {
+/** Pure space-weather cells, shared by the wall and the OP view. */
+export function spaceWeatherCells(data) {
     const sfi = last(data.sfi && data.sfi.list);
     const kp = last(data.kp && data.kp.list);
     const dst = last(data.dst && data.dst.list);
@@ -99,7 +100,7 @@ export function renderSpaceWeather(data) {
     const mag = last(data.mag && data.mag.list);
     const wind = last(data.wind && data.wind.list);
     const ham = data.ham || {};
-    const cells = [
+    return [
         ['SFI', sfi ? num(sfi[1]) : num(ham.sfi), ''],
         ['SSN', ssn ? num(ssn[1]) : num(ham.ssn), ''],
         ['KP', kp ? num(kp[1], 1) : num(ham.kp, 1), kp && kp[1] >= 5 ? 'bad' : ''],
@@ -110,23 +111,23 @@ export function renderSpaceWeather(data) {
         ['WIND', wind ? num(wind[1], 0) : '—', ''],
         ['XRAY', xr ? xrayClass(xr[1]) : (ham.xray || '—'), '']
     ];
-    $('#swGrid').innerHTML = cells.map(([key, value, className]) =>
+}
+
+export function renderSpaceWeather(data) {
+    $('#swGrid').innerHTML = spaceWeatherCells(data).map(([key, value, className]) =>
         '<div><label>' + key + '</label><b class="' + className + '">' + esc(value) +
         '</b></div>').join('');
 }
 
-/** Render only the server forecast, selecting its HOME-local day or night table. */
-export function renderBands(forecast, now = new Date()) {
+/** Pure band-condition cells (server forecast only, day/night selected by noon). */
+export function bandConditionCells(forecast, now = new Date()) {
     const conditions = forecast && forecast.bandConditions;
     const bands = conditions && conditions.bands;
-    if (!bands || typeof bands !== 'object' || !Object.keys(bands).length) {
-        $('#bandBar').innerHTML = '<div class="band closed"><b>—</b></div>';
-        return;
-    }
+    if (!bands || typeof bands !== 'object' || !Object.keys(bands).length) return [];
     const utcHour = now.getUTCHours() + now.getUTCMinutes() / 60;
     const sinceNoon = ((utcHour - conditions.noon + 12) % 24 + 24) % 24 - 12;
     const period = sinceNoon >= -6 && sinceNoon < 6 ? 'day' : 'night';
-    $('#bandBar').innerHTML = Object.entries(bands).map(([name, entry]) => {
+    return Object.entries(bands).map(([name, entry]) => {
         const condition = entry && entry[period] || 'Closed';
         const value = String(condition).toLowerCase();
         const label = String(name).toUpperCase() === 'VHF' ? t('wall.band.vhf') : name.toUpperCase();
@@ -134,14 +135,26 @@ export function renderBands(forecast, now = new Date()) {
             value === 'poor' ? 'poor' : 'closed';
         const level = className === 'good' ? 3 : className === 'fair' ? 2 :
             className === 'poor' ? 1 : 0;
-        return '<div class="band ' + className + '"><b>' + esc(label) +
-            '</b><span>' + esc(t('wall.condition.' + className)) + '</span><div class="meter">' +
-            [0, 1, 2].map(index => '<u' + (index < level ? ' class="on"' : '') + '></u>').join('') +
+        return {band: label, className, level, condition: t('wall.condition.' + className)};
+    });
+}
+
+/** Render only the server forecast, selecting its HOME-local day or night table. */
+export function renderBands(forecast, now = new Date()) {
+    const cells = bandConditionCells(forecast, now);
+    if (!cells.length) {
+        $('#bandBar').innerHTML = '<div class="band closed"><b>—</b></div>';
+        return;
+    }
+    $('#bandBar').innerHTML = cells.map(cell => {
+        return '<div class="band ' + cell.className + '"><b>' + esc(cell.band) +
+            '</b><span>' + esc(cell.condition) + '</span><div class="meter">' +
+            [0, 1, 2].map(index => '<u' + (index < cell.level ? ' class="on"' : '') + '></u>').join('') +
             '</div></div>';
     }).join('');
 }
 
-function bandOf(freqKhz) {
+export function bandOf(freqKhz) {
     const frequency = freqKhz / 1000;
     if (!isFinite(frequency)) return '';
     if (frequency < 2) return '160M';

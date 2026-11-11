@@ -7,6 +7,7 @@
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%230b1220'/%3E%3Ccircle cx='8' cy='8' r='4' fill='%2300e08a'/%3E%3C/svg%3E">
     <link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
     <link rel="stylesheet" href="css/style.css?v=2.3.4">
+    <link rel="stylesheet" href="css/op.css?v=1.0.0">
 </head>
 <body>
     <div class="toolbar">
@@ -19,6 +20,7 @@
                 <button class="menu-item view-btn" id="btnAnalysisView" title="Antenna type &amp; bearing">Analysis</button>
                 <button class="menu-item view-btn" id="btnMultView" title="DXCC x band multiplier matrix">Multipliers</button>
                 <button class="menu-item view-btn" id="btnAlertView" title="Conditional alert rules">Alerts</button>
+                <button class="menu-item view-btn" id="btnOpView" title="Operator position view">OP View</button>
                 <div class="menu-sep"></div>
                 <button class="menu-item" id="btnConfig" title="Settings">Settings</button>
             </div>
@@ -104,6 +106,84 @@
                  the licence its data ships under (GIRO's Rules of the Road and
                  the CC BY-NC-SA terms of the LGDC products require it). -->
             <div id="propCredit" class="prop-credit"></div>
+        </div>
+
+        <!-- OP view: ring layout, fixed offline map in the centre -->
+        <div id="opView" class="op-view hidden">
+            <header class="op-top">
+                <div class="op-top-id">
+                    <span class="op-kicker" id="opKicker">OP VIEW</span>
+                    <label class="op-cat-label" for="opCategory" id="opCategoryLabel">Category</label>
+                    <select id="opCategory" class="op-cat-select"></select>
+                    <span class="op-subtitle" id="opSubtitle"></span>
+                </div>
+                <div class="op-station-tabs" id="opStationTabs" role="tablist"></div>
+                <div class="op-metrics" id="opMetrics"></div>
+            </header>
+
+            <div id="opAdvice" class="op-advice hidden" aria-live="polite"></div>
+
+            <div class="op-body">
+                <aside class="op-rail op-left">
+                    <section class="op-card op-band-card">
+                        <h3 id="opBandsTitle">Band conditions</h3>
+                        <div class="op-band-grid" id="opBandGrid"></div>
+                    </section>
+                    <section class="op-card op-space-card">
+                        <h3 id="opSpaceTitle">Space weather</h3>
+                        <div class="op-space-grid" id="opSpaceGrid"></div>
+                    </section>
+                    <section class="op-card op-opp-card">
+                        <h3 id="opOppTitle">Opponent intel</h3>
+                        <div class="op-opp-list" id="opOpponents"></div>
+                    </section>
+                </aside>
+
+                <section class="op-center">
+                    <div class="op-map-head">
+                        <h3 id="opMapTitle">Radio map</h3>
+                        <span id="opMapHint" class="op-map-hint"></span>
+                    </div>
+                    <div class="op-map-wrap">
+                        <div id="opMap"></div>
+                        <div class="op-map-legend" id="opMapLegend"></div>
+                        <div class="op-map-credit" id="opMapCredit"></div>
+                    </div>
+                </section>
+
+                <aside class="op-rail op-right">
+                    <section class="op-card op-work-card">
+                        <h3><span id="opWorkTitle">Workability</span><b id="opWorkMode" class="op-chip"></b></h3>
+                        <div class="op-work-list" id="opWorkability"></div>
+                    </section>
+                    <section class="op-card op-suspect-card">
+                        <h3 id="opSuspectTitle">Suspected call check</h3>
+                        <div class="op-suspect-list" id="opSuspicious"></div>
+                    </section>
+                    <section class="op-card op-mult-card">
+                        <h3>
+                            <span id="opMultTitle">Multiplier matrix</span>
+                            <span class="op-card-actions">
+                                <button class="op-mini" id="opMultExpand" type="button"></button>
+                            </span>
+                        </h3>
+                        <div class="op-mult-band" id="opMultBand"></div>
+                        <div class="op-mult-list" id="opMultipliers"></div>
+                    </section>
+                </aside>
+            </div>
+
+            <footer class="op-bottom">
+                <div class="op-bottom-head">
+                    <h3 id="opBottomTitle">Device control</h3>
+                    <span id="opBottomNote" class="op-bottom-note"></span>
+                    <div class="op-add-wrap">
+                        <button class="op-mini" id="opAddPeripheral" type="button">+</button>
+                        <div class="op-add-menu hidden" id="opAddMenu"></div>
+                    </div>
+                </div>
+                <div class="op-bottom-body" id="opBottom"></div>
+            </footer>
         </div>
 
         <div id="analysisView" class="analysis-view hidden"></div>

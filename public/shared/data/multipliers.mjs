@@ -17,3 +17,11 @@ export async function fetchMultiplierMatrix({transport = defaultTransport, ...pa
     if (!data || data.ok !== true) throw new TypeError('/api/multipliers returned an invalid DTO');
     return data;
 }
+
+/** OP 视图：紧凑矩阵只需要 mode 与竞赛窗口。 */
+export async function fetchMultipliers({mode = 'ALL', scope = 'contest', transport = defaultTransport, ...options} = {}) {
+    const query = new URLSearchParams();
+    query.set('mode', String(mode || 'ALL').toUpperCase());
+    query.set('scope', scope === 'all' ? 'all' : 'contest');
+    return transport.getJson(`/api/multipliers?${query.toString()}`, options);
+}

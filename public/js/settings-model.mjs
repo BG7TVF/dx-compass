@@ -108,6 +108,7 @@ export function dbRowToQso(row) {
         type: 'qso', n1mmId: row.n1mm_id, ts: row.timestamp, mycall: row.mycall,
         operator: row.operator, call: row.call, band: row.band, freqKhz: row.freq_khz,
         mode: row.mode, rstSnt: row.rst_snt, rstRcv: row.rst_rcv, exchange: row.exchange,
-        points: row.points, isMult: Boolean(row.is_mult), lat: row.lat, lon: row.lon
+        points: row.points, isMult: Boolean(row.is_mult), lat: row.lat, lon: row.lon,
+        radioNr: row.radionr === undefined ? null : row.radionr
     };
 }

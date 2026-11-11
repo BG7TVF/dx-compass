@@ -30,3 +30,17 @@ export async function fetchPathAnalysis({from, to, limit, transport = defaultTra
     if (!report || typeof report !== 'object') throw new TypeError('invalid path analysis response');
     return report;
 }
+
+/** OP 视图：单目标天线推断，复用分析研判的估算结果。 */
+export async function fetchEstimate(call, {transport = defaultTransport, ...options} = {}) {
+    const query = new URLSearchParams();
+    query.set('call', String(call || '').trim().toUpperCase());
+    return transport.getJson(`/api/analysis/estimate?${query.toString()}`, options);
+}
+
+/** OP 视图：按时间窗口读取 CW/SSB 可通性。 */
+export async function fetchPaths({hours = 2, transport = defaultTransport, ...options} = {}) {
+    const query = new URLSearchParams();
+    query.set('hours', String(hours));
+    return transport.getJson(`/api/analysis/paths?${query.toString()}`, options);
+}

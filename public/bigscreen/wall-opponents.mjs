@@ -230,11 +230,12 @@ export function buildOpponents(rows, myCall, bearing, {
 
         let opponent = opponents.get(call);
         if (!opponent) {
-            opponent = {call, n: 0, ts: 0, bands: new Map()};
+            opponent = {call, n: 0, ts: 0, bands: new Map(), last: null};
             opponents.set(call, opponent);
         }
         opponent.n++;
         opponent.ts = Math.max(opponent.ts, time);
+        if (!opponent.last || time >= opponent.last.ts) opponent.last = {ts: time, row};
 
         let entry = opponent.bands.get(band);
         if (!entry) {
@@ -260,14 +261,41 @@ export function buildOpponents(rows, myCall, bearing, {
         }
     });
 
-    const list = [...opponents.values()].map(opponent => ({
-        call: opponent.call,
-        n: opponent.n,
-        ts: opponent.ts,
-        bands: [...opponent.bands.values()]
-            .sort((a, b) => b.n - a.n || bandRank(a.band) - bandRank(b.band))
-            .map(entry => finishBand(entry, concentrationMin))
-    })).sort((a, b) => b.n - a.n || b.ts - a.ts || a.call.localeCompare(b.call));
+    const list = [...opponents.values()].map(opponent => {
+        const row = opponent.last && opponent.last.row || {};
+        /* PSKR writes the spotted sender into spot_call; RBN writes the spotter
+         * there. The "target" fields therefore describe the *other* station,
+         * never the rival itself. */
+        const rivalIsSpot = String(row.spot_call || '').toUpperCase() === opponent.call;
+        const targetGrid = rivalIsSpot ? row.receiver_grid : row.sender_grid;
+        const targetDxcc = rivalIsSpot ? row.dxcc_receiver : row.dxcc_sender;
+        let dir = null;
+        if (bearing && row.dx_lat !== null && row.dx_lat !== undefined &&
+            row.dx_lon !== null && row.dx_lon !== undefined &&
+            row.lat !== null && row.lat !== undefined &&
+            row.lon !== null && row.lon !== undefined) {
+            const value = bearing(row.dx_lat, row.dx_lon, row.lat, row.lon);
+            if (isFinite(value)) dir = (value + 360) % 360;
+        }
+        return {
+            call: opponent.call,
+            n: opponent.n,
+            ts: opponent.ts,
+            lat: row.dx_lat === undefined ? null : row.dx_lat,
+            lon: row.dx_lon === undefined ? null : row.dx_lon,
+            grid: rivalIsSpot ? row.sender_grid : row.receiver_grid,
+            dxcc: rivalIsSpot ? row.dxcc_sender : row.dxcc_receiver,
+            targetCall: rivalIsSpot ? row.de : row.spot_call,
+            targetGrid: targetGrid || null,
+            targetDxcc: targetDxcc === undefined ? null : targetDxcc,
+            bearing: dir,
+            freq: row.freq === undefined ? null : row.freq,
+            band: row.band || '',
+            bands: [...opponent.bands.values()]
+                .sort((a, b) => b.n - a.n || bandRank(a.band) - bandRank(b.band))
+                .map(entry => finishBand(entry, concentrationMin))
+        };
+    }).sort((a, b) => b.n - a.n || b.ts - a.ts || a.call.localeCompare(b.call));
     /* Colour and glyph in the same order the cards are painted, so the map can
      * rebuild the identical assignment from the same rows. */
     const styles = assignOpponentStyles(list.map(opponent => opponent.call));

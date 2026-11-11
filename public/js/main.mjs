@@ -14,6 +14,7 @@ import {createPropagationPage} from './pages/propagation-page.mjs';
 import {createAnalysisPage} from './pages/analysis-page.mjs?v=2.3.8';
 import {createMultiplierPage} from './pages/mult-page.mjs';
 import {createAlertsPage} from './pages/alerts-page.mjs';
+import {createOpPage} from './pages/op-page.mjs';
 
 async function start() {
     const i18n = createI18n({lang: 'zh'});
@@ -31,6 +32,7 @@ async function start() {
     ctx.analysis = createAnalysisPage(ctx);
     ctx.mult = createMultiplierPage(ctx);
     ctx.alerts = createAlertsPage(ctx);
+    ctx.op = createOpPage(ctx);
     ctx.settingsPage = createSettingsPage(ctx);
     ctx.saveSettings = () => ctx.settingsPage.save();
 
@@ -42,6 +44,7 @@ async function start() {
     ctx.analysis.init();
     ctx.mult.init();
     ctx.alerts.init();
+    ctx.op.init();
     ctx.settingsPage.bind();
     ctx.settingsPage.applyLang();
     ctx.records.init();
@@ -58,12 +61,15 @@ async function start() {
                 case 'radio':
                 case 'score':
                     ctx.qso.handleStationMessage(message);
+                    ctx.op.handleStation();
                     break;
                 case 'qso':
                     ctx.qso.handleQso(message);
+                    ctx.op.handleQso(message);
                     break;
                 case 'qsoDelete':
                     ctx.qso.handleQsoDelete(message);
+                    ctx.op.handleDelete(message);
                     break;
                 case 'settings':
                     ctx.settingsPage.applyRemote(message);
@@ -74,6 +80,7 @@ async function start() {
                     break;
                 default:
                     ctx.spot.handleSpot(message);
+                    ctx.op.handleSpot(message);
             }
         }
     });
@@ -142,6 +149,7 @@ async function start() {
     window.addEventListener('resize', () => {
         if (ctx.qso.state.view === 'spots') ctx.spot.refreshMaps();
         else if (ctx.qso.state.view === 'qso') ctx.qso.refreshMap();
+        else if (ctx.qso.state.view === 'op') ctx.op.resize();
         else ctx.prop.resize();
     });
 }

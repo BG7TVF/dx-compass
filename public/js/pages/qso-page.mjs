@@ -669,14 +669,15 @@ export function createQsoPage(ctx) {
         const leaving = state.view;
         state.view = mode;
         const isQso = mode === 'qso', isProp = mode === 'prop', isAnalysis = mode === 'analysis';
-        const isMult = mode === 'mult', isAlert = mode === 'alert';
-        const isFull = isQso || isProp || isAnalysis || isMult || isAlert;
+        const isMult = mode === 'mult', isAlert = mode === 'alert', isOp = mode === 'op';
+        const isFull = isQso || isProp || isAnalysis || isMult || isAlert || isOp;
         $('#grid').classList.toggle('hidden', isFull);
         $('#qsoView').classList.toggle('hidden', !isQso);
         $('#propView').classList.toggle('hidden', !isProp);
         $('#analysisView').classList.toggle('hidden', !isAnalysis);
         $('#multView').classList.toggle('hidden', !isMult);
         $('#alertView').classList.toggle('hidden', !isAlert);
+        $('#opView').classList.toggle('hidden', !isOp);
         $('#recordsPanel').classList.toggle('hidden', isFull);
         $('#qsoPanel').classList.toggle('hidden', !isQso);
         $('#btnSpotView').classList.toggle('active', mode === 'spots');
@@ -685,15 +686,18 @@ export function createQsoPage(ctx) {
         $('#btnAnalysisView').classList.toggle('active', isAnalysis);
         $('#btnMultView').classList.toggle('active', isMult);
         $('#btnAlertView').classList.toggle('active', isAlert);
+        $('#btnOpView').classList.toggle('active', isOp);
         document.body.classList.toggle('qso-mode', isQso);
         document.body.classList.toggle('prop-mode', isProp);
         document.body.classList.toggle('analysis-mode', isAnalysis);
         document.body.classList.toggle('mult-mode', isMult);
         document.body.classList.toggle('alert-mode', isAlert);
+        document.body.classList.toggle('op-mode', isOp);
         if (leaving === 'prop' && !isProp) ctx.prop?.hide();
         if (leaving === 'analysis' && !isAnalysis) ctx.analysis?.hide();
         if (leaving === 'mult' && !isMult) ctx.mult?.hide();
         if (leaving === 'alert' && !isAlert) ctx.alerts?.hide();
+        if (leaving === 'op' && !isOp) ctx.op?.hide();
         if (isAnalysis) {
             ctx.analysis?.show();
         } else if (isMult) {
@@ -706,6 +710,9 @@ export function createQsoPage(ctx) {
             renderQsoPanel();
         } else if (isProp) {
             ctx.prop?.show();
+        } else if (isOp) {
+            hideSpotAlertAndVoice();
+            ctx.op?.show();
         } else {
             hideSpotAlertAndVoice();
             ctx.spot.refreshMaps();
