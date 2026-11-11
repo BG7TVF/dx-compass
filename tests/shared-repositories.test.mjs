@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {getSettings, saveSettings, settingsFromMessage} from '../public/shared/data/settings.mjs';
 import {getPropSnapshot, selectForecast} from '../public/shared/data/propagation.mjs';
-import {applyStationMessage, getStationState} from '../public/shared/data/station.mjs';
+import {applyStationMessage, changeFrequencyClaim, getStationState} from '../public/shared/data/station.mjs';
 
 test('settings repository preserves DTO and keeps layout local by default', async () => {
     const settings = {lang: 'zh', grid: 'FN31', layout: '3x3'};
@@ -54,4 +54,26 @@ test('station repository and pure radio/score merger retain raw messages', async
     assert.strictEqual(withScore.score, score);
     assert.strictEqual(withScore.radio, radio);
     assert.strictEqual(applyStationMessage(withScore, {type: 'qso'}), withScore);
+});
+
+test('station repository routes claims and keeps composite seat keys', async () => {
+    let request;
+    const transport = {async postJson(url, body) {
+        request = {url, body};
+        return {ok: true, claims: []};
+    }};
+    await changeFrequencyClaim('claim', {seat: 'PC-A:1', freqKhz: 14025}, {transport});
+    assert.deepEqual(request, {
+        url: '/api/frequency-claims/claim', body: {seat: 'PC-A:1', freqKhz: 14025}
+    });
+
+    const initial = {radio: null, radios: {}, claims: [], score: null};
+    const radio = {type: 'radio', seat: 'PC-A:1', radioNr: 1};
+    const withRadio = applyStationMessage(initial, radio);
+    assert.strictEqual(withRadio.radios['PC-A:1'], radio);
+    assert.equal(withRadio.radios[1], undefined);
+    const claims = [{seat: 'PC-A:1', freqKhz: 14025}];
+    const withClaims = applyStationMessage(withRadio, {type: 'frequencyClaims', claims});
+    assert.strictEqual(withClaims.claims, claims);
+    assert.strictEqual(withClaims.radios['PC-A:1'], radio);
 });

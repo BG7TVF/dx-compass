@@ -51,6 +51,7 @@ async function start() {
             switch (message && message.type) {
                 case 'radio':
                 case 'score':
+                case 'frequencyClaims':
                     ctx.qso.handleStationMessage(message);
                     ctx.op.handleStation();
                     break;
@@ -67,6 +68,7 @@ async function start() {
                     break;
                 case 'alert':
                     ctx.qso.showRuleAlert(message);
+                    ctx.op.showRuleAlert(message);
                     break;
                 default:
                     ctx.spot.handleSpot(message);

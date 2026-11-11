@@ -211,6 +211,24 @@ test('DB startup migrates columns and creates neighbor schema in independent bra
     assert.ok((catcher.scope || []).length >= 3, 'catch must cover the migration sqlite nodes');
 });
 
+test('alert seat migration and frequency claim API are wired end to end', () => {
+    const flow = JSON.parse(read('flow.json'));
+    const byName = name => flow.find(node => node.name === name);
+    assert.deepEqual(byName('Create alert rules').wires, [[byName('Build alert seat column query').id]]);
+    assert.match(byName('Build alert seat column query').func, /seatColumnQuery/);
+    assert.match(byName('Build alert seat migration').func, /migrateSeat/);
+    assert.deepEqual(byName('Apply alert seat migration').wires, [[]]);
+
+    const route = byName('POST /api/frequency-claims/:action');
+    const change = byName('Change frequency claim');
+    assert.deepEqual(route.wires, [[change.id]]);
+    assert.equal(change.outputs, 2);
+    assert.match(change.func, /dx\.qso\.changeFrequencyClaim/);
+    assert.match(change.func, /type: 'frequencyClaims'/);
+    assert.ok(change.wires[0].includes(byName('Frequency claim response').id));
+    assert.ok(change.wires[1].includes(byName('Broadcast frequency claims').id));
+});
+
 test('flow node ids are unique', () => {
     const flow = JSON.parse(read('flow.json'));
     const seen = new Set();

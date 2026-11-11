@@ -25,6 +25,7 @@ import {gridToLatLon} from '../../shared/geo/maidenhead.mjs';
 import {resolveCall} from '../../shared/dxcc/callsign.mjs';
 import {createOpMap} from '../op/op-map.mjs';
 import {createPeripheralHub, deviceDefinitions} from '../op/peripherals.mjs';
+import {changeFrequencyClaim} from '../../shared/data/station.mjs';
 
 const REVIEW_KEY = 'dxcompass-op-call-review';
 const COMPASS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
@@ -64,6 +65,7 @@ export function createOpPage(ctx) {
         multTimer: null,
         adviceTimer: null,
         rotorTarget: null,
+        claimFeedback: null,
         timers: []
     };
 
@@ -168,6 +170,22 @@ export function createOpPage(ctx) {
     function visibleSeats() {
         const key = currentSeat();
         return key === 'all' ? seatChoices().map(choice => choice.value) : [key];
+    }
+
+    /* Empty targets are global alerts and retain the original QSO-page path.
+       Seat-targeted alerts are shown only in the matching OP position. */
+    function showRuleAlert(alert) {
+        const targets = Array.isArray(alert && alert.seats) ? alert.seats.map(String) : [];
+        if (!state.active || !targets.length) return false;
+        const visible = new Set(visibleSeats());
+        if (!targets.some(target => visible.has(target))) return false;
+        ctx.qso.showRuleAlert(alert, {allowOp: true});
+        return true;
+    }
+
+    function frequencyClaims() {
+        const station = ctx.qso && ctx.qso.state && ctx.qso.state.station;
+        return station && Array.isArray(station.claims) ? station.claims : [];
     }
 
     function radioTheme(key) {
@@ -923,6 +941,33 @@ export function createOpPage(ctx) {
         renderBottom();
     }
 
+    function claimControls(key, radio) {
+        const claims = frequencyClaims();
+        const own = claims.find(claim => String(claim.seat) === String(key));
+        const freqKhz = Number(radio && radio.freqKhz);
+        const occupied = claims.find(claim => Number.isFinite(freqKhz) &&
+            Number(claim.freqKhz).toFixed(3) === freqKhz.toFixed(3));
+        let note;
+        let button;
+        if (own) {
+            note = t('op.claim.owned', {freq: own.freqKhz});
+            button = '<button type="button" class="op-mini op-claim-btn" data-op-claim="release" data-seat="' +
+                esc(key) + '" data-freq="' + own.freqKhz + '">' + esc(t('op.claim.release')) + '</button>';
+        } else {
+            note = occupied
+                ? t('op.claim.occupiedBy', {seat: occupied.operator || seatNameOf(occupied.seat)})
+                : t('op.claim.free');
+            button = '<button type="button" class="op-mini op-claim-btn" data-op-claim="claim" data-seat="' +
+                esc(key) + '" data-freq="' + (Number.isFinite(freqKhz) ? freqKhz : '') + '"' +
+                (occupied || !Number.isFinite(freqKhz) || freqKhz <= 0 ? ' disabled' : '') + '>' +
+                esc(t('op.claim.claim')) + '</button>';
+        }
+        const feedback = state.claimFeedback && state.claimFeedback.seat === String(key)
+            ? '<span class="op-claim-feedback' + (state.claimFeedback.bad ? ' bad' : '') + '">' +
+                esc(state.claimFeedback.text) + '</span>' : '';
+        return '<div class="op-claim"><span>' + esc(note) + '</span>' + button + '</div>' + feedback;
+    }
+
     function renderBottom() {
         const host = $('#opBottom');
         const devices = deviceDefinitions(ctx.settings);
@@ -938,7 +983,7 @@ export function createOpPage(ctx) {
             return '<div class="op-radio-card ' + radioTheme(key) + '"><b>' +
                 esc(radioName(key)) + '</b><span>' +
                 esc(radio && radio.freqKhz ? bandOf(radio.freqKhz) + ' ' + mini(radio.mode) : t('op.radio.waiting')) +
-                '</span><span>' + esc(radio && radio.opCall || '') + '</span></div>';
+                '</span><span>' + esc(radio && radio.opCall || '') + '</span>' + claimControls(key, radio) + '</div>';
         }).join('');
         const recent = [...state.qsos.values()].slice(-6).reverse().map(qso =>
             '<div class="op-recent-row"><span>' + esc(new Date(qso.ts).toISOString().slice(11, 16)) + 'Z</span>' +
@@ -1454,7 +1499,33 @@ export function createOpPage(ctx) {
             configureDevice(button.dataset.opAdd, true);
             $('#opAddMenu').classList.add('hidden');
         });
-        $('#opBottom')?.addEventListener('click', event => {
+        $('#opBottom')?.addEventListener('click', async event => {
+            const claimButton = event.target.closest('[data-op-claim]');
+            if (claimButton) {
+                const action = claimButton.dataset.opClaim;
+                const seat = String(claimButton.dataset.seat || '');
+                const freqKhz = Number(claimButton.dataset.freq);
+                claimButton.disabled = true;
+                try {
+                    const result = await changeFrequencyClaim(action, {seat, freqKhz});
+                    if (result && Array.isArray(result.claims)) {
+                        ctx.qso.handleStationMessage({type: 'frequencyClaims', claims: result.claims});
+                    }
+                    state.claimFeedback = {seat, bad: false,
+                        text: t(action === 'claim' ? 'op.claim.success' : 'op.claim.released')};
+                } catch (error) {
+                    const body = error && error.body || {};
+                    if (Array.isArray(body.claims)) {
+                        ctx.qso.handleStationMessage({type: 'frequencyClaims', claims: body.claims});
+                    }
+                    const owner = body.owner && (body.owner.operator || seatNameOf(body.owner.seat));
+                    const key = body.error === 'frequency-claimed' ? 'op.claim.conflict'
+                        : body.error === 'not-claim-owner' ? 'op.claim.notOwner' : 'op.claim.failed';
+                    state.claimFeedback = {seat, bad: true, text: t(key, {seat: owner || ''})};
+                }
+                renderBottom();
+                return;
+            }
             const remove = event.target.closest('[data-op-remove]');
             if (remove) {
                 configureDevice(remove.dataset.opRemove, false);
@@ -1499,6 +1570,7 @@ export function createOpPage(ctx) {
         handleQso,
         handleDelete,
         handleStation,
-        handleSpot
+        handleSpot,
+        showRuleAlert
     };
 }

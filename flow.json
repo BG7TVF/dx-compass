@@ -1967,6 +1967,67 @@
         "wires": []
     },
     {
+        "id": "dxf0000000000001",
+        "type": "http in",
+        "z": "dxc0000000000090",
+        "name": "POST /api/frequency-claims/:action",
+        "url": "/api/frequency-claims/:action",
+        "method": "post",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 190,
+        "y": 700,
+        "wires": [
+            [
+                "dxf0000000000002"
+            ]
+        ]
+    },
+    {
+        "id": "dxf0000000000002",
+        "type": "function",
+        "z": "dxc0000000000090",
+        "name": "Change frequency claim",
+        "func": "const dx = global.get('dx');\nconst action = msg.req && msg.req.params ? msg.req.params.action : '';\nconst result = dx.qso.changeFrequencyClaim(global, action, msg.payload, new Date());\nmsg.statusCode = result.status;\ndelete result.status;\nmsg.headers = {'Content-Type': 'application/json; charset=utf-8'};\nmsg.payload = result;\nconst broadcast = result.ok && result.changed ? {payload: {type: 'frequencyClaims', claims: result.claims}} : null;\nreturn [msg, broadcast];",
+        "outputs": 2,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 480,
+        "y": 700,
+        "wires": [
+            [
+                "dxf0000000000003"
+            ],
+            [
+                "dxf0000000000004"
+            ]
+        ]
+    },
+    {
+        "id": "dxf0000000000003",
+        "type": "http response",
+        "z": "dxc0000000000090",
+        "name": "Frequency claim response",
+        "statusCode": "",
+        "headers": {},
+        "x": 760,
+        "y": 680,
+        "wires": []
+    },
+    {
+        "id": "dxf0000000000004",
+        "type": "websocket out",
+        "z": "dxc0000000000090",
+        "name": "Broadcast frequency claims",
+        "server": "dxc0000000000028",
+        "client": "",
+        "x": 790,
+        "y": 740,
+        "wires": []
+    },
+    {
         "id": "dxc00000000000c1",
         "type": "function",
         "z": "dxc0000000000090",
@@ -3222,6 +3283,76 @@
         "x": 570,
         "y": 1900,
         "wires": [
+            [
+                "dxl0000000000081"
+            ]
+        ]
+    },
+    {
+        "id": "dxl0000000000081",
+        "type": "function",
+        "z": "dxc0000000000001",
+        "name": "Build alert seat column query",
+        "func": "const dx = global.get('dx');\nmsg.topic = dx.storage.alerts.seatColumnQuery();\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 810,
+        "y": 1900,
+        "wires": [
+            [
+                "dxl0000000000082"
+            ]
+        ]
+    },
+    {
+        "id": "dxl0000000000082",
+        "type": "sqlite",
+        "z": "dxc0000000000001",
+        "mydb": "dxc0000000000027",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "Query alert seat column",
+        "x": 1070,
+        "y": 1900,
+        "wires": [
+            [
+                "dxl0000000000083"
+            ]
+        ]
+    },
+    {
+        "id": "dxl0000000000083",
+        "type": "function",
+        "z": "dxc0000000000001",
+        "name": "Build alert seat migration",
+        "func": "const dx = global.get('dx');\nconst topic = dx.storage.alerts.migrateSeat(msg.payload);\nif (!topic) return null;\nmsg.topic = topic;\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1320,
+        "y": 1900,
+        "wires": [
+            [
+                "dxl0000000000084"
+            ]
+        ]
+    },
+    {
+        "id": "dxl0000000000084",
+        "type": "sqlite",
+        "z": "dxc0000000000001",
+        "mydb": "dxc0000000000027",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "Apply alert seat migration",
+        "x": 1580,
+        "y": 1900,
+        "wires": [
             []
         ]
     },
@@ -3763,7 +3894,11 @@
             "dxl0000000000052",
             "dxl0000000000053",
             "dxl0000000000054",
-            "dxl0000000000062"
+            "dxl0000000000062",
+            "dxl0000000000081",
+            "dxl0000000000082",
+            "dxl0000000000083",
+            "dxl0000000000084"
         ],
         "uncaught": false,
         "x": 3080,

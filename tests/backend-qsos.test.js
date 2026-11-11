@@ -68,6 +68,51 @@ test('RadioInfo and Score update current and per-radio station state', () => {
     assert.equal(qsoApi.stationState(ctx).score, score);
 });
 
+test('frequency claims enforce same-frequency ownership and release authorization', () => {
+    const values = {radioStates: {
+        'PC-A:1': {seat: 'PC-A:1', opCall: 'OPA', stationName: 'Alpha'},
+        'PC-B:1': {seat: 'PC-B:1', opCall: 'OPB', stationName: 'Beta'}
+    }};
+    const ctx = {get: key => values[key], set: (key, value) => { values[key] = value; }};
+    const at = new Date('2026-11-12T00:00:00Z');
+    const first = qsoApi.changeFrequencyClaim(ctx, 'claim', {seat: 'pc-a:1', freqKhz: 14025}, at);
+    assert.equal(first.ok, true);
+    assert.equal(first.claim.owner, 'PC-A:1');
+    assert.equal(first.claim.operator, 'OPA');
+    assert.deepEqual(qsoApi.stationState(ctx).claims, first.claims);
+
+    const conflict = qsoApi.changeFrequencyClaim(ctx, 'claim', {seat: 'PC-B:1', freqKhz: '14025.000'}, at);
+    assert.equal(conflict.status, 409);
+    assert.equal(conflict.error, 'frequency-claimed');
+    assert.equal(conflict.owner.seat, 'PC-A:1');
+    const forbidden = qsoApi.changeFrequencyClaim(ctx, 'release', {seat: 'PC-B:1', freqKhz: 14025}, at);
+    assert.equal(forbidden.status, 403);
+    assert.equal(forbidden.error, 'not-claim-owner');
+
+    const released = qsoApi.changeFrequencyClaim(ctx, 'release', {seat: 'PC-A:1', freqKhz: 14025}, at);
+    assert.equal(released.ok, true);
+    assert.equal(released.changed, true);
+    assert.deepEqual(released.claims, []);
+    const second = qsoApi.changeFrequencyClaim(ctx, 'claim', {seat: 'PC-B:1', freqKhz: 14025}, at);
+    assert.equal(second.ok, true);
+    assert.equal(second.claim.operator, 'OPB');
+});
+
+test('a new claim replaces only the same seat old claim and validates input', () => {
+    const values = {};
+    const ctx = {get: key => values[key], set: (key, value) => { values[key] = value; }};
+    const at = new Date('2026-11-12T00:00:00Z');
+    qsoApi.changeFrequencyClaim(ctx, 'claim', {seat: 'PC-A:1', freqKhz: 14025}, at);
+    qsoApi.changeFrequencyClaim(ctx, 'claim', {seat: 'PC-B:1', freqKhz: 7025}, at);
+    const moved = qsoApi.changeFrequencyClaim(ctx, 'claim', {seat: 'PC-A:1', freqKhz: 21025}, at);
+    assert.deepEqual(moved.claims.map(claim => claim.freqKhz), [7025, 21025]);
+    const idempotent = qsoApi.changeFrequencyClaim(ctx, 'claim', {seat: 'PC-A:1', freqKhz: 21025}, at);
+    assert.equal(idempotent.changed, false);
+    assert.equal(qsoApi.changeFrequencyClaim(ctx, 'claim', {seat: '', freqKhz: 14025}, at).status, 400);
+    assert.equal(qsoApi.changeFrequencyClaim(ctx, 'claim', {seat: 'PC-A:1', freqKhz: -1}, at).status, 400);
+    assert.equal(qsoApi.changeFrequencyClaim(ctx, 'other', {seat: 'PC-A:1', freqKhz: 14025}, at).status, 400);
+});
+
 test('QRZ success updates coordinates and session failures request relogin', () => {
     const qso = {n1mmId: "id'1", call: 'K1ABC', lat: null, lon: null};
     const ok = qsoApi.parseResult({QRZDatabase: {Callsign: [{lat: [{_: '12.5'}], lon: [{_: '-45'}]}]}}, qso);

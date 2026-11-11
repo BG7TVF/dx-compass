@@ -63,6 +63,7 @@ test('规则规范化：列表、波段小写、布尔默认值', () => {
         call: ' dl1abc , k1abc/p ',
         band: '20M, 40M',
         mode: 'cw',
+        seat: 'pc-a:1, PC-B:2',
         snrMin: '10',
         voice: true
     });
@@ -71,6 +72,7 @@ test('规则规范化：列表、波段小写、布尔默认值', () => {
     assert.equal(result.rule.call, 'DL1ABC,K1ABC/P');
     assert.equal(result.rule.band, '20m,40m');
     assert.equal(result.rule.mode, 'CW');
+    assert.equal(result.rule.seat, 'PC-A:1,PC-B:2');
     assert.equal(result.rule.snrMin, 10);
     assert.equal(result.rule.voice, 1);
     assert.equal(result.rule.popup, 1);
@@ -88,6 +90,7 @@ test('fromRow 把 snake_case 行还原成规则对象', () => {
         id: 7,
         name: 'DL',
         enabled: 0,
+        seat: 'pc-a:1',
         call: 'DL1ABC',
         band: '20m',
         snr_min: 12,
@@ -97,6 +100,7 @@ test('fromRow 把 snake_case 行还原成规则对象', () => {
     });
     assert.equal(mapped.id, 7);
     assert.equal(mapped.enabled, 0);
+    assert.equal(mapped.seat, 'PC-A:1');
     assert.equal(mapped.snrMin, 12);
     assert.equal(mapped.popup, 0);
     assert.equal(mapped.voice, 1);
@@ -164,6 +168,27 @@ test('评估：命中后给出优先级、触发规则与通知门控', () => {
     assert.equal(out.alert.notify.sound, false);
     assert.equal(out.alert.notify.voice, true);
     assert.equal(out.alert.country, 'United States');
+});
+
+test('评估：全部命中规则定向时合并席位，命中全局规则则保持全局', () => {
+    const targeted = service.evaluate(spot(), {
+        settings: baseSettings(),
+        rules: [
+            rule({name: 'A', call: 'K1ABC', seat: 'PC-A:1'}),
+            rule({name: 'B', prefix: 'K', seat: 'PC-B:2,PC-A:1'})
+        ],
+        history: {}, state: {now: NOW, dedupe: {}, lastAlertAt: 0}, resolve
+    });
+    assert.deepEqual(targeted.alert.seats, ['PC-A:1', 'PC-B:2']);
+    assert.equal(targeted.alert.seat, 'PC-A:1,PC-B:2');
+
+    const global = service.evaluate(spot(), {
+        settings: baseSettings(),
+        rules: [rule({name: 'A', call: 'K1ABC', seat: 'PC-A:1'}), rule({name: 'global', prefix: 'K'})],
+        history: {}, state: {now: NOW, dedupe: {}, lastAlertAt: 0}, resolve
+    });
+    assert.deepEqual(global.alert.seats, []);
+    assert.equal(global.alert.seat, '');
 });
 
 test('评估：同波段频率在阈值内不提醒，超出阈值报新频率', () => {
@@ -424,10 +449,15 @@ test('去重键与频率容差：缺频率按重复处理', () => {
 test('规则 SQL：建表、转义、更新、删除与快照', () => {
     assert.match(sql.createTable(), /CREATE TABLE IF NOT EXISTS alert_rules/);
     assert.match(sql.createTable(), /not_source TEXT/);
-    const inserted = sql.insert(rule({name: "O'Brien", call: 'K1ABC'}));
+    assert.match(sql.createTable(), /seat TEXT/);
+    assert.match(sql.seatColumnQuery(), /pragma_table_info\('alert_rules'\)/);
+    assert.equal(sql.migrateSeat([]), 'ALTER TABLE alert_rules ADD COLUMN seat TEXT;');
+    assert.equal(sql.migrateSeat([{name: 'seat'}]), null);
+    const inserted = sql.insert(rule({name: "O'Brien", call: 'K1ABC', seat: 'PC-A:1'}));
     assert.match(inserted, /INSERT INTO alert_rules/);
     assert.match(inserted, /'O''Brien'/);
     assert.match(inserted, /'K1ABC'/);
+    assert.match(inserted, /'PC-A:1'/);
     assert.equal(sql.update(rule({call: 'K1ABC'})), null);
     const updated = sql.update(rule({id: 4, call: 'K1ABC'}));
     assert.match(updated, /WHERE id = 4;/);

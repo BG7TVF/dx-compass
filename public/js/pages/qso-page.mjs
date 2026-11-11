@@ -660,8 +660,11 @@ export function createQsoPage(ctx) {
     /* Server-side rule alert: reuses the existing card, tone, speech and quiet
      * hours. The server already applied the dedupe window and minimum interval,
      * so this only renders what it decided to deliver. */
-    function showRuleAlert(alert) {
-        if (!alert || state.view !== 'qso') return;
+    function showRuleAlert(alert, options) {
+        const allowOp = Boolean(options && options.allowOp);
+        const targeted = Array.isArray(alert && alert.seats) && alert.seats.length > 0;
+        if (!alert || (!allowOp && targeted)) return;
+        if (state.view !== 'qso' && !(allowOp && state.view === 'op')) return;
         if (inQuietHours()) return;
         const notify = alert.notify || {};
         if (notify.sound) playAlertTone();
