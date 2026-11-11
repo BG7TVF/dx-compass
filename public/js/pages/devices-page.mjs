@@ -54,7 +54,8 @@ const ERROR_KEYS = {
     'invalid-outlet': 'dev.error.invalid-outlet',
     'unknown-channel': 'dev.error.unknown-channel',
     'invalid-direction': 'dev.error.invalid-direction',
-    'unknown-command': 'dev.error.unknown-command'
+    'unknown-command': 'dev.error.unknown-command',
+    'direction-switch-too-fast': 'dev.error.direction-switch-too-fast'
 };
 
 export function createDevicesPage(ctx) {
@@ -68,6 +69,9 @@ export function createDevicesPage(ctx) {
     let formSignature = null;
     let ctrlSignature = null;
     let timer = null;
+    let towerTimer = null;
+    let towerHoldDevice = null;
+    let towerDirection = null;
 
     function t(key, params) {
         const value = ctx.t(key, params);
@@ -317,6 +321,15 @@ export function createDevicesPage(ctx) {
                 </div>
                 ${token}${error}${seatNote}`;
         }
+        if (device.type === 'tower') {
+            return `<h3>${t('dev.control.title')}</h3>${status}
+                <div class="dev-ctrl-row">
+                    <button class="dev-btn" type="button" data-tower="up">${t('dev.control.up')}</button>
+                    <button class="dev-btn" type="button" data-tower="down">${t('dev.control.down')}</button>
+                </div>
+                ${token}${error}${seatNote}
+                <p class="dev-note">${t('dev.control.holdHint')}</p>`;
+        }
         return `<h3>${t('dev.control.title')}</h3>${status}${error}${seatNote}`;
     }
 
@@ -395,6 +408,33 @@ export function createDevicesPage(ctx) {
         }
     }
 
+    function startTower(device, direction) {
+        if (towerTimer) clearInterval(towerTimer);
+        towerHoldDevice = device;
+        towerDirection = direction;
+        void sendCommand(device, {command: 'tower_hold', direction});
+        // 按住期间每 500ms 续一次心跳，服务端 1500ms 收不到就释放。
+        towerTimer = setInterval(() => {
+            const current = towerHoldDevice;
+            if (!current || towerDirection !== direction) {
+                stopTower();
+                return;
+            }
+            void sendCommand(current, {command: 'tower_hold', direction});
+        }, 500);
+    }
+
+    function stopTower() {
+        if (towerTimer) {
+            clearInterval(towerTimer);
+            towerTimer = null;
+        }
+        towerDirection = null;
+        const device = towerHoldDevice;
+        towerHoldDevice = null;
+        if (device) void sendCommand(device, {command: 'tower_release'});
+    }
+
     function seatOptions() {
         if (!snapshot.ownership.seats.length) return `<option value="">—</option>`;
         return snapshot.ownership.seats.map(seat => `<option value="${esc(seat.seat)}"${seat.seat === seatKey ? ' selected' : ''}>${esc(seat.seat)}${seat.band ? ' · ' + esc(seat.band) : ''}</option>`).join('');
@@ -462,6 +502,7 @@ export function createDevicesPage(ctx) {
     }
 
     function selectDevice(id) {
+        stopTower();
         selectedId = id;
         creating = false;
         formDirty = false;
@@ -649,6 +690,15 @@ export function createDevicesPage(ctx) {
                 });
             }
         });
+        $('#devControl').addEventListener('pointerdown', event => {
+            const button = event.target.closest('[data-tower]');
+            const device = selectedDevice();
+            if (!button || !device) return;
+            event.preventDefault();
+            startTower(device, button.dataset.tower);
+        });
+        document.addEventListener('pointerup', stopTower);
+        window.addEventListener('blur', stopTower);
         $('#devForm').addEventListener('submit', submitForm);
         $('#devForm').addEventListener('input', () => { formDirty = true; });
         $('#devForm').addEventListener('click', event => {
@@ -668,6 +718,7 @@ export function createDevicesPage(ctx) {
 
     function hide() {
         active = false;
+        stopTower();
         if (timer) {
             clearInterval(timer);
             timer = null;

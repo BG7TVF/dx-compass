@@ -5549,5 +5549,159 @@
         "wires": [
             []
         ]
+    },
+    {
+        "id": "dxdev0000000071",
+        "type": "inject",
+        "z": "dxdev0000000000",
+        "name": "Release tower outputs on start",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "6",
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 150,
+        "y": 940,
+        "wires": [
+            [
+                "dxdev0000000072"
+            ]
+        ]
+    },
+    {
+        "id": "dxdev0000000072",
+        "type": "function",
+        "z": "dxdev0000000000",
+        "name": "Prepare tower release",
+        "func": "const dx = global.get('dx');\nmsg.topic = dx.storage.devices.devicesQuery();\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 390,
+        "y": 940,
+        "wires": [
+            [
+                "dxdev0000000073"
+            ]
+        ]
+    },
+    {
+        "id": "dxdev0000000073",
+        "type": "sqlite",
+        "z": "dxdev0000000000",
+        "mydb": "dxc0000000000027",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "Read towers for release",
+        "x": 610,
+        "y": 940,
+        "wires": [
+            [
+                "dxdev0000000074"
+            ]
+        ]
+    },
+    {
+        "id": "dxdev0000000074",
+        "type": "function",
+        "z": "dxdev0000000000",
+        "name": "Run tower release on start",
+        "func": "const dx = global.get('dx');\nconst result = await dx.devices.towerReleaseAll(global, msg.payload, new Date());\nif (result.released.length) node.log('tower outputs released on start: ' + result.released.length);\nreturn null;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 850,
+        "y": 940,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "dxdev0000000081",
+        "type": "inject",
+        "z": "dxdev0000000000",
+        "name": "Tower hold watchdog",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "0.5",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "5",
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 150,
+        "y": 1060,
+        "wires": [
+            [
+                "dxdev0000000082"
+            ]
+        ]
+    },
+    {
+        "id": "dxdev0000000082",
+        "type": "function",
+        "z": "dxdev0000000000",
+        "name": "Prepare tower watchdog",
+        "func": "const dx = global.get('dx');\nmsg.topic = dx.storage.devices.devicesQuery();\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 390,
+        "y": 1060,
+        "wires": [
+            [
+                "dxdev0000000083"
+            ]
+        ]
+    },
+    {
+        "id": "dxdev0000000083",
+        "type": "sqlite",
+        "z": "dxdev0000000000",
+        "mydb": "dxc0000000000027",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "Read towers for watchdog",
+        "x": 610,
+        "y": 1060,
+        "wires": [
+            [
+                "dxdev0000000084"
+            ]
+        ]
+    },
+    {
+        "id": "dxdev0000000084",
+        "type": "function",
+        "z": "dxdev0000000000",
+        "name": "Run tower watchdog",
+        "func": "const dx = global.get('dx');\nconst result = await dx.devices.towerWatchdog(global, msg.payload, new Date());\nif (result.released.length) node.log('tower heartbeat timeout: ' + result.released.map(item => item.device_id).join(', '));\nreturn null;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 850,
+        "y": 1060,
+        "wires": [
+            []
+        ]
     }
 ]

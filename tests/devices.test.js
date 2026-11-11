@@ -579,6 +579,9 @@ test('flow registers device routes and startup schema migration', () => {
     const poll = byName('Run rotator poll');
     assert.ok(poll, 'rotator poll node exists');
     assert.match(poll.func, /dx\.devices\.pollRotators/);
+
+    assert.match(byName('Run tower watchdog').func, /dx\.devices\.towerWatchdog/);
+    assert.match(byName('Run tower release on start').func, /dx\.devices\.towerReleaseAll/);
 });
 
 test('two new settings ship with the agreed defaults and no gating', () => {
@@ -920,6 +923,174 @@ test('commands only apply to matching device types', async () => {
         {command: 'select', port: 'IN1', outlet: '1'}, headers, now);
     assert.equal(result.status, 400);
     assert.equal(result.payload.error, 'invalid-device-type');
+});
+
+const towerHold = require('../lib/devices/tower-hold.js');
+
+function towerDevice(overrides) {
+    return device(Object.assign({
+        id: 'tower-1',
+        name: 'Tower',
+        type: 'tower',
+        bands: '',
+        config_json: JSON.stringify({
+            relay_url: 'http://relay.local/out',
+            up_channel: 1,
+            down_channel: 2
+        })
+    }, overrides || {}));
+}
+
+test('tower hold keeps the output closed, renews on heartbeat and times out at 1500ms', async () => {
+    const calls = [];
+    relay.setFetchFactory(async (url, init) => {
+        calls.push(JSON.parse(init.body));
+        return {ok: true, status: 200};
+    });
+    const globalCtx = makeContext();
+    const deviceItem = towerDevice();
+    const start = new Date('2026-03-01T12:00:00.000Z');
+
+    let result = await towerHold.hold(globalCtx, deviceItem, 'up', 'OP-A', start);
+    assert.equal(result.ok, true);
+    assert.equal(result.renewed, false);
+    assert.deepEqual(calls, [
+        {channel: 2, action: 'off'},
+        {channel: 1, action: 'on'}
+    ]);
+    assert.equal(towerHold.stateOf(globalCtx, 'tower-1').direction, 'up');
+
+    // 同方向心跳只续期，不再重复吸合。
+    const beat = new Date(start.getTime() + 400);
+    result = await towerHold.hold(globalCtx, deviceItem, 'up', 'OP-A', beat);
+    assert.equal(result.renewed, true);
+    assert.equal(result.dispatched, false);
+    assert.equal(calls.length, 2);
+    assert.equal(result.expires_ms, beat.getTime() + 1500);
+
+    // 未到 1500ms 不释放。
+    let dog = await towerHold.watchdog(globalCtx, [deviceItem], new Date(beat.getTime() + 1499));
+    assert.deepEqual(dog.released, []);
+    // 超过 1500ms 无心跳 → 断开输出。
+    dog = await towerHold.watchdog(globalCtx, [deviceItem], new Date(beat.getTime() + 1501));
+    assert.deepEqual(dog.released, [{device_id: 'tower-1', direction: 'up', channel: 1}]);
+    assert.deepEqual(calls[calls.length - 1], {channel: 1, action: 'off'});
+    assert.ok(towerHold.stateOf(globalCtx, 'tower-1').released_ms);
+
+    relay.reset();
+});
+
+test('tower release is immediate and two channels never close together', async () => {
+    const calls = [];
+    relay.setFetchFactory(async (url, init) => {
+        calls.push(JSON.parse(init.body));
+        return {ok: true, status: 200};
+    });
+    const globalCtx = makeContext();
+    const deviceItem = towerDevice();
+    const start = new Date('2026-03-01T12:00:00.000Z');
+
+    await towerHold.hold(globalCtx, deviceItem, 'up', 'OP-A', start);
+    calls.length = 0;
+
+    // 直接反向：宽限期内拒绝，且不输出。
+    let result = await towerHold.hold(globalCtx, deviceItem, 'down', 'OP-A', start);
+    assert.equal(result.status, 409);
+    assert.equal(result.error, 'direction-switch-too-fast');
+    assert.deepEqual(calls, []);
+
+    // 松手立即断开。
+    result = await towerHold.release(globalCtx, deviceItem, start);
+    assert.equal(result.released, true);
+    assert.deepEqual(calls, [{channel: 1, action: 'off'}]);
+
+    // 释放后 1000ms 内仍禁止反向。
+    calls.length = 0;
+    result = await towerHold.hold(globalCtx, deviceItem, 'down', 'OP-A', new Date(start.getTime() + 500));
+    assert.equal(result.error, 'direction-switch-too-fast');
+    assert.deepEqual(calls, []);
+
+    // 超过最小间隔后允许反向，先断另一路再合。
+    result = await towerHold.hold(globalCtx, deviceItem, 'down', 'OP-A', new Date(start.getTime() + 1000));
+    assert.equal(result.ok, true);
+    assert.deepEqual(calls, [
+        {channel: 1, action: 'off'},
+        {channel: 2, action: 'on'}
+    ]);
+
+    relay.reset();
+});
+
+test('tower hold needs a configured channel and startup releases every output', async () => {
+    const calls = [];
+    relay.setFetchFactory(async (url, init) => {
+        calls.push(JSON.parse(init.body));
+        return {ok: true, status: 200};
+    });
+    const globalCtx = makeContext();
+    const now = new Date('2026-03-01T12:00:00.000Z');
+
+    const bare = towerDevice({id: 'tower-2', config_json: JSON.stringify({relay_url: 'http://relay.local/out'})});
+    const result = await towerHold.hold(globalCtx, bare, 'up', 'OP-A', now);
+    assert.equal(result.status, 400);
+    assert.equal(result.error, 'unknown-channel');
+
+    calls.length = 0;
+    const second = towerDevice({id: 'tower-3'});
+    const all = await towerHold.releaseAll(globalCtx, [towerDevice(), second], now);
+    assert.equal(all.released.length, 4);
+    assert.deepEqual(calls.sort((a, b) => a.channel - b.channel), [
+        {channel: 1, action: 'off'},
+        {channel: 1, action: 'off'},
+        {channel: 2, action: 'off'},
+        {channel: 2, action: 'off'}
+    ]);
+    relay.reset();
+});
+
+test('tower commands go through the command channel with heartbeats and audit', async () => {
+    commands.resetForTests();
+    commands.setTransports({
+        towerHold: context => towerHold.hold(context.global, context.device, context.direction, context.seat, context.now),
+        towerRelease: context => towerHold.release(context.global, context.device, context.now)
+    });
+    const calls = [];
+    relay.setFetchFactory(async (url, init) => {
+        calls.push(JSON.parse(init.body));
+        return {ok: true, status: 200};
+    });
+    const now = new Date('2026-03-01T12:00:00.000Z');
+    const globalCtx = makeContext();
+    const rows = [deviceRow({
+        id: 'tower-1', name: 'Tower', type: 'tower', bands: '',
+        config_json: JSON.stringify({relay_url: 'http://relay.local/out', up_channel: 1, down_channel: 2})
+    })];
+    const headers = {'X-DX-Seat': 'OP-A'};
+
+    let result = await service.handleCommand(globalCtx, rows, 'tower-1',
+        {command: 'tower_hold', direction: 'up'}, headers, now);
+    assert.equal(result.status, 202);
+    assert.equal(result.payload.dispatched, true);
+    assert.match(result.sql[0], /tower_hold/);
+
+    const beat = new Date(now.getTime() + 500);
+    result = await service.handleCommand(globalCtx, rows, 'tower-1',
+        {command: 'tower_hold', direction: 'up'}, headers, beat);
+    assert.equal(result.status, 202);
+    assert.equal(result.payload.dispatched, false);
+
+    // 来不及换向 → 409，审计为 rejected。
+    result = await service.handleCommand(globalCtx, rows, 'tower-1',
+        {command: 'tower_hold', direction: 'down'}, headers, beat);
+    assert.equal(result.status, 409);
+    assert.equal(result.payload.error, 'direction-switch-too-fast');
+
+    result = await service.handleCommand(globalCtx, rows, 'tower-1',
+        {command: 'tower_release'}, headers, new Date(beat.getTime() + 100));
+    assert.equal(result.status, 202);
+    assert.equal(runtime.stateOf(globalCtx, 'tower-1').tower_direction, null);
+
+    relay.reset();
 });
 
 function fakeSocket(handler) {
