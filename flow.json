@@ -5472,5 +5472,82 @@
         "x": 1650,
         "y": 660,
         "wires": []
+    },
+    {
+        "id": "dxdev0000000061",
+        "type": "inject",
+        "z": "dxdev0000000000",
+        "name": "Poll rotators",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "2",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "4",
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 420,
+        "y": 780,
+        "wires": [
+            [
+                "dxdev0000000062"
+            ]
+        ]
+    },
+    {
+        "id": "dxdev0000000062",
+        "type": "function",
+        "z": "dxdev0000000000",
+        "name": "Prepare rotator poll",
+        "func": "const dx = global.get('dx');\nmsg.topic = dx.storage.devices.devicesQuery();\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 610,
+        "y": 780,
+        "wires": [
+            [
+                "dxdev0000000063"
+            ]
+        ]
+    },
+    {
+        "id": "dxdev0000000063",
+        "type": "sqlite",
+        "z": "dxdev0000000000",
+        "mydb": "dxc0000000000027",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "Read rotators for poll",
+        "x": 810,
+        "y": 780,
+        "wires": [
+            [
+                "dxdev0000000064"
+            ]
+        ]
+    },
+    {
+        "id": "dxdev0000000064",
+        "type": "function",
+        "z": "dxdev0000000000",
+        "name": "Run rotator poll",
+        "func": "const dx = global.get('dx');\nconst result = await dx.devices.pollRotators(global, msg.payload, new Date());\nif (result.errors.length) {\n    node.warn('rotator poll: ' + result.errors.map(item => item.device_id + '=' + item.error).join(', '));\n}\nreturn null;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1030,
+        "y": 780,
+        "wires": [
+            []
+        ]
     }
 ]

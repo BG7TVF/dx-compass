@@ -1,4 +1,4 @@
-'use strict';
+﻿'use strict';
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -11,7 +11,19 @@ const runtime = require('../lib/devices/runtime.js');
 const tower = require('../lib/devices/tower.js');
 const tx = require('../lib/devices/tx.js');
 const commands = require('../lib/devices/commands.js');
+const rotatorLink = require('../lib/devices/rotator-link.js');
 const service = require('../lib/devices/service.js');
+
+function fakeTransports() {
+    commands.resetForTests();
+    commands.setTransports({
+        rotate: async () => ({ok: true}),
+        stop: async () => ({ok: true}),
+        select: async () => ({ok: true}),
+        towerHold: async () => ({ok: true}),
+        towerRelease: async () => ({ok: true})
+    });
+}
 const storage = require('../lib/storage');
 
 function makeContext(initial) {
@@ -563,6 +575,10 @@ test('flow registers device routes and startup schema migration', () => {
 
     const settings = fs.readFileSync(path.join(__dirname, '..', 'settings.js'), 'utf8');
     assert.match(settings, /httpAdminRoot:\s*false/);
+
+    const poll = byName('Run rotator poll');
+    assert.ok(poll, 'rotator poll node exists');
+    assert.match(poll.func, /dx\.devices\.pollRotators/);
 });
 
 test('two new settings ship with the agreed defaults and no gating', () => {
@@ -588,7 +604,7 @@ test('two new settings ship with the agreed defaults and no gating', () => {
 });
 
 test('command channel requires seat identity and the device password', async () => {
-    commands.resetForTests();
+    fakeTransports();
     const now = new Date('2026-03-01T12:00:00.000Z');
     const globalCtx = makeContext();
     const rows = [deviceRow({id: 'rotator-1', name: 'Rotator', type: 'rotator', bands: '', password: 'pw'})];
@@ -616,7 +632,7 @@ test('command channel requires seat identity and the device password', async () 
 });
 
 test('device lease allows one seat, renews and expires after 30s', async () => {
-    commands.resetForTests();
+    fakeTransports();
     const now = new Date('2026-03-01T12:00:00.000Z');
     const globalCtx = makeContext();
     const rows = [deviceRow({id: 'rotator-1', type: 'rotator', bands: ''})];
@@ -650,7 +666,7 @@ test('device lease allows one seat, renews and expires after 30s', async () => {
 });
 
 test('angle idempotency returns the first result and treats 360 as 0', async () => {
-    commands.resetForTests();
+    fakeTransports();
     const now = new Date('2026-03-01T12:00:00.000Z');
     const globalCtx = makeContext();
     const rows = [deviceRow({id: 'rotator-1', type: 'rotator', bands: ''})];
@@ -682,7 +698,7 @@ test('angle idempotency returns the first result and treats 360 as 0', async () 
 });
 
 test('select is blocked with 423 when a TX source reports active', async () => {
-    commands.resetForTests();
+    fakeTransports();
     const now = new Date('2026-03-01T12:00:00.000Z');
     const globalCtx = makeContext();
     const matrix = deviceRow({
@@ -734,7 +750,7 @@ test('select is blocked with 423 when a TX source reports active', async () => {
 });
 
 test('tower hold skeleton validates direction and channels', async () => {
-    commands.resetForTests();
+    fakeTransports();
     const now = new Date('2026-03-01T12:00:00.000Z');
     const globalCtx = makeContext();
     const towerRow = deviceRow({
@@ -796,4 +812,122 @@ test('device protocol config is validated and secrets stay out of the DTO', () =
     assert.equal(model.normalizeDevice({
         name: 'R', type: 'matrix', config: {channels: {'IN1:1': 300}}
     }, {devices: []}).error, 'invalid-config-channel');
+});
+
+function fakeSocket(handler) {
+    const {EventEmitter} = require('node:events');
+    const socket = new EventEmitter();
+    socket.destroyed = false;
+    socket.setEncoding = () => {};
+    socket.write = line => {
+        const reply = handler(String(line));
+        if (reply !== null && reply !== undefined) setImmediate(() => socket.emit('data', reply));
+    };
+    socket.destroy = () => {
+        socket.destroyed = true;
+    };
+    setImmediate(() => socket.emit('connect'));
+    return socket;
+}
+
+test('rotctld link formats GS-232 commands and parses the position reply', async () => {
+    const writes = [];
+    rotatorLink.setSocketFactory(() => fakeSocket(line => {
+        writes.push(line);
+        if (line.startsWith('P ')) return 'RPRT 0\n';
+        if (line.trim() === 'p') return '45.0 0.0\n';
+        if (line.trim() === 'S') return 'RPRT 0\n';
+        return null;
+    }));
+
+    const link = new rotatorLink.RotctldLink({host: '127.0.0.1', port: 4533, timeoutMs: 200});
+    await link.setPosition(45, 0);
+    const position = await link.getPosition();
+    await link.stop();
+
+    assert.equal(writes[0], 'P 45.0 0.0\n');
+    assert.equal(writes[1], 'p\n');
+    assert.equal(writes[2], 'S\n');
+    assert.equal(position.azimuth, 45);
+    assert.ok(Math.abs(rotatorLink.parsePosition('359.8 12').azimuth - 359.8) < 1e-9);
+    assert.equal(rotatorLink.parsePosition('nonsense'), null);
+    assert.equal(rotatorLink.formatSet(0), 'P 0.0 0.0\n');
+
+    link.close();
+    rotatorLink.resetLinks();
+    rotatorLink.setSocketFactory(null);
+});
+
+test('rotctld link reports timeouts and connection failures without faking success', async () => {
+    rotatorLink.setSocketFactory(() => fakeSocket(() => null));
+    const timeoutLink = new rotatorLink.RotctldLink({host: '127.0.0.1', port: 4533, timeoutMs: 20});
+    await assert.rejects(() => timeoutLink.getPosition(), /transport-timeout/);
+    timeoutLink.close();
+
+    rotatorLink.setSocketFactory(() => {
+        throw new Error('ECONNREFUSED');
+    });
+    const refused = new rotatorLink.RotctldLink({host: '127.0.0.1', port: 4533, timeoutMs: 50});
+    await assert.rejects(() => refused.setPosition(10), /transport-connect/);
+
+    rotatorLink.resetLinks();
+    rotatorLink.setSocketFactory(null);
+});
+
+test('rotator polling turns a successful read into a real state report', async () => {
+    const now = new Date('2026-03-01T12:00:00.000Z');
+    const globalCtx = makeContext();
+    const rows = [deviceRow({
+        id: 'rotator-1', name: 'Rotator', type: 'rotator', bands: '',
+        config_json: JSON.stringify({host: '10.0.0.9', port: 4533})
+    })];
+
+    rotatorLink.resetLinks();
+    rotatorLink.setSocketFactory(() => fakeSocket(line => line.trim() === 'p' ? '45.0 0.0\n' : 'RPRT 0\n'));
+
+    const result = await service.pollRotators(globalCtx, rows, now);
+    assert.equal(result.polled, 1);
+    assert.deepEqual(result.errors, []);
+
+    const view = service.snapshot(globalCtx, rows, now);
+    assert.equal(view.rotators['rotator-1'].physical_azimuth, 45);
+    assert.equal(view.status['rotator-1'].state, 'online');
+
+    // 读取失败不覆盖已有角度，也不假装在线；超过 10 秒自然转为通信中断。
+    rotatorLink.resetLinks();
+    rotatorLink.setSocketFactory(() => fakeSocket(() => null));
+    const failed = await service.pollRotators(globalCtx, rows, new Date(now.getTime() + 1000));
+    assert.equal(failed.polled, 0);
+    assert.equal(failed.errors[0].error, 'transport-timeout');
+    const offline = service.snapshot(globalCtx, rows, new Date(now.getTime() + 11000));
+    assert.equal(offline.status['rotator-1'].state, 'offline');
+
+    rotatorLink.resetLinks();
+    rotatorLink.setSocketFactory(null);
+});
+
+test('rotator motion state follows the target and the travel window', async () => {
+    fakeTransports();
+    const now = new Date('2026-03-01T12:00:00.000Z');
+    const globalCtx = makeContext();
+    const rows = [deviceRow({id: 'rotator-1', type: 'rotator', bands: '', travel_timeout_sec: 60})];
+    const headers = {'X-DX-Seat': 'OP-A'};
+
+    await service.handleCommand(globalCtx, rows, 'rotator-1', {command: 'rotate', azimuth: 90}, headers, now);
+    service.handle(globalCtx, rows, {action: 'report', device_id: 'rotator-1', azimuth: 10}, now);
+
+    let view = service.snapshot(globalCtx, rows, now).rotators['rotator-1'];
+    assert.equal(view.target_azimuth, 90);
+    assert.equal(view.physical_azimuth, 10);
+    assert.equal(view.motion_state, 'moving');
+    assert.equal(view.last_commander, 'OP-A');
+
+    service.handle(globalCtx, rows, {action: 'report', device_id: 'rotator-1', azimuth: 90}, now);
+    view = service.snapshot(globalCtx, rows, now).rotators['rotator-1'];
+    assert.equal(view.motion_state, 'settled');
+
+    const late = new Date(now.getTime() + 61000);
+    service.handle(globalCtx, rows, {action: 'report', device_id: 'rotator-1', azimuth: 10}, late);
+    view = service.snapshot(globalCtx, rows, late).rotators['rotator-1'];
+    assert.equal(view.motion_state, 'unknown');
 });

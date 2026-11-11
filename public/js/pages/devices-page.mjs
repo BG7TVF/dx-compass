@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Devices view: unified node tree, configuration editing, and read-only status.
  *
  * Every rendered state comes from GET /api/devices; the page keeps no device
@@ -8,7 +8,7 @@
  * This phase has no device commands: save/delete only touch configuration.
  */
 import {$, escapeHtml as esc, showToast, showConfirm} from '../ui.mjs';
-import {getDevicesSnapshot, saveDevice, deleteDevice} from '../../shared/data/devices.mjs';
+import {getDevicesSnapshot, saveDevice, deleteDevice, sendDeviceCommand} from '../../shared/data/devices.mjs';
 
 const POLL_MS = 2000;
 const TYPE_OPTIONS = ['tower', 'rotator', 'antenna', 'matrix', 'switch', 'other'];
@@ -23,6 +23,11 @@ const TOWER_KEYS = {
 };
 const COLOR_KEYS = {red: 'dev.color.red', yellow: 'dev.color.yellow', green: 'dev.color.green'};
 const HEALTH_KEYS = {ok: 'dev.tx.health.ok', stale: 'dev.tx.health.stale', offline: 'dev.tx.health.offline'};
+const MOTION_KEYS = {
+    moving: 'dev.motion.moving',
+    settled: 'dev.motion.settled',
+    unknown: 'dev.motion.unknown'
+};
 const ERROR_KEYS = {
     'has-children': 'dev.error.has-children',
     cycle: 'dev.error.cycle',
@@ -30,7 +35,20 @@ const ERROR_KEYS = {
     'invalid-offset': 'dev.error.invalid-offset',
     'unknown-device': 'dev.error.unknown-device',
     'unknown-parent': 'dev.error.unknown-parent',
-    'invalid-band': 'dev.error.invalid-band'
+    'invalid-band': 'dev.error.invalid-band',
+    'seat-required': 'dev.error.seat-required',
+    'invalid-device-token': 'dev.error.invalid-device-token',
+    'device-locked': 'dev.error.device-locked',
+    'device-disabled': 'dev.error.device-disabled',
+    'invalid-azimuth': 'dev.error.invalid-azimuth',
+    'transport-error': 'dev.error.transport-error',
+    'transport-timeout': 'dev.error.transport-timeout',
+    'transport-connect': 'dev.error.transport-error',
+    'transport-protocol': 'dev.error.transport-error',
+    'transport-not-configured': 'dev.error.transport-not-configured',
+    'tx-active': 'dev.error.tx-active',
+    'invalid-config': 'dev.error.invalid-config',
+    'invalid-config-channels': 'dev.error.invalid-config-channels'
 };
 
 export function createDevicesPage(ctx) {
@@ -42,6 +60,7 @@ export function createDevicesPage(ctx) {
     let creating = false;
     let formDirty = false;
     let formSignature = null;
+    let ctrlSignature = null;
     let timer = null;
 
     function t(key, params) {
@@ -55,9 +74,9 @@ export function createDevicesPage(ctx) {
         return label === key ? String(type || '') : label;
     }
 
-    function errorText(code) {
+    function errorText(code, params) {
         const key = ERROR_KEYS[code];
-        return key ? t(key) : t('dev.error.generic');
+        return key ? t(key, params) : t('dev.error.generic');
     }
 
     function clock(iso) {
@@ -166,6 +185,27 @@ export function createDevicesPage(ctx) {
         return options.join('');
     }
 
+    function configFields(value) {
+        const config = value.config || {};
+        if (value.type === 'rotator') {
+            return `<label>${t('dev.config.host')}<input name="cfg_host" maxlength="100" value="${esc(config.host || '')}"></label>
+                <label>${t('dev.config.port')}<input name="cfg_port" type="number" min="1" max="65535" step="1" value="${esc(config.port || '')}"></label>`;
+        }
+        if (value.type === 'matrix' || value.type === 'switch') {
+            return `<label>${t('dev.config.relayUrl')}<input name="cfg_relay_url" maxlength="300" value="${esc(config.relay_url || '')}"></label>
+                <label>${t('dev.config.relayToken')}<input name="cfg_relay_token" type="password" autocomplete="off" placeholder="${esc(t('dev.config.keepToken'))}"></label>
+                <label>${t('dev.config.channels')}<textarea name="cfg_channels" rows="3" spellcheck="false">${esc(JSON.stringify(config.channels || {}))}</textarea></label>
+                <label>${t('dev.config.pulse')}<input name="cfg_pulse_ms" type="number" min="50" max="5000" step="1" value="${esc(config.pulse_ms || '')}"></label>`;
+        }
+        if (value.type === 'tower') {
+            return `<label>${t('dev.config.relayUrl')}<input name="cfg_relay_url" maxlength="300" value="${esc(config.relay_url || '')}"></label>
+                <label>${t('dev.config.relayToken')}<input name="cfg_relay_token" type="password" autocomplete="off" placeholder="${esc(t('dev.config.keepToken'))}"></label>
+                <label>${t('dev.config.upChannel')}<input name="cfg_up_channel" type="number" min="0" max="255" step="1" value="${esc(config.up_channel === undefined ? '' : config.up_channel)}"></label>
+                <label>${t('dev.config.downChannel')}<input name="cfg_down_channel" type="number" min="0" max="255" step="1" value="${esc(config.down_channel === undefined ? '' : config.down_channel)}"></label>`;
+        }
+        return '';
+    }
+
     function formHtml() {
         const device = selectedDevice();
         if (!device && !creating) return `<p class="dev-empty">${t('dev.noSelection')}</p>`;
@@ -184,6 +224,7 @@ export function createDevicesPage(ctx) {
                 <label>${t('dev.form.port')}<input name="port_label" maxlength="32" value="${esc(value.port_label)}"></label>
                 <label>${t('dev.form.password')}<input name="password" type="password" maxlength="200" autocomplete="new-password" placeholder="${esc(device && device.has_password ? t('dev.form.passwordKeep') : '')}"></label>
                 <label>${t('dev.form.travel')}<input name="travel_timeout_sec" type="number" min="5" max="3600" step="1" value="${esc(value.travel_timeout_sec)}"></label>
+                ${configFields(value)}
             </div>
             <label class="dev-check"><input name="exclusive" type="checkbox"${value.exclusive ? ' checked' : ''}> ${t('dev.form.exclusive')}</label>
             <label class="dev-check"><input name="enabled" type="checkbox"${value.enabled !== false ? ' checked' : ''}> ${t('dev.form.enabled')}</label>
@@ -244,6 +285,101 @@ export function createDevicesPage(ctx) {
                 <tbody>${rows}</tbody></table>` : ''}`;
     }
 
+    function controlHtml(device) {
+        if (!device || !['rotator', 'matrix', 'switch', 'tower'].includes(device.type)) return '';
+        const status = '<p class="dev-ctrl-status" id="devCtrlStatus"></p>';
+        const error = '<p class="dev-form-error hidden" id="devCtrlError"></p>';
+        const token = device.has_password
+            ? `<label>${t('dev.control.deviceToken')}<input id="devCtrlToken" type="password" autocomplete="off"></label>`
+            : '';
+        const seatNote = `<p class="dev-note">${t('dev.control.seatNote', {seat: seatKey || '—'})}</p>`;
+        if (device.type === 'rotator') {
+            return `<h3>${t('dev.control.title')}</h3>${status}
+                <div class="dev-ctrl-row">
+                    <label>${t('dev.control.target')}<input id="devCtrlAzimuth" type="number" min="0" max="360" step="1" inputmode="numeric"></label>
+                    <button class="dev-btn primary" type="button" data-cmd="rotate">${t('dev.control.rotate')}</button>
+                    <button class="dev-btn" type="button" data-cmd="stop">${t('dev.control.stop')}</button>
+                </div>
+                ${token}${error}${seatNote}`;
+        }
+        return `<h3>${t('dev.control.title')}</h3>${status}${error}${seatNote}`;
+    }
+
+    function updateControlStatus(device) {
+        const box = $('#devCtrlStatus');
+        if (!box) return;
+        const parts = [];
+        const status = deviceStatus(device.id);
+        parts.push(t(STATUS_KEYS[status.state] || STATUS_KEYS.unknown));
+        if (device.type === 'rotator') {
+            const rotator = (snapshot.rotators && snapshot.rotators[device.id]) || {};
+            parts.push(t('dev.rotator.physical', {deg: rotator.physical_azimuth === null || rotator.physical_azimuth === undefined ? '—' : rotator.physical_azimuth}));
+            parts.push(t('dev.rotator.target', {deg: rotator.target_azimuth === null || rotator.target_azimuth === undefined ? '—' : rotator.target_azimuth}));
+            parts.push(t(MOTION_KEYS[rotator.motion_state] || MOTION_KEYS.unknown));
+            parts.push(t('dev.control.lastCommander', {name: rotator.last_commander || '—'}));
+        }
+        const control = snapshot.controls && snapshot.controls[device.id];
+        if (control && control.lease) parts.push(t('dev.control.lease', {seat: control.lease.seat}));
+        if (control && control.ports) {
+            const ports = Object.keys(control.ports)
+                .map(port => port + '→' + control.ports[port])
+                .join(' ');
+            if (ports) parts.push(ports);
+        }
+        box.textContent = parts.join(' · ');
+    }
+
+    function renderControl() {
+        const container = $('#devControl');
+        if (!container) return;
+        const device = selectedDevice();
+        if (!device) {
+            container.innerHTML = '';
+            ctrlSignature = null;
+            return;
+        }
+        const signature = [device.id, device.type, device.has_password ? 1 : 0].join('|');
+        if (signature !== ctrlSignature) {
+            container.innerHTML = controlHtml(device);
+            ctrlSignature = signature;
+        }
+        updateControlStatus(device);
+    }
+
+    function showCtrlError(text) {
+        const box = $('#devCtrlError');
+        if (!box) return;
+        box.textContent = text;
+        box.classList.remove('hidden');
+    }
+
+    async function sendCommand(device, command) {
+        const box = $('#devCtrlError');
+        if (box) {
+            box.textContent = '';
+            box.classList.add('hidden');
+        }
+        if (!seatKey) {
+            showCtrlError(t('dev.error.seat-required'));
+            return;
+        }
+        const token = $('#devCtrlToken');
+        try {
+            const result = await sendDeviceCommand(device.id, command, {
+                seat: seatKey,
+                deviceToken: token ? token.value : ''
+            });
+            if (!result || !result.ok) {
+                showCtrlError(errorText(result && result.error ? result.error : 'generic'));
+                return;
+            }
+            await refresh();
+        } catch (error) {
+            const body = error && error.body;
+            showCtrlError(errorText(body && body.error ? body.error : 'generic', {owner: body && body.owner}));
+        }
+    }
+
     function seatOptions() {
         if (!snapshot.ownership.seats.length) return `<option value="">—</option>`;
         return snapshot.ownership.seats.map(seat => `<option value="${esc(seat.seat)}"${seat.seat === seatKey ? ' selected' : ''}>${esc(seat.seat)}${seat.band ? ' · ' + esc(seat.band) : ''}</option>`).join('');
@@ -255,6 +391,8 @@ export function createDevicesPage(ctx) {
             $('#devTree').innerHTML = `<p class="dev-empty">${t('dev.status.unknown')}</p>`;
             $('#devForm').innerHTML = `<p class="dev-empty">${t('dev.error.generic')}</p>`;
             formSignature = null;
+            $('#devControl').innerHTML = '';
+            ctrlSignature = null;
             $('#devSeats').innerHTML = '';
             $('#devTx').innerHTML = '';
             return;
@@ -277,6 +415,7 @@ export function createDevicesPage(ctx) {
         }
         $('#devSeats').innerHTML = seatsHtml();
         $('#devTx').innerHTML = txHtml();
+        renderControl();
     }
 
     async function refresh() {
@@ -312,6 +451,7 @@ export function createDevicesPage(ctx) {
         creating = false;
         formDirty = false;
         formSignature = null;
+        ctrlSignature = null;
         render();
         const form = $('#devFormEl');
         if (form) form.querySelector('input[name="name"]')?.focus();
@@ -322,6 +462,7 @@ export function createDevicesPage(ctx) {
         creating = true;
         formDirty = false;
         formSignature = null;
+        ctrlSignature = null;
         render();
         $('#devFormEl')?.querySelector('input[name="name"]')?.focus();
     }
@@ -343,7 +484,38 @@ export function createDevicesPage(ctx) {
         if (form.dataset.devId) device.id = form.dataset.devId;
         const password = String(data.get('password') || '');
         if (password) device.password = password;
+        device.config = formConfig(data, device.type);
         return device;
+    }
+
+    /** Protocol settings live under `config`; empty inputs clear the stored key. */
+    function formConfig(data, type) {
+        const config = {};
+        if (type === 'rotator') {
+            config.host = String(data.get('cfg_host') || '');
+            config.port = String(data.get('cfg_port') || '');
+            config.protocol = config.host ? 'rotctld' : '';
+        } else if (type === 'matrix' || type === 'switch') {
+            config.relay_url = String(data.get('cfg_relay_url') || '');
+            const relayToken = String(data.get('cfg_relay_token') || '');
+            if (relayToken) config.relay_token = relayToken;
+            config.pulse_ms = String(data.get('cfg_pulse_ms') || '');
+            const channelsText = String(data.get('cfg_channels') || '').trim();
+            if (channelsText) {
+                try {
+                    config.channels = JSON.parse(channelsText);
+                } catch (error) {
+                    throw new Error('invalid-config-channels');
+                }
+            }
+        } else if (type === 'tower') {
+            config.relay_url = String(data.get('cfg_relay_url') || '');
+            const relayToken = String(data.get('cfg_relay_token') || '');
+            if (relayToken) config.relay_token = relayToken;
+            config.up_channel = String(data.get('cfg_up_channel') || '');
+            config.down_channel = String(data.get('cfg_down_channel') || '');
+        }
+        return config;
     }
 
     function apiError(error) {
@@ -372,10 +544,11 @@ export function createDevicesPage(ctx) {
             creating = false;
             formDirty = false;
             formSignature = null;
+            ctrlSignature = null;
             await refresh();
         } catch (error) {
             if (errorBox) {
-                errorBox.textContent = apiError(error);
+                errorBox.textContent = error && ERROR_KEYS[error.message] ? errorText(error.message) : apiError(error);
                 errorBox.classList.remove('hidden');
             }
         }
@@ -399,6 +572,7 @@ export function createDevicesPage(ctx) {
             selectedId = null;
             formDirty = false;
             formSignature = null;
+            ctrlSignature = null;
             await refresh();
         } catch (error) {
             showToast(apiError(error));
@@ -439,6 +613,18 @@ export function createDevicesPage(ctx) {
             if (!row) return;
             seatKey = row.dataset.devSeat;
             render();
+        });
+        $('#devControl').addEventListener('click', event => {
+            const button = event.target.closest('[data-cmd]');
+            const device = selectedDevice();
+            if (!button || !device) return;
+            const cmd = button.dataset.cmd;
+            if (cmd === 'rotate') {
+                const input = $('#devCtrlAzimuth');
+                void sendCommand(device, {command: 'rotate', azimuth: input ? Number(input.value) : NaN});
+            } else if (cmd === 'stop') {
+                void sendCommand(device, {command: 'stop'});
+            }
         });
         $('#devForm').addEventListener('submit', submitForm);
         $('#devForm').addEventListener('input', () => { formDirty = true; });
