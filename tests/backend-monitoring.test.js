@@ -11,19 +11,12 @@ class Context {
     set(key, value) { this.values[key] = value; }
 }
 
-test('monitoring aggregates tabs, prunes stale clients and retains __legacy heartbeat semantics', () => {
+test('monitoring is always on and ignores client switches', () => {
     const ctx = new Context();
     const now = Date.parse('2026-11-08T12:00:00Z');
-    assert.equal(monitoring.setClient(ctx, {on: true, client: 'a'}, now).monitoring, true);
-    assert.equal(monitoring.setClient(ctx, {on: true, client: 'b'}, now).clients, 2);
-    assert.equal(monitoring.setClient(ctx, {on: false, client: 'a'}, now + 1000).monitoring, true);
-    const legacy = monitoring.setClient(ctx, {on: true}, now + 2000);
-    assert.equal(legacy.clients, 3);
-    const pruned = monitoring.setClient(ctx, {on: false, client: 'b'}, now + 124000);
-    assert.equal(pruned.monitoring, true);
-    assert.equal(pruned.clients, 2);
-    assert.ok(ctx.get('monitorClients').__legacy);
-    assert.equal(ctx.get('monitorClients').a, undefined);
+    assert.equal(monitoring.setClient(ctx, {on: false, client: 'a'}, now).monitoring, true);
+    assert.equal(monitoring.setClient(ctx, {on: false}, now + 1000).monitoring, true);
+    assert.deepEqual(monitoring.getState(ctx), {monitoring: true});
 });
 
 test('recording rejects malformed schedule input without changing state', () => {

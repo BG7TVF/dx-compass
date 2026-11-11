@@ -36,7 +36,6 @@ function baseSettings(patch) {
         alertPopup: true,
         alertSound: false,
         qsoVoiceAlert: true,
-        alertVoiceRepeats: false,
         freqDeltaKhz: 1
     }, patch || {});
 }
@@ -150,10 +149,12 @@ test('评估：命中后给出优先级、触发规则与通知门控', () => {
         settings: baseSettings(),
         rules: [rule({name: 'US 20m', call: 'K1ABC', voice: 1}), rule({name: 'US CW', prefix: 'K', mode: 'CW'})],
         index: indexWith([], null),
+        history: {},
         state: {now: NOW, dedupe: {}, lastAlertAt: 0},
         resolve
     });
     assert.equal(out.reason, 'alert');
+    assert.equal(out.alert.kind, 'newBand');
     assert.equal(out.alert.call, 'K1ABC');
     assert.equal(out.alert.state, 'newMultiplier');
     assert.equal(out.alert.priority, 0);
@@ -165,82 +166,156 @@ test('评估：命中后给出优先级、触发规则与通知门控', () => {
     assert.equal(out.alert.country, 'United States');
 });
 
-test('评估：同一 call|band 在去重窗口内只提醒一次，频率超出容差才再次提醒', () => {
+test('评估：同波段频率在阈值内不提醒，超出阈值报新频率', () => {
+    const history = {};
+    const settings = baseSettings();
     const rules = [rule({call: 'K1ABC'})];
     const first = service.evaluate(spot(), {
-        settings: baseSettings(), rules, state: {now: NOW, dedupe: {}, lastAlertAt: 0}, resolve
+        settings, rules, history, state: {now: NOW, dedupe: {}, lastAlertAt: 0}, resolve
     });
+    assert.equal(first.reason, 'alert');
+    assert.equal(first.alert.kind, 'newBand');
     const repeat = service.evaluate(spot({freq: 14025.4}), {
-        settings: baseSettings(), rules,
-        state: {now: NOW + 60, dedupe: first.dedupe, lastAlertAt: first.lastAlertAt}, resolve
+        settings, rules, history,
+        state: {now: NOW + 60, dedupe: {}, lastAlertAt: first.lastAlertAt}, resolve
     });
     assert.equal(repeat.reason, 'duplicate');
     assert.equal(repeat.alert, null);
-    assert.equal(repeat.hit.suppressed, 'duplicate');
-    assert.equal(repeat.hit.notified, false);
-    assert.deepEqual(repeat.hit.notify, {popup: false, voice: false, sound: false});
     const moved = service.evaluate(spot({freq: 14040.0}), {
-        settings: baseSettings(), rules,
-        state: {now: NOW + 120, dedupe: first.dedupe, lastAlertAt: first.lastAlertAt}, resolve
+        settings, rules, history,
+        state: {now: NOW + 120, dedupe: {}, lastAlertAt: first.lastAlertAt}, resolve
     });
     assert.equal(moved.reason, 'alert');
+    assert.equal(moved.alert.kind, 'newFreq');
+    assert.equal(moved.alert.previous.band, '20m');
 });
 
-test('评估：不同波段不共享去重键', () => {
+test('评估：其他波段仍在 TTL 内报新频段', () => {
+    const history = {};
+    const settings = baseSettings();
     const rules = [rule({call: 'K1ABC'})];
-    const first = service.evaluate(spot(), {
-        settings: baseSettings(), rules, state: {now: NOW, dedupe: {}, lastAlertAt: 0}, resolve
+    service.evaluate(spot(), {
+        settings, rules, history, state: {now: NOW, dedupe: {}, lastAlertAt: 0}, resolve
     });
-    const otherBand = service.evaluate(spot({band: '40m', freq: 7025}), {
-        settings: baseSettings(), rules,
-        state: {now: NOW + 60, dedupe: first.dedupe, lastAlertAt: first.lastAlertAt}, resolve
+    const other = service.evaluate(spot({band: '40m', freq: 7025}), {
+        settings, rules, history, state: {now: NOW + 60, dedupe: {}, lastAlertAt: 0}, resolve
     });
-    assert.equal(otherBand.reason, 'alert');
+    assert.equal(other.reason, 'alert');
+    assert.equal(other.alert.kind, 'newBand');
+    assert.equal(other.alert.previous.band, '20m');
 });
 
-test('评估：全局最短间隔只节流，不写入去重表', () => {
+test('评估：原有波段超出 TTL 后换台报换频段', () => {
+    const history = {};
+    const settings = baseSettings({ttl: {CW: 1, SSB: 1, DIGI: 1}});
+    service.evaluate(spot(), {
+        settings, history, state: {now: NOW, dedupe: {}, lastAlertAt: 0}, resolve
+    });
+    const moved = service.evaluate(spot({band: '40m', freq: 7025}), {
+        settings, history, state: {now: NOW + 120, dedupe: {}, lastAlertAt: 0}, resolve
+    });
+    assert.equal(moved.reason, 'alert');
+    assert.equal(moved.alert.kind, 'bandChange');
+    assert.equal(moved.alert.previous.band, '20m');
+});
+
+test('评估：同波段即使记录过期也只按频率阈值判断', () => {
+    const history = {};
+    const settings = baseSettings({ttl: {CW: 1, SSB: 1, DIGI: 1}});
+    service.evaluate(spot(), {
+        settings, history, state: {now: NOW, dedupe: {}, lastAlertAt: 0}, resolve
+    });
+    const same = service.evaluate(spot(), {
+        settings, history, state: {now: NOW + 120, dedupe: {}, lastAlertAt: 0}, resolve
+    });
+    assert.equal(same.reason, 'duplicate');
+    const moved = service.evaluate(spot({freq: 14035}), {
+        settings, history, state: {now: NOW + 180, dedupe: {}, lastAlertAt: 0}, resolve
+    });
+    assert.equal(moved.reason, 'alert');
+    assert.equal(moved.alert.kind, 'newFreq');
+});
+
+test('评估：同一波段组合在去重窗口内只提醒一次', () => {
+    const history = {
+        K1ABC: {
+            bands: {
+                '20m': {freq: 14020, at: NOW - 10, mode: 'CW'},
+                '40m': {freq: 7010, at: NOW - 20, mode: 'CW'}
+            },
+            combo: '20m+40m',
+            comboAt: NOW - 60
+        }
+    };
+    const out = service.evaluate(spot({band: '40m', freq: 7015}), {
+        settings: baseSettings(), history, state: {now: NOW, dedupe: {}, lastAlertAt: 0}, resolve
+    });
+    assert.equal(out.reason, 'band-combo');
+    assert.equal(out.alert, null);
+});
+
+test('评估：只对监控呼号告警，我的 SPOT 交给前端批量处理', () => {
+    const history = {};
+    const settings = baseSettings({myCall: 'BG7TVF'});
+    const other = service.evaluate(spot(), {
+        settings, history, monitored: ['DL1ABC'], state: {now: NOW, dedupe: {}, lastAlertAt: 0}, resolve
+    });
+    assert.equal(other.reason, 'not-monitored');
+    const mine = service.evaluate(spot({spot_call: 'BG7TVF'}), {
+        settings, history, monitored: ['BG7TVF'], state: {now: NOW, dedupe: {}, lastAlertAt: 0}, resolve
+    });
+    assert.equal(mine.reason, 'my-spot');
+    assert.equal(mine.alert, null);
+});
+
+test('评估：没有规则行时三类内置对手告警照常工作', () => {
+    const out = service.evaluate(spot(), {
+        settings: baseSettings(), rules: [], history: {},
+        state: {now: NOW, dedupe: {}, lastAlertAt: 0}, resolve
+    });
+    assert.equal(out.reason, 'alert');
+    assert.equal(out.alert.kind, 'newBand');
+    assert.equal(out.alert.ruleNames, '');
+    assert.equal(out.alert.notify.voice, true);
+    assert.equal(out.alert.notify.popup, true);
+});
+
+test('评估：全局最短间隔只节流，不写入告警', () => {
     const rules = [rule({name: 'any K', prefix: 'K'}), rule({name: 'any DL', prefix: 'DL'})];
+    const history = {};
     const first = service.evaluate(spot(), {
-        settings: baseSettings(), rules, state: {now: NOW, dedupe: {}, lastAlertAt: 0}, resolve
+        settings: baseSettings(), rules, history,
+        state: {now: NOW, dedupe: {}, lastAlertAt: 0}, resolve
     });
     const throttled = service.evaluate(spot({spot_call: 'DL1ABC', freq: 14030, de: 'K1ABC'}), {
-        settings: baseSettings({alertMinIntervalSec: 120}), rules,
-        state: {now: NOW + 30, dedupe: first.dedupe, lastAlertAt: first.lastAlertAt}, resolve
+        settings: baseSettings({alertMinIntervalSec: 120}), rules, history,
+        state: {now: NOW + 30, dedupe: {}, lastAlertAt: first.lastAlertAt}, resolve
     });
     assert.equal(throttled.reason, 'throttled');
     assert.equal(throttled.alert, null);
     assert.equal(throttled.hit.suppressed, 'throttled');
     assert.equal(throttled.hit.notified, false);
-    assert.deepEqual(throttled.dedupe, first.dedupe);
+    assert.deepEqual(throttled.dedupe, {});
 });
 
-test('评估：语音只给新 DXCC / 新波段，重复格子需显式允许', () => {
-    const rules = [rule({call: 'K1ABC', voice: 1})];
-    const worked = indexWith([
-        {timestamp: '2026-11-11T10:00:00Z', call: 'K1ABC', band: '40m', contestname: 'CQWW'}
-    ], Date.parse('2026-11-11T00:00:00Z') / 1000);
-    const newBand = service.evaluate(spot(), {
-        settings: baseSettings(), rules, index: worked,
+test('评估：语音与弹窗门控跟随设置开关', () => {
+    const rules = [rule({call: 'K1ABC', voice: 1, popup: 1})];
+    const quiet = service.evaluate(spot(), {
+        settings: baseSettings({qsoVoiceAlert: false}), rules, history: {},
         state: {now: NOW, dedupe: {}, lastAlertAt: 0}, resolve
     });
-    assert.equal(newBand.alert.state, 'newBand');
-    assert.equal(newBand.alert.notify.voice, true);
-
-    const workedSlot = indexWith([
-        {timestamp: '2026-11-11T10:00:00Z', call: 'K1ABC', band: '20m', contestname: 'CQWW'}
-    ], Date.parse('2026-11-11T00:00:00Z') / 1000);
-    const other = service.evaluate(spot(), {
-        settings: baseSettings(), rules, index: workedSlot,
+    assert.equal(quiet.alert.notify.voice, false);
+    assert.equal(quiet.alert.notify.popup, true);
+    const loud = service.evaluate(spot(), {
+        settings: baseSettings(), rules, history: {},
         state: {now: NOW, dedupe: {}, lastAlertAt: 0}, resolve
     });
-    assert.equal(other.alert.state, 'other');
-    assert.equal(other.alert.notify.voice, false);
-
-    const forced = service.evaluate(spot(), {
-        settings: baseSettings({alertVoiceRepeats: true}), rules, index: workedSlot,
+    assert.equal(loud.alert.notify.voice, true);
+    const noPopup = service.evaluate(spot(), {
+        settings: baseSettings({alertPopup: false}), rules, history: {},
         state: {now: NOW, dedupe: {}, lastAlertAt: 0}, resolve
     });
-    assert.equal(forced.alert.notify.voice, true);
+    assert.equal(noPopup.alert.notify.popup, false);
 });
 
 test('索引：newMultiplier > newBand > rare > other，窗口外不参与', () => {

@@ -273,7 +273,7 @@ test('every literal t() key used by the UI still resolves', () => {
         const text = fs.readFileSync(file, 'utf8');
         for (const m of text.matchAll(/\bt\(\s*'([A-Za-z][\w]*)'\s*\)/g)) keys.add(m[1]);
     }
-    assert.ok(keys.size >= 80, `unexpectedly few literal t() keys: ${keys.size}`);
+    assert.ok(keys.size >= 70, `unexpectedly few literal t() keys: ${keys.size}`);
     for (const key of keys) {
         assert.ok(key in dict.I18N.en, `t('${key}') has no dictionary entry`);
         for (const lang of LANGS) {

@@ -23,8 +23,7 @@ export const WALL_CHECKS = {
 
 /** Browser-local keys that intentionally stay outside /api/settings. */
 export const LOCAL_SETTING_KEYS = {
-    rotationSec: {storageKey: 'dxcompass-rot-sec', type: 'int'},
-    monitoring: {storageKey: 'dxcompass-monitoring', type: 'bool'}
+    rotationSec: {storageKey: 'dxcompass-rot-sec', type: 'int'}
 };
 
 export function defaultSettings() {
@@ -57,14 +56,13 @@ export function loadLocalSettings(storage = globalThis.localStorage, languages) 
     }
 }
 
-/** Read the settings that are deliberately browser-local (rotation, monitoring). */
+/** Read the settings that are deliberately browser-local (rotation). */
 export function readLocalExtras(storage = globalThis.localStorage) {
     const field = SETTINGS_SCHEMA.FIELD_MAP.rotationSec;
     const rotationRaw = parseInt(storage.getItem(LOCAL_SETTING_KEYS.rotationSec.storageKey), 10);
     const checked = SETTINGS_SCHEMA.validateValue(field, rotationRaw);
     return {
-        rotationSec: checked.ok ? checked.value : field.default,
-        monitoring: storage.getItem(LOCAL_SETTING_KEYS.monitoring.storageKey) === '1'
+        rotationSec: checked.ok ? checked.value : field.default
     };
 }
 
@@ -73,9 +71,6 @@ export function writeLocalExtras(values, storage = globalThis.localStorage) {
     if (!values || typeof values !== 'object') return;
     if (Number.isInteger(values.rotationSec)) {
         storage.setItem(LOCAL_SETTING_KEYS.rotationSec.storageKey, String(values.rotationSec));
-    }
-    if (typeof values.monitoring === 'boolean') {
-        storage.setItem(LOCAL_SETTING_KEYS.monitoring.storageKey, values.monitoring ? '1' : '0');
     }
 }
 

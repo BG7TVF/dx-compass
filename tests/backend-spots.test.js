@@ -108,8 +108,10 @@ test('PSKR keeps old records for SQLite but suppresses their live output', () =>
     assert.equal(result.records[0].dxcc_sender, 291);
     assert.equal(result.records[0].dxcc_receiver, 230);
     assert.equal(spots.ingest('pskr', raw, e).records.length, 0);
+    // 采集固定常开：monitoring 开关不再影响轮询。
     e.global.set('monitoring', false);
-    assert.equal(spots.liveRequest(e), null);
+    e.flow.set('lastDxwatchPoll', 0);
+    assert.ok(spots.liveRequest(e).url.includes('dxwatch.com'));
 });
 
 test('PSKR intake accepts local-neighbour spots and rejects unrelated pairs', () => {
@@ -165,12 +167,11 @@ test('source switches and poll intervals gate requests and ingestion', () => {
     assert.equal(spots.ingest('pskr', raw, pskrOff).records.length, 0);
 });
 
-test('PSKR regional intake works with the monitor switch off and no monitored calls', () => {
-    // 分析页邻台来自本台大网格的区域采集，不能被“开始监控”开关或监控列表挡住。
+test('PSKR regional intake ignores the removed monitor switch', () => {
+    // 分析页邻台来自本台大网格的区域采集；监听开关已删除，采集恒开。
     const e = env();
     e.global.set('uiSettings', {myCall: 'BG7TVF', grid: 'OL53OP'});
     e.global.set('monitoredCalls', []);
-    e.global.set('monitoring', false);
     const t = Math.floor(NOW / 1000) - 60;
 
     const localRow = {sq: 401, f: 14074000, md: 'FT8', rp: -11, t,
@@ -183,12 +184,10 @@ test('PSKR regional intake works with the monitor switch off and no monitored ca
         sc: 'AA1AA', sl: 'FN42', rc: 'DE.9', rl: 'JO22'};
     assert.equal(spots.ingest('pskr', remoteRow, e).records.length, 0);
 
-    // 监控呼号仍然只在“开始监控”后入库。
+    // 监控呼号无需任何开关、也不依赖心跳，直接入库。
     e.global.set('monitoredCalls', ['K1ABC']);
     const watched = {sq: 403, f: 14074000, md: 'FT8', rp: -11, t,
         sc: 'K1ABC', sl: 'PM95', rc: 'DE.9', rl: 'JN58'};
-    assert.equal(spots.ingest('pskr', watched, e).records.length, 0);
-    e.global.set('monitoring', true);
     assert.equal(spots.ingest('pskr', watched, e).records.length, 1);
 });
 

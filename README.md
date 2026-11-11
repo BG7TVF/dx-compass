@@ -326,9 +326,10 @@ sudo chown -R root:root /opt/dx-compass
 - **QSO 地图**：与 Spot 视图各有独立按钮，一键全屏切换；进入 QSO 视图后自动隐藏布局（1×1/2×2/3×3）、轮询、开始监控等 Spot 专用控件；每个 QSO 一个按频段着色的永久标记，从本台位置画大圆线连接；新乘数（Multiplier）带黄色 M 徽章；QSO 持久化在 SQLite `qsos` 表，浏览器刷新与服务重启后自动恢复
 - **QSO 顶部实时条**：地图上方显示最新 QSO —— RUN / S&P 状态（由 N1MM RadioInfo 实时判断）、频率、对方呼号、信号报告（RST 收发）、交换信息，以及频段/模式/操作员/相对时间
 - **竞赛组别支持**：Settings → QSO 地图 可选择 SO1R / SO2R / MS / MM；QSO 面板按已上报的电台动态生成频率卡片，SO2R / MS / MM 下每台电台一张（R1、R2、R3…），顶部条同步显示全部电台频率，页面刷新后自动回填
-- **新 Spot 弹窗提醒**：QSO 地图下，被监听呼号出现新 Spot 时弹出提示（呼号、频段、模式、频率、监听站 DE、SNR、时间），8 秒后自动消失；任何时刻只存在一个弹窗，新 Spot 会直接覆盖旧内容并重置计时，绝不叠加；可在 Settings → QSO 地图 中开关
-- **语音提醒（Web Speech API）**：与弹窗同时播报——首次出现为「{呼号} 新 Spot」；与上一条同呼号 Spot 相比频段变化为「{呼号} 换频段」（此时不再播报新频率）；仅频率变化为「{呼号} 新频率」；新的播报会打断上一条，绝不排队；可在 Settings → QSO 地图 中独立开关
-- **本台 Spot 提醒**：本台呼号被别人 spot 时，QSO 地图以红点标出（有本台网格时同时画红色大圆线）；可独立开启弹窗与语音「you get a new spot」，语音随当前界面语言播报；标记存活时间与最多显示数量可调，与普通 Spot 的提醒互不影响
+- **新 Spot 弹窗提醒**：QSO 地图下，被监听呼号触发内置告警规则时弹出提示（呼号、频段、模式、频率、监听站 DE、SNR、时间），8 秒后自动消失；任何时刻只存在一个弹窗，新提示会直接覆盖旧内容并重置计时，绝不叠加；可在 Settings → QSO 地图 中开关
+- **语音提醒（Web Speech API）**：由告警模块统一下发——只对 Settings 中监听的对手告警，按「新频率（超出 `freqDeltaKhz`）/ 新频段（原有波段仍在 TTL 内）/ 换频段（原有波段已超出 TTL）」三类播报；多波段来回切换按波段组合短时去重，不会反复播报；我的 SPOT 在 30 秒窗口内合并为一次（N≥2 播「你有 N 条新 SPOT」）；新的播报会打断上一条，绝不排队；语音仍受 `voiceRate` / `voiceVolume` 与静音时段约束
+- **本台 Spot 提醒**：本台呼号被别人 spot 时，QSO 地图以红点标出（有本台网格时同时画红色大圆线）；可独立开启弹窗与语音「you get a new spot」，语音随当前界面语言播报；标记存活时间与最多显示数量可调，与对手告警互不影响
+- **采集常开**：Spot 采集与 PSKR 订阅不再依赖「开始监听」开关，服务启动后即持续运行；监听呼号新增后无需任何按钮即可生效
 - **QSO 视图右侧面板**：按电台动态显示频率/模式/TX 卡片、当前分数（QSO/乘数/点数/Score）、上一个 QSO，以及最近 60 分钟的 QSO 速率柱状图（5 分钟一根柱，按墙钟整点对齐不抖动）、QSO/分钟图、按操作员与按频段统计条形图；Spot Records 面板仅在 Spot 视图显示
 - **设置分页**：Settings 面板分为 **全局**（语言、主题、底图源、本台呼号与网格、时间显示）/ **Spot 地图**（监测呼号、标记存活时间、频段颜色、图层参数）/ **QSO 地图**（竞赛组别、自动缩放、本台 Spot 提醒、告警阈值与提示音、静音时段、QRZ 凭据）/ **大屏**（名称、图层、叠加方式、轮播、纬度窗口、倒计时）/ **数据**（数据源开关与轮询、保留期清理、磁盘告警、日志级别）/ **传播**（投影、图层、阈值）六页；页签固定顶部并支持关键字搜索、导出 / 导入 JSON、按域重置与多配置档
 - QSO 坐标**优先从 QRZ.com 查询**（与原 n1mm_dashboard 项目一致，需在 Settings 中配置 QRZ 用户名/密码，需 QRZ XML 订阅）；未配置或查询失败时依次回退到通联中的 gridsquare 字段、已积累的 spot 坐标库
@@ -473,6 +474,9 @@ journalctl --user -u dx-compass -f     # 实时查看日志
   - `GET  /api/station/state`：返回全部已上报电台的状态映射（`radios`）与最近一次竞赛记分（N1MM+ 集成）
   - `GET  /api/qrz/config` / `POST /api/qrz/config`：读取 / 保存 QRZ.com 凭据（密码不回显）
   - `POST /api/reset`：清空 spots / qsos / recording_spots 三张表与电台/记分状态（Settings 的一键清除会同时清空监听呼号与全部设置）
+  - `GET  /api/alert-rules` / `POST /api/alert-rules` / `PUT /api/alert-rules/:id` / `DELETE /api/alert-rules/:id`：条件告警规则增删改查；`GET /api/alert-rules/hits` 返回最近命中。规则没有编辑页面，只能通过接口维护
+  - 对手提醒本身是内置规则，不需要先建规则行：只对监听呼号生效，按「新频率 / 新频段 / 换频段」判定（频率阈值 `freqDeltaKhz`，TTL 用每模式存活时间），波段组合短时去重；`alert_rules` 只作为可选附加过滤，存在规则行时需命中至少一条才下发
+  - 创建规则请求体：`name`（必填，≤60 字符）与至少一个正向条件 `call` / `prefix` / `dxcc` / `cqZone` / `ituZone` / `band` / `mode` / `source` / `from` `to`（UTC）/ `snrMin` `snrMax` / `wpmMin` `wpmMax`；可选排除条件 `notCall` / `notDxcc` / `notBand` / `notMode` / `notSource`；动作开关 `popup` / `voice` / `sound`，默认 `enabled: true`。示例：`curl -X POST http://<host>/api/alert-rules -H 'Content-Type: application/json' -d '{"name":"20m DX","band":["20m"],"voice":true}'`（`band` 为数组，其余列表字段同理）
 
 ## 常见问题
 

@@ -7,7 +7,7 @@ import {addTrackPaths} from '../../shared/map/layers.mjs';
 import {greatCirclePaths} from '../../shared/geo/great-circle.mjs';
 import {createSpotStore, fetchSpots, spotKey} from '../../shared/data/spots.mjs';
 import {bandColorOf, ttlForMode} from '../settings-model.mjs';
-import {$, $$, formatTime, showConfirm, timeAgo} from '../ui.mjs';
+import {$, $$, formatTime, timeAgo} from '../ui.mjs';
 
 const MAX_CELLS = 9;
 
@@ -27,7 +27,6 @@ export function createSpotPage(ctx) {
     const store = createSpotStore();
     const state = {
         layout: '1x1', cells: [], callsigns: [], totalSpots: 0,
-        monitoring: localStorage.getItem('dxcompass-monitoring') === '1',
         connState: 'disconnected',
         rotation: {
             offset: 0, timer: null, running: false,
@@ -312,7 +311,7 @@ export function createSpotPage(ctx) {
         try {
             const rows = await fetchSpots({call, limit: historyLimit()});
             store.replay(rows);
-            if (cell.call !== call || !state.monitoring) return;
+            if (cell.call !== call) return;
             const now = Date.now();
             for (const spot of store.byCall(call)) {
                 const timestamp = new Date(spot.timestamp).getTime();
@@ -328,7 +327,7 @@ export function createSpotPage(ctx) {
 
     async function replayHistory() {
         for (const cell of visibleCells()) {
-            if (cell.call && state.monitoring) await replayCellHistory(cell);
+            if (cell.call) await replayCellHistory(cell);
         }
     }
 
@@ -339,7 +338,7 @@ export function createSpotPage(ctx) {
         cell.callLabel.textContent = call || '—';
         cell.hint.style.display = call ? 'none' : '';
         fitWorld(cell.map);
-        if (call && state.monitoring) void replayCellHistory(cell);
+        if (call) void replayCellHistory(cell);
     }
 
     function assignCalls() {
@@ -445,37 +444,11 @@ export function createSpotPage(ctx) {
             assignCalls();
         }
         updateRotateUI();
-        updateMonitorBtn();
         ctx.records?.populateCallSelect();
     }
 
-    function hasAnyCallsign() {
-        return state.callsigns.some(Boolean);
-    }
-
-    function updateMonitorBtn() {
-        const button = $('#btnMonitor');
-        button.classList.toggle('running', state.monitoring);
-        button.textContent = state.monitoring ? ctx.t('stopMon') : ctx.t('startMon');
-        button.disabled = !state.monitoring && !hasAnyCallsign();
-        button.title = hasAnyCallsign() || state.monitoring ? '' : ctx.t('needCall');
-    }
-
-    async function setMonitoring(on) {
-        if (on && !hasAnyCallsign()) return;
-        if (!on && state.cells.some(cell => cell.markers.length)) {
-            const clear = await showConfirm(ctx, ctx.t('askClearMarks'), {title: ctx.t('stopMon')});
-            if (clear) state.cells.forEach(clearCell);
-        }
-        state.monitoring = Boolean(on);
-        localStorage.setItem('dxcompass-monitoring', on ? '1' : '0');
-        await ctx.monitoring.set(on);
-        updateMonitorBtn();
-        if (on) void replayHistory();
-    }
-
     function handleSpot(spot) {
-        if (!spot || (!spot.monitored_call && !spot.call) || !state.monitoring) return;
+        if (!spot || (!spot.monitored_call && !spot.call)) return;
         if (!store.ingest(spot)) return;
         const call = String(spot.monitored_call || spot.call || '').toUpperCase();
         const isMySpot = ctx.settings.myCall && call === ctx.settings.myCall;
@@ -562,7 +535,6 @@ export function createSpotPage(ctx) {
             if (Object.keys(cell.bandInfo).length) renderCellInfo(cell);
         });
         setConnState(state.connState);
-        updateMonitorBtn();
         updateRotateUI();
     }
 
@@ -601,7 +573,7 @@ export function createSpotPage(ctx) {
 
     return {
         state, store, init, applyCallsigns, applyLang, applyBandColors, applyMapSettings, setConnState,
-        setLayout, setMonitoring, updateMonitorBtn, handleSpot, replayHistory,
+        setLayout, handleSpot, replayHistory,
         setTileProvider, refreshMaps, fitCellView, visibleCells, clearCell,
         startRotation, stopRotation, rotateStep, restartRotationTimer, updateRotateUI,
         tick, prune, dotIcon, applyMarkerFade,

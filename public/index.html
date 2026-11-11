@@ -17,9 +17,6 @@
                 <button class="menu-item view-btn" id="btnSpotView" title="Spot grid">Spot</button>
                 <button class="menu-item view-btn" id="btnQsoView" title="QSO map">QSO</button>
                 <button class="menu-item view-btn" id="btnPropView" title="Propagation map">Propagation</button>
-                <button class="menu-item view-btn" id="btnAnalysisView" title="Antenna type &amp; bearing">Analysis</button>
-                <button class="menu-item view-btn" id="btnMultView" title="DXCC x band multiplier matrix">Multipliers</button>
-                <button class="menu-item view-btn" id="btnAlertView" title="Conditional alert rules">Alerts</button>
                 <button class="menu-item view-btn" id="btnOpView" title="Operator position view">OP View</button>
                 <div class="menu-sep"></div>
                 <button class="menu-item" id="btnConfig" title="Settings">Settings</button>
@@ -186,12 +183,6 @@
             </footer>
         </div>
 
-        <div id="analysisView" class="analysis-view hidden"></div>
-
-        <div id="multView" class="mult-view hidden"></div>
-
-        <div id="alertView" class="alert-view hidden"></div>
-
         <!-- Records Panel: docked on the right, always visible -->
         <div id="recordsPanel" class="dock-panel">
             <div class="panel-header">
@@ -205,7 +196,6 @@
                         <span class="sep">|</span>
                         <span class="stat" id="spotCount">0 spots</span>
                     </div>
-                    <button class="action-btn monitor-btn" id="btnMonitor" disabled>▶ 开始监控</button>
                 </div>
                 <div class="panel-controls-row view-controls">
                     <div class="layout-group" id="layoutGroup">
@@ -472,10 +462,6 @@
                                 <input type="checkbox" id="setQsoLines" class="set-check">
                             </div>
                             <div class="form-row">
-                                <label id="qsoSpotAlertLabel" for="setQsoSpotAlert">New spot alert</label>
-                                <input type="checkbox" id="setQsoSpotAlert" class="set-check">
-                            </div>
-                            <div class="form-row">
                                 <label id="qsoVoiceLabel" for="setQsoVoice">Voice alert</label>
                                 <input type="checkbox" id="setQsoVoice" class="set-check">
                             </div>
@@ -523,24 +509,8 @@
                             <button type="button" class="mini-btn danger-btn" data-reset-domain="qso" id="btnResetQso">Reset group</button>
                         </div>
                     </div>
-                    <!-- Contest calendar / window -->
+                    <!-- Contest window -->
                     <div class="cfg-pane" id="paneContest" role="tabpanel" aria-labelledby="tabContest">
-                        <div class="form-section">
-                            <div class="section-title" id="contestCalendarTitle">Contest calendar</div>
-                            <div class="form-row">
-                                <label id="contestPickLabel" for="contestPick">Calendar contest</label>
-                                <select id="contestPick" class="set-input">
-                                    <option value="">Loading calendar...</option>
-                                </select>
-                            </div>
-                            <p class="hint" id="contestMeta"></p>
-                            <p class="hint" id="contestDetail"></p>
-                            <div class="btn-row">
-                                <button type="button" class="mini-btn" id="btnContestRefresh">Refresh calendar</button>
-                                <button type="button" class="mini-btn danger-btn" id="btnContestClear">Clear contest</button>
-                            </div>
-                            <p class="hint" id="contestSourceHint"></p>
-                        </div>
                         <div class="form-section">
                             <div class="section-title" id="contestWindowTitle">Contest window</div>
                             <div class="set-grid" id="contestFields"></div>

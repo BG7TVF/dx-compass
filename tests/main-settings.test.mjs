@@ -42,11 +42,10 @@ test('main settings sanitizer applies defaults and one-time Mercator migration',
 
 test('schema placeholders keep defaults out of the shared blob', () => {
     const result = sanitizeSettings({
-        rotationSec: 42, monitoring: true, terminatorSec: 5, voiceRate: 9
+        rotationSec: 42, terminatorSec: 5, voiceRate: 9
     });
     // external keys never enter the settings object
     assert.equal(result.rotationSec, undefined);
-    assert.equal(result.monitoring, undefined);
     // out-of-range placeholder falls back to its schema default
     assert.equal(result.terminatorSec, 60);
     assert.equal(result.voiceRate, 1.05);

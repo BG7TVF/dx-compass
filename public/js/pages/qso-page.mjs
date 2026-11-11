@@ -9,6 +9,7 @@ import {applyStationMessage, getStationState} from '../../shared/data/station.mj
 import {bandColorOf, bandLabel, dbRowToQso} from '../settings-model.mjs';
 import {formatDuration} from '../../shared/core/clock.mjs';
 import {quietHoursActive} from '../../shared/monitoring/quiet-hours.mjs';
+import {MySpotBatcher, MY_SPOT_WINDOW_MS} from '../../shared/alerts/my-spot-batch.mjs';
 import {$, $$, escapeHtml, timeAgo} from '../ui.mjs';
 
 const QSO_RATE_BUCKETS = 12;
@@ -35,7 +36,10 @@ export function createQsoPage(ctx) {
         radios: {}, station: {radio: null, radios: {}, score: null}
     };
     let alertTimer = null;
-    const lastSpotByCall = new Map();
+    /* 「我的 SPOT」在 30 秒窗口内合并为一次告警。 */
+    const mySpotBatcher = new MySpotBatcher(MY_SPOT_WINDOW_MS);
+    let mySpotTimer = null;
+    let mySpotLatest = null;
     const home = () => gridToLatLon(ctx.settings.grid);
     const color = band => bandColorOf(ctx.settings, band);
     const settingNumber = (key, fallback, min, max) => {
@@ -582,6 +586,7 @@ export function createQsoPage(ctx) {
 
     function hideSpotAlertAndVoice() {
         hideSpotAlert();
+        clearMySpotBatch();
         if ('speechSynthesis' in window) speechSynthesis.cancel();
     }
 
@@ -610,33 +615,46 @@ export function createQsoPage(ctx) {
         alertTimer = setTimeout(hideSpotAlert, settingNumber('alertPopupMs', 8000, 2000, 30000));
     }
 
-    function showSpotAlert(spot, call, own) {
-        if (state.view !== 'qso') return;
-        if (inQuietHours()) return;
-        if (!alertAllowed(spot)) return;
-        if (own) {
-            if (ctx.settings.mySpotPopup || ctx.settings.mySpotVoice) playAlertTone();
-            if (ctx.settings.mySpotVoice) speakAlert(String(ctx.t('voiceMySpot')));
-            if (ctx.settings.mySpotPopup) fillAlert(spot, call, true);
-            return;
+    /* 「我的 SPOT」批量播报：30 秒窗口内只告警一次，N≥2 时播报「你有 N 条新 SPOT」。 */
+    function mySpotsPhrase(count) {
+        const text = String(ctx.t('voiceMySpots', {n: count}));
+        return text === 'voiceMySpots' ? `You have ${count} new spots` : text;
+    }
+
+    function clearMySpotBatch() {
+        if (mySpotTimer) clearTimeout(mySpotTimer);
+        mySpotTimer = null;
+        mySpotLatest = null;
+        mySpotBatcher.take();
+    }
+
+    function flushMySpots() {
+        if (mySpotTimer) clearTimeout(mySpotTimer);
+        mySpotTimer = null;
+        const batch = mySpotBatcher.take();
+        const spot = mySpotLatest;
+        mySpotLatest = null;
+        if (!batch || !spot) return;
+        if (state.view !== 'qso' || inQuietHours() || !alertAllowed(spot)) return;
+        if (ctx.settings.mySpotPopup || ctx.settings.mySpotVoice) playAlertTone();
+        if (ctx.settings.mySpotPopup) fillAlert(spot, ctx.settings.myCall, true);
+        if (ctx.settings.mySpotVoice) {
+            speakAlert(batch.count > 1 ? mySpotsPhrase(batch.count)
+                : String(ctx.t('voiceMySpot')));
         }
-        if (!ctx.settings.qsoSpotAlert) return;
-        playAlertTone();
-        fillAlert(spot, call, false);
-        const previous = lastSpotByCall.get(call), frequency = Number(spot.freq);
-        const deltaKhz = settingNumber('freqDeltaKhz', 1, 0, 50);
-        let phrase = ctx.t('voiceNewSpot');
-        if (previous) {
-            if (previous.band && spot.band && previous.band !== spot.band) phrase = ctx.t('voiceChangeBand');
-            else if (Number.isFinite(previous.freq) && Number.isFinite(frequency) && Math.abs(frequency - previous.freq) > deltaKhz) {
-                phrase = ctx.t('voiceNewFreq');
-                lastSpotByCall.set(call, {band: spot.band, freq: frequency});
-            }
-        }
-        if (!previous || phrase === ctx.t('voiceChangeBand')) {
-            lastSpotByCall.set(call, {band: spot.band, freq: frequency});
-        }
-        if (ctx.settings.qsoVoiceAlert) speakAlert(String(phrase).replace(/\{call\}/g, spellCall(call)));
+    }
+
+    function queueMySpot(spot) {
+        const {started} = mySpotBatcher.push(Date.now());
+        mySpotLatest = spot;
+        if (started) mySpotTimer = setTimeout(flushMySpots, MY_SPOT_WINDOW_MS);
+    }
+
+    /* 对手提醒已统一由服务端告警模块按 新频率 / 新频段 / 换频段 判定后下发；
+     * 这里只负责「我的 SPOT」，不再对对手的新 SPOT 弹窗或播报。 */
+    function showSpotAlert(spot, _call, own) {
+        if (!own) return;
+        queueMySpot(spot);
     }
 
     /* Server-side rule alert: reuses the existing card, tone, speech and quiet
@@ -658,8 +676,10 @@ export function createQsoPage(ctx) {
             }, alert.call, false, alert.ruleNames);
         }
         if (notify.voice) {
-            const key = alert.state === 'newMultiplier' ? 'voiceAlertNewMult'
-                : alert.state === 'newBand' ? 'voiceAlertNewBand' : 'voiceAlertRule';
+            const key = alert.kind === 'newFreq' ? 'voiceNewFreq'
+                : alert.kind === 'bandChange' ? 'voiceChangeBand'
+                    : alert.kind === 'newBand' ? 'voiceAlertNewBand'
+                        : alert.state === 'newMultiplier' ? 'voiceAlertNewMult' : 'voiceAlertRule';
             speakAlert(String(ctx.t(key)).replace(/\{call\}/g, spellCall(alert.call)));
         }
     }
@@ -668,43 +688,24 @@ export function createQsoPage(ctx) {
         if (state.view === mode) return;
         const leaving = state.view;
         state.view = mode;
-        const isQso = mode === 'qso', isProp = mode === 'prop', isAnalysis = mode === 'analysis';
-        const isMult = mode === 'mult', isAlert = mode === 'alert', isOp = mode === 'op';
-        const isFull = isQso || isProp || isAnalysis || isMult || isAlert || isOp;
+        const isQso = mode === 'qso', isProp = mode === 'prop', isOp = mode === 'op';
+        const isFull = isQso || isProp || isOp;
         $('#grid').classList.toggle('hidden', isFull);
         $('#qsoView').classList.toggle('hidden', !isQso);
         $('#propView').classList.toggle('hidden', !isProp);
-        $('#analysisView').classList.toggle('hidden', !isAnalysis);
-        $('#multView').classList.toggle('hidden', !isMult);
-        $('#alertView').classList.toggle('hidden', !isAlert);
         $('#opView').classList.toggle('hidden', !isOp);
         $('#recordsPanel').classList.toggle('hidden', isFull);
         $('#qsoPanel').classList.toggle('hidden', !isQso);
         $('#btnSpotView').classList.toggle('active', mode === 'spots');
         $('#btnQsoView').classList.toggle('active', isQso);
         $('#btnPropView').classList.toggle('active', isProp);
-        $('#btnAnalysisView').classList.toggle('active', isAnalysis);
-        $('#btnMultView').classList.toggle('active', isMult);
-        $('#btnAlertView').classList.toggle('active', isAlert);
         $('#btnOpView').classList.toggle('active', isOp);
         document.body.classList.toggle('qso-mode', isQso);
         document.body.classList.toggle('prop-mode', isProp);
-        document.body.classList.toggle('analysis-mode', isAnalysis);
-        document.body.classList.toggle('mult-mode', isMult);
-        document.body.classList.toggle('alert-mode', isAlert);
         document.body.classList.toggle('op-mode', isOp);
         if (leaving === 'prop' && !isProp) ctx.prop?.hide();
-        if (leaving === 'analysis' && !isAnalysis) ctx.analysis?.hide();
-        if (leaving === 'mult' && !isMult) ctx.mult?.hide();
-        if (leaving === 'alert' && !isAlert) ctx.alerts?.hide();
         if (leaving === 'op' && !isOp) ctx.op?.hide();
-        if (isAnalysis) {
-            ctx.analysis?.show();
-        } else if (isMult) {
-            ctx.mult?.show();
-        } else if (isAlert) {
-            ctx.alerts?.show();
-        } else if (isQso) {
+        if (isQso) {
             state.map.invalidateSize();
             fitQsoMap();
             renderQsoPanel();

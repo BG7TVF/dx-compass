@@ -60,7 +60,7 @@
         {key: 'qso', pane: 'qso', title: 'QSO Map', titleZh: 'QSO 地图', desc: 'QSO map display and alert thresholds.'},
         {key: 'wall', pane: 'wall', title: 'Wall', titleZh: '大屏', desc: 'Read-only wall overlay and rotation.'},
         {key: 'data', pane: 'data', title: 'Data & Alerts', titleZh: '数据与告警', desc: 'Upstream polling, retention and diagnostics.'},
-        {key: 'contest', pane: 'contest', title: 'Contest', titleZh: '比赛', desc: 'Contest calendar, rules summary and the selected contest window.'},
+        {key: 'contest', pane: 'contest', title: 'Contest', titleZh: '比赛', desc: 'Hand-entered contest name, UTC window, modes, bands and rules link.'},
         {key: 'prop', pane: 'prop', title: 'Propagation', titleZh: '传播', desc: 'Propagation collection and condition thresholds.'}
     ];
 
@@ -102,9 +102,9 @@
             desc: 'Optional override; empty/0 = assume 50 W (typical 10–70 W) for path analysis.'
         }),
         field('pskWindowMin', 'ui', 'enum', '15', {
-            values: ['15', '30'], scope: 'both',
+            values: ['5', '10', '15', '30'], scope: 'both',
             label: 'PSKReporter window (min)', zh: 'PSKReporter 聚合窗口（分钟）',
-            desc: 'Aggregation window for FT8 path analysis; 15 by default, 30 optional.'
+            desc: 'Aggregation window for FT8 path analysis; 15 by default, 5/10 for real-time, 30 for stability.'
         }),
         field('layout', 'ui', 'enum', '1x1', {
             values: LAYOUTS, storage: 'local', label: 'Layout', zh: '布局',
@@ -220,9 +220,6 @@
         }),
         field('qsoAutoFit', 'qso', 'bool', true, {
             label: 'Auto zoom to fit QSOs', zh: 'QSO 自动缩放', desc: 'Auto-fit the QSO map after updates.'
-        }),
-        field('qsoSpotAlert', 'qso', 'bool', true, {
-            label: 'New spot alert', zh: '新 SPOT 弹窗', desc: 'Show the in-page spot alert card.'
         }),
         field('qsoVoiceAlert', 'qso', 'bool', true, {
             label: 'Voice alert', zh: '语音告警', desc: 'Speak new spots with SpeechSynthesis.'
@@ -542,23 +539,8 @@
             label: 'Rule alert popup', zh: '规则告警弹窗',
             desc: 'Allow the in-page alert card for rule hits; still muted by quiet hours.'
         }),
-        field('alertVoiceRepeats', 'data', 'bool', false, {
-            scope: 'both', wired: true,
-            label: 'Voice for repeated slots', zh: '重复格子也语音',
-            desc: 'Off by default: only new multipliers and new band slots are spoken; popup still shows every rule hit.'
-        }),
-        field('monitoring', 'data', 'bool', false, {
-            storage: 'external', scope: 'both', exportable: false, importable: false,
-            label: 'Monitoring', zh: '监控开关',
-            desc: 'Runtime switch; stored in dxcompass-monitoring and global.monitoring, never in uiSettings.'
-        }),
 
         // ---- contest / Contest
-        field('contestId', 'contest', 'string', '', {
-            maxLen: 80, allowEmpty: true, scope: 'both',
-            label: 'Contest id', zh: '赛事标识',
-            desc: 'Calendar entry id; empty for a hand-entered contest.'
-        }),
         field('contestName', 'contest', 'string', '', {
             maxLen: 120, allowEmpty: true, scope: 'both',
             label: 'Contest name', zh: '比赛名称',
@@ -577,27 +559,17 @@
         field('contestModes', 'contest', 'string', '', {
             maxLen: 80, allowEmpty: true, scope: 'both',
             label: 'Allowed modes', zh: '允许模式',
-            desc: 'Free text when the calendar/rules summary does not provide it.'
+            desc: 'Free text entered by the operator, e.g. CW or CW, SSB.'
         }),
         field('contestBands', 'contest', 'string', '', {
             maxLen: 120, allowEmpty: true, scope: 'both',
             label: 'Allowed bands', zh: '允许波段',
-            desc: 'Free text when the calendar/rules summary does not provide it.'
+            desc: 'Free text entered by the operator, e.g. 20m or 20m, 40m.'
         }),
         field('contestRulesUrl', 'contest', 'string', '', {
             maxLen: 300, allowEmpty: true, scope: 'both',
             label: 'Rules link', zh: '规则链接',
-            desc: 'Official rules page; calendar entries link to the WA7BNM detail page.'
-        }),
-        field('contestUpdatedAt', 'contest', 'datetime', '', {
-            pattern: /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/, allowEmpty: true, maxLen: 19,
-            scope: 'both', label: 'Calendar date', zh: '数据日期',
-            desc: 'When the selected contest entry was read from the calendar.'
-        }),
-        field('contestRefreshHours', 'contest', 'int', 168, {
-            min: 1, max: 720, scope: 'server',
-            label: 'Calendar refresh (hours)', zh: '日历刷新间隔（小时）',
-            desc: 'Automatic WA7BNM ICS refresh interval; the manual button always refreshes. Needs a restart? No.'
+            desc: 'Official rules page entered by the operator.'
         }),
 
         // ---- prop / Propagation

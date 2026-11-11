@@ -1,6 +1,4 @@
 import {getJson, postJson} from '../../shared/core/transport.mjs';
-import {clockOptions, formatClockDateTime, parseUtcDateTime} from '../../shared/core/clock.mjs';
-import {fetchContests, refreshContests} from '../../shared/data/contests.mjs';
 import {
     getSettings as getSharedSettings, saveSettingsPatch, resetSettingsDomain, settingsFromMessage
 } from '../../shared/data/settings.mjs';
@@ -22,11 +20,11 @@ const FIELD_CONTAINERS = {
  * skip them to avoid duplicate inputs. */
 const LEGACY_FIELD_KEYS = new Set([
     'lang', 'theme', 'tiles', 'myCall', 'grid', 'layout', 'rotationSec',
-    'category', 'qsoMax', 'qsoLines', 'qsoAutoFit', 'qsoSpotAlert', 'qsoVoiceAlert',
+    'category', 'qsoMax', 'qsoLines', 'qsoAutoFit', 'qsoVoiceAlert',
     'mySpotTtl', 'mySpotMax', 'mySpotPopup', 'mySpotVoice',
     'wallTitle', 'wallLayers', 'wallMode', 'wallTimerOn', 'wallTimerStart', 'wallTimerEnd',
     'multPerBand',
-    'ttl', 'bandColors', 'contestId', 'contestUpdatedAt'
+    'ttl', 'bandColors'
 ]);
 
 /* Short descriptions come from the dictionary (settings.field.<key>.desc,
@@ -37,7 +35,7 @@ const LEGACY_FIELD_KEYS = new Set([
 const LEGACY_ROW_KEYS = {
     setLang: 'lang', setTheme: 'theme', setTiles: 'tiles', setMyCall: 'myCall', setGrid: 'grid',
     setCategory: 'category', setQsoMax: 'qsoMax', setQsoAutoFit: 'qsoAutoFit',
-    setQsoLines: 'qsoLines', setQsoSpotAlert: 'qsoSpotAlert', setQsoVoice: 'qsoVoiceAlert',
+    setQsoLines: 'qsoLines', setQsoVoice: 'qsoVoiceAlert',
     setMySpotTtl: 'mySpotTtl', setMySpotMax: 'mySpotMax', setMySpotPopup: 'mySpotPopup',
     setMySpotVoice: 'mySpotVoice', setWallTitle: 'wallTitle', setWallMode: 'wallMode',
     setWallTimerOn: 'wallTimerOn', setWallTimerStart: 'wallTimerStart', setWallTimerEnd: 'wallTimerEnd',
@@ -145,137 +143,11 @@ export function createSettingsPage(ctx) {
         'propProj', 'propLayer', 'propDxLat', 'propDxLon',
         'mufOpacity', 'nightOpacity', 'propPollSec'
     ]);
-    const MULT_SETTING_KEYS = new Set([
-        'wallTimerStart', 'wallTimerEnd', 'multPerBand', 'contestStart', 'contestEnd'
-    ]);
     const LIVE_SETTING_KEYS = new Set([
-        ...CLOCK_SETTING_KEYS, ...MAP_SETTING_KEYS, ...QSO_SETTING_KEYS, ...PROP_SETTING_KEYS,
-        ...MULT_SETTING_KEYS
+        ...CLOCK_SETTING_KEYS, ...MAP_SETTING_KEYS, ...QSO_SETTING_KEYS, ...PROP_SETTING_KEYS
     ]);
 
-    let contestCalendar = null;
     const t = (key, params) => ctx.t(key, params);
-
-    function contestTime(value) {
-        return formatClockDateTime(value, clockOptions(ctx.settings));
-    }
-
-    function safeLink(value) {
-        try {
-            const url = new URL(String(value || ''));
-            return /^https?:$/.test(url.protocol) ? url.href : '';
-        } catch {
-            return '';
-        }
-    }
-
-    function renderContestDetail(entry) {
-        const detail = $('#contestDetail');
-        if (!detail) return;
-        if (!entry) { detail.textContent = ''; return; }
-        const missing = t('settings.hint.contestMissing');
-        const modes = Array.isArray(entry.modes) && entry.modes.length ? entry.modes.join(', ') : missing;
-        const bands = Array.isArray(entry.bands) && entry.bands.length ? entry.bands.join(', ') : missing;
-        const link = safeLink(entry.rulesUrl || entry.sourceUrl);
-        const rules = link ? ` · <a href="${escapeHtml(link)}" target="_blank" rel="noopener">${escapeHtml(t('settings.calendar.rules'))}</a>` : '';
-        detail.innerHTML =
-            `${escapeHtml(t('settings.calendar.start'))} ${escapeHtml(contestTime(entry.startUtc))}` +
-            ` · ${escapeHtml(t('settings.calendar.end'))} ${escapeHtml(contestTime(entry.endUtc))}<br>` +
-            `${escapeHtml(t('settings.calendar.modes'))} ${escapeHtml(modes)}` +
-            ` · ${escapeHtml(t('settings.calendar.bands'))} ${escapeHtml(bands)}` +
-            ` · ${escapeHtml(missing)}${rules}`;
-    }
-
-    function renderContestCalendar() {
-        const select = $('#contestPick');
-        if (!select) return;
-        const now = Date.now();
-        const entries = (contestCalendar && Array.isArray(contestCalendar.contests) ? contestCalendar.contests : [])
-            .filter(entry => parseUtcDateTime(entry.endUtc) >= now);
-        select.replaceChildren(new Option(t('settings.calendar.pick'), ''));
-        for (const entry of entries) {
-            select.appendChild(new Option(`${entry.name} · ${contestTime(entry.startUtc)}`, entry.id));
-        }
-        if (entries.some(entry => entry.id === ctx.settings.contestId)) select.value = ctx.settings.contestId;
-        const meta = $('#contestMeta');
-        if (meta) {
-            const info = contestCalendar && contestCalendar.meta;
-            meta.textContent = info && info.fetchedAt
-                ? t('settings.hint.contestUpdated', {
-                    time: contestTime(info.fetchedAt), count: Number(info.count) || 0
-                })
-                : t('settings.hint.contestEmpty');
-        }
-        renderContestDetail(entries.find(entry => entry.id === select.value) || null);
-    }
-
-    async function loadContests() {
-        try {
-            const data = await fetchContests();
-            if (data && Array.isArray(data.contests)) contestCalendar = data;
-        } catch {
-            // Keep any previously loaded calendar; the bundled snapshot is the offline fallback.
-        }
-        renderContestCalendar();
-    }
-
-    function applyContest(entry) {
-        if (!entry) return;
-        const start = String(entry.startUtc || '').slice(0, 16);
-        const end = String(entry.endUtc || '').slice(0, 16);
-        const patch = {
-            contestId: entry.id,
-            contestName: entry.name,
-            contestStart: start,
-            contestEnd: end,
-            contestModes: Array.isArray(entry.modes) ? entry.modes.join(', ') : '',
-            contestBands: Array.isArray(entry.bands) ? entry.bands.join(', ') : '',
-            contestRulesUrl: entry.rulesUrl || entry.sourceUrl || '',
-            contestUpdatedAt: String((contestCalendar && contestCalendar.meta && contestCalendar.meta.fetchedAt) ||
-                new Date().toISOString()).slice(0, 19),
-            wallTimerStart: start,
-            wallTimerEnd: end
-        };
-        Object.assign(ctx.settings, patch);
-        save(patch);
-        syncGeneratedFields();
-        renderContestDetail(entry);
-        showToast(t('settings.calendar.applied'));
-    }
-
-    function clearContest() {
-        const patch = {
-            contestId: '', contestName: '', contestStart: '', contestEnd: '',
-            contestModes: '', contestBands: '', contestRulesUrl: '', contestUpdatedAt: '',
-            wallTimerStart: '', wallTimerEnd: ''
-        };
-        Object.assign(ctx.settings, patch);
-        save(patch);
-        syncGeneratedFields();
-        $('#contestPick').value = '';
-        renderContestDetail(null);
-        showToast(t('settings.calendar.cleared'));
-    }
-
-    async function refreshCalendar() {
-        const button = $('#btnContestRefresh');
-        if (button) { button.disabled = true; button.textContent = t('settings.calendar.refreshing'); }
-        try {
-            const result = await refreshContests();
-            if (result && result.ok) {
-                await loadContests();
-                showToast(t('settings.calendar.refreshed', {
-                    count: Number(result.meta && result.meta.count) || 0
-                }));
-            } else {
-                showToast(t('settings.calendar.failed'));
-            }
-        } catch {
-            showToast(t('settings.calendar.failed'));
-        } finally {
-            if (button) { button.disabled = false; button.textContent = t('settings.calendar.refresh'); }
-        }
-    }
 
     /** Push only the affected display groups into the live pages. */
     function applyLiveSettings(keys = LIVE_SETTING_KEYS) {
@@ -284,7 +156,6 @@ export function createSettingsPage(ctx) {
         if (changed.some(key => MAP_SETTING_KEYS.has(key))) ctx.spot?.applyMapSettings?.();
         if (changed.some(key => QSO_SETTING_KEYS.has(key))) ctx.qso?.applyDisplaySettings?.();
         if (changed.some(key => PROP_SETTING_KEYS.has(key))) ctx.prop?.applySettings?.();
-        if (changed.some(key => MULT_SETTING_KEYS.has(key))) ctx.mult?.applySettings?.();
     }
 
     function save(patch) {
@@ -769,7 +640,6 @@ export function createSettingsPage(ctx) {
         if (domain === 'map') {
             ctx.spot.setRotationInterval(SETTINGS_SCHEMA.FIELD_MAP.rotationSec.default);
         }
-        if (domain === 'data') void ctx.spot.setMonitoring(false);
     }
 
     async function resetDomainSettings(domain) {
@@ -831,11 +701,12 @@ export function createSettingsPage(ctx) {
             '#wallWeatherLabel': 'wallWeather', '#wallQsoLabel': 'wallQso', '#wallMySpotLabel': 'wallMySpot',
             '#wallDxSpotLabel': 'wallDxSpot', '#wallModeLabel': 'wallMode', '#wallModeAll': 'wallModeAll',
             '#wallModeCycle': 'wallModeCycle', '#wallTimerLabel': 'wallTimer',
-            '#qsoSpotAlertLabel': 'qsoSpotAlert', '#qsoVoiceLabel': 'qsoVoice',
+            '#qsoVoiceLabel': 'qsoVoice',
             '#resetAllLabel': 'resetAll', '#btnResetAll': 'resetAll', '#qtLFreq': 'lblFreq',
             '#qtLCall': 'lblCall', '#qtLRst': 'lblRst', '#qtLExch': 'lblExch', '#qtLBand': 'lblBand',
             '#qtLMode': 'lblMode', '#qtLOp': 'lblOp', '#qtLAge': 'lblAge', '#btnSpotView': 'spotView',
-            '#btnQsoView': 'qsoView', '#btnPropView': 'propView', '#btnAnalysisView': 'analysisView', '#btnMultView': 'multView', '#btnAlertView': 'alertView', '#btnOpView': 'op.title', '#propProjLabel': 'propProjection',
+            '#btnQsoView': 'qsoView', '#btnPropView': 'propView', '#btnOpView': 'op.title',
+            '#propProjLabel': 'propProjection',
             '#propLayerLabel': 'propLayer', '#qsoPanelTitle': 'stPanel', '#qLastTitle': 'stLastQso',
             '#qRateTitle': 'qsoRate', '#qMinTitle': 'qsoPerMin', '#qOpTitle': 'qsoByOp',
             '#qBandTitle': 'qsoByBand', '#qLQsos': 'stQsos', '#qLMults': 'stMults',
@@ -849,9 +720,7 @@ export function createSettingsPage(ctx) {
         $('#btnMenu').title = t('menu');
         const tooltips = {
             '#btnSpotView': 'nav.spotGrid', '#btnQsoView': 'nav.qsoMap',
-            '#btnPropView': 'nav.propMap', '#btnAnalysisView': 'nav.analysis',
-            '#btnMultView': 'nav.multipliers',
-            '#btnAlertView': 'nav.alerts',
+            '#btnPropView': 'nav.propMap',
             '#btnOpView': 'op.title',
             '#connDot': 'nav.conn',
             '#rotateGroup': 'nav.rotateHint', '#btnClearDb': 'nav.clearDbHint',
@@ -881,12 +750,7 @@ export function createSettingsPage(ctx) {
         setText('#wallAdvancedTitle', t('settings.section.advanced'));
         setText('#dataTitle', t('settings.section.data'));
         setText('#propTitle', t('settings.section.prop'));
-        setText('#contestCalendarTitle', t('settings.section.calendar'));
         setText('#contestWindowTitle', t('settings.section.contestWindow'));
-        setText('#contestPickLabel', t('settings.calendar.pick'));
-        setText('#contestSourceHint', t('settings.hint.contestSource'));
-        setText('#btnContestRefresh', t('settings.calendar.refresh'));
-        setText('#btnContestClear', t('settings.calendar.clear'));
         setText('#contestResetLabel', t('settings.reset.contest'));
         setText('#contestMultBandLabel', t('settings.field.multPerBand.label'));
         setText('#backupTitle', t('settings.section.backup'));
@@ -910,15 +774,11 @@ export function createSettingsPage(ctx) {
 
         renderThemeOptions();
         renderSchemaFields();
-        renderContestCalendar();
         ctx.spot.applyLang();
         ctx.qso.renderLastQso();
         ctx.qso.renderQsoPanel();
         ctx.records.applyLang();
         ctx.prop.applyLang();
-        ctx.analysis?.applyLang();
-        ctx.mult?.applyLang();
-        ctx.alerts?.applyLang();
         ctx.op?.applyLang();
     }
 
@@ -961,7 +821,7 @@ export function createSettingsPage(ctx) {
             setValue('#setQsoMax', ctx.settings.qsoMax);
             for (const [selector, key] of [
                 ['#setQsoLines', 'qsoLines'], ['#setQsoAutoFit', 'qsoAutoFit'],
-                ['#setQsoSpotAlert', 'qsoSpotAlert'], ['#setQsoVoice', 'qsoVoiceAlert'],
+                ['#setQsoVoice', 'qsoVoiceAlert'],
                 ['#setMySpotPopup', 'mySpotPopup'], ['#setMySpotVoice', 'mySpotVoice'],
                 ['#setWallTimerOn', 'wallTimerOn'], ['#setContestMultPerBand', 'multPerBand']
             ]) setChecked(selector, ctx.settings[key]);
@@ -1008,7 +868,6 @@ export function createSettingsPage(ctx) {
         } finally {
             applyingRemote = false;
         }
-        renderContestCalendar();
         if (authoritative) syncedSettings = cloneSettings(ctx.settings);
     }
 
@@ -1044,13 +903,12 @@ export function createSettingsPage(ctx) {
     }
 
     async function loadConfig() {
-        void loadContests();
         try {
             const calls = await getJson('/api/callsigns');
             if (!Array.isArray(calls)) return;
             ctx.spot.applyCallsigns(calls);
             $$('.cfg-call').forEach((input, index) => { input.value = calls[index] || ''; });
-            if (ctx.spot.state.monitoring) void ctx.spot.replayHistory();
+            void ctx.spot.replayHistory();
         } catch {
             // Keep the currently configured calls when the backend is offline.
         }
@@ -1062,7 +920,7 @@ export function createSettingsPage(ctx) {
         try {
             await postJson('/api/callsigns', calls);
             ctx.spot.applyCallsigns(calls);
-            if (ctx.spot.state.monitoring) void ctx.spot.replayHistory();
+            void ctx.spot.replayHistory();
             showToast(ctx.t('saved'));
             closeConfig();
         } catch {
@@ -1125,7 +983,6 @@ export function createSettingsPage(ctx) {
         $('#appMenu').addEventListener('click', event => event.stopPropagation());
         document.addEventListener('click', closeAppMenu);
         $('#btnConfig').addEventListener('click', openConfig);
-        $('#btnMonitor').addEventListener('click', () => ctx.spot.setMonitoring(!ctx.spot.state.monitoring));
         $('#btnRotate').addEventListener('click', () => {
             if (ctx.spot.state.rotation.running) {
                 ctx.spot.stopRotation();
@@ -1208,7 +1065,6 @@ export function createSettingsPage(ctx) {
         bindNumberSetting('#setQsoMax', 'qsoMax', 200, 4000, 1500);
         bindCheckedSetting('#setQsoLines', 'qsoLines', () => ctx.qso.rebuildQsoMap());
         bindCheckedSetting('#setQsoAutoFit', 'qsoAutoFit', () => ctx.qso.fitQsoMap());
-        bindCheckedSetting('#setQsoSpotAlert', 'qsoSpotAlert', enabled => { if (!enabled) ctx.qso.hideSpotAlert(); });
         bindCheckedSetting('#setQsoVoice', 'qsoVoiceAlert', enabled => {
             if (!enabled && 'speechSynthesis' in window) speechSynthesis.cancel();
         });
@@ -1243,9 +1099,6 @@ export function createSettingsPage(ctx) {
         $('#btnSpotView').addEventListener('click', () => { closeConfig(); ctx.qso.setViewMode('spots'); });
         $('#btnQsoView').addEventListener('click', () => { closeConfig(); ctx.qso.setViewMode('qso'); });
         $('#btnPropView').addEventListener('click', () => { closeConfig(); ctx.qso.setViewMode('prop'); });
-        $('#btnAnalysisView').addEventListener('click', () => { closeConfig(); ctx.qso.setViewMode('analysis'); });
-        $('#btnMultView').addEventListener('click', () => { closeConfig(); ctx.qso.setViewMode('mult'); });
-        $('#btnAlertView').addEventListener('click', () => { closeConfig(); ctx.qso.setViewMode('alert'); });
         $('#btnOpView').addEventListener('click', () => { closeConfig(); ctx.qso.setViewMode('op'); });
         $('#configForm').addEventListener('submit', saveConfig);
 
@@ -1274,7 +1127,7 @@ export function createSettingsPage(ctx) {
             if (!confirmed) return;
             try {
                 await Promise.all([postJson('/api/reset'), postJson('/api/callsigns', [])]);
-                ['dxcompass-settings', 'dxcompass-monitoring', 'dxcompass-rot-sec']
+                ['dxcompass-settings', 'dxcompass-rot-sec']
                     .forEach(key => localStorage.removeItem(key));
                 location.reload();
             } catch {
@@ -1312,18 +1165,6 @@ export function createSettingsPage(ctx) {
                 save({ttl: {...ctx.settings.ttl}});
             });
         }
-        const contestPick = $('#contestPick');
-        if (contestPick) {
-            contestPick.addEventListener('change', () => {
-                const entry = (contestCalendar && Array.isArray(contestCalendar.contests)
-                    ? contestCalendar.contests : []).find(item => item.id === contestPick.value);
-                if (entry) applyContest(entry);
-                else renderContestDetail(null);
-            });
-        }
-        $('#btnContestRefresh')?.addEventListener('click', () => { void refreshCalendar(); });
-        $('#btnContestClear')?.addEventListener('click', clearContest);
-
         buildBandColorInputs();
         renderSchemaFields();
     }

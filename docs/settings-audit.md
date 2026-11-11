@@ -46,7 +46,6 @@
 | 比赛类别 | `#setCategory` / `category` | 决定是否显示多机卡片（`qso-page.mjs:412-433`） | localStorage + `uiSettings` | `'SO1R'` | `CONTEST_CATEGORIES = SO1R/SO2R/MS/MM`（`settings-model.mjs:10`、`:48`） | 即时 |
 | QSO 自动缩放 | `#setQsoAutoFit` / `qsoAutoFit` | `fitQsoMap`（`qso-page.mjs:72-81`） | 同上 | `true` | 布尔 | 即时 |
 | 本台→QSO 大圆连线 | `#setQsoLines` / `qsoLines` | `qso-page.mjs:113` | 同上 | `true` | 布尔 | 即时，重建地图 |
-| 新 SPOT 弹窗 | `#setQsoSpotAlert` / `qsoSpotAlert` | `qso-page.mjs:556-557` | 同上 | `true` | 布尔 | 即时 |
 | 语音告警 | `#setQsoVoice` / `qsoVoiceAlert` | `qso-page.mjs:570` | 同上 | `true` | 布尔 | 即时，关闭时 `speechSynthesis.cancel()` |
 | QSO 标记上限 | `#setQsoMax` / `qsoMax` | 超出即丢最旧标记（`qso-page.mjs:132`） | 同上 | `1500` | 整数 200–4000（`settings-model.mjs:49-50`、`settings-page.mjs:385`） | 即时 |
 | 我的 SPOT 标记寿命 | `#setMySpotTtl` / `mySpotTtl` | `qso-page.mjs:166,186` | 同上 | `30` 分钟 | 整数 1–180（`:55-56`） | 即时（重算 `_dieAt`） |

@@ -754,7 +754,7 @@ P1 已在 2026-11-10 完成；设置页 UI 改版定稿（`717eae3`）后，P2�
 | 2 | `tabAll` (zh) | `全部 Spot` | `全部 SPOT` | 术语统一 |
 | 3 | `spotsN` (zh) | `n + ' spots'` | `n + ' 条 SPOT'` | 英文残留 |
 | 4 | `mySpotSection` (zh/ko) | `本台 Spot` / `내 Spot` | `本台 SPOT` / `내 스폿` | 术语统一 |
-| 5 | `subtitle`/`startMon`/`stopMon` (zh) | `Spot…` / `开始监控` | `SPOT…` / `开始监听` | monitoring ≠ 监控 |
+| 5 | `subtitle` (zh) | `Spot…` | `SPOT…` | 术语统一 |
 | 6 | `mySpotTtl/Max/Popup/Voice` (zh) | `本台 Spot …` | `本台 SPOT …` | 与 §4 术语一致 |
 | 7 | `resetConfirm`/`cfgHint`/`askClearDb` (zh) | `Spot …` | `SPOT …` | 英文残留 |
 | 8 | `mySpot*` (en) | `My-spot …` | `My spot …` | 连字符不规范 |
