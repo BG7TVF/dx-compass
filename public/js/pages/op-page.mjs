@@ -287,15 +287,12 @@ export function createOpPage(ctx) {
             esc(value) + '</b></div>').join('');
     }
 
-    function antennaText(call) {
-        const cached = state.opponentCache.get(call);
-        if (!cached || cached.status === 'loading') {
-            return {kind: 'loading', text: t('op.suspect.checking')};
-        }
-        if (cached.status === 'error') {
-            return {kind: 'unknown', text: t('op.opp.unknown')};
-        }
-        const antenna = cached.data && cached.data.antenna;
+    function formatKhz(value) {
+        if (!isFinite(value) || !value) return '—';
+        return String(Math.round(value)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' kHz';
+    }
+
+    function antennaLine(antenna) {
         if (!antenna || !antenna.ok) {
             const points = antenna && antenna.points || 0;
             return {
@@ -305,11 +302,35 @@ export function createOpPage(ctx) {
         }
         const probs = antenna.probabilities || {};
         const prob = Math.round(Number(probs[antenna.type] || 0) * 100);
-        const type = t('op.antenna.' + (antenna.type || 'unknown'));
         return {
             kind: 'inferred',
-            text: type + ' · ' + prob + '% · ' + t('op.opp.samples', {n: antenna.points || 0})
+            text: t('op.antenna.' + (antenna.type || 'unknown')) + ' · ' + prob + '% · ' +
+                t('op.opp.samples', {n: antenna.points || 0})
         };
+    }
+
+    /* Per-band rows: band name, latest frequency and the antenna verdict for
+     * that band. The estimate endpoint computes them; the page only formats. */
+    function bandLines(call) {
+        const cached = state.opponentCache.get(call);
+        if (!cached || cached.status === 'loading') {
+            return [{band: '', freq: null, kind: 'loading', text: t('op.suspect.checking')}];
+        }
+        if (cached.status === 'error') {
+            return [{band: '', freq: null, kind: 'unknown', text: t('op.opp.unknown')}];
+        }
+        const data = cached.data || {};
+        const bands = Array.isArray(data.bands) ? data.bands : [];
+        if (bands.length) {
+            return bands.map(item => {
+                const line = {band: item.band || '', freq: item.freqKhz, ...antennaLine(item.antenna)};
+                if (line.kind !== 'inferred' && item.samples) {
+                    line.text = t('op.opp.samples', {n: item.samples}) + ' · ' + line.text;
+                }
+                return line;
+            });
+        }
+        return [{band: '', freq: null, ...antennaLine(data.antenna)}];
     }
 
     function renderOpponents() {
@@ -332,18 +353,23 @@ export function createOpPage(ctx) {
                 isFinite(opponent.bearing) ? t('op.opp.targetBearing', {deg: Math.round(opponent.bearing)}) +
                     ' ' + compass(opponent.bearing) : ''
             ].filter(Boolean).join(' · ') || t('op.opp.noData');
-            const antenna = antennaText(opponent.call);
+            const bands = bandLines(opponent.call).map(line =>
+                '<div class="op-opp-band">' +
+                    '<b>' + esc(line.band || '—') + '</b>' +
+                    '<span class="op-opp-khz">' + esc(line.freq ? formatKhz(line.freq) : '—') + '</span>' +
+                    '<span class="op-opp-ant' + (line.kind === 'insufficient' ? ' op-opp-dim' : '') + '">' +
+                        (line.kind === 'inferred'
+                            ? '<em class="op-inferred">' + esc(t('op.opp.inferred')) + '</em>' : '') +
+                        '<span>' + esc(line.text) + '</span></span>' +
+                '</div>').join('');
             return '<div class="op-opp">' +
                 '<div class="op-opp-head"><b>' + esc(opponent.call) + '</b><span>' +
-                esc(t('op.opp.samples', {n: opponent.n})) + '</span></div>' +
+                    esc(t('op.opp.samples', {n: opponent.n})) + '</span></div>' +
                 '<div class="op-opp-row"><label>' + esc(t('op.opp.location')) + '</label><span>' +
-                esc(location) + '</span></div>' +
-                '<div class="op-opp-row"><label>' + esc(t('op.opp.target')) + '</label><span>' +
-                esc(target) + '</span></div>' +
-                '<div class="op-opp-row"><label>' + esc(t('op.opp.antenna')) + '</label><span class="op-opp-ant">' +
-                (antenna.kind === 'inferred'
-                    ? '<em class="op-inferred">' + esc(t('op.opp.inferred')) + '</em>'
-                    : '') + '<span>' + esc(antenna.text) + '</span></span></div>' +
+                    esc(location) + '</span></div>' +
+                '<div class="op-opp-bands">' + bands + '</div>' +
+                '<div class="op-opp-row op-opp-secondary"><label>' + esc(t('op.opp.target')) +
+                    '</label><span>' + esc(target) + '</span></div>' +
             '</div>';
         }).join('');
     }

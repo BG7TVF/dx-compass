@@ -349,3 +349,25 @@ test('最小数据条件：至少 MIN_ANTENNA_POINTS 个带坐标的方位点才
     assert.equal(enough.antenna.ok, true);
     assert.notEqual(enough.antenna.type, 'unknown');
 });
+
+test('按波段输出：每波段天线独立研判，频率取最近一次', () => {
+    const rows = directionalRows().concat([
+        snrRow(250, {band: '40m', freq: 7025, timestamp: '2026-11-08T13:00:00Z'}),
+        snrRow(255, {band: '40m', freq: 7035, timestamp: '2026-11-08T14:00:00Z'})
+    ]);
+    const report = analyzeTarget({call: TARGET, rows, from: '2026-11-08 00:00:00', to: '2026-11-09 00:00:00'});
+    assert.deepEqual(report.bands.map(item => item.band), ['40m', '20m']);
+
+    const forty = report.bands[0];
+    assert.equal(forty.freqKhz, 7035);
+    assert.equal(forty.samples, 2);
+    assert.equal(forty.antenna.ok, false);
+    assert.equal(forty.antenna.type, 'unknown');
+
+    const twenty = report.bands[1];
+    assert.equal(twenty.freqKhz, 14025);
+    assert.equal(twenty.samples, 10);
+    assert.equal(twenty.antenna.ok, true);
+    assert.notEqual(twenty.antenna.type, 'unknown');
+    assert.ok(twenty.antenna.confidence > 0);
+});
