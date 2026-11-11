@@ -129,7 +129,6 @@ test('multi-statement function nodes emit every message on output 1', () => {
     const flow = JSON.parse(read('flow.json'));
     const expected = {
         'Add missing columns': /return \[topics\.map\(/,
-        'Create neighbors schema': /return \[list\.map\(/,
         'Build retention SQL': /return \[statements\.map\(/
     };
     for (const [name, pattern] of Object.entries(expected)) {
@@ -139,6 +138,17 @@ test('multi-statement function nodes emit every message on output 1', () => {
         assert.match(node.func, pattern,
             name + ' must wrap its message list so every statement is delivered');
     }
+});
+
+test('neighbors schema is delivered as one batch statement', () => {
+    // 建表语句合并成一条 msg.topic，由 sqlite 节点的 batch 模式一次执行；
+    // 多条消息逐条 db.all 会在启动竞态里丢语句。
+    const flow = JSON.parse(read('flow.json'));
+    const builder = flow.find(node => node.name === 'Create neighbors schema');
+    const apply = flow.find(node => node.name === 'Apply neighbors schema');
+    assert.ok(builder && apply);
+    assert.match(builder.func, /list\.join\('\\n'\)/);
+    assert.equal(apply.sqlquery, 'batch');
 });
 
 test('DB startup migrates columns and creates neighbor schema in independent branches', () => {

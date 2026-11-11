@@ -3,6 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const ingestApi = require('../lib/qsos/ingest.js');
+const schema = require('../lib/storage/schema.js');
 
 const NOW = new Date('2026-11-08T12:34:00.000Z');
 
@@ -11,6 +12,14 @@ class Context {
     get(k) { return this.values[k]; }
     set(k, v) { this.values[k] = v; }
 }
+
+test('建表清单包含 N1MM 状态表，启动时与其它 schema 一起下发', () => {
+    assert.equal(typeof schema.createN1mm, 'function');
+    const statements = schema.createN1mm();
+    assert.equal(statements.length, 2);
+    assert.match(statements[0], /CREATE TABLE IF NOT EXISTS station_state/);
+    assert.match(statements[1], /CREATE TABLE IF NOT EXISTS score_state/);
+});
 
 test('令牌比较与提取：头优先、查询兜底、空值拒绝', () => {
     assert.equal(ingestApi.tokenFrom({headers: {'X-DX-Token': 'abc'}}), 'abc');
