@@ -39,6 +39,16 @@ test('转发请求带令牌与原始 XML', () => {
     assert.equal(request.init.headers['X-DX-Token'], 'abc');
     assert.match(request.init.headers['Content-Type'], /text\/plain/);
     assert.equal(request.init.body, '<contactinfo/>');
+    assert.equal('X-DX-Station' in request.init.headers, false);
+});
+
+test('--station 让多台 N1MM 实例带稳定席位身份', () => {
+    const config = core.parseArgs(['--url', 'http://s/api', '--token', 't',
+        '--station', 'RUN'], {});
+    assert.equal(config.station, 'RUN');
+    const request = core.buildRequest(config, '<contactinfo/>');
+    assert.equal(request.init.headers['X-DX-Station'], 'RUN');
+    assert.equal(core.parseArgs([], {DX_N1MM_STATION: 'MULT'}).station, 'MULT');
 });
 
 test('指数退避递增并封顶，抖动限制在 ±20%', () => {

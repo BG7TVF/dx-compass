@@ -5,6 +5,10 @@
 :root {
     --op-r1: #00e5ff;
     --op-r2: #ffb020;
+    --op-r3: #7cf05a;
+    --op-r4: #c78bff;
+    --op-r5: #ff6f91;
+    --op-r6: #5ad1ff;
 }
 
 .main.op-active .dock-panel { display: none; }
@@ -60,6 +64,10 @@
 .op-station-tab.active { color: var(--on-accent); background: var(--accent); border-color: var(--accent); font-weight: 700; }
 .op-station-tab.r1 { border-left: 3px solid var(--op-r1); }
 .op-station-tab.r2 { border-left: 3px solid var(--op-r2); }
+.op-station-tab.r3 { border-left: 3px solid var(--op-r3); }
+.op-station-tab.r4 { border-left: 3px solid var(--op-r4); }
+.op-station-tab.r5 { border-left: 3px solid var(--op-r5); }
+.op-station-tab.r6 { border-left: 3px solid var(--op-r6); }
 
 .op-metrics { display: flex; align-items: stretch; gap: 8px; margin-left: auto; min-width: 0; flex: 1 1 auto; justify-content: flex-end; }
 .op-metric {
@@ -76,6 +84,12 @@
 .op-metric small { font-size: 10px; color: var(--text-dim); }
 .op-metric.radio1 b { color: var(--op-r1); }
 .op-metric.radio2 b { color: var(--op-r2); }
+.op-metric.r1 b { color: var(--op-r1); }
+.op-metric.r2 b { color: var(--op-r2); }
+.op-metric.r3 b { color: var(--op-r3); }
+.op-metric.r4 b { color: var(--op-r4); }
+.op-metric.r5 b { color: var(--op-r5); }
+.op-metric.r6 b { color: var(--op-r6); }
 .op-bands { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; max-width: 300px; }
 .op-band-chip {
     display: inline-flex;
@@ -441,6 +455,10 @@
     justify-content: center;
 }
 .op-radio-card.r2 { border-left-color: var(--op-r2); }
+.op-radio-card.r3 { border-left-color: var(--op-r3); }
+.op-radio-card.r4 { border-left-color: var(--op-r4); }
+.op-radio-card.r5 { border-left-color: var(--op-r5); }
+.op-radio-card.r6 { border-left-color: var(--op-r6); }
 .op-radio-card b { font-size: 13px; color: var(--text-strong); }
 .op-radio-card span { color: var(--text-dim); }
 .op-recent { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; justify-content: center; }

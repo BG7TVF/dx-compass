@@ -6,8 +6,9 @@ import {getJson} from '../core/transport.mjs';
 
 const defaultTransport = {getJson};
 
-export async function fetchAdvice({transport = defaultTransport} = {}, options = {}) {
-    const data = await transport.getJson('/api/advice', options);
+export async function fetchAdvice({transport = defaultTransport, seat = ''} = {}, options = {}) {
+    const suffix = seat ? '?seat=' + encodeURIComponent(seat) : '';
+    const data = await transport.getJson('/api/advice' + suffix, options);
     if (!data || data.ok !== true) return null;
     return data;
 }

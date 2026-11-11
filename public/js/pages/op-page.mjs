@@ -28,7 +28,7 @@ import {createPeripheralHub, deviceDefinitions} from '../op/peripherals.mjs';
 
 const REVIEW_KEY = 'dxcompass-op-call-review';
 const COMPASS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
-const RADIO_THEME = {1: 'r1', 2: 'r2'};
+const RADIO_THEME = {1: 'r1', 2: 'r2', 3: 'r3', 4: 'r4', 5: 'r5', 6: 'r6'};
 
 const timeOf = value => {
     const time = new Date(value).getTime();
@@ -82,10 +82,22 @@ export function createOpPage(ctx) {
     }
 
     function radioKeys() {
+        const keys = Object.keys(radios()).sort((a, b) => {
+            const an = radioNrOfKey(a);
+            const bn = radioNrOfKey(b);
+            return an - bn || a.localeCompare(b);
+        });
+        if (keys.length) return keys;
+        // 还没有电台状态时保留旧占位：双 lane 组别给两个，其余给一个。
         const cat = category();
-        if (cat === 'SO2R') return ['1', '2'];
-        const keys = Object.keys(radios()).sort((a, b) => Number(a) - Number(b));
-        return keys.length ? keys : ['1'];
+        return cat === 'SO2R' || cat === 'M2' ? ['1', '2'] : ['1'];
+    }
+
+    function radioNrOfKey(key) {
+        const value = String(key || '');
+        const suffix = value.includes(':') ? value.slice(value.lastIndexOf(':') + 1) : value;
+        const n = Number(suffix);
+        return Number.isFinite(n) && n > 0 ? n : 1;
     }
 
     function radioOf(key) {
@@ -93,7 +105,7 @@ export function createOpPage(ctx) {
     }
 
     function currentRadioKey() {
-        if (category() === 'SO2R') return 'all';
+        if (category() === 'SO2R' || category() === 'M2') return 'all';
         const keys = radioKeys();
         return keys.includes(String(state.selectedRadio)) ? String(state.selectedRadio) : keys[0];
     }
@@ -104,12 +116,34 @@ export function createOpPage(ctx) {
     }
 
     function radioTheme(key) {
-        return RADIO_THEME[Number(key)] || 'r1';
+        // M2/MM 多台实例可能都报 RadioNr=1，主题色按席位顺序分配才分得清。
+        const index = radioKeys().indexOf(String(key));
+        if (index >= 0) return RADIO_THEME[index + 1] || 'r6';
+        return RADIO_THEME[radioNrOfKey(key)] || 'r1';
     }
 
     function radioName(key) {
         const radio = radioOf(key);
-        return radio && (radio.radioName || radio.name) || t('op.radio.n', {n: key});
+        if (radio && (radio.radioName || radio.name)) return radio.radioName || radio.name;
+        if (radio && radio.stationName) return radio.stationName;
+        return t('op.radio.n', {n: radioNrOfKey(key)});
+    }
+
+    /* 与服务端 seatOfRow 同口径：优先 n1mm_id 命名空间，回退 stationname。 */
+    function seatOfQso(qso) {
+        const id = String(qso && qso.n1mmId || '');
+        let instance = '';
+        if (id.startsWith('DXI|')) {
+            const rest = id.slice(4);
+            const cut = rest.indexOf('|');
+            if (cut >= 0) instance = rest.slice(0, cut);
+        }
+        if (!instance) {
+            instance = String(qso && qso.stationName || '').trim().toUpperCase()
+                .replace(/[|:]/g, '_').slice(0, 64) || 'LOCAL';
+        }
+        const nr = String(qso && qso.radioNr !== null && qso.radioNr !== undefined ? qso.radioNr : '1');
+        return instance + ':' + nr;
     }
 
     function myCall() {
@@ -187,6 +221,7 @@ export function createOpPage(ctx) {
     function qsosFor(key) {
         const list = [...state.qsos.values()];
         if (key === 'all') return list;
+        if (String(key).includes(':')) return list.filter(qso => seatOfQso(qso) === String(key));
         return list.filter(qso => String(qso.radioNr) === String(key));
     }
 
@@ -208,8 +243,15 @@ export function createOpPage(ctx) {
         const parts = [];
         for (const key of keys) {
             const radio = radioOf(key);
+            const lane = seatLane(key);
+            const laneState = lane
+                ? ((lane.radio && lane.radio.isRunning === false) ? 'S&P' : 'RUN') +
+                    (lane.gates && lane.gates.quota
+                        ? ' · chg ' + lane.changesThisHour + '/' + lane.gates.quota : '')
+                : '';
             parts.push('<div class="op-metric ' + radioTheme(key) + '"><label>' +
-                esc(t('op.radio.n', {n: key})) + ' · ' + esc(t('op.top.rateNow')) +
+                esc(radioName(key)) + (laneState ? ' · ' + esc(laneState) : '') +
+                ' · ' + esc(t('op.top.rateNow')) +
                 '</label><b>' + rateFor(key) + '</b><small>' + esc(t('op.top.perHour')) +
                 '</small></div>');
             if (radio && radio.isTransmitting) {
@@ -223,7 +265,7 @@ export function createOpPage(ctx) {
         const lasts = keys.map(key => ({key, qso: lastQsoFor(key)}));
         const lastHtml = lasts.filter(item => item.qso).map(item =>
             '<div class="op-metric op-last ' + radioTheme(item.key) + '"><label>' +
-            esc(t('op.radio.n', {n: item.key}) + ' · ' + t('op.top.lastQso')) +
+            esc(radioName(item.key) + ' · ' + t('op.top.lastQso')) +
             '</label><b>' + esc(item.qso.call) + '</b><small>' +
             esc([bandLabel(item.qso.freqKhz || item.qso.band), item.qso.mode,
                 new Date(item.qso.ts).toISOString().slice(11, 16) + 'Z'].filter(Boolean).join(' · ')) +
@@ -617,30 +659,56 @@ export function createOpPage(ctx) {
 
     /* Server-side rule engine output. When it is live it replaces the local
        RUN-idle reminder, so there is only one reminder path in the OP view. */
+    function seatLane(key) {
+        const data = state.adviceEngine;
+        if (!data || !Array.isArray(data.seats)) return null;
+        return data.seats.find(item => item.seat === String(key)) || null;
+    }
+
+    function laneLabel(lane) {
+        const radio = lane && lane.radio || {};
+        const seatValue = String(lane && lane.seat || '');
+        const nr = radio.radioNr ||
+            (seatValue.includes(':') ? seatValue.slice(seatValue.lastIndexOf(':') + 1) : seatValue);
+        return radio.stationName || radio.radioName || t('op.radio.n', {n: nr || 1});
+    }
+
     function engineAdvice() {
         const data = state.adviceEngine;
         if (!data || !data.ok) return [];
+        const lanes = Array.isArray(data.seats) && data.seats.length > 1
+            ? data.seats
+            : [{seat: data.seat, radio: null, gates: data.gates, advice: data.advice}];
+        const multi = lanes.length > 1;
         const out = [];
-        const gate = data.gates || {};
-        if (gate.blockReason) {
-            const key = 'gate|' + (gate.blockBandChange || 'lock');
-            if (!state.adviceDismissed.has(key)) {
-                out.push({kind: 'run', key, text: pickText(gate.blockReason), why: '', missing: []});
+        for (const lane of lanes) {
+            const prefix = multi && lane.seat ? lane.seat + '|' : '';
+            const label = multi ? laneLabel(lane) + ' · ' : '';
+            const gate = lane.gates || {};
+            if (gate.blockReason) {
+                const key = prefix + 'gate|' + (gate.blockBandChange || 'lock');
+                if (!state.adviceDismissed.has(key)) {
+                    out.push({
+                        kind: 'run', key, text: label + pickText(gate.blockReason),
+                        why: '', missing: []
+                    });
+                }
             }
-        }
-        for (const advice of data.advice || []) {
-            const key = 'adv|' + advice.id + '|' +
-                String((advice.evidence && advice.evidence.band) || '');
-            if (state.adviceDismissed.has(key)) continue;
-            out.push({
-                kind: advice.group === 'G' ? 'run' : (advice.group === 'B' ? 'mult' : 'run'),
-                key,
-                text: pickText(advice.title) || advice.action,
-                why: pickText(advice.detail),
-                missing: Array.isArray(advice.missing) ? advice.missing : [],
-                confidence: advice.confidence
-            });
-            if (out.length >= 4) break;
+            for (const advice of lane.advice || []) {
+                const key = prefix + 'adv|' + advice.id + '|' +
+                    String((advice.evidence && advice.evidence.band) || '');
+                if (state.adviceDismissed.has(key)) continue;
+                out.push({
+                    kind: advice.group === 'G' ? 'run' : (advice.group === 'B' ? 'mult' : 'run'),
+                    key,
+                    text: label + (pickText(advice.title) || advice.action),
+                    why: pickText(advice.detail),
+                    missing: Array.isArray(advice.missing) ? advice.missing : [],
+                    confidence: advice.confidence
+                });
+                if (out.length >= 6) break;
+            }
+            if (out.length >= 6) break;
         }
         return out;
     }
@@ -753,7 +821,7 @@ export function createOpPage(ctx) {
         state.map.setData({
             qsos: all,
             spots,
-            radioFilter: key === 'all' ? 'all' : key
+            radioFilter: key === 'all' ? 'all' : String(radioNrOfKey(key))
         });
         renderMapLegend();
     }

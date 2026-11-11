@@ -104,6 +104,7 @@ export function dbRowToQso(row) {
         operator: row.operator, call: row.call, band: row.band, freqKhz: row.freq_khz,
         mode: row.mode, rstSnt: row.rst_snt, rstRcv: row.rst_rcv, exchange: row.exchange,
         points: row.points, isMult: Boolean(row.is_mult), lat: row.lat, lon: row.lon,
-        radioNr: row.radionr === undefined ? null : row.radionr
+        radioNr: row.radionr === undefined ? null : row.radionr,
+        stationName: row.stationname === undefined ? null : row.stationname
     };
 }

@@ -1535,8 +1535,8 @@
         "type": "function",
         "z": "dxc0000000000090",
         "name": "Parse RadioInfo",
-        "func": "const dx = global.get('dx');\nconst radio = dx.qso.saveRadio(global, msg.payload, new Date());\nif (!radio) return null;\nmsg.payload = radio;\nreturn [[msg], [{topic: dx.storage.n1mm.radioUpsert(radio)}]];",
-        "outputs": 2,
+        "func": "const dx = global.get('dx');\nconst radio = dx.qso.saveRadio(global, msg.payload, new Date(), {ip: msg.ip});\nif (!radio) return null;\nmsg.payload = radio;\nconst session = dx.storage.n1mm.sessionInsert(radio);\nreturn [[msg], [{topic: dx.storage.n1mm.radioUpsert(radio)}], session ? [{topic: session}] : null];",
+        "outputs": 3,
         "timeout": "",
         "noerr": 0,
         "initialize": "",
@@ -1550,6 +1550,9 @@
             ],
             [
                 "dxn1mm00000000b5"
+            ],
+            [
+                "dxn1mm00000000b7"
             ]
         ]
     },
@@ -1638,7 +1641,7 @@
         "type": "function",
         "z": "dxc0000000000090",
         "name": "Parse QSO",
-        "func": "const dx = global.get('dx');\nconst qso = dx.qso.parseContact(msg.payload, new Date());\nif (!qso) return null;\nmsg.qso = qso;\nmsg.topic = dx.storage.qso.upsert(qso);\nreturn msg;",
+        "func": "const dx = global.get('dx');\nconst qso = dx.qso.parseContact(msg.payload, new Date(), {ip: msg.ip});\nif (!qso) return null;\nmsg.qso = qso;\nmsg.topic = dx.storage.qso.upsert(qso);\nreturn msg;",
         "outputs": 1,
         "timeout": "",
         "noerr": 0,
@@ -1736,7 +1739,7 @@
         "type": "function",
         "z": "dxc0000000000090",
         "name": "Delete QSO",
-        "func": "const dx = global.get('dx');\nconst removed = dx.qso.parseDelete(msg.payload);\nif (!removed) return null;\nmsg.qso = removed.qso;\nmsg.topic = dx.storage.qso.remove(removed.id, removed.call, removed.timestamp);\nreturn msg;",
+        "func": "const dx = global.get('dx');\nconst removed = dx.qso.parseDelete(msg.payload, {ip: msg.ip});\nif (!removed) return null;\nmsg.qso = removed.qso;\nmsg.topic = dx.storage.qso.remove(removed.id, removed.call, removed.timestamp);\nreturn msg;",
         "outputs": 1,
         "timeout": "",
         "noerr": 0,
@@ -4137,7 +4140,7 @@
         "type": "function",
         "z": "dxc0000000000001",
         "name": "Build advice",
-        "func": "const dx = global.get('dx');\nconst prepared = {ok: true, error: null, request: msg.adviceRequest};\nconst state = dx.qso.stationState(global);\nconst result = dx.advice.complete(prepared, msg.payload, {\n    prop: global.get('propData') || {},\n    radio: state.radio || {},\n    score: state.score || null,\n    cooldown: global.get('adviceCooldown') || {}\n});\nglobal.set('adviceCooldown', result.cooldown || {});\ndelete msg.adviceRequest;\nmsg.headers = {'Content-Type': 'application/json'};\nmsg.statusCode = result.ok ? 200 : 400;\nmsg.payload = result;\nreturn msg;",
+        "func": "const dx = global.get('dx');\nconst prepared = {ok: true, error: null, request: msg.adviceRequest};\nconst state = dx.qso.stationState(global);\nconst result = dx.advice.complete(prepared, msg.payload, {\n    prop: global.get('propData') || {},\n    radio: state.radio || {},\n    radios: state.radios || {},\n    seat: (msg.adviceRequest && msg.adviceRequest.seat) || null,\n    score: state.score || null,\n    cooldown: global.get('adviceCooldown') || {}\n});\nglobal.set('adviceCooldown', result.cooldown || {});\ndelete msg.adviceRequest;\nmsg.headers = {'Content-Type': 'application/json'};\nmsg.statusCode = result.ok ? 200 : 400;\nmsg.payload = result;\nreturn msg;",
         "outputs": 1,
         "timeout": "",
         "noerr": 0,
@@ -4276,7 +4279,7 @@
         "libs": [],
         "x": 380,
         "y": 900,
-        "func": "const dx = global.get('dx');\nconst settings = dx.settings.runtime(global);\nconst expected = String(settings.n1mmToken || env.get('DX_N1MM_TOKEN') || '');\nif (!expected) {\n    msg.statusCode = 503;\n    msg.headers = {'Content-Type': 'application/json'};\n    msg.payload = {ok: false, error: 'ingest-token-not-configured'};\n    return [null, msg];\n}\nif (!dx.qso.authorized(dx.qso.tokenFrom(msg.req), expected)) {\n    msg.statusCode = 401;\n    msg.headers = {'Content-Type': 'application/json'};\n    msg.payload = {ok: false, error: 'unauthorized'};\n    return [null, msg];\n}\nlet body = msg.payload;\nif (Buffer.isBuffer(body)) body = body.toString('utf8');\nif (body && typeof body === 'object' && !Array.isArray(body)) body = body.xml || body.payload;\nif (typeof body !== 'string' || !body.trim()) {\n    msg.statusCode = 400;\n    msg.headers = {'Content-Type': 'application/json'};\n    msg.payload = {ok: false, error: 'empty-body'};\n    return [null, msg];\n}\nmsg.payload = body;\nreturn [msg, null];",
+        "func": "const dx = global.get('dx');\nconst settings = dx.settings.runtime(global);\nconst expected = String(settings.n1mmToken || env.get('DX_N1MM_TOKEN') || '');\nif (!expected) {\n    msg.statusCode = 503;\n    msg.headers = {'Content-Type': 'application/json'};\n    msg.payload = {ok: false, error: 'ingest-token-not-configured'};\n    return [null, msg];\n}\nif (!dx.qso.authorized(dx.qso.tokenFrom(msg.req), expected)) {\n    msg.statusCode = 401;\n    msg.headers = {'Content-Type': 'application/json'};\n    msg.payload = {ok: false, error: 'unauthorized'};\n    return [null, msg];\n}\nlet body = msg.payload;\nif (Buffer.isBuffer(body)) body = body.toString('utf8');\nif (body && typeof body === 'object' && !Array.isArray(body)) body = body.xml || body.payload;\nif (typeof body !== 'string' || !body.trim()) {\n    msg.statusCode = 400;\n    msg.headers = {'Content-Type': 'application/json'};\n    msg.payload = {ok: false, error: 'empty-body'};\n    return [null, msg];\n}\nmsg.payload = body;\nconst headers = msg.req && msg.req.headers || {};\nconst query = msg.req && msg.req.query || {};\nconst station = headers['x-dx-station'] || headers['X-DX-Station'] || query.station || '';\nconst socket = msg.req && (msg.req.ip || msg.req.socket && msg.req.socket.remoteAddress) || '';\nmsg.n1mmMeta = {station: String(station || ''), ip: String(socket || '')};\nreturn [msg, null];",
         "wires": [
             [
                 "dxn1mm00000000a3"
@@ -4306,20 +4309,23 @@
         "type": "function",
         "z": "dxc0000000000090",
         "name": "N1MM ingest normalize",
-        "outputs": 2,
+        "outputs": 3,
         "noerr": 0,
         "initialize": "",
         "finalize": "",
         "libs": [],
         "x": 820,
         "y": 900,
-        "func": "const dx = global.get('dx');\nconst result = dx.qso.ingest(global, msg.payload, new Date());\nif (!result.ok) {\n    msg.statusCode = result.statusCode || 400;\n    msg.headers = {'Content-Type': 'application/json'};\n    msg.payload = {ok: false, error: result.error};\n    return [null, msg];\n}\nmsg.topic = result.sql;\nmsg._kind = result.kind;\nmsg._event = result.event;\nreturn [msg, null];",
+        "func": "const dx = global.get('dx');\nconst result = dx.qso.ingest(global, msg.payload, new Date(), msg.n1mmMeta || {});\nif (!result.ok) {\n    msg.statusCode = result.statusCode || 400;\n    msg.headers = {'Content-Type': 'application/json'};\n    msg.payload = {ok: false, error: result.error};\n    return [null, msg, null];\n}\nmsg.topic = result.sql;\nmsg._kind = result.kind;\nmsg._event = result.event;\nreturn [msg, null, result.sessionSql ? {topic: result.sessionSql} : null];",
         "wires": [
             [
                 "dxn1mm00000000a5"
             ],
             [
                 "dxn1mm00000000a7"
+            ],
+            [
+                "dxn1mm00000000b8"
             ]
         ]
     },
@@ -4337,6 +4343,20 @@
             [
                 "dxn1mm00000000a6"
             ]
+        ]
+    },
+    {
+        "id": "dxn1mm00000000b8",
+        "type": "sqlite",
+        "z": "dxc0000000000090",
+        "mydb": "dxc0000000000027",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "Persist ingest operator session",
+        "x": 1100,
+        "y": 1020,
+        "wires": [
+            []
         ]
     },
     {
@@ -4495,6 +4515,20 @@
         "name": "Persist radio state",
         "x": 520,
         "y": 140,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "dxn1mm00000000b7",
+        "type": "sqlite",
+        "z": "dxc0000000000090",
+        "mydb": "dxc0000000000027",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "Persist operator session",
+        "x": 530,
+        "y": 200,
         "wires": [
             []
         ]

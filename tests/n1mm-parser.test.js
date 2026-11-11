@@ -13,7 +13,8 @@ test('contactinfo 容忍小写字段、数组/标量混用与缺失字段', () =
     }};
     const qso = n1mm.parseContact(payload, NOW);
     assert.equal(qso.call, 'K1ABC');
-    assert.equal(qso.n1mmId, '42');
+    assert.equal(qso.n1mmId, 'DXI|LOCAL|42');
+    assert.equal(qso.rawId, '42');
     assert.equal(qso.band, '20');
     assert.equal(qso.mode, 'CW');
     assert.equal(qso.freqKhz, 14025);
@@ -48,7 +49,8 @@ test('大小写不一致的根节点仍能识别', () => {
 test('contactdelete 归一化为删除事件', () => {
     const result = n1mm.normalize({contactdelete: {ID: '{A-1}', call: 'k1abc'}}, NOW);
     assert.equal(result.kind, 'delete');
-    assert.equal(result.event.id, '{A-1}');
+    assert.equal(result.event.rawId, '{A-1}');
+    assert.equal(result.event.id, 'DXI|LOCAL|{A-1}');
     assert.equal(result.event.call, 'K1ABC');
     assert.match(result.event.qso.n1mmId, /A-1/);
 });

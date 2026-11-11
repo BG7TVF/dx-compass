@@ -16,9 +16,11 @@ class Context {
 test('建表清单包含 N1MM 状态表，启动时与其它 schema 一起下发', () => {
     assert.equal(typeof schema.createN1mm, 'function');
     const statements = schema.createN1mm();
-    assert.equal(statements.length, 2);
-    assert.match(statements[0], /CREATE TABLE IF NOT EXISTS station_state/);
+    assert.equal(statements.length, 3);
+    assert.match(statements[0], /CREATE TABLE IF NOT EXISTS radio_state/);
+    assert.match(statements[0], /seat TEXT PRIMARY KEY/);
     assert.match(statements[1], /CREATE TABLE IF NOT EXISTS score_state/);
+    assert.match(statements[2], /CREATE TABLE IF NOT EXISTS operator_sessions/);
 });
 
 test('令牌比较与提取：头优先、查询兜底、空值拒绝', () => {
@@ -55,18 +57,18 @@ test('缺 ID 的 QSO 生成稳定键，重复投递不会新增行', () => {
     const first = ingestApi.ingest(ctx, payload, NOW);
     const second = ingestApi.ingest(ctx, payload, NOW);
     assert.equal(first.event.n1mmId, second.event.n1mmId);
-    assert.match(first.event.n1mmId, /^K1ABC\|/);
+    assert.match(first.event.n1mmId, /^DXI\|LOCAL\|K1ABC\|/);
 });
 
-test('电台状态包同时更新 global 与 station_state', () => {
+test('电台状态包按席位更新 global 与 radio_state', () => {
     const ctx = new Context();
     const result = ingestApi.ingest(ctx, {RadioInfo: {RadioNr: '1', Freq: '14025000',
         Mode: 'CW', IsRunning: 'True'}}, NOW);
     assert.equal(result.kind, 'radio');
-    assert.match(result.sql, /^INSERT OR REPLACE INTO station_state/);
-    assert.equal(result.sql.includes("'1'"), true);
+    assert.match(result.sql, /^INSERT OR REPLACE INTO radio_state/);
+    assert.match(result.sql, /'LOCAL:1'/);
     assert.equal(ctx.get('radioState').isRunning, true);
-    assert.equal(ctx.get('radioStates')['1'].freqKhz, 14025);
+    assert.equal(ctx.get('radioStates')['LOCAL:1'].freqKhz, 14025);
 });
 
 test('分数包写入 score_state', () => {
@@ -83,7 +85,7 @@ test('分数包写入 score_state', () => {
 test('删除包按 n1mm_id 删除', () => {
     const result = ingestApi.ingest(new Context(), {contactdelete: {ID: '{9}', call: 'K1ABC'}}, NOW);
     assert.equal(result.kind, 'delete');
-    assert.match(result.sql, /^DELETE FROM qsos WHERE n1mm_id = '\{9\}'/);
+    assert.match(result.sql, /^DELETE FROM qsos WHERE n1mm_id = 'DXI\|LOCAL\|\{9\}'/);
 });
 
 test('未识别包返回 400，不写库', () => {
@@ -95,9 +97,9 @@ test('未识别包返回 400，不写库', () => {
 
 test('重启恢复只在内存为空时生效', () => {
     const rows = [
-        {kind: 'radio', id: '1', ts: NOW.toISOString(), freq_khz: 14025, tx_freq_khz: 14025,
-            mode: 'CW', is_running: 1, is_transmitting: 0, is_split: 0,
-            op_call: 'OP', radio_name: 'R1', station_name: ''},
+        {kind: 'radio', id: 'LOCAL:1', radio_nr: '1', instance: 'LOCAL', ts: NOW.toISOString(),
+            freq_khz: 14025, tx_freq_khz: 14025, mode: 'CW', is_running: 1,
+            is_transmitting: 0, is_split: 0, op_call: 'OP', radio_name: 'R1', station_name: ''},
         {kind: 'score', id: 'live', ts: NOW.toISOString(), contest: 'CQWW',
             qsos: 10, mults: 4, points: 30, score: 120}
     ];
@@ -108,7 +110,7 @@ test('重启恢复只在内存为空时生效', () => {
 
     const live = new Context();
     live.set('radioState', {type: 'radio', freqKhz: 21025});
-    live.set('radioStates', {'1': {type: 'radio', freqKhz: 21025}});
+    live.set('radioStates', {'LOCAL:1': {type: 'radio', freqKhz: 21025}});
     live.set('scoreState', {qsos: 99});
     assert.equal(ingestApi.restore(live, rows), false);
     assert.equal(live.get('radioState').freqKhz, 21025);

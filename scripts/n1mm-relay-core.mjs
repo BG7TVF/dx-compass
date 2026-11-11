@@ -41,6 +41,7 @@ export function parseArgs(argv, env = {}) {
     const protocol = (get('--protocol') || env.DX_N1MM_PROTOCOL || 'http').toLowerCase();
     const path = get('--path') || env.DX_N1MM_PATH || DEFAULTS.path;
     const token = get('--token') || env.DX_N1MM_TOKEN || '';
+    const station = get('--station') || env.DX_N1MM_STATION || '';
     const udpPort = intOf(get('--udp-port') || env.DX_N1MM_UDP_PORT, DEFAULTS.udpPort);
     const udpHost = get('--udp-host') || env.DX_N1MM_UDP_HOST || DEFAULTS.udpHost;
     const timeoutMs = intOf(get('--timeout'), DEFAULTS.timeoutMs);
@@ -50,7 +51,7 @@ export function parseArgs(argv, env = {}) {
     const url = get('--url') || env.DX_N1MM_URL ||
         (host ? `${protocol}://${host}:${httpPort}${path.startsWith('/') ? path : '/' + path}` : '');
 
-    return {help: false, url, token, udpHost, udpPort, timeoutMs, maxQueue, idleWarnSec};
+    return {help: false, url, token, station, udpHost, udpPort, timeoutMs, maxQueue, idleWarnSec};
 }
 
 export function validate(config) {
@@ -98,17 +99,17 @@ export class BoundedQueue {
 }
 
 export function buildRequest(config, body) {
+    const headers = {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'X-DX-Token': config.token,
+        'User-Agent': 'dx-compass-n1mm-relay'
+    };
+    // 多台 N1MM 实例走同一个服务器时，用 --station 给每台一个稳定身份，
+    // 服务器据此区分席位；不填则回退报文的 StationName / 来源 IP。
+    if (config.station) headers['X-DX-Station'] = config.station;
     return {
         url: config.url,
-        init: {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'text/plain; charset=utf-8',
-                'X-DX-Token': config.token,
-                'User-Agent': 'dx-compass-n1mm-relay'
-            },
-            body
-        }
+        init: {method: 'POST', headers, body}
     };
 }
 
@@ -133,6 +134,7 @@ export function helpText() {
         '  --path <p>         默认 /api/n1mm/ingest',
         '  --url <url>        直接给出完整端点（优先于 host/port）',
         '  --token <t>        接入令牌（或 DX_N1MM_TOKEN）',
+        '  --station <name>   本实例的席位名（或 DX_N1MM_STATION）；多台 N1MM 必须不同',
         '  --udp-host <ip>    本机监听地址，默认 0.0.0.0（接收广播）',
         '  --udp-port <n>     本机监听端口，默认 12060',
         '  --timeout <ms>     单次 HTTP 超时，默认 8000',
@@ -144,6 +146,9 @@ export function helpText() {
         '  2. 勾选 Enable Broadcast Data',
         '  3. 在目标列表加入 127.0.0.1（N1MM 与 relay 同机）或 relay 所在电脑的局域网 IP，端口 12060',
         '  4. 确认三个数据源（Contact / Radio / Score）都已勾选',
+        '',
+        '多台 N1MM 实例：每台用不同的 --station（如 RUN / MULT），否则服务器只能靠',
+        'StationName 或来源 IP 区分，可能出现席位合并。',
         '',
         'Windows 首次运行需在防火墙提示中允许 node.exe 监听 UDP 12060。'
     ].join('\n');
