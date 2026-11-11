@@ -5352,5 +5352,125 @@
         "x": 1090,
         "y": 560,
         "wires": []
+    },
+    {
+        "id": "dxdev0000000051",
+        "type": "http in",
+        "z": "dxdev0000000000",
+        "name": "POST /api/devices/:id/command",
+        "url": "/api/devices/:id/command",
+        "method": "post",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 160,
+        "y": 680,
+        "wires": [
+            [
+                "dxdev0000000052"
+            ]
+        ]
+    },
+    {
+        "id": "dxdev0000000052",
+        "type": "function",
+        "z": "dxdev0000000000",
+        "name": "Prepare device command",
+        "func": "const dx = global.get('dx');\nmsg.commandBody = msg.payload;\nmsg.commandHeaders = msg.req && msg.req.headers;\nmsg.commandDeviceId = msg.req && msg.req.params ? msg.req.params.id : '';\nmsg.topic = dx.storage.devices.snapshotQuery();\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 430,
+        "y": 680,
+        "wires": [
+            [
+                "dxdev0000000053"
+            ]
+        ]
+    },
+    {
+        "id": "dxdev0000000053",
+        "type": "sqlite",
+        "z": "dxdev0000000000",
+        "mydb": "dxc0000000000027",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "Read devices for command",
+        "x": 700,
+        "y": 680,
+        "wires": [
+            [
+                "dxdev0000000054"
+            ]
+        ]
+    },
+    {
+        "id": "dxdev0000000054",
+        "type": "function",
+        "z": "dxdev0000000000",
+        "name": "Handle device command",
+        "func": "const dx = global.get('dx');\nconst result = await dx.devices.handleCommand(global, msg.payload, msg.commandDeviceId, msg.commandBody, msg.commandHeaders, new Date());\nmsg.statusCode = result.status;\nmsg.headers = {'content-type': 'application/json; charset=utf-8'};\nmsg.commandResponse = result.payload;\nmsg.topic = result.sql && result.sql.length ? result.sql.join('\\n') : 'SELECT 1';\nconst broadcast = result.broadcast\n    ? {payload: Object.assign({server_ts: new Date().toISOString()}, result.broadcast)}\n    : null;\nreturn [msg, broadcast];",
+        "outputs": 2,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 930,
+        "y": 680,
+        "wires": [
+            [
+                "dxdev0000000055"
+            ],
+            [
+                "dxc000000000000e"
+            ]
+        ]
+    },
+    {
+        "id": "dxdev0000000055",
+        "type": "sqlite",
+        "z": "dxdev0000000000",
+        "mydb": "dxc0000000000027",
+        "sqlquery": "batch",
+        "sql": "",
+        "name": "Append command audit",
+        "x": 1190,
+        "y": 660,
+        "wires": [
+            [
+                "dxdev0000000056"
+            ]
+        ]
+    },
+    {
+        "id": "dxdev0000000056",
+        "type": "function",
+        "z": "dxdev0000000000",
+        "name": "Device command response",
+        "func": "msg.payload = msg.commandResponse;\ndelete msg.commandResponse;\nmsg.headers = {'content-type': 'application/json; charset=utf-8'};\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1420,
+        "y": 660,
+        "wires": [
+            [
+                "dxdev0000000057"
+            ]
+        ]
+    },
+    {
+        "id": "dxdev0000000057",
+        "type": "http response",
+        "z": "dxdev0000000000",
+        "name": "",
+        "statusCode": "",
+        "headers": {},
+        "x": 1650,
+        "y": 660,
+        "wires": []
     }
 ]

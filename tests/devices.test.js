@@ -10,6 +10,7 @@ const ownership = require('../lib/devices/ownership.js');
 const runtime = require('../lib/devices/runtime.js');
 const tower = require('../lib/devices/tower.js');
 const tx = require('../lib/devices/tx.js');
+const commands = require('../lib/devices/commands.js');
 const service = require('../lib/devices/service.js');
 const storage = require('../lib/storage');
 
@@ -508,9 +509,10 @@ test('TX source configuration keeps the token private and validates ranges', () 
 
 test('storage creates both tables and migrates missing columns idempotently', () => {
     const schema = storage.devices.createSchema();
-    assert.equal(schema.length, 2);
+    assert.equal(schema.length, 3);
     assert.match(schema[0], /CREATE TABLE IF NOT EXISTS devices/);
     assert.match(schema[1], /CREATE TABLE IF NOT EXISTS tx_sources/);
+    assert.match(schema[2], /CREATE TABLE IF NOT EXISTS device_commands/);
     assert.match(storage.devices.snapshotQuery(), /UNION ALL/);
     assert.match(storage.devices.columnsQuery(), /pragma_table_info\('devices'\)/);
 
@@ -547,6 +549,7 @@ test('flow registers device routes and startup schema migration', () => {
     assert.deepEqual(routes.sort(), [
         'GET /api/devices',
         'POST /api/devices',
+        'POST /api/devices/:id/command',
         'POST /api/devices/report',
         'POST /api/devices/tx'
     ]);
@@ -582,4 +585,215 @@ test('two new settings ship with the agreed defaults and no gating', () => {
     const pulseField = schema.FIELDS.find(field => field.key === 'towerPulseWidthMs');
     assert.equal(pulseField.wired, true);
     assert.equal(pulseField.default, 400);
+});
+
+test('command channel requires seat identity and the device password', async () => {
+    commands.resetForTests();
+    const now = new Date('2026-03-01T12:00:00.000Z');
+    const globalCtx = makeContext();
+    const rows = [deviceRow({id: 'rotator-1', name: 'Rotator', type: 'rotator', bands: '', password: 'pw'})];
+
+    let result = await service.handleCommand(globalCtx, rows, 'rotator-1',
+        {command: 'rotate', azimuth: 45}, {}, now);
+    assert.equal(result.status, 401);
+    assert.equal(result.payload.ok, false);
+    assert.equal(result.payload.error, 'seat-required');
+    assert.match(result.sql[0], /INSERT INTO device_commands/);
+
+    result = await service.handleCommand(globalCtx, rows, 'rotator-1',
+        {command: 'rotate', azimuth: 45}, {'X-DX-Seat': 'OP-A', 'X-DX-Device-Token': 'bad'}, now);
+    assert.equal(result.status, 403);
+    assert.equal(result.payload.error, 'invalid-device-token');
+
+    result = await service.handleCommand(globalCtx, rows, 'rotator-1',
+        {command: 'rotate', azimuth: 45},
+        {'X-DX-Seat': 'OP-A', 'X-DX-Device-Token': 'pw', 'X-DX-Operator': 'Alice'}, now);
+    assert.equal(result.status, 202);
+    assert.equal(result.payload.ok, true);
+    assert.match(result.sql[0], /OP-A/);
+    assert.match(result.sql[0], /Alice/);
+    assert.match(result.sql[0], /accepted/);
+});
+
+test('device lease allows one seat, renews and expires after 30s', async () => {
+    commands.resetForTests();
+    const now = new Date('2026-03-01T12:00:00.000Z');
+    const globalCtx = makeContext();
+    const rows = [deviceRow({id: 'rotator-1', type: 'rotator', bands: ''})];
+
+    let result = await service.handleCommand(globalCtx, rows, 'rotator-1',
+        {command: 'rotate', azimuth: 45}, {'X-DX-Seat': 'OP-A'}, now);
+    assert.equal(result.status, 202);
+
+    result = await service.handleCommand(globalCtx, rows, 'rotator-1',
+        {command: 'rotate', azimuth: 90}, {'X-DX-Seat': 'OP-B'}, now);
+    assert.equal(result.status, 409);
+    assert.equal(result.payload.error, 'device-locked');
+    assert.equal(result.payload.owner, 'OP-A');
+
+    // 同席位继续操作会续租。
+    const later = new Date(now.getTime() + 20000);
+    result = await service.handleCommand(globalCtx, rows, 'rotator-1',
+        {command: 'rotate', azimuth: 90}, {'X-DX-Seat': 'OP-A'}, later);
+    assert.equal(result.status, 202);
+
+    // 续租后 30 秒内仍归 OP-A，超过 30 秒自动释放。
+    const stillHeld = new Date(later.getTime() + 29000);
+    result = await service.handleCommand(globalCtx, rows, 'rotator-1',
+        {command: 'rotate', azimuth: 120}, {'X-DX-Seat': 'OP-B'}, stillHeld);
+    assert.equal(result.status, 409);
+
+    const expired = new Date(later.getTime() + 30001);
+    result = await service.handleCommand(globalCtx, rows, 'rotator-1',
+        {command: 'rotate', azimuth: 120}, {'X-DX-Seat': 'OP-B'}, expired);
+    assert.equal(result.status, 202);
+});
+
+test('angle idempotency returns the first result and treats 360 as 0', async () => {
+    commands.resetForTests();
+    const now = new Date('2026-03-01T12:00:00.000Z');
+    const globalCtx = makeContext();
+    const rows = [deviceRow({id: 'rotator-1', type: 'rotator', bands: ''})];
+    const headers = {'X-DX-Seat': 'OP-A'};
+
+    let first = await service.handleCommand(globalCtx, rows, 'rotator-1',
+        {command: 'rotate', azimuth: 360}, headers, now);
+    assert.equal(first.status, 202);
+    assert.equal(first.payload.target_azimuth, 0);
+
+    const duplicate = await service.handleCommand(globalCtx, rows, 'rotator-1',
+        {command: 'rotate', azimuth: 0}, headers, now);
+    assert.equal(duplicate.status, 200);
+    assert.equal(duplicate.payload.duplicate, true);
+    assert.equal(duplicate.payload.command_id, first.payload.command_id);
+
+    const different = await service.handleCommand(globalCtx, rows, 'rotator-1',
+        {command: 'rotate', azimuth: 90}, headers, now);
+    assert.equal(different.status, 202);
+    assert.notEqual(different.payload.command_id, first.payload.command_id);
+
+    // stop 清空目标，之后同角度会重新下发。
+    const stopped = await service.handleCommand(globalCtx, rows, 'rotator-1',
+        {command: 'stop'}, {'X-DX-Seat': 'OP-B'}, now);
+    assert.equal(stopped.status, 202);
+    const again = await service.handleCommand(globalCtx, rows, 'rotator-1',
+        {command: 'rotate', azimuth: 90}, headers, now);
+    assert.equal(again.status, 202);
+});
+
+test('select is blocked with 423 when a TX source reports active', async () => {
+    commands.resetForTests();
+    const now = new Date('2026-03-01T12:00:00.000Z');
+    const globalCtx = makeContext();
+    const matrix = deviceRow({
+        id: 'matrix-1', name: 'Matrix', type: 'matrix', bands: '',
+        config_json: JSON.stringify({relay_url: 'http://relay.local/out', channels: {'IN1:1': 3}})
+    });
+    const source = sourceRow({id: 'src-a', name: 'A', priority: 10, timeout_ms: 2000});
+    const rows = [matrix, source];
+    const headers = {'X-DX-Seat': 'OP-A'};
+
+    // 未接入任何源：互锁不启用，正常放行。
+    let result = await service.handleCommand(globalCtx, rows, 'matrix-1',
+        {command: 'select', port: 'IN1', outlet: '1'}, headers, now);
+    assert.equal(result.status, 202);
+    assert.equal(result.payload.interlock, 'not-enabled');
+
+    // 源上报发射中 → 423 TX_ACTIVE，且不产生下发。
+    service.ingestTx(globalCtx, [storage.devices.toTxSource(source)],
+        {source_id: 'src-a', tx_active: true}, {}, now);
+    result = await service.handleCommand(globalCtx, rows, 'matrix-1',
+        {command: 'select', port: 'IN1', outlet: '1'}, headers, now);
+    assert.equal(result.status, 423);
+    assert.equal(result.payload.error, 'tx-active');
+    assert.equal(result.payload.interlock, 'tx-active');
+
+    // 源上报未发射 → 放行，互锁启用。
+    service.ingestTx(globalCtx, [storage.devices.toTxSource(source)],
+        {source_id: 'src-a', tx_active: false, seq: 2}, {}, now);
+    result = await service.handleCommand(globalCtx, rows, 'matrix-1',
+        {command: 'select', port: 'IN1', outlet: '1'}, headers, now);
+    assert.equal(result.status, 202);
+    assert.equal(result.payload.interlock, 'enabled');
+
+    // 源超时 → 互锁不启用，正常放行。
+    const stale = new Date(now.getTime() + 7000);
+    result = await service.handleCommand(globalCtx, rows, 'matrix-1',
+        {command: 'select', port: 'IN1', outlet: '1'}, headers, stale);
+    assert.equal(result.status, 202);
+    assert.equal(result.payload.interlock, 'not-enabled');
+
+    // 未知通道 / 缺参数。
+    result = await service.handleCommand(globalCtx, rows, 'matrix-1',
+        {command: 'select', port: 'IN1', outlet: '9'}, headers, now);
+    assert.equal(result.status, 400);
+    assert.equal(result.payload.error, 'unknown-channel');
+    result = await service.handleCommand(globalCtx, rows, 'matrix-1',
+        {command: 'select'}, headers, now);
+    assert.equal(result.payload.error, 'invalid-port');
+});
+
+test('tower hold skeleton validates direction and channels', async () => {
+    commands.resetForTests();
+    const now = new Date('2026-03-01T12:00:00.000Z');
+    const globalCtx = makeContext();
+    const towerRow = deviceRow({
+        id: 'tower-1', name: 'Tower', type: 'tower', bands: '',
+        config_json: JSON.stringify({relay_url: 'http://relay.local/out', up_channel: 1, down_channel: 2})
+    });
+    const headers = {'X-DX-Seat': 'OP-A'};
+
+    let result = await service.handleCommand(globalCtx, [towerRow], 'tower-1',
+        {command: 'tower_hold', direction: 'left'}, headers, now);
+    assert.equal(result.status, 400);
+    assert.equal(result.payload.error, 'invalid-direction');
+
+    result = await service.handleCommand(globalCtx, [towerRow], 'tower-1',
+        {command: 'tower_hold', direction: 'up'}, headers, now);
+    assert.equal(result.status, 202);
+
+    result = await service.handleCommand(globalCtx, [towerRow], 'tower-1',
+        {command: 'tower_release'}, headers, now);
+    assert.equal(result.status, 202);
+
+    const bare = deviceRow({id: 'tower-2', type: 'tower', bands: ''});
+    result = await service.handleCommand(globalCtx, [bare], 'tower-2',
+        {command: 'tower_hold', direction: 'up'}, headers, now);
+    assert.equal(result.status, 400);
+    assert.equal(result.payload.error, 'unknown-channel');
+});
+
+test('device protocol config is validated and secrets stay out of the DTO', () => {
+    const ok = model.normalizeDevice({
+        name: 'Matrix', type: 'matrix',
+        config: {
+            relay_url: 'http://relay.local/out',
+            relay_token: 'relay-secret',
+            channels: {'IN1:1': 2, 'IN1:2': 3},
+            pulse_ms: 250
+        }
+    }, {devices: []});
+    assert.equal(ok.ok, true);
+    assert.equal(ok.device.config.relay_token, 'relay-secret');
+    const pub = model.publicDevice(ok.device);
+    assert.equal(pub.has_relay_token, true);
+    assert.equal(pub.config.relay_token, undefined);
+    assert.equal(pub.config.channels['IN1:1'], 2);
+
+    const sql = storage.devices.insertDevice(ok.device);
+    assert.match(sql, /config_json/);
+    assert.match(sql, /relay-secret/);
+
+    assert.equal(model.normalizeDevice({
+        name: 'R', type: 'rotator', config: {protocol: 'modbus'}
+    }, {devices: []}).status, 400);
+    assert.equal(model.normalizeDevice({
+        name: 'R', type: 'rotator', config: {relay_url: 'ftp://x'}
+    }, {devices: []}).error, 'invalid-config-relay-url');
+    assert.equal(model.normalizeDevice({
+        name: 'R', type: 'rotator', config: {port: 70000}
+    }, {devices: []}).error, 'invalid-config-port');
+    assert.equal(model.normalizeDevice({
+        name: 'R', type: 'matrix', config: {channels: {'IN1:1': 300}}
+    }, {devices: []}).error, 'invalid-config-channel');
 });

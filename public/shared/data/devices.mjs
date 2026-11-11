@@ -28,3 +28,25 @@ export function saveTxSource(source, {transport = defaultTransport, ...options} 
 export function deleteTxSource(id, {transport = defaultTransport, ...options} = {}) {
     return transport.postJson('/api/devices', {action: 'tx-source-delete', id}, options);
 }
+
+/**
+ * Send one device command through the single write channel.
+ * Every command carries the seat identity; the device password is optional
+ * and only sent when the device has one configured.
+ */
+export function sendDeviceCommand(deviceId, command, {
+    seat,
+    deviceToken,
+    operator,
+    transport = defaultTransport,
+    ...options
+} = {}) {
+    const headers = Object.assign({}, options.headers, {'X-DX-Seat': String(seat || '')});
+    if (operator) headers['X-DX-Operator'] = String(operator);
+    if (deviceToken) headers['X-DX-Device-Token'] = String(deviceToken);
+    return transport.postJson(
+        `/api/devices/${encodeURIComponent(deviceId)}/command`,
+        command,
+        Object.assign({}, options, {headers})
+    );
+}
