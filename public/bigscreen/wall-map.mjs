@@ -2,20 +2,13 @@ import {clamp} from '../shared/geo/coordinates.mjs';
 import {computeTerminator, solarCosAt} from '../shared/map/terminator.mjs';
 import {trackPaths} from '../shared/geo/great-circle.mjs';
 import {gridToLatLon} from '../shared/geo/maidenhead.mjs';
-import {
-    addOfflineLand,
-    createBaseMap,
-    fitWorldRange,
-    LAND_BOUNDS,
-    mercLat,
-    mercY,
-    WORLD_BOUNDS
-} from '../shared/map/base-map.mjs';
+import {LAND_BOUNDS, mercLat, mercY, WORLD_BOUNDS} from '../shared/map/base-map.mjs';
+import {createMapSurface} from '../shared/map/surface.mjs';
 import {getLeaflet} from '../shared/map/leaflet.mjs';
-import {opponentStyleMap, shapeSvg, trackStyle} from './wall-opponents.mjs';
+import {opponentStyleMap, trackStyle} from './wall-opponents.mjs';
+import {opponentIcon} from '../shared/map/markers.mjs';
 import {
     addTrackPaths,
-    createLayerGroup,
     removeLayers,
     setLayerVisible
 } from '../shared/map/layers.mjs';
@@ -106,36 +99,29 @@ function nightImage(when, {width, height}, scale = 1) {
 
 export function createWallMap() {
     const L = getLeaflet();
-    const {map} = createBaseMap('map', {
-        L,
-        provider: null,
-        mapOptions: {
-            zoomControl: false,
-            attributionControl: false,
-            dragging: false,
-            touchZoom: false,
-            scrollWheelZoom: false,
-            doubleClickZoom: false,
-            boxZoom: false,
-            keyboard: false,
-            zoomSnap: 0,
-            minZoom: 0,
-            maxZoom: 6,
-            maxBounds: WORLD_BOUNDS,
-            maxBoundsViscosity: 1
-        }
+    /* Border layer stays off for the wall: it neither loads the data file nor
+     * draws the lines. The wall only needs the offline land silhouette. */
+    const surface = createMapSurface('map', {
+        provider: 'offline',
+        view: {kind: 'range', range: [viewTopLat, viewBottomLat]},
+        /* Cover the same latitude window the map may pan to (WORLD_BOUNDS), not
+         * just the LAND_BOUNDS the rings are drawn in: on very tall panes the
+         * view reaches the pole and a LAND_BOUNDS overlay would leave a strip of
+         * bare container background above 85 deg. */
+        land: {show: true, bounds: WORLD_BOUNDS, pane: 'raster', zIndex: 250},
+        borders: {show: false},
+        interaction: {zoom: false, pan: false},
+        mapOptions: {maxZoom: 6},
+        resize: {observe: true, debounce: 120},
+        layers: ['aurora', 'weather', 'qso', 'myspot', 'dxspot']
     });
-    /* Cover the same latitude window the map may pan to (WORLD_BOUNDS), not
-     * just the LAND_BOUNDS the rings are drawn in: on very tall panes the view
-     * reaches the pole and a LAND_BOUNDS overlay would leave a strip of bare
-     * container background above 85 deg. */
-    addOfflineLand(map, {L, bounds: WORLD_BOUNDS, pane: 'raster', zIndex: 250});
-    fitWorldRange(map, viewTopLat, viewBottomLat);
-
+    const map = surface.map;
+    const viewLayers = {};
     const views = {};
     ['aurora', 'weather', 'qso', 'myspot', 'dxspot'].forEach(key => {
-        views[key] = createLayerGroup(map, {L});
-        setLayerVisible(map, views[key], false);
+        viewLayers[key] = surface.layer(key);
+        views[key] = viewLayers[key].group;
+        viewLayers[key].hide();
     });
     const visible = {};
     let mufOverlay = null;
@@ -149,7 +135,7 @@ export function createWallMap() {
             setLayerVisible(map, nightOverlay, visible[key]);
             return;
         }
-        setLayerVisible(map, views[key], visible[key]);
+        viewLayers[key][visible[key] ? 'show' : 'hide']();
     }
 
     function renderProp(mufGrid) {
@@ -206,12 +192,7 @@ export function createWallMap() {
                     painted.add(key);
                     if (style) {
                         L.marker([row.dx_lat, row.dx_lon], {
-                            icon: L.divIcon({
-                                className: 'dx-glyph',
-                                html: shapeSvg(style.shape, style.color, 16),
-                                iconSize: [16, 16],
-                                iconAnchor: [8, 8]
-                            }),
+                            icon: opponentIcon(L, style, 16),
                             interactive: false,
                             keyboard: false
                         }).addTo(group);
@@ -303,8 +284,7 @@ export function createWallMap() {
     }
 
     function fit() {
-        map.invalidateSize();
-        fitWorldRange(map, viewTopLat, viewBottomLat);
+        return surface.fit();
     }
 
     function setRange(topLat, bottomLat) {
@@ -317,7 +297,7 @@ export function createWallMap() {
         if (top === viewTopLat && bottom === viewBottomLat) return;
         viewTopLat = top;
         viewBottomLat = bottom;
-        fit();
+        surface.setView({kind: 'range', range: [viewTopLat, viewBottomLat]});
         if (lastMufGrid) renderProp(lastMufGrid);
     }
 

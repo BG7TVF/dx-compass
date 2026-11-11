@@ -37,6 +37,15 @@
     --map-bg: #0a1929;
     --map-land: #22313f;
     --map-line: #64879b;
+    /* Shared map surface tokens (public/shared/map/surface.mjs) */
+    --map-land-fill: #1d2a35;
+    --map-land-line: #4d6b7d;
+    --map-borders-color: #3d5666;
+    --map-grid: #253039;
+    --map-spot: #8fe3ff;
+    --map-qso: #00e5ff;
+    --map-open: #2ecc71;
+    --map-blocked: #e74c3c;
     --row-alt: #141a20;
     --row-hover: #1c252e;
     --row-border: #1a2027;
@@ -1668,6 +1677,14 @@ body[data-theme="light"] {
     --map-bg: #e4edf4;
     --map-land: #a6bccd;
     --map-line: #5d7c96;
+    --map-land-fill: #c3d3df;
+    --map-land-line: #7b96ab;
+    --map-borders-color: #9fb4c4;
+    --map-grid: #cfd8e2;
+    --map-spot: #1f7fa8;
+    --map-qso: #0077b6;
+    --map-open: #128f4a;
+    --map-blocked: #c62828;
     --row-alt: #f4f7fa;
     --row-hover: #e8f0f7;
     --row-border: #e1e8ef;

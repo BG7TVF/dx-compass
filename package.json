@@ -16,6 +16,7 @@
         "start": "node-red -s settings.js",
         "dev": "node-red -s settings.js",
         "wall": "node bigscreen/server.js",
+        "build:map-data": "node scripts/build-map-data.mjs",
         "test": "node --test"
     }
 }

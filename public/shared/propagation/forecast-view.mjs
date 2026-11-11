@@ -112,9 +112,10 @@ export function mufColor(muf) {
     return `rgb(${mufRgb(muf).join(',')})`;
 }
 
-/** Read the classic offline geography scripts after index.html has bridged them. */
+/** Read the classic offline geography scripts after index.html has bridged them.
+ *  Land and borders share the 50m outline data under shared/map/data. */
 export function getForecastMapData(root = globalThis) {
-    return {land: root.LAND || [], borders: root.BORDERS || []};
+    return {land: root.LAND || [], borders: root.MAP_BORDERS || []};
 }
 
 export function selectPathMatrix(forecast) {

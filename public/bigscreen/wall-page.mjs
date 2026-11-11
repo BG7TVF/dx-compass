@@ -244,11 +244,9 @@ export async function startWallPage() {
 
     let resizeTimer = null;
     window.addEventListener('resize', () => {
-        wallMap.fit();
         if (resizeTimer) clearTimeout(resizeTimer);
         resizeTimer = setTimeout(() => {
             resizeTimer = null;
-            wallMap.invalidate();
             renderQsoTrend(state.qsoRows);
             renderRateTrend(state.qsoRows);
             renderSpotTrend(state.spotRows);
@@ -257,19 +255,9 @@ export async function startWallPage() {
     });
     if (window.ResizeObserver) {
         new ResizeObserver(() => opponents.trim()).observe($('#oppRows'));
-        /* The grid can settle after the first fit (fonts, wrapped header, data
-         * cards), so re-fit whenever the pane itself changes size instead of
-         * trusting the size the map was created with. */
-        let paneWidth = 0;
-        let paneHeight = 0;
-        new ResizeObserver(entries => {
-            const box = entries[0].contentRect;
-            if (!box.width || !box.height) return;
-            if (box.width === paneWidth && box.height === paneHeight) return;
-            paneWidth = box.width;
-            paneHeight = box.height;
-            wallMap.fit();
-        }).observe($('#map'));
+        /* #map itself is observed inside createMapSurface(), so the pane's own
+         * size changes (fonts, wrapped header, data cards) re-fit the map there
+         * instead of keeping a second observer here. */
     }
 
     tickClock(state.settings);

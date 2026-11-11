@@ -70,11 +70,13 @@ const STATIC = {
     '/shared/map/leaflet.mjs': ['map/leaflet.mjs', JS, 'shared'],
     '/shared/map/base-map.mjs': ['map/base-map.mjs', JS, 'shared'],
     '/shared/map/layers.mjs': ['map/layers.mjs', JS, 'shared'],
+    '/shared/map/borders.mjs': ['map/borders.mjs', JS, 'shared'],
+    '/shared/map/surface.mjs': ['map/surface.mjs', JS, 'shared'],
+    '/shared/map/markers.mjs': ['map/markers.mjs', JS, 'shared'],
     '/shared/map/terminator.mjs': ['map/terminator.mjs', JS, 'shared'],
     '/shared/monitoring/poller.mjs': ['monitoring/poller.mjs', JS, 'shared'],
     '/shared/propagation/forecast-view.mjs': ['propagation/forecast-view.mjs', JS, 'shared'],
-    '/data/land.js': ['land.js', 'application/javascript; charset=utf-8', 'data'],
-    '/data/borders.js': ['borders.js', 'application/javascript; charset=utf-8', 'data'],
+    '/shared/map/data/land.js': ['map/data/land.js', JS, 'shared'],
     '/vendor/leaflet/leaflet.css': ['leaflet.css', 'text/css; charset=utf-8', 'leaflet'],
     '/vendor/leaflet/leaflet.js': ['leaflet.js', 'application/javascript; charset=utf-8', 'leaflet'],
     '/vendor/leaflet/images/layers.png': ['layers.png', 'image/png', 'leaflet-img'],
@@ -87,7 +89,6 @@ const STATIC = {
 const BASES = {
     leaflet: path.join(ROOT, '..', 'vendor', 'leaflet'),
     'leaflet-img': path.join(ROOT, '..', 'vendor', 'leaflet', 'images'),
-    data: path.join(ROOT, '..', 'data'),
     shared: path.join(ROOT, '..', 'shared'),
     public: path.join(ROOT, '..')
 };

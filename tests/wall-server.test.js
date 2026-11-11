@@ -31,7 +31,11 @@ const MODULE_PATHS = [
     '/shared/map/leaflet.mjs',
     '/shared/map/base-map.mjs',
     '/shared/map/layers.mjs',
+    '/shared/map/borders.mjs',
+    '/shared/map/surface.mjs',
+    '/shared/map/markers.mjs',
     '/shared/map/terminator.mjs',
+    '/shared/map/data/land.js',
     '/shared/monitoring/poller.mjs',
     '/shared/propagation/forecast-view.mjs'
 ];
@@ -97,8 +101,7 @@ test('wall keeps only the six read API routes', () => {
 
 test('existing data and vendor whitelist entries remain exact', () => {
     for (const route of [
-        '/data/land.js',
-        '/data/borders.js',
+        '/shared/map/data/land.js',
         '/vendor/leaflet/leaflet.css',
         '/vendor/leaflet/leaflet.js',
         '/vendor/leaflet/images/layers.png',
