@@ -352,6 +352,7 @@ Group=${RUN_GROUP}
 WorkingDirectory=${APP_DIR}
 Environment=NODE_ENV=production
 Environment=NODE_OPTIONS=--max-old-space-size=256
+# 提醒：本项目按自有网络内自用开发，程序不做网络拦截；如无必要请勿公网暴露。
 ExecStart=${NODE_BIN} ${RED_JS} -u ${APP_DIR} -s ${SETTINGS_FILE}
 Restart=on-failure
 RestartSec=5
@@ -455,6 +456,7 @@ User=${RUN_USER}
 Group=${RUN_GROUP}
 WorkingDirectory=${APP_DIR}
 Environment=NODE_ENV=production
+# 提醒：只读大屏与主服务一样不拦截访问；如无必要请勿把端口映射到公网。
 Environment=BIGSCREEN_PORT=${WALL_PORT}
 Environment=BIGSCREEN_UPSTREAM=http://127.0.0.1:${APP_PORT}
 ExecStart=${NODE_BIN} ${WALL_JS}
@@ -485,8 +487,9 @@ EOF
         warn "Wall display did not answer on port ${WALL_PORT}. Check: ${WALL_LOG_CMD}"
     fi
 
-    # Open the port locally when ufw is actually enforcing rules. Cloud hosts
-    # additionally need the same port allowed in their security group.
+    # Open the read-only wall port locally when ufw is enforcing rules.
+    # This is for the operator's own LAN only; never forward it on the router
+    # or open it in a cloud security group.
     if [[ ${MODE} == "system" ]] && command -v ufw >/dev/null 2>&1 \
         && ${SUDO} ufw status 2>/dev/null | grep -q 'Status: active'; then
         ${SUDO} ufw allow "${WALL_PORT}/tcp" >/dev/null 2>&1 \
@@ -503,6 +506,14 @@ echo "------------------------------------------------------------------------"
 echo "  Dashboard      : http://${PRIMARY_IP}:${APP_PORT}/"
 echo "  Node-RED editor: http://${PRIMARY_IP}:${APP_PORT}/red"
 echo "  Wall display   : http://${PRIMARY_IP}:${WALL_PORT}/   (read-only, own service)"
+echo ""
+echo "  DEPLOYMENT BOUNDARY / 部署边界（仅提醒，不拦截）"
+echo "    This project is meant for the operator's own machine or a trusted LAN."
+echo "    It does not block or detect public/cloud deployments; where you run it"
+echo "    is your decision. Public exposure is discouraged: any device miscontrol,"
+echo "    data exposure or legal issue remains the operator's responsibility."
+echo "    本项目按自有网络内自用开发，程序不拦截也不判断部署环境；建议不要公网暴露。"
+echo "    公网/云服务器部署的后果由使用者自行承担，与项目及开发者无关。"
 echo ""
 echo "  Manage the service${MODE:+ (${MODE} mode)}:"
 if [[ ${MODE} == "user" ]]; then
@@ -524,7 +535,7 @@ else
     echo "    sudo systemctl restart ${WALL_SERVICE_NAME}"
     echo "    sudo journalctl -u ${WALL_SERVICE_NAME} -f"
 fi
-echo "    (cloud hosts: allow TCP ${WALL_PORT} in the security group as well)"
+echo "    (never open ${WALL_PORT} or ${APP_PORT} to the public internet)"
 echo ""
 echo "  Coexistence: an existing Node-RED (e.g. port 1880 / nodered service)"
 echo "  and ~/.node-red were not modified. Both instances run independently."
