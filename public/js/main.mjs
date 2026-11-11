@@ -11,9 +11,6 @@ import {createQsoPage} from './pages/qso-page.mjs';
 import {createRecordsPage} from './pages/records-page.mjs';
 import {createSettingsPage} from './pages/settings-page.mjs';
 import {createPropagationPage} from './pages/propagation-page.mjs';
-import {createAnalysisPage} from './pages/analysis-page.mjs?v=2.3.8';
-import {createMultiplierPage} from './pages/mult-page.mjs';
-import {createAlertsPage} from './pages/alerts-page.mjs';
 import {createOpPage} from './pages/op-page.mjs';
 
 async function start() {
@@ -29,9 +26,6 @@ async function start() {
     ctx.qso = createQsoPage(ctx);
     ctx.records = createRecordsPage(ctx);
     ctx.prop = createPropagationPage(ctx);
-    ctx.analysis = createAnalysisPage(ctx);
-    ctx.mult = createMultiplierPage(ctx);
-    ctx.alerts = createAlertsPage(ctx);
     ctx.op = createOpPage(ctx);
     ctx.settingsPage = createSettingsPage(ctx);
     ctx.saveSettings = () => ctx.settingsPage.save();
@@ -41,16 +35,13 @@ async function start() {
     ctx.spot.init();
     ctx.qso.init();
     ctx.prop.init();
-    ctx.analysis.init();
-    ctx.mult.init();
-    ctx.alerts.init();
     ctx.op.init();
     ctx.settingsPage.bind();
     ctx.settingsPage.applyLang();
     ctx.records.init();
     await ctx.settingsPage.loadConfig();
     void ctx.qso.loadStation();
-    void ctx.monitoring.start(ctx.spot.state.monitoring);
+    void ctx.monitoring.start(true);
 
     ctx.ws = subscribeWS({
         url: '/ws',
@@ -76,7 +67,6 @@ async function start() {
                     break;
                 case 'alert':
                     ctx.qso.showRuleAlert(message);
-                    ctx.alerts.handleAlert(message);
                     break;
                 default:
                     ctx.spot.handleSpot(message);
