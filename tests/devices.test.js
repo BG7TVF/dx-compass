@@ -814,6 +814,114 @@ test('device protocol config is validated and secrets stay out of the DTO', () =
     }, {devices: []}).error, 'invalid-config-channel');
 });
 
+const relay = require('../lib/devices/relay.js');
+
+test('relay dry contacts post channel actions as JSON', async () => {
+    const calls = [];
+    relay.setFetchFactory(async (url, init) => {
+        calls.push({url, init});
+        return {ok: true, status: 200};
+    });
+    const matrix = {
+        id: 'matrix-1',
+        type: 'matrix',
+        config: {relay_url: 'http://relay.local/out', relay_token: 'tok', pulse_ms: 250}
+    };
+
+    let result = await relay.pulse(matrix, 3);
+    assert.equal(result.ok, true);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].url, 'http://relay.local/out');
+    assert.equal(calls[0].init.method, 'POST');
+    assert.equal(calls[0].init.headers['X-Relay-Token'], 'tok');
+    assert.deepEqual(JSON.parse(calls[0].init.body), {channel: 3, action: 'pulse', pulse_ms: 250});
+
+    await relay.on(matrix, 1);
+    assert.deepEqual(JSON.parse(calls[1].init.body), {channel: 1, action: 'on'});
+    await relay.off(matrix, 2);
+    assert.deepEqual(JSON.parse(calls[2].init.body), {channel: 2, action: 'off'});
+
+    // 未配置端点与非法通道都不发请求。
+    result = await relay.pulse({id: 'm2', type: 'matrix', config: {}}, 1);
+    assert.equal(result.status, 400);
+    assert.equal(result.error, 'transport-not-configured');
+    result = await relay.pulse(matrix, 300);
+    assert.equal(result.error, 'unknown-channel');
+
+    // 非 2xx 视为通信失败。
+    relay.setFetchFactory(async () => ({ok: false, status: 503}));
+    result = await relay.pulse(matrix, 3);
+    assert.equal(result.status, 502);
+    assert.equal(result.error, 'transport-error');
+    relay.reset();
+});
+
+test('relay request times out instead of hanging', async () => {
+    relay.setFetchFactory((url, init) => new Promise((resolve, reject) => {
+        init.signal.addEventListener('abort', () => reject(new Error('aborted')));
+    }));
+    const result = await relay.pulse({id: 'm1', type: 'matrix', config: {relay_url: 'http://relay.local/out'}}, 1);
+    assert.equal(result.status, 504);
+    assert.equal(result.error, 'transport-timeout');
+    relay.reset();
+});
+
+test('select drives the relay with the mapped channel and records the port', async () => {
+    commands.resetForTests();
+    commands.setTransports({select: context => relay.pulse(context.device, context.channel, context.pulseMs)});
+    const calls = [];
+    relay.setFetchFactory(async (url, init) => {
+        calls.push(JSON.parse(init.body));
+        return {ok: true, status: 200};
+    });
+    const now = new Date('2026-03-01T12:00:00.000Z');
+    const globalCtx = makeContext();
+    const rows = [deviceRow({
+        id: 'matrix-1', name: 'Matrix', type: 'matrix', bands: '',
+        config_json: JSON.stringify({
+            relay_url: 'http://relay.local/out',
+            pulse_ms: 300,
+            channels: {'IN1:1': 4, '1': 5}
+        })
+    })];
+    const headers = {'X-DX-Seat': 'OP-A'};
+
+    const result = await service.handleCommand(globalCtx, rows, 'matrix-1',
+        {command: 'select', port: 'IN1', outlet: '1'}, headers, now);
+    assert.equal(result.status, 202);
+    assert.equal(result.payload.channel, 4);
+    assert.deepEqual(calls, [{channel: 4, action: 'pulse', pulse_ms: 300}]);
+    assert.equal(runtime.stateOf(globalCtx, 'matrix-1').ports.IN1, '1');
+
+    // 未配置端口映射时只按出口号回退。
+    const fallback = commands.channelFor(storage.devices.toDevice(rows[0]), 'IN2', '1');
+    assert.equal(fallback, 5);
+    // 完全没有映射的出口被拒绝。
+    assert.equal(commands.channelFor(storage.devices.toDevice(rows[0]), 'IN2', '9'), null);
+    relay.reset();
+});
+
+test('commands only apply to matching device types', async () => {
+    fakeTransports();
+    const now = new Date('2026-03-01T12:00:00.000Z');
+    const globalCtx = makeContext();
+    const rows = [
+        deviceRow({id: 'rotator-1', type: 'rotator', bands: ''}),
+        deviceRow({id: 'matrix-1', type: 'matrix', bands: ''})
+    ];
+    const headers = {'X-DX-Seat': 'OP-A'};
+
+    let result = await service.handleCommand(globalCtx, rows, 'matrix-1',
+        {command: 'rotate', azimuth: 45}, headers, now);
+    assert.equal(result.status, 400);
+    assert.equal(result.payload.error, 'invalid-device-type');
+
+    result = await service.handleCommand(globalCtx, rows, 'rotator-1',
+        {command: 'select', port: 'IN1', outlet: '1'}, headers, now);
+    assert.equal(result.status, 400);
+    assert.equal(result.payload.error, 'invalid-device-type');
+});
+
 function fakeSocket(handler) {
     const {EventEmitter} = require('node:events');
     const socket = new EventEmitter();

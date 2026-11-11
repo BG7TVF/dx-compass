@@ -48,7 +48,13 @@ const ERROR_KEYS = {
     'transport-not-configured': 'dev.error.transport-not-configured',
     'tx-active': 'dev.error.tx-active',
     'invalid-config': 'dev.error.invalid-config',
-    'invalid-config-channels': 'dev.error.invalid-config-channels'
+    'invalid-config-channels': 'dev.error.invalid-config-channels',
+    'invalid-device-type': 'dev.error.invalid-device-type',
+    'invalid-port': 'dev.error.invalid-port',
+    'invalid-outlet': 'dev.error.invalid-outlet',
+    'unknown-channel': 'dev.error.unknown-channel',
+    'invalid-direction': 'dev.error.invalid-direction',
+    'unknown-command': 'dev.error.unknown-command'
 };
 
 export function createDevicesPage(ctx) {
@@ -299,6 +305,15 @@ export function createDevicesPage(ctx) {
                     <label>${t('dev.control.target')}<input id="devCtrlAzimuth" type="number" min="0" max="360" step="1" inputmode="numeric"></label>
                     <button class="dev-btn primary" type="button" data-cmd="rotate">${t('dev.control.rotate')}</button>
                     <button class="dev-btn" type="button" data-cmd="stop">${t('dev.control.stop')}</button>
+                </div>
+                ${token}${error}${seatNote}`;
+        }
+        if (device.type === 'matrix' || device.type === 'switch') {
+            return `<h3>${t('dev.control.title')}</h3>${status}
+                <div class="dev-ctrl-row">
+                    <label>${t('dev.control.port')}<input id="devCtrlPort" maxlength="32"></label>
+                    <label>${t('dev.control.outlet')}<input id="devCtrlOutlet" maxlength="32"></label>
+                    <button class="dev-btn primary" type="button" data-cmd="select">${t('dev.control.select')}</button>
                 </div>
                 ${token}${error}${seatNote}`;
         }
@@ -624,6 +639,14 @@ export function createDevicesPage(ctx) {
                 void sendCommand(device, {command: 'rotate', azimuth: input ? Number(input.value) : NaN});
             } else if (cmd === 'stop') {
                 void sendCommand(device, {command: 'stop'});
+            } else if (cmd === 'select') {
+                const port = $('#devCtrlPort');
+                const outlet = $('#devCtrlOutlet');
+                void sendCommand(device, {
+                    command: 'select',
+                    port: port ? port.value : '',
+                    outlet: outlet ? outlet.value : ''
+                });
             }
         });
         $('#devForm').addEventListener('submit', submitForm);
