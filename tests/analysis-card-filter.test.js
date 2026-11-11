@@ -121,8 +121,8 @@ function reportRows() {
     add(291, 'K1ABC', 10);
     add(224, 'F1XX', -10);
     rows.push({
-        spot_call: 'KH6ZZ', de: 'N1AA', band: '40m', snr: -10,
-        comment: 'PSKR FT8 -10 dB', mode: 'DIGI', timestamp: '2026-11-10T12:00:10Z',
+        spot_call: 'KH6ZZ', de: 'N1AA', band: '40m', snr: -20,
+        comment: 'PSKR FT8 -20 dB', mode: 'DIGI', timestamp: '2026-11-10T12:00:10Z',
         sender_grid: 'BL11', receiver_grid: 'OL42AA',
         dxcc_sender: 110, dxcc_receiver: 318,
         lat: 22, lon: 110, dx_lat: 21, dx_lon: 158
@@ -146,8 +146,11 @@ test('真实研判结果：白名单保留双向可通，其余三类分别计�
     assert.equal(strong.modes.CW.lower, 'workable');
     assert.equal(strong.modes.SSB.lower, 'workable');
     assert.equal(soft.modes.CW.lower, 'marginal');
-    // 只有一条单方向报告：该方向样本不足，另一方向完全没有数据。
-    assert.equal(noData.directions.aToB.available, false);
+    // 只有一条单方向报告：该方向现在也出结论（样本量标注在 samples/sparse），
+    // 但另一方向完全没有数据，展示层仍归入 no-data。
+    assert.equal(noData.directions.aToB.available, true);
+    assert.equal(noData.directions.aToB.samples, 1);
+    assert.equal(noData.evidence.level, 'single-direction');
     assert.equal(noData.directions.bToA, null);
 
     const filtered = visiblePathRows(report.rows);

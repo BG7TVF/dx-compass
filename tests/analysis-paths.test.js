@@ -224,7 +224,7 @@ test('本台报告混入后区域中位数不变，且标记未计入', () => {
     assert.ok(!report.local.neighbors.some(item => item.call === 'BG7TV'));
 });
 
-test('本地邻近台不足时输出样本不足，不退回用本台数据凑', () => {
+test('单站单方向也出结论，样本量照实标注、不退回用本台数据凑', () => {
     const rows = [
         aToB(-2, 'N1AA', 'OL42AA', '2026-11-10T12:00:10Z'),
         aToB(-3, 'N1AA', 'OL42AA', '2026-11-10T12:01:10Z'),
@@ -236,25 +236,76 @@ test('本地邻近台不足时输出样本不足，不退回用本台数据凑',
     ];
     const report = analyze(rows);
     const rowOut = report.rows[0];
-    assert.equal(rowOut.directions.aToB.available, false);
-    assert.equal(rowOut.directions.aToB.insufficient, true);
-    assert.equal(rowOut.directions.aToB.reason, 'too-few-stations');
+    assert.equal(rowOut.directions.aToB.available, true);
     assert.equal(rowOut.directions.aToB.stations, 1);
+    assert.equal(rowOut.directions.aToB.samples, 5);
+    assert.equal(rowOut.directions.bToA, null);
+    assert.equal(rowOut.evidence.level, 'single-direction');
+    assert.deepEqual(rowOut.evidence.stations, {aToB: 1, bToA: 0});
+    assert.deepEqual(rowOut.evidence.reports, {aToB: 5, bToA: 0});
     assert.equal(rowOut.confidence.level, 'low');
-    assert.ok(rowOut.confidence.notes.includes('a-to-b-insufficient'));
+    assert.ok(rowOut.confidence.notes.includes('single-direction'));
     assert.equal(rowOut.self.aToB.samples, 1);
 });
 
-test('报告少于 5 条同样判样本不足', () => {
+test('每个方向 1 条报告即可出结论，不再要求 5 条', () => {
     const rows = [
         aToB(-2, 'N1AA', 'OL42AA', '2026-11-10T12:00:10Z'),
         aToB(-3, 'N2BB', 'OL42BB', '2026-11-10T12:01:10Z'),
         aToB(-4, 'N3CC', 'OL42CC', '2026-11-10T12:02:10Z')
     ];
-    const a = analyze(rows).rows[0].directions.aToB;
-    assert.equal(a.available, false);
-    assert.equal(a.reason, 'too-few-reports');
+    const rowOut = analyze(rows).rows[0];
+    const a = rowOut.directions.aToB;
+    assert.equal(a.available, true);
     assert.equal(a.samples, 3);
+    assert.equal(a.stations, 3);
+    assert.equal(rowOut.evidence.level, 'single-direction');
+});
+
+test('双向各 1 条即成立，证据强度标为单站佐证并保持模式门限', () => {
+    const rows = [
+        aToB(-2, 'N1AA', 'OL42AA', '2026-11-10T12:00:10Z'),
+        bToA(-2, 'N1AA', 'OL42AA', '2026-11-10T12:00:20Z')
+    ];
+    const rowOut = analyze(rows).rows[0];
+    assert.equal(rowOut.directions.aToB.available, true);
+    assert.equal(rowOut.directions.bToA.available, true);
+    assert.equal(rowOut.directions.aToB.samples, 1);
+    assert.equal(rowOut.directions.bToA.samples, 1);
+    assert.equal(rowOut.directions.aToB.sparse, true);
+    // 1 dB 的原始中位数 + 3 dB 标称 → CW 10 可通、SSB −5 不可通，门限不放宽。
+    assert.equal(rowOut.modes.CW.advice, 'workable');
+    assert.equal(rowOut.modes.SSB.advice, 'unworkable');
+    assert.equal(rowOut.evidence.level, 'single-station');
+    assert.equal(rowOut.evidence.consistent, true);
+    assert.deepEqual(rowOut.evidence.stations, {aToB: 1, bToA: 1});
+    assert.deepEqual(rowOut.evidence.reports, {aToB: 1, bToA: 1});
+});
+
+test('双向多站：证据强度标为 multi-station，计数与一致性与判定对齐', () => {
+    const rows = [];
+    ['N1AA', 'N2BB', 'N3CC'].forEach((call, index) => {
+        const grid = 'OL42' + call.slice(2);
+        rows.push(aToB(-2, call, grid, `2026-11-10T12:0${index}:10Z`));
+        rows.push(bToA(-2, call, grid, `2026-11-10T12:0${index}:20Z`));
+    });
+    const rowOut = analyze(rows).rows[0];
+    assert.equal(rowOut.evidence.level, 'multi-station');
+    assert.equal(rowOut.evidence.consistent, true);
+    assert.deepEqual(rowOut.evidence.stations, {aToB: 3, bToA: 3});
+    assert.deepEqual(rowOut.evidence.reports, {aToB: 3, bToA: 3});
+});
+
+test('聚合窗口默认 15 分钟，可配置并夹紧到 1–60 分钟', () => {
+    assert.equal(paths.DEFAULT_WINDOW_MINUTES, 15);
+    assert.equal(paths.clampWindowMinutes(undefined), 15);
+    assert.equal(paths.clampWindowMinutes(0), 15);
+    assert.equal(paths.clampWindowMinutes('5'), 5);
+    assert.equal(paths.clampWindowMinutes(90), 60);
+    assert.equal(analyze([], {windowMinutes: 5}).windowMinutes, 5);
+    assert.deepEqual(analyze([]).windowRange, {min: 1, max: 60, default: 15});
+    assert.equal(analyze([]).thresholds.minStationsPerDirection, 1);
+    assert.equal(analyze([]).thresholds.minReportsPerDirection, 1);
 });
 
 test('目标区域按 DXCC 优先、缺 DXCC 时退回 4 位网格前缀', () => {
@@ -348,9 +399,9 @@ test('失效邻台的历史报告不进入统计与贡献列表', () => {
     // 只有 N1AA 的 2 条报告进入统计；N2BB / N3CC 虽有历史报告，但已失效。
     assert.equal(a.samples, 2);
     assert.equal(a.stations, 1);
-    assert.equal(a.available, false);
-    assert.equal(a.reason, 'too-few-stations');
-    assert.deepEqual(a.contributors, []);
+    assert.equal(a.available, true);
+    assert.equal(report.rows[0].evidence.level, 'single-station');
+    assert.deepEqual(a.contributors.map(item => item.call), ['N1AA']);
     assert.deepEqual(report.local.neighbors.map(item => item.call), ['N1AA']);
     assert.ok(!(report.rows[0].remoteCalls || []).includes('N2BB'));
 });
@@ -492,6 +543,23 @@ test('path-service 全自动：准备两段查询、并入邻台、补时间窗'
     assert.equal(pathService.complete(noCall, []).error, 'call-required');
     const noGrid = pathService.prepare({}, new Ctx({uiSettings: {myCall: 'BG7TV'}}));
     assert.equal(noGrid.error, 'grid-required');
+});
+
+test('path-service 按 hours 决定回看范围，窗口缺省取 15 分钟', () => {
+    const global = new Ctx({
+        uiSettings: {myCall: 'BG7TV', grid: 'OL42ET'},
+        monitoredCalls: []
+    });
+    const defaults = pathService.prepare({}, global);
+    assert.equal(defaults.request.windowMinutes, 15);
+    const span = (prepared) => (Date.parse(prepared.request.to) -
+        Date.parse(prepared.request.from)) / 3600000;
+    assert.equal(Math.round(span(defaults)), 6);
+    const op = pathService.prepare({hours: '2'}, global);
+    assert.equal(Math.round(span(op)), 2);
+    const clamped = pathService.prepare({hours: '99'}, global);
+    assert.equal(Math.round(span(clamped)), pathService.allowedWindowHours().maxHours);
+    assert.equal(pathService.allowedWindowHours().defaultHours, 6);
 });
 
 test('页面无需任何输入即可产出结果：prepare({}) 直接可用', () => {
