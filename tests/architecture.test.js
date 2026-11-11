@@ -129,7 +129,7 @@ test('multi-statement function nodes emit every message on output 1', () => {
     const flow = JSON.parse(read('flow.json'));
     const expected = {
         'Add missing columns': /return \[topics\.map\(/,
-        'Create neighbors schema': /return \[dx\.storage\.schema\.createNeighbors\(\)\.map\(/,
+        'Create neighbors schema': /return \[list\.map\(/,
         'Build retention SQL': /return \[statements\.map\(/
     };
     for (const [name, pattern] of Object.entries(expected)) {

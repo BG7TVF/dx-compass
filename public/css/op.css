@@ -134,6 +134,21 @@
     padding: 0 1px;
 }
 .op-advice-close:hover { color: var(--text); }
+/* Rule-engine cards: the reason and the missing inputs are visible, not tooltips. */
+.op-advice-item { white-space: normal; max-width: 48ch; }
+.op-advice-why {
+    font-style: normal;
+    color: var(--text-dim);
+    font-size: 10px;
+    padding-left: 6px;
+    border-left: 1px solid var(--border);
+}
+.op-advice-missing {
+    font-style: normal;
+    color: var(--red, #e06c75);
+    font-size: 9px;
+    letter-spacing: .02em;
+}
 
 .op-body {
     min-width: 0;

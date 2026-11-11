@@ -102,6 +102,16 @@ test('合计与完成度基于现行 DXCC 实体数', async () => {
     assert.equal(result.totals.completion, Number((4 / result.activeEntities).toFixed(4)));
 });
 
+test('totals.perBand 新增每波段汇总，原有字段保持不变', async () => {
+    const result = await matrix({mode: 'ALL'});
+    assert.deepEqual(result.totals.perBand['20m'], {new: 1, worked: 1, pending: 1, slots: 3});
+    assert.deepEqual(result.totals.perBand['15m'], {new: 1, worked: 0, pending: 0, slots: 1});
+    assert.deepEqual(result.totals.perBand['10m'], {new: 1, worked: 0, pending: 0, slots: 1});
+    assert.equal(result.totals.perBand.ALL, undefined);
+    assert.equal(result.totals.entities, 5);
+    assert.equal(result.totals.completed, 4);
+});
+
 test('模式筛选只保留 CW / SSB / DIGI 对应 QSO', async () => {
     const cw = await matrix({mode: 'CW'});
     assert.equal(entity(cw, 291).cells['20m'].status, 'worked');

@@ -17,6 +17,7 @@ import {getPropSnapshot, selectForecast} from '../../shared/data/propagation.mjs
 import {fetchPaths, fetchEstimate} from '../../shared/data/analysis.mjs';
 import {fetchMultipliers} from '../../shared/data/multipliers.mjs';
 import {fetchCallsigns, checkCallsign} from '../../shared/data/callsigns.mjs';
+import {fetchAdvice} from '../../shared/data/advice.mjs';
 import {buildOpponents} from '../../bigscreen/wall-opponents.mjs';
 import {bandConditionCells, spaceWeatherCells, bandOf} from '../../bigscreen/wall-cards.mjs';
 import {bearing} from '../../shared/geo/coordinates.mjs';
@@ -58,8 +59,10 @@ export function createOpPage(ctx) {
         review: loadReview(),
         opponentCache: new Map(),
         adviceDismissed: new Set(),
+        adviceEngine: null,
         checking: null,
         multTimer: null,
+        adviceTimer: null,
         rotorTarget: null,
         timers: []
     };
@@ -602,10 +605,55 @@ export function createOpPage(ctx) {
         return out;
     }
 
+    function adviceLang() {
+        return ctx.i18n && ctx.i18n.language === 'en' ? 'en' : 'zh';
+    }
+
+    function pickText(value) {
+        if (!value) return '';
+        if (typeof value === 'string') return value;
+        return value[adviceLang()] || value.zh || value.en || '';
+    }
+
+    /* Server-side rule engine output. When it is live it replaces the local
+       RUN-idle reminder, so there is only one reminder path in the OP view. */
+    function engineAdvice() {
+        const data = state.adviceEngine;
+        if (!data || !data.ok) return [];
+        const out = [];
+        const gate = data.gates || {};
+        if (gate.blockReason) {
+            const key = 'gate|' + (gate.blockBandChange || 'lock');
+            if (!state.adviceDismissed.has(key)) {
+                out.push({kind: 'run', key, text: pickText(gate.blockReason), why: '', missing: []});
+            }
+        }
+        for (const advice of data.advice || []) {
+            const key = 'adv|' + advice.id + '|' +
+                String((advice.evidence && advice.evidence.band) || '');
+            if (state.adviceDismissed.has(key)) continue;
+            out.push({
+                kind: advice.group === 'G' ? 'run' : (advice.group === 'B' ? 'mult' : 'run'),
+                key,
+                text: pickText(advice.title) || advice.action,
+                why: pickText(advice.detail),
+                missing: Array.isArray(advice.missing) ? advice.missing : [],
+                confidence: advice.confidence
+            });
+            if (out.length >= 4) break;
+        }
+        return out;
+    }
+
+    function engineLive() {
+        return !!(state.adviceEngine && state.adviceEngine.ok && !state.adviceEngine.degraded);
+    }
+
     function renderAdvice() {
         const host = $('#opAdvice');
         if (!host) return;
-        const list = multiplierAdvice().concat(runIdleAdvice());
+        const list = engineAdvice().concat(multiplierAdvice())
+            .concat(engineLive() ? [] : runIdleAdvice());
         if (!list.length) {
             host.classList.add('hidden');
             host.innerHTML = '';
@@ -613,10 +661,28 @@ export function createOpPage(ctx) {
         }
         host.classList.remove('hidden');
         host.innerHTML = '<span class="op-advice-title">' + esc(t('op.advice.title')) + '</span>' +
-            list.map(item => '<span class="op-advice-item ' + item.kind + '"><span>' +
-                esc(item.text) + '</span><button type="button" class="op-advice-close" ' +
+            list.map(item => '<span class="op-advice-item ' + item.kind + '">' +
+                '<span class="op-advice-text">' + esc(item.text) + '</span>' +
+                (item.why ? '<i class="op-advice-why">' + esc(item.why) + '</i>' : '') +
+                (item.missing && item.missing.length
+                    ? '<i class="op-advice-missing">⚠ ' + esc(item.missing.join(',')) + '</i>' : '') +
+                '<button type="button" class="op-advice-close" ' +
                 'data-op-advice="' + esc(item.key) + '" title="' + esc(t('op.advice.dismiss')) +
                 '">×</button></span>').join('');
+    }
+
+    async function loadAdvice() {
+        if (ctx.settings.adviceEnabled === false) {
+            state.adviceEngine = null;
+            renderAdvice();
+            return;
+        }
+        try {
+            state.adviceEngine = await fetchAdvice();
+        } catch (error) {
+            state.adviceEngine = null;
+        }
+        renderAdvice();
     }
 
     function statusRank(status) {
@@ -853,6 +919,13 @@ export function createOpPage(ctx) {
         }
         renderMultipliers();
         renderAdvice();
+    }
+
+    function scheduleAdviceRefresh() {
+        clearTimeout(state.adviceTimer);
+        state.adviceTimer = setTimeout(() => {
+            if (state.active) loadAdvice();
+        }, 3000);
     }
 
     function scheduleMultiplierRefresh() {
@@ -1099,6 +1172,7 @@ export function createOpPage(ctx) {
         loadPropagation();
         loadPaths();
         loadMultipliers();
+        loadAdvice();
         loadMySpots();
         loadOpponents();
         state.timers.forEach(timer => clearInterval(timer));
@@ -1121,7 +1195,9 @@ export function createOpPage(ctx) {
             setInterval(() => { if (state.active) loadPaths(); }, 10000),
             setInterval(() => { if (state.active) loadOpponents(); }, 60000),
             setInterval(() => { if (state.active) loadPropagation(); }, 120000),
-            setInterval(() => { if (state.active) loadMultipliers(); }, 60000)
+            setInterval(() => { if (state.active) loadMultipliers(); }, 60000),
+            setInterval(() => { if (state.active) loadAdvice(); },
+                Math.max(15, Number(ctx.settings.adviceRefreshSec) || 60) * 1000)
         ];
     }
 
@@ -1132,6 +1208,7 @@ export function createOpPage(ctx) {
         state.timers.forEach(timer => clearInterval(timer));
         state.timers = [];
         clearTimeout(state.multTimer);
+        clearTimeout(state.adviceTimer);
     }
 
     function handleStation() {
@@ -1156,6 +1233,7 @@ export function createOpPage(ctx) {
         renderAdvice();
         scheduleSuspects();
         scheduleMultiplierRefresh();
+        scheduleAdviceRefresh();
     }
 
     function handleDelete(message) {
@@ -1171,6 +1249,7 @@ export function createOpPage(ctx) {
         renderBottom();
         renderAdvice();
         scheduleMultiplierRefresh();
+        scheduleAdviceRefresh();
     }
 
     function handleSpot(message) {

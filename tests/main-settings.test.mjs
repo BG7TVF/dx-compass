@@ -35,7 +35,7 @@ test('main settings sanitizer applies defaults and one-time Mercator migration',
     assert.deepEqual(fallback, defaultSettings());
     const migrated = sanitizeSettings({cfgV: 1, propProj: 'mercator'});
     assert.equal(migrated.propProj, 'robinson');
-    assert.equal(migrated.cfgV, 3);
+    assert.equal(migrated.cfgV, 4);
     const explicit = sanitizeSettings({cfgV: 2, propProj: 'mercator'});
     assert.equal(explicit.propProj, 'mercator');
 });

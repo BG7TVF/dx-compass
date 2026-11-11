@@ -30,12 +30,19 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
     'use strict';
 
-    const SCHEMA_VERSION = 3;
+    const SCHEMA_VERSION = 4;
 
     const UI_LANGUAGES = ['zh', 'en', 'de', 'fr', 'es', 'pt', 'ru', 'it', 'ar', 'ko', 'ja'];
     const THEMES = ['dark', 'light', 'ocean', 'amber'];
     const TILE_PROVIDERS = ['osm', 'amap'];
-    const CONTEST_CATEGORIES = ['SO1R', 'SO2R', 'MS', 'MM'];
+    const CONTEST_CATEGORIES = ['SO1R', 'SO2R', 'MS', 'M2', 'MM'];
+    const CONTEST_TYPES = ['AUTO', 'CQWW', 'CQWPX', 'CQWW_RTTY', 'ARRL_DX', 'CQ160', 'WAE', 'IARU', 'OTHER'];
+    const POWER_CLASSES = ['UNKNOWN', 'HP', 'LP', 'QRP'];
+    const MULT_MODES = ['dxcc-per-band', 'dxcc-total', 'wpx'];
+    const BAND_CHANGE_RULES = ['none', 'time-lock', 'hourly-quota'];
+    const MS_ROLES = ['none', 'run', 'mult'];
+    const SINGLE_BANDS = ['', '160m', '80m', '40m', '30m', '20m', '17m', '15m', '12m', '10m', '6m'];
+    const ADVICE_LEVELS = ['low', 'medium', 'high'];
     const WALL_LAYERS = ['prop', 'aurora', 'weather', 'qso', 'myspot', 'dxspot'];
     const WALL_MODES = ['all', 'cycle'];
     const PROP_PROJECTIONS = ['mercator', 'azimuthal', 'robinson'];
@@ -457,6 +464,11 @@
             label: 'QSO retention (days, 0 = keep)', zh: 'QSO 保留（天，0 永久）',
             desc: 'Hourly purge of the qsos table; 0 keeps everything.'
         }),
+        field('retentionActivityDays', 'data', 'int', 7, {
+            min: 0, max: 3650, scope: 'server', wired: true,
+            label: 'Band activity retention (days, 0 = keep)', zh: '波段活跃度保留（天，0 永久）',
+            desc: 'Hourly purge of the 5-minute band_activity buckets; 0 keeps everything.'
+        }),
         field('autoPurge', 'data', 'bool', true, {
             scope: 'server', wired: true, label: 'Automatic purge', zh: '自动清理',
             desc: 'Enable the hourly retention job.'
@@ -570,6 +582,60 @@
             maxLen: 300, allowEmpty: true, scope: 'both',
             label: 'Rules link', zh: '规则链接',
             desc: 'Official rules page entered by the operator.'
+        }),
+        field('contestType', 'contest', 'enum', 'AUTO', {
+            values: CONTEST_TYPES, scope: 'both',
+            label: 'Contest rules family', zh: '赛事规则族',
+            desc: 'Decides which tactical rules apply. AUTO derives it from the contest name; explicit wins when set.'
+        }),
+        field('powerClass', 'contest', 'enum', 'UNKNOWN', {
+            values: POWER_CLASSES, scope: 'both',
+            label: 'Power class', zh: '功率组别',
+            desc: 'HP <= 1500 W, LP <= 100 W, QRP <= 5 W. UNKNOWN never gates advice.'
+        }),
+        field('contestSingleBand', 'contest', 'enum', '', {
+            values: SINGLE_BANDS, scope: 'both',
+            label: 'Single-band entry', zh: '单波段参赛',
+            desc: 'Empty = all-band entry; otherwise the only band allowed by the entry category.'
+        }),
+        field('multMode', 'contest', 'enum', 'dxcc-per-band', {
+            values: MULT_MODES, scope: 'both',
+            label: 'Multiplier counting', zh: '乘数计法',
+            desc: 'dxcc-per-band / dxcc-total / wpx. Legacy multPerBand is kept in sync by migration.'
+        }),
+        field('bandChangeRule', 'contest', 'enum', 'none', {
+            values: BAND_CHANGE_RULES, scope: 'both',
+            label: 'Band-change rule', zh: '换波段约束',
+            desc: 'none = unlimited; time-lock = 10 minutes; hourly-quota = N changes per clock hour.'
+        }),
+        field('bandChangeLimit', 'contest', 'int', 0, {
+            min: 0, max: 60, scope: 'both',
+            label: 'Band-change quota (per hour)', zh: '每小时换波段上限',
+            desc: 'Used when bandChangeRule=hourly-quota; 0 falls back to the contest default (MS 10, M2 8).'
+        }),
+        field('msRole', 'contest', 'enum', 'none', {
+            values: MS_ROLES, scope: 'both',
+            label: 'Multi-op role', zh: '多人台角色',
+            desc: 'run / mult / none; affects whether RUN-idle and multiplier-gap advice applies.'
+        }),
+        field('adviceEnabled', 'contest', 'bool', true, {
+            scope: 'both', label: 'Real-time advice', zh: '实时决策辅助',
+            desc: 'Master switch for the /api/advice rule engine and the OP advice card.'
+        }),
+        field('adviceRefreshSec', 'contest', 'int', 60, {
+            min: 15, max: 600, scope: 'both',
+            label: 'Advice refresh (s)', zh: '建议刷新（秒）',
+            desc: 'OP view polling interval for /api/advice.'
+        }),
+        field('adviceMinConfidence', 'contest', 'enum', 'low', {
+            values: ADVICE_LEVELS, scope: 'both',
+            label: 'Minimum advice confidence', zh: '建议最低置信度',
+            desc: 'low/medium/high; higher hides weak-evidence rules.'
+        }),
+        field('adviceConfig', 'contest', 'string', '', {
+            maxLen: 2000, allowEmpty: true, scope: 'server',
+            label: 'Advice thresholds (JSON)', zh: '建议阈值（JSON）',
+            desc: 'D-level threshold overrides, e.g. {"stayRateRatio":0.75,"idleMin":10}. Invalid JSON falls back to defaults.'
         }),
 
         // ---- prop / Propagation
@@ -789,6 +855,10 @@
         // v2 introduced Mercator as a valid projection. Older data still used
         // Mercator as the implicit default and must be moved to Robinson.
         if (version < 2 && raw.propProj === 'mercator') raw.propProj = 'robinson';
+        // v4 引入 multMode；旧配置只有布尔 multPerBand，false 等价于“总计”。
+        if (version < 4 && raw.multMode === undefined && raw.multPerBand === false) {
+            raw.multMode = 'dxcc-total';
+        }
         raw.cfgV = SCHEMA_VERSION;
         return raw;
     }
@@ -842,6 +912,9 @@
         const ext = collectExt(raw);
         if (ext) out._ext = ext;
         if (Number.isInteger(raw._rev) && raw._rev >= 0) out._rev = raw._rev;
+        // 兼容层：multPerBand 仍是 /api/multipliers 的入参，跟随 multMode 同步。
+        if (out.multMode === 'dxcc-total') out.multPerBand = false;
+        else if (out.multMode === 'dxcc-per-band') out.multPerBand = true;
         out.cfgV = SCHEMA_VERSION;
         return {settings: out, warnings, rejected};
     }
@@ -878,6 +951,7 @@
         const ext = collectExt(raw);
         if (ext) values._ext = mergeDeep(values._ext || {}, ext);
         if (Number.isInteger(raw._rev)) values._rev = raw._rev;
+        if (values.multMode !== undefined) values.multPerBand = values.multMode !== 'dxcc-total';
         return {values, warnings, rejected, unknown};
     }
 
@@ -891,6 +965,13 @@
         THEMES,
         TILE_PROVIDERS,
         CONTEST_CATEGORIES,
+        CONTEST_TYPES,
+        POWER_CLASSES,
+        MULT_MODES,
+        BAND_CHANGE_RULES,
+        MS_ROLES,
+        SINGLE_BANDS,
+        ADVICE_LEVELS,
         WALL_LAYERS,
         WALL_MODES,
         PROP_PROJECTIONS,

@@ -315,7 +315,7 @@
         "type": "function",
         "z": "dxc0000000000001",
         "name": "Create neighbors schema",
-        "func": "const dx = global.get('dx');\nreturn [dx.storage.schema.createNeighbors().map(topic => ({topic}))];",
+        "func": "const dx = global.get('dx');\nconst s = dx.storage.schema;\nconst list = s.createNeighbors().concat(s.createActivity ? s.createActivity() : []);\nreturn [list.map(topic => ({topic}))];",
         "outputs": 1,
         "noerr": 0,
         "initialize": "",
@@ -4072,5 +4072,173 @@
         "wires": [
             []
         ]
+    },
+    {
+        "id": "dxadv00000000a1",
+        "type": "http in",
+        "z": "dxc0000000000001",
+        "name": "GET /api/advice",
+        "url": "/api/advice",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 130,
+        "y": 1960,
+        "wires": [
+            [
+                "dxadv00000000a2"
+            ]
+        ]
+    },
+    {
+        "id": "dxadv00000000a2",
+        "type": "function",
+        "z": "dxc0000000000001",
+        "name": "Prepare advice",
+        "func": "const dx = global.get('dx');\nconst settings = dx.settings.runtime(global);\nconst prepared = dx.advice.prepare(msg.req.query, settings);\nmsg.topic = prepared.sql;\nmsg.adviceRequest = prepared.request;\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 370,
+        "y": 1960,
+        "wires": [
+            [
+                "dxadv00000000a3"
+            ]
+        ]
+    },
+    {
+        "id": "dxadv00000000a3",
+        "type": "sqlite",
+        "z": "dxc0000000000001",
+        "mydb": "dxc0000000000027",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "Query advice data",
+        "x": 600,
+        "y": 1960,
+        "wires": [
+            [
+                "dxadv00000000a4"
+            ]
+        ]
+    },
+    {
+        "id": "dxadv00000000a4",
+        "type": "function",
+        "z": "dxc0000000000001",
+        "name": "Build advice",
+        "func": "const dx = global.get('dx');\nconst prepared = {ok: true, error: null, request: msg.adviceRequest};\nconst state = dx.qso.stationState(global);\nconst result = dx.advice.complete(prepared, msg.payload, {\n    prop: global.get('propData') || {},\n    radio: state.radio || {},\n    score: state.score || null,\n    cooldown: global.get('adviceCooldown') || {}\n});\nglobal.set('adviceCooldown', result.cooldown || {});\ndelete msg.adviceRequest;\nmsg.headers = {'Content-Type': 'application/json'};\nmsg.statusCode = result.ok ? 200 : 400;\nmsg.payload = result;\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 830,
+        "y": 1960,
+        "wires": [
+            [
+                "dxadv00000000a5"
+            ]
+        ]
+    },
+    {
+        "id": "dxadv00000000a5",
+        "type": "http response",
+        "z": "dxc0000000000001",
+        "name": "",
+        "statusCode": "",
+        "headers": {},
+        "x": 1060,
+        "y": 1960,
+        "wires": []
+    },
+    {
+        "id": "dxact00000000b1",
+        "type": "http in",
+        "z": "dxc0000000000001",
+        "name": "GET /api/activity",
+        "url": "/api/activity",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 130,
+        "y": 2100,
+        "wires": [
+            [
+                "dxact00000000b2"
+            ]
+        ]
+    },
+    {
+        "id": "dxact00000000b2",
+        "type": "function",
+        "z": "dxc0000000000001",
+        "name": "Prepare activity query",
+        "func": "const dx = global.get('dx');\nconst prepared = dx.activity.prepare(msg.req.query);\nmsg.topic = prepared.sql;\nmsg.activityRequest = prepared.request;\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 380,
+        "y": 2100,
+        "wires": [
+            [
+                "dxact00000000b3"
+            ]
+        ]
+    },
+    {
+        "id": "dxact00000000b3",
+        "type": "sqlite",
+        "z": "dxc0000000000001",
+        "mydb": "dxc0000000000027",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "Query band activity",
+        "x": 630,
+        "y": 2100,
+        "wires": [
+            [
+                "dxact00000000b4"
+            ]
+        ]
+    },
+    {
+        "id": "dxact00000000b4",
+        "type": "function",
+        "z": "dxc0000000000001",
+        "name": "Build activity",
+        "func": "const dx = global.get('dx');\nconst prepared = {ok: true, error: null, request: msg.activityRequest};\nconst result = dx.activity.complete(prepared, msg.payload);\ndelete msg.activityRequest;\nmsg.headers = {'Content-Type': 'application/json'};\nmsg.statusCode = result.ok ? 200 : 400;\nmsg.payload = result;\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 860,
+        "y": 2100,
+        "wires": [
+            [
+                "dxact00000000b5"
+            ]
+        ]
+    },
+    {
+        "id": "dxact00000000b5",
+        "type": "http response",
+        "z": "dxc0000000000001",
+        "name": "",
+        "statusCode": "",
+        "headers": {},
+        "x": 1070,
+        "y": 2100,
+        "wires": []
     }
 ]
