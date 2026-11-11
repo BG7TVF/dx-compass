@@ -4815,5 +4815,542 @@
                 "dxseat000000013"
             ]
         ]
+    },
+    {
+        "id": "dxdev0000000000",
+        "type": "tab",
+        "label": "Devices",
+        "disabled": false,
+        "info": "",
+        "env": []
+    },
+    {
+        "id": "dxdev0000000001",
+        "type": "inject",
+        "z": "dxdev0000000000",
+        "name": "Initialize devices schema",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "3.5",
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 150,
+        "y": 80,
+        "wires": [
+            [
+                "dxdev0000000002"
+            ]
+        ]
+    },
+    {
+        "id": "dxdev0000000002",
+        "type": "function",
+        "z": "dxdev0000000000",
+        "name": "Build devices schema",
+        "func": "const dx = global.get('dx');\nmsg.topic = dx.storage.devices.createSchema().join('\\n');\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 390,
+        "y": 80,
+        "wires": [
+            [
+                "dxdev0000000003"
+            ]
+        ]
+    },
+    {
+        "id": "dxdev0000000003",
+        "type": "sqlite",
+        "z": "dxdev0000000000",
+        "mydb": "dxc0000000000027",
+        "sqlquery": "batch",
+        "sql": "",
+        "name": "Apply devices schema",
+        "x": 610,
+        "y": 80,
+        "wires": [
+            [
+                "dxdev0000000004"
+            ]
+        ]
+    },
+    {
+        "id": "dxdev0000000004",
+        "type": "function",
+        "z": "dxdev0000000000",
+        "name": "Check device columns",
+        "func": "const dx = global.get('dx');\nmsg.topic = dx.storage.devices.columnsQuery();\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 830,
+        "y": 80,
+        "wires": [
+            [
+                "dxdev0000000005"
+            ]
+        ]
+    },
+    {
+        "id": "dxdev0000000005",
+        "type": "sqlite",
+        "z": "dxdev0000000000",
+        "mydb": "dxc0000000000027",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "Read device columns",
+        "x": 1050,
+        "y": 80,
+        "wires": [
+            [
+                "dxdev0000000006"
+            ]
+        ]
+    },
+    {
+        "id": "dxdev0000000006",
+        "type": "function",
+        "z": "dxdev0000000000",
+        "name": "Build device migrations",
+        "func": "const dx = global.get('dx');\nconst topics = dx.storage.devices.addMissingColumns(msg.payload);\nif (!topics.length) {\n    node.log('DB migration: device columns already complete');\n    return null;\n}\nreturn [topics.map(topic => ({topic}))];",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1270,
+        "y": 80,
+        "wires": [
+            [
+                "dxdev0000000007"
+            ]
+        ]
+    },
+    {
+        "id": "dxdev0000000007",
+        "type": "sqlite",
+        "z": "dxdev0000000000",
+        "mydb": "dxc0000000000027",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "Apply device migrations",
+        "x": 1490,
+        "y": 80,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "dxdev0000000011",
+        "type": "http in",
+        "z": "dxdev0000000000",
+        "name": "GET /api/devices",
+        "url": "/api/devices",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 140,
+        "y": 200,
+        "wires": [
+            [
+                "dxdev0000000012"
+            ]
+        ]
+    },
+    {
+        "id": "dxdev0000000012",
+        "type": "function",
+        "z": "dxdev0000000000",
+        "name": "Build devices snapshot query",
+        "func": "const dx = global.get('dx');\nmsg.topic = dx.storage.devices.snapshotQuery();\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 390,
+        "y": 200,
+        "wires": [
+            [
+                "dxdev0000000013"
+            ]
+        ]
+    },
+    {
+        "id": "dxdev0000000013",
+        "type": "sqlite",
+        "z": "dxdev0000000000",
+        "mydb": "dxc0000000000027",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "Read devices snapshot",
+        "x": 620,
+        "y": 200,
+        "wires": [
+            [
+                "dxdev0000000014"
+            ]
+        ]
+    },
+    {
+        "id": "dxdev0000000014",
+        "type": "function",
+        "z": "dxdev0000000000",
+        "name": "Format devices snapshot",
+        "func": "const dx = global.get('dx');\nmsg.statusCode = 200;\nmsg.headers = {'content-type': 'application/json; charset=utf-8'};\nmsg.payload = dx.devices.snapshot(global, msg.payload, new Date());\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 850,
+        "y": 200,
+        "wires": [
+            [
+                "dxdev0000000015"
+            ]
+        ]
+    },
+    {
+        "id": "dxdev0000000015",
+        "type": "http response",
+        "z": "dxdev0000000000",
+        "name": "",
+        "statusCode": "",
+        "headers": {},
+        "x": 1090,
+        "y": 200,
+        "wires": []
+    },
+    {
+        "id": "dxdev0000000021",
+        "type": "http in",
+        "z": "dxdev0000000000",
+        "name": "POST /api/devices",
+        "url": "/api/devices",
+        "method": "post",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 140,
+        "y": 320,
+        "wires": [
+            [
+                "dxdev0000000022"
+            ]
+        ]
+    },
+    {
+        "id": "dxdev0000000022",
+        "type": "function",
+        "z": "dxdev0000000000",
+        "name": "Prepare devices write",
+        "func": "const dx = global.get('dx');\nmsg.deviceBody = msg.payload;\nmsg.topic = dx.storage.devices.snapshotQuery();\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 390,
+        "y": 320,
+        "wires": [
+            [
+                "dxdev0000000023"
+            ]
+        ]
+    },
+    {
+        "id": "dxdev0000000023",
+        "type": "sqlite",
+        "z": "dxdev0000000000",
+        "mydb": "dxc0000000000027",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "Read devices for write",
+        "x": 620,
+        "y": 320,
+        "wires": [
+            [
+                "dxdev0000000024"
+            ]
+        ]
+    },
+    {
+        "id": "dxdev0000000024",
+        "type": "function",
+        "z": "dxdev0000000000",
+        "name": "Handle devices write",
+        "func": "const dx = global.get('dx');\nconst result = dx.devices.handle(global, msg.payload, msg.deviceBody, new Date());\nmsg.statusCode = result.status;\nmsg.headers = {'content-type': 'application/json; charset=utf-8'};\nmsg.deviceResponse = result.payload;\nmsg.topic = result.sql && result.sql.length ? result.sql.join('\\n') : 'SELECT 1';\nconst broadcast = result.broadcast\n    ? {payload: Object.assign({ok: true, server_ts: new Date().toISOString()}, result.broadcast)}\n    : null;\nreturn [msg, broadcast];",
+        "outputs": 2,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 850,
+        "y": 320,
+        "wires": [
+            [
+                "dxdev0000000025"
+            ],
+            [
+                "dxc000000000000e"
+            ]
+        ]
+    },
+    {
+        "id": "dxdev0000000025",
+        "type": "sqlite",
+        "z": "dxdev0000000000",
+        "mydb": "dxc0000000000027",
+        "sqlquery": "batch",
+        "sql": "",
+        "name": "Apply devices write",
+        "x": 1090,
+        "y": 300,
+        "wires": [
+            [
+                "dxdev0000000026"
+            ]
+        ]
+    },
+    {
+        "id": "dxdev0000000026",
+        "type": "function",
+        "z": "dxdev0000000000",
+        "name": "Devices write response",
+        "func": "msg.payload = msg.deviceResponse;\ndelete msg.deviceResponse;\nmsg.headers = {'content-type': 'application/json; charset=utf-8'};\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1310,
+        "y": 300,
+        "wires": [
+            [
+                "dxdev0000000027"
+            ]
+        ]
+    },
+    {
+        "id": "dxdev0000000027",
+        "type": "http response",
+        "z": "dxdev0000000000",
+        "name": "",
+        "statusCode": "",
+        "headers": {},
+        "x": 1530,
+        "y": 300,
+        "wires": []
+    },
+    {
+        "id": "dxdev0000000031",
+        "type": "http in",
+        "z": "dxdev0000000000",
+        "name": "POST /api/devices/tx",
+        "url": "/api/devices/tx",
+        "method": "post",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 140,
+        "y": 440,
+        "wires": [
+            [
+                "dxdev0000000032"
+            ]
+        ]
+    },
+    {
+        "id": "dxdev0000000032",
+        "type": "function",
+        "z": "dxdev0000000000",
+        "name": "Prepare TX report",
+        "func": "const dx = global.get('dx');\nmsg.txBody = msg.payload;\nmsg.txHeaders = msg.req && msg.req.headers;\nmsg.topic = dx.storage.devices.txSourcesQuery();\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 390,
+        "y": 440,
+        "wires": [
+            [
+                "dxdev0000000033"
+            ]
+        ]
+    },
+    {
+        "id": "dxdev0000000033",
+        "type": "sqlite",
+        "z": "dxdev0000000000",
+        "mydb": "dxc0000000000027",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "Read TX sources",
+        "x": 620,
+        "y": 440,
+        "wires": [
+            [
+                "dxdev0000000034"
+            ]
+        ]
+    },
+    {
+        "id": "dxdev0000000034",
+        "type": "function",
+        "z": "dxdev0000000000",
+        "name": "Ingest TX report",
+        "func": "const dx = global.get('dx');\nconst result = dx.devices.ingestTx(global, msg.payload, msg.txBody, msg.txHeaders, new Date());\nmsg.statusCode = result.status;\nmsg.headers = {'content-type': 'application/json; charset=utf-8'};\nmsg.txResponse = result.payload;\nmsg.topic = result.sql && result.sql.length ? result.sql.join('\\n') : 'SELECT 1';\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 850,
+        "y": 440,
+        "wires": [
+            [
+                "dxdev0000000035"
+            ]
+        ]
+    },
+    {
+        "id": "dxdev0000000035",
+        "type": "sqlite",
+        "z": "dxdev0000000000",
+        "mydb": "dxc0000000000027",
+        "sqlquery": "batch",
+        "sql": "",
+        "name": "Apply TX source registration",
+        "x": 1090,
+        "y": 440,
+        "wires": [
+            [
+                "dxdev0000000036"
+            ]
+        ]
+    },
+    {
+        "id": "dxdev0000000036",
+        "type": "function",
+        "z": "dxdev0000000000",
+        "name": "TX report response",
+        "func": "msg.payload = msg.txResponse;\ndelete msg.txResponse;\nmsg.headers = {'content-type': 'application/json; charset=utf-8'};\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1310,
+        "y": 440,
+        "wires": [
+            [
+                "dxdev0000000037"
+            ]
+        ]
+    },
+    {
+        "id": "dxdev0000000037",
+        "type": "http response",
+        "z": "dxdev0000000000",
+        "name": "",
+        "statusCode": "",
+        "headers": {},
+        "x": 1530,
+        "y": 440,
+        "wires": []
+    },
+    {
+        "id": "dxdev0000000041",
+        "type": "http in",
+        "z": "dxdev0000000000",
+        "name": "POST /api/devices/report",
+        "url": "/api/devices/report",
+        "method": "post",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 140,
+        "y": 560,
+        "wires": [
+            [
+                "dxdev0000000042"
+            ]
+        ]
+    },
+    {
+        "id": "dxdev0000000042",
+        "type": "function",
+        "z": "dxdev0000000000",
+        "name": "Prepare device report",
+        "func": "const dx = global.get('dx');\nmsg.deviceBody = msg.payload;\nmsg.topic = dx.storage.devices.devicesQuery();\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 390,
+        "y": 560,
+        "wires": [
+            [
+                "dxdev0000000043"
+            ]
+        ]
+    },
+    {
+        "id": "dxdev0000000043",
+        "type": "sqlite",
+        "z": "dxdev0000000000",
+        "mydb": "dxc0000000000027",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "Read devices for report",
+        "x": 620,
+        "y": 560,
+        "wires": [
+            [
+                "dxdev0000000044"
+            ]
+        ]
+    },
+    {
+        "id": "dxdev0000000044",
+        "type": "function",
+        "z": "dxdev0000000000",
+        "name": "Handle device report",
+        "func": "const dx = global.get('dx');\nconst body = Object.assign({}, msg.deviceBody || {});\nbody.action = 'report';\nconst result = dx.devices.handle(global, msg.payload, body, new Date());\nmsg.statusCode = result.status;\nmsg.headers = {'content-type': 'application/json; charset=utf-8'};\nmsg.payload = result.payload;\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 850,
+        "y": 560,
+        "wires": [
+            [
+                "dxdev0000000045"
+            ]
+        ]
+    },
+    {
+        "id": "dxdev0000000045",
+        "type": "http response",
+        "z": "dxdev0000000000",
+        "name": "",
+        "statusCode": "",
+        "headers": {},
+        "x": 1090,
+        "y": 560,
+        "wires": []
     }
 ]

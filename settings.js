@@ -18,8 +18,10 @@ module.exports = {
     // once the admin editor is moved away from its default root path)
     httpStatic: "public",
 
-    // Node-RED admin editor lives at "/red" (root "/" must stay free for the dashboard)
-    httpAdminRoot: "/red",
+    // Node-RED admin editor is disabled: /red is not part of the product
+    // surface (returns 404 to every request). Edit flow.json directly and
+    // restart the service instead of using the browser editor.
+    httpAdminRoot: false,
 
     // Root for HTTP-in nodes (REST API)
     httpNodeRoot: "/",

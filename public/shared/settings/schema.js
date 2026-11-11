@@ -336,6 +336,16 @@
             maxLen: 40, allowEmpty: true, label: 'OP view: tower name', zh: 'OP 视图：天线塔名称',
             desc: 'Shown in the bottom device bay.'
         }),
+        field('towerLimitType', 'qso', 'enum', 'NO', {
+            values: ['NO', 'NC'], scope: 'both',
+            label: 'Tower limit switch type', zh: '天线塔限位开关类型',
+            desc: '按实际接线选择，选错会显示相反状态。'
+        }),
+        field('towerPulseWidthMs', 'qso', 'int', 400, {
+            min: 50, max: 5000, scope: 'both',
+            label: 'Tower start pulse (ms)', zh: '天线塔启动脉冲宽度（ms）',
+            desc: '脉冲过短接触器可能不吸合，过长会增加误动作窗口；随时可改。'
+        }),
         field('opRunIdleMin', 'qso', 'int', 10, {
             min: 2, max: 60, label: 'OP view: RUN idle reminder (min)', zh: 'OP 视图：RUN 空闲提醒（分钟）',
             desc: 'Suggest S&P when a RUN radio has no QSO for this many minutes.'
