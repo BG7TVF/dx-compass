@@ -24,6 +24,14 @@
     background: var(--bg);
     color: var(--text);
 }
+/* Pin every child to its own track. #opAdvice is display:none most of the
+ * time; without explicit rows the hidden banner is dropped from auto-placement
+ * and .op-body falls into the auto track while the footer takes the 1fr one,
+ * leaving ~260px of the page empty under the status bar. */
+.op-view > .op-head { grid-row: 1; }
+.op-view > .op-advice { grid-row: 2; }
+.op-view > .op-body { grid-row: 3; }
+.op-view > .op-bottom { grid-row: 4; }
 
 .op-top {
     display: flex;
