@@ -633,6 +633,10 @@
     width: 100%;
     flex: 1 1 auto;
     min-height: 36px;
+    /* Faint instrument grid so a chart with no QSOs still reads as a gauge
+     * rather than an empty card. */
+    background-image: linear-gradient(to top, rgba(122, 168, 255, .10) 1px, transparent 1px);
+    background-size: 100% 25%;
 }
 .op-bandqso-labels {
     display: flex;
