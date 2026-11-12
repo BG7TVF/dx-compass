@@ -7,7 +7,7 @@
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%230b1220'/%3E%3Ccircle cx='8' cy='8' r='4' fill='%2300e08a'/%3E%3C/svg%3E">
     <link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
     <link rel="stylesheet" href="css/style.css?v=2.3.4">
-    <link rel="stylesheet" href="css/op.css?v=1.0.0">
+    <link rel="stylesheet" href="css/op.css?v=1.0.1">
     <link rel="stylesheet" href="css/devices.css?v=1.0.0">
     <link rel="stylesheet" href="shared/opponents/opponents.css?v=2.3.4">
 </head>
@@ -110,28 +110,34 @@
 
         <!-- OP view: ring layout, fixed offline map in the centre -->
         <div id="opView" class="op-view hidden">
-            <header class="op-top">
-                <div class="op-top-id">
-                    <span class="op-kicker" id="opKicker">OP VIEW</span>
-                    <label class="op-cat-label" for="opSeat" id="opSeatLabel">Seat</label>
-                    <select id="opSeat" class="op-cat-select"></select>
-                    <span class="op-subtitle" id="opSubtitle"></span>
-                </div>
-                <div class="op-metrics" id="opMetrics"></div>
-            </header>
+            <!-- Top strip: the operator header keeps the left side, the band and
+                 space-weather modules sit beside it so the left rail below can
+                 belong to opponent intel alone. -->
+            <div class="op-head">
+                <header class="op-top">
+                    <div class="op-top-id">
+                        <span class="op-kicker" id="opKicker">OP VIEW</span>
+                        <label class="op-cat-label" for="opSeat" id="opSeatLabel">Seat</label>
+                        <select id="opSeat" class="op-cat-select"></select>
+                        <span class="op-subtitle" id="opSubtitle"></span>
+                    </div>
+                    <div class="op-metrics" id="opMetrics"></div>
+                </header>
+
+                <section class="op-card op-band-card">
+                    <h3 id="opBandsTitle">Band conditions</h3>
+                    <div class="op-band-grid" id="opBandGrid"></div>
+                </section>
+                <section class="op-card op-space-card">
+                    <h3 id="opSpaceTitle">Space weather</h3>
+                    <div class="op-space-grid" id="opSpaceGrid"></div>
+                </section>
+            </div>
 
             <div id="opAdvice" class="op-advice hidden" aria-live="polite"></div>
 
             <div class="op-body">
                 <aside class="op-rail op-left">
-                    <section class="op-card op-band-card">
-                        <h3 id="opBandsTitle">Band conditions</h3>
-                        <div class="op-band-grid" id="opBandGrid"></div>
-                    </section>
-                    <section class="op-card op-space-card">
-                        <h3 id="opSpaceTitle">Space weather</h3>
-                        <div class="op-space-grid" id="opSpaceGrid"></div>
-                    </section>
                     <section class="op-card op-opp-card">
                         <h3 id="opOppTitle"><span id="opOppTitleText">Opponent intel</span><i class="opp-sum" id="oppSummary"></i></h3>
                         <div class="opp-rows" id="oppRows"></div>

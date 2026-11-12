@@ -36,6 +36,21 @@
     background: var(--panel);
 }
 
+/* Top strip: the header keeps the left, band conditions and space weather ride
+ * beside it. That empties the left rail so opponent intel gets its full height
+ * instead of the 139px it used to share with the two modules. */
+.op-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 360px 300px;
+    gap: 8px;
+    min-width: 0;
+    min-height: 0;
+}
+.op-head .op-top { min-width: 0; }
+/* Wider card than the old 272px rail, so the same twelve bands fit in four
+ * rows instead of six and the strip stays short. */
+.op-head .op-band-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
 .op-top-id { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
 .op-kicker { font-size: 13px; font-weight: 700; letter-spacing: .12em; color: var(--accent); }
 .op-cat-label { font-size: 11px; color: var(--text-dim); }
@@ -211,8 +226,8 @@
 .op-band-grid, .op-space-grid { padding: 6px; }
 .op-work-list, .op-suspect-list, .op-mult-list { padding: 6px; flex: 1; }
 
-.op-band-card { flex: 0 0 auto; }
-.op-space-card { flex: 0 0 auto; }
+/* The left rail now holds opponent intel alone, so it takes every pixel the
+ * old band/space cards used to reserve. */
 .op-opp-card { flex: 1 1 auto; }
 
 /* Left rail: band grid 2 columns, compact rows */
@@ -480,12 +495,14 @@
 /* Narrow laptops: shrink the rails before the map, never below the usable map */
 @media (max-width: 1500px) {
     .op-body { grid-template-columns: 236px minmax(0, 1fr) 312px; }
+    .op-head { grid-template-columns: minmax(0, 1fr) 320px 272px; }
     .op-space-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
     .op-metric { min-width: 78px; padding: 3px 6px; }
     .op-subtitle { display: none; }
 }
 @media (max-width: 1200px) {
     .op-body { grid-template-columns: 220px minmax(0, 1fr) 300px; }
+    .op-head { grid-template-columns: minmax(0, 1fr) 280px 240px; }
     .op-metrics .op-band-chips { display: none; }
 }
 @media (max-height: 800px) {
