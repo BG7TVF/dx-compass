@@ -36,9 +36,9 @@ export const DEFAULT_MAP_OPTIONS = {
     maxBoundsViscosity: 1
 };
 
-export function createTileLayer(provider = 'osm', {L = globalThis.L, ...options} = {}) {
+export function createTileLayer(provider = 'amap', {L = globalThis.L, ...options} = {}) {
     const leaflet = getLeaflet(L);
-    const definition = TILE_PROVIDERS[provider] || TILE_PROVIDERS.osm;
+    const definition = TILE_PROVIDERS[provider] || TILE_PROVIDERS.amap;
     return leaflet.tileLayer(definition.url, {
         ...definition.options,
         ...options,
@@ -56,7 +56,7 @@ export function replaceTileLayer(map, current, provider, options = {}) {
 
 export function createBaseMap(target, {
     L = globalThis.L,
-    provider = 'osm',
+    provider = 'amap',
     mapOptions = {},
     tileOptions = {}
 } = {}) {

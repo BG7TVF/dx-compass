@@ -90,9 +90,9 @@
         field('theme', 'ui', 'enum', 'dark', {
             values: THEMES, label: 'Theme', zh: '主题', desc: 'Colour theme applied to body[data-theme].'
         }),
-        field('tiles', 'ui', 'enum', 'osm', {
+        field('tiles', 'ui', 'enum', 'amap', {
             values: TILE_PROVIDERS, label: 'Base map', zh: '底图',
-            desc: 'Raster tile provider; amap is reachable from mainland China.'
+            desc: 'Raster tile provider; amap is reachable from mainland China and uses GCJ-02 (large-scale offsets in China).'
         }),
         field('myCall', 'ui', 'string', '', {
             pattern: /^[A-Z0-9/]{3,12}$/, upper: true, allowEmpty: true, maxLen: 12,
