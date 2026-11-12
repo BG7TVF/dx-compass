@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
     htmlToText, extractBands, extractPeriods, extractCategories,
-    extractSource, validateRules, diffRules
+    extractQsoPoints, extractSource, validateRules, diffRules
 } from '../scripts/fetch-contest-rules.mjs';
 
 const SPEC = {family: 'CQWW', name: 'CQ World-Wide DX Contest', sources: []};
@@ -78,4 +78,32 @@ test('差异提示区分新增、变化与未变化', () => {
     const diff = diffRules(previous, next);
     assert.deepEqual(diff.lines, ['~ CQWW', '= CQ160', '+ IARU']);
     assert.equal(diff.unknownCount, 0);
+});
+
+test('CQWW RTTY 计分表按三/二/一解析', () => {
+    const text = 'Contacts between stations on different continents count three (3) points. '
+        + 'Contacts between stations on the same continent count two (2) points. '
+        + 'Contacts within the same country count one (1) point.';
+    assert.deepEqual(extractQsoPoints(text, 'CQWW_RTTY'), {
+        sameCountry: 1, sameContinent: 2, differentContinent: 3
+    });
+});
+
+test('WAE 三段赛程与 SINGLE-OP/MULTI-OP 组别可解析', () => {
+    const text = 'CW: August, second full weekend\n'
+        + 'Saturday, August 8th 2026, 00:00 UTC until Sunday, August 9th 2026, 23:59 UTC\n'
+        + 'SSB: September, second full weekend\n'
+        + 'Saturday, September 12th 2026, 00:00 UTC until Sunday, September 13th 2026, 23:59 UTC\n'
+        + 'RTTY: November, second full weekend\n'
+        + 'Saturday, November 14th 2026, 00:00 UTC until Sunday, November 15th 2026, 23:59 UTC\n'
+        + 'SINGLE-OP LOW\nMax. output 100 watts - all bands. Only one signal permitted at any time.\n'
+        + 'MULTI-OP\nBand changes are allowed every 10 minutes.\n';
+    const periods = extractPeriods(text, 2026, 'CW').periods;
+    assert.equal(periods.length, 3);
+    assert.deepEqual(periods.map(p => p.mode), ['CW', 'SSB', 'RTTY']);
+    assert.equal(periods[0].start, '2026-08-08T00:00:00.000Z');
+    const {categories} = extractCategories(text, 'WAE');
+    assert.equal(categories.SO1R.simultaneousSignals, 1);
+    assert.equal(categories.MS.bandChange.rule, 'time-lock');
+    assert.equal(categories.MS.bandChange.minutes, 10);
 });

@@ -7,7 +7,7 @@ const contestRules = require('../lib/contest/rules.js');
 const engine = require('../lib/advice/engine.js');
 
 const NOW = new Date('2026-11-08T12:40:00.000Z');
-const FAMILIES = ['CQWW', 'CQWPX', 'ARRL_DX', 'IARU', 'CQ160'];
+const FAMILIES = ['CQWW', 'CQWPX', 'CQWW_RTTY', 'ARRL_DX', 'IARU', 'CQ160', 'WAE'];
 
 function settings(patch) {
     return Object.assign({
@@ -38,7 +38,7 @@ function advice(patch) {
     });
 }
 
-test('规则文件包含五个家族且每个家族都有来源与抓取时间', () => {
+test('规则文件包含九个可选赛事中的七个结构化家族', () => {
     const raw = JSON.parse(fs.readFileSync(contestRules.RULES_PATH, 'utf8'));
     assert.equal(raw.schemaVersion, 1);
     for (const family of FAMILIES) {
@@ -50,6 +50,37 @@ test('规则文件包含五个家族且每个家族都有来源与抓取时间',
         assert.ok(Array.isArray(entry.modes) && entry.modes.length, `${family} modes`);
         assert.ok(entry.bands === 'unknown' || Array.isArray(entry.bands), `${family} bands`);
     }
+    assert.equal(contestRules.familyOf('CQWW_RTTY'), 'CQWW_RTTY');
+    assert.equal(contestRules.familyOf('WAE'), 'WAE');
+});
+
+test('CQWW RTTY 与 WAE 都有抓取到的波段与比赛时段', () => {
+    const rtty = contestRules.constraintsFor(settings({contestType: 'CQWW_RTTY'}), 'CQWW_RTTY');
+    assert.equal(rtty.structured, true);
+    assert.deepEqual(rtty.bands, ['80m', '40m', '20m', '15m', '10m']);
+    assert.deepEqual(rtty.modes, ['RTTY']);
+    assert.equal(rtty.multiplierCounting, 'dxcc-per-band');
+
+    const wae = contestRules.constraintsFor(settings({contestType: 'WAE', category: 'MS'}), 'WAE');
+    assert.equal(wae.structured, true);
+    assert.deepEqual(wae.bands, ['80m', '40m', '20m', '15m', '10m']);
+    assert.equal(wae.bandChange.rule, 'time-lock');
+    assert.equal(wae.source.includes('wae-dx-contest'), true);
+});
+
+test('OTHER 与 AUTO 的回退是显式且可查询的', () => {
+    for (const type of ['OTHER', 'AUTO']) {
+        const info = contestRules.describe(type);
+        assert.equal(info.structured, false);
+        assert.equal(info.fallback, 'settings-config');
+        assert.ok(info.reason);
+        const book = contestRules.constraintsFor(settings({contestType: type}), type);
+        assert.equal(book.structured, false);
+        assert.equal(book.fallback, 'settings-config');
+        assert.equal(book.available, false);
+    }
+    assert.equal(contestRules.describe('CQWW').structured, true);
+    assert.equal(contestRules.describe('CQWW').fallback, null);
 });
 
 test('CQ WW M2：规则文件给 2 个信号与每小时 8 次，设置可覆盖', () => {
@@ -101,7 +132,9 @@ test('规则缺失时回落到内置配额，未知值不会被当成 0', () => 
     const arrl = advice({contestType: 'ARRL_DX'});
     assert.equal(arrl.gates.quota, 6);
     assert.equal(contestRules.constraintsFor(settings({category: 'M2'}), 'ARRL_DX').bandChange, null);
-    assert.equal(contestRules.familyOf('WAE'), null);
+    assert.equal(contestRules.familyOf('OTHER'), null);
+    assert.equal(contestRules.familyOf('AUTO'), null);
+    assert.equal(contestRules.describe('OTHER').fallback, 'settings-config');
 });
 
 test('席位数与席位-电台绑定进入决策模块输出', () => {

@@ -22,7 +22,7 @@ const UNKNOWN = 'unknown';
 const SCHEMA_VERSION = 1;
 const USER_AGENT = 'DX-Compass rules fetcher (amateur radio contest dashboard)';
 
-const FAMILIES = ['CQWW', 'CQWPX', 'ARRL_DX', 'IARU', 'CQ160'];
+const FAMILIES = ['CQWW', 'CQWPX', 'CQWW_RTTY', 'ARRL_DX', 'IARU', 'CQ160', 'WAE'];
 
 const SPECS = [
     {
@@ -59,6 +59,20 @@ const SPECS = [
         name: 'CQ World Wide 160-Meter Contest',
         sources: [
             {url: 'https://www.cq160.com/rules.htm', modes: ['CW', 'SSB']}
+        ]
+    },
+    {
+        family: 'CQWW_RTTY',
+        name: 'CQ World-Wide RTTY DX Contest',
+        sources: [
+            {url: 'https://www.cqwwrtty.com/rules.htm', modes: ['RTTY']}
+        ]
+    },
+    {
+        family: 'WAE',
+        name: 'Worked All Europe DX Contest',
+        sources: [
+            {url: 'https://www.darc.de/der-club/referate/conteste/wae-dx-contest/en/wae-rules', modes: ['CW', 'SSB', 'RTTY']}
         ]
     }
 ];
@@ -116,9 +130,11 @@ export function extractYear(text) {
 const NAME_PATTERNS = {
     CQWW: [/((?:The\s+)?20\d{2}\s+CQ\s+World[- ]Wide\s+DX\s+Contest)/i],
     CQWPX: [/((?:The\s+)?20\d{2}\s+CQ\s+World[- ]Wide\s+WPX\s+Contest)/i],
+    CQWW_RTTY: [/((?:The\s+)?20\d{2}\s+CQ\s+World[- ]Wide\s+RTTY\s+DX\s+Contest)/i, /(CQ\s+World[- ]Wide\s+RTTY\s+DX\s+Contest)/i],
     CQ160: [/((?:The\s+)?20\d{2}\s+CQ\s+World\s+Wide\s+160[^\n]{0,40}Contest)/i],
     ARRL_DX: [/(ARRL\s+International\s+DX\s+Contest)/i],
-    IARU: [/(IARU\s+HF\s+World\s+Championship)/i]
+    IARU: [/(IARU\s+HF\s+World\s+Championship)/i],
+    WAE: [/(Worked\s+All\s+Europe(?:\s+DX)?\s+Contest)/i]
 };
 
 export function extractName(text, spec) {
@@ -209,6 +225,31 @@ export function extractPeriods(text, year, modeHint) {
         const end = iso(y, monthNumber(clock[7]), Number(clock[8]), Number(clock[5]), Number(clock[6]), 0);
         if (start && end) periods.push({mode: modeHint || 'CW', start, end, durationHours: 48});
     }
+    // WAE states every leg twice: "CW: August, ... Saturday, August 8th 2026,
+    // 00:00 UTC until Sunday, August 9th 2026, 23:59 UTC".
+    const explicit = /[A-Z][a-z]+day,\s+([A-Z][a-z]+)\s+(\d{1,2})(?:st|nd|rd|th)?\s+(20\d{2}),?\s+(\d{2}):(\d{2})\s+UTC\s+until\s+[A-Z][a-z]+day,\s+([A-Z][a-z]+)\s+(\d{1,2})(?:st|nd|rd|th)?\s+(20\d{2}),?\s+(\d{2}):(\d{2})\s+UTC/gi;
+    for (const match of text.matchAll(explicit)) {
+        const start = iso(Number(match[3]), monthNumber(match[1]), Number(match[2]), Number(match[4]), Number(match[5]), 0);
+        const end = iso(Number(match[8]), monthNumber(match[6]), Number(match[7]), Number(match[9]), Number(match[10]), 59);
+        if (!start || !end) continue;
+        const lead = text.slice(Math.max(0, match.index - 300), match.index);
+        const modeMatch = [...lead.matchAll(/\b(CW|SSB|RTTY|Phone)\s*:/gi)].pop();
+        periods.push({
+            mode: modeMatch ? modeMatch[1].toUpperCase() : (modeHint || 'CW'),
+            start,
+            end,
+            durationHours: Math.round((Date.parse(end) - Date.parse(start)) / 3600000)
+        });
+    }
+    // Bare "September 26-27" on CQWW RTTY; the year comes from the page title.
+    if (!periods.length && Number.isFinite(year)) {
+        const bare = /(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2})\s*[-–]\s*(\d{1,2})/i.exec(text);
+        if (bare) {
+            const start = iso(year, monthNumber(bare[1]), Number(bare[2]), 0, 0, 0);
+            const end = iso(year, monthNumber(bare[1]), Number(bare[3]), 23, 59, 59);
+            if (start && end) periods.push({mode: modeHint || 'CW', start, end, durationHours: 48});
+        }
+    }
     const weekend = /Begins?\s+0000\s+UTC\s+Saturday[^.]*2359\s+UTC\s+Sunday/i.test(text);
     if (!periods.length && weekend) return {periods: UNKNOWN, note: 'weekend anchor only; exact dates unknown'};
     if (!periods.length) return {periods: UNKNOWN, note: 'no explicit date range on the page'};
@@ -237,6 +278,14 @@ export function extractQsoPoints(text, family) {
             };
         }
     }
+    if (family === 'CQWW_RTTY') {
+        const different = /different continents?[^.]*?\b(three|3)\b/i.test(text);
+        const same = /same continent[^.]*?\b(two|2)\b/i.test(text);
+        const country = /same country[^.]*?\b(one|1)\b/i.test(text);
+        if (different && same && country) {
+            return {sameCountry: 1, sameContinent: 2, differentContinent: 3};
+        }
+    }
     if (family === 'CQWPX') {
         const high = /three\s*\(3\)\s*points[^.]*?(28|21|14)\s*MHz/i.test(text);
         const low = /six\s*\(6\)\s*points[^.]*?(7|3\.5|1\.8)\s*MHz/i.test(text);
@@ -251,6 +300,9 @@ export function extractQsoPoints(text, family) {
         const three = /\b(three|3)\s*points?\b/i.test(text);
         if (three) return {perQso: 3};
     }
+    if (family === 'WAE' && /final score[^.]*total QSOs plus QTCs/i.test(text)) {
+        return {perQso: 1};
+    }
     if (family === 'CQ160') {
         const two = /\b(two|2)\s*points?\b/i.test(text);
         if (two) return {perQso: 2};
@@ -263,6 +315,12 @@ export function extractMultiplierCounting(text, family) {
         if (/prefix/i.test(text) && /once regardless of (the )?band/i.test(text)) return 'wpx';
     }
     if (family === 'CQWW' && /zone[^.]*on each band/i.test(text) && /country[^.]*on each band/i.test(text)) {
+        return 'dxcc-per-band';
+    }
+    if (family === 'CQWW_RTTY' && /(zone|country)[^.]*on each band/i.test(text)) {
+        return 'dxcc-per-band';
+    }
+    if (family === 'WAE' && /(worked per band|countries?[^.]*per band)/i.test(text)) {
         return 'dxcc-per-band';
     }
     if (family === 'CQ160' && /(states?|provinces?)[^.]*countries?/i.test(text)) {
@@ -317,8 +375,12 @@ export function extractCategories(text, family) {
     const unknowns = [];
     // Locate every category heading first and cut each block at the next one,
     // otherwise a Multi-Single block would borrow the Multi-Two quota.
+    // WAE uses "SINGLE-OP / MULTI-OP" headings instead of "Single Operator".
+    const patterns = family === 'WAE'
+        ? [['SO1R', /SINGLE-OP(?:\s+(?:LOW|HIGH))?/i], ['MS', /MULTI-OP/i]]
+        : CATEGORY_PATTERNS;
     const matches = [];
-    for (const [key, pattern] of CATEGORY_PATTERNS) {
+    for (const [key, pattern] of patterns) {
         const match = pattern.exec(text);
         if (match) matches.push({key, index: match.index, name: match[0]});
     }
@@ -356,17 +418,20 @@ export function extractCategories(text, family) {
 /** Extract one source document; unknown values are explicit. */
 export function extractSource(spec, modes, html, url, fetchedAt) {
     const text = htmlToText(html);
-    const year = extractYear(text);
+    let year = extractYear(text);
     const name = extractName(text, spec);
     const bands = extractBands(text);
     const modeList = Array.isArray(modes) ? modes : [modes];
     const periodResult = extractPeriods(text, year, modeList[0]);
+    const periodYear = Array.isArray(periodResult.periods) && periodResult.periods[0]
+        ? Number(periodResult.periods[0].start.slice(0, 4)) : year;
     const qsoPoints = extractQsoPoints(text, spec.family);
     const multiplierCounting = extractMultiplierCounting(text, spec.family);
     const categoryResult = extractCategories(text, spec.family);
     const unknowns = [];
     const record = (field, reason) => unknowns.push({field, reason, source: url});
     if (year === UNKNOWN) record('year', 'no four-digit year on the page');
+    else if (periodYear !== year) year = periodYear;
     if (bands === UNKNOWN) record('bands', 'no band list matched');
     if (qsoPoints === UNKNOWN) record('qsoPoints', 'point table not matched');
     if (multiplierCounting === UNKNOWN) record('multiplierCounting', 'multiplier rule not matched');
