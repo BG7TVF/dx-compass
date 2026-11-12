@@ -13,10 +13,6 @@ import {MySpotBatcher, MY_SPOT_WINDOW_MS} from '../../shared/alerts/my-spot-batc
 import {$, $$, escapeHtml, timeAgo} from '../ui.mjs';
 
 const QSO_RATE_BUCKETS = 12;
-const VOICE_LANGS = {
-    zh: 'zh-CN', en: 'en-US', de: 'de-DE', fr: 'fr-FR', es: 'es-ES',
-    pt: 'pt-PT', ru: 'ru-RU', it: 'it-IT', ar: 'ar-SA', ko: 'ko-KR', ja: 'ja-JP'
-};
 const ICAO_ALPHABET = {
     A: 'Alfa', B: 'Bravo', C: 'Charlie', D: 'Delta', E: 'Echo', F: 'Foxtrot',
     G: 'Golf', H: 'Hotel', I: 'India', J: 'Juliett', K: 'Kilo', L: 'Lima',
@@ -565,17 +561,7 @@ export function createQsoPage(ctx) {
     }
 
     function speakAlert(text) {
-        if (!text || !('speechSynthesis' in window)) return;
-        try {
-            speechSynthesis.cancel();
-            const utterance = new SpeechSynthesisUtterance(text);
-            utterance.lang = VOICE_LANGS[ctx.settings.lang] || 'en-US';
-            utterance.rate = settingNumber('voiceRate', 1.05, 0.6, 1.6);
-            utterance.volume = settingNumber('voiceVolume', 1, 0, 1);
-            speechSynthesis.speak(utterance);
-        } catch {
-            // Speech is optional and can be disabled by the browser.
-        }
+        return ctx.voice ? ctx.voice.speak(text) : false;
     }
 
     function hideSpotAlert() {

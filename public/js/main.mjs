@@ -13,6 +13,7 @@ import {createSettingsPage} from './pages/settings-page.mjs';
 import {createPropagationPage} from './pages/propagation-page.mjs';
 import {createOpPage} from './pages/op-page.mjs';
 import {createDevicesPage} from './pages/devices-page.mjs';
+import {createVoiceAlert} from '../shared/alerts/voice.mjs';
 
 async function start() {
     const i18n = createI18n({lang: 'zh'});
@@ -23,6 +24,10 @@ async function start() {
         t: createLegacyTranslator(i18n, () => settings.lang),
         monitoring: createMonitoringClient()
     };
+    ctx.voice = createVoiceAlert({
+        getSettings: () => settings,
+        getLanguage: () => settings.lang
+    });
     ctx.spot = createSpotPage(ctx);
     ctx.qso = createQsoPage(ctx);
     ctx.records = createRecordsPage(ctx);
