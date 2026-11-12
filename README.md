@@ -373,6 +373,69 @@ node scripts/n1mm-relay.mjs --host <服务器IP> --token <同一个令牌>
 4. Windows 防火墙需允许 `node.exe` 监听 UDP 12060（首次运行会弹窗）
 5. relay 自带断线缓存与指数退避；`--help` 可查看全部参数。服务器返回 401 表示令牌不一致，503 表示服务器尚未配置令牌
 
+## 设备接入与集中控制
+
+设备树把电台周边能力收在一处，菜单 **Devices** 只读展示状态与席位归属，写操作在 **Settings → 设备** 或 HTTP API。
+
+- **树模型**：每个设备有唯一 `id`、`name`、`type`、可选 `parent_id`。单父、禁止成环、有子节点时禁止删除；类型不设白名单，界面提供 `tower` / `rotator` / `antenna` / `matrix` / `switch` / `other` 六种常用标签，自定义类型会按原样显示。
+- **父子关系**：塔 → 旋转器 → 天线的挂载关系用于展示与归属，不改变协议寻址；删除父节点前必须先迁移或删除子节点（`409 has-children`）。
+- **能力**
+  - `rotator`：`host` / `port` 指向 rotctld；`actual = (physical + installation offset) mod 360`。未接入驱动时卡片仍显示目标方位，但只做预览，不发送指令。
+  - `matrix` / `switch`：`relay_url`、`relay_token`、`up_channel` / `down_channel`；指令按端口/出口换算成通道号，未知通道返回 `400 unknown-channel`。
+  - `tower`：`up_channel` / `down_channel`、`pulse_ms`（默认 400 ms，50–5000 ms）、限位类型 NO/NC；按住上升/下降，500 ms 心跳续约，松开或断线 1.5 秒后由服务端强制释放。
+  - `antenna`：可用波段列表与安装偏移；波段用于设备卡片与告警展示。
+- **TX 上报入口契约**：`POST /api/devices/tx`，JSON `{ "source_id": "...", "tx_active": true|false, "ts": "可选 ISO 时间" }`。`source_id` 未登记时自动登记为最低优先级（1000），已配置 token 的源必须带 `X-DX-TX-Token`。默认 2 秒超时：超时记 `stale`，3 倍超时记 `offline`；全部源不可用等同「未接入发射状态」，不沿用旧值，也不阻断操作。
+- **互锁行为**：天线切换 `select` 在任一 TX 源报告 `tx_active: true` 时返回 `423 tx-active`，并附带来源 `source_id`；设备指令有 30 秒租约，并发指令返回 `409 device-locked`；没有 transport 时返回 `accepted + dispatched:false`，不会假装已执行。
+- **`/red` 已禁用**：`settings.js` 设置 `httpAdminRoot: false`，Node-RED 编辑器不暴露；所有操作只走设置页与 HTTP API。
+
+## 席位自动识别
+
+N1MM 的 ContactInfo 与 RadioInfo 可能不是同一条报文，服务按 UDP 源（IP + 端口）关联两类信息，再按四级降级链判定席位：
+
+1. **显式配置**：启动参数 `--station` 或设置页手工绑定（最高优先级）。
+2. **ComputerName + RadioName + RadioNr**：同一台机器跑两个实例时 `ComputerName` 相同，必须用 `RadioNr` 区分，否则两个席位会被合并；`RadioName` 是自由文本（可能是 `Radio1`、`ICOM`），只作识别键，不当作型号或能力推断。
+3. **源 IP + RadioNr**：没有 `ComputerName` 时按 UDP 源地址与电台序号识别。
+4. **单实例默认**：注册表里只剩一个席位且报文没有可用身份时，沿用该席位。
+
+兼容旧接入的 `StationName` 位于第 3 与第 4 级之间：既无 `ComputerName` 也无可用源地址时才使用。识别不到的报文进入 **未识别席位桶**（计数、来源、最近样本），不会硬塞给现成席位。
+
+设置页 **比赛 → 席位识别** 列出每个席位的命中规则、来源 IP、ComputerName、RadioName、RadioNr 与最近出现时间，可改名、覆盖席位键、解除绑定；每次变更写入历史。绑定持久化在服务端，重连或重启沿用既有绑定，不会重新分配导致席位跳变。离线判定以 `lastSeen` 为准（页面按时间显示）：服务不维护额外心跳或 `online` 布尔值，长时间未刷新的席位按最后出现时间判断。
+
+## 决策辅助模块
+
+`GET /api/advice` 返回当前席位/波段的建议，OP 视图右侧卡片消费同一份数据。
+
+- **规则组**
+  - **G**：换波段闸门（CQ 160 单波段、MM 不限、M/S 与 M/2 的每小时配额与 10 分钟锁）。
+  - **R**：RUN 速率与「速率下降但 eQSO 仍高，继续主叫」。
+  - **S**：S&P 切换、波段刚打开先扫乘数、乘数接近饱和、S&P 速率过低回主叫。
+  - **B**：波段与传播（BPI、切换成本、Kp/极区吸收/太阳耀斑、极昼极夜、末段冻结换波段）。
+  - 没有独立的 **P** 组：传播与空间天气规则都在 **B** 组；`ENGINE` 只表示规则计算异常。
+- **依赖输入**：QSO 行（时间、波段、模式、呼号）、RadioInfo（频率/模式/RUN/TX）、传播环境（Kp、CGM 纬度、MUF）、spot 流、乘数矩阵、`rules.json` 与设置页竞赛字段。
+- **缺数据时的降级**：没有 MUF 时 BPI 用经验提前量；路径样本不足时判定为 `unknown` 并在卡片标注样本数；`OTHER` / `AUTO` 没有结构化规则，`describe()` 明确返回 `fallback: settings-config`，由设置值与 `config.js` 兜底；QRZ/SCP 不可用时只放弃对应校验，不影响其他规则。
+- **乘数联动提醒所在层**：不在 `/api/advice` 后端，而在 OP 前端 `multiplierAdvice()`（`public/js/pages/op-page.mjs`）。条件是该字头在该波段仍为 `pending`，且当前竞赛模式下路径 **双向** 都判定 `workable`；可逐条忽略，只提示，绝不自动调机。
+
+## 竞赛设置
+
+设置页 **比赛** 共 22 个字段：
+
+| 字段 | 用途 |
+| --- | --- |
+| `contestType` | 规则家族（AUTO/CQWW/CQWPX/CQWW_RTTY/ARRL_DX/CQ160/WAE/IARU/OTHER） |
+| `contestName` / `contestStart` / `contestEnd` | 比赛名称与 UTC 窗口，驱动倒计时与末段规则 |
+| `contestModes` / `contestBands` | 本次允许的模式与波段（自由文本，逗号分隔） |
+| `contestRulesUrl` | 官方规则链接 |
+| `category` | SO1R / SO2R / MS / M2 / MM，决定信号数与功率约束 |
+| `operators` / `seatCount` / `seatRadios` | 操作员列表、席位数量与席位-电台绑定 |
+| `powerClass` | UNKNOWN / HP / LP / QRP |
+| `contestSingleBand` | 单波段参赛时的波段 |
+| `multPerBand` / `multMode` | 乘数按波段计数或总计（DXCC per band / DXCC total / WPX） |
+| `bandChangeRule` / `bandChangeLimit` | 换波段规则（none / time-lock / hourly-quota）与每小时配额 |
+| `msRole` | 多机角色（none / run / mult） |
+| `adviceEnabled` / `adviceRefreshSec` / `adviceMinConfidence` / `adviceConfig` | 决策辅助开关、刷新间隔、最低置信度与阈值覆盖 |
+
+**优先级：设置页显式值 > `public/shared/contest/rules.json` > `config.js` 兜底。** 例如未填 `multMode` 时先采用规则文件的 `multiplierCounting`，仍为空才用内置默认；`bandChangeRule` 同理。`OTHER` 与 `AUTO` 没有结构化规则，`lib/contest/rules.js` 的 `describe()` / `constraintsFor()` 会显式返回 `structured:false` 与 `fallback:'settings-config'`，不会静默套用某个赛事。
+
 ## 传播地图（Propagation）
 
 菜单中的 **Propagation** 是独立于 Spot / QSO 的第三个全屏视图：左侧为 Canvas 世界地图，右侧停靠传播数据面板。进入该视图后自动隐藏 Spot 专用控件（布局、轮询、开始监控、Spot 计数）。
