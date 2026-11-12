@@ -36,7 +36,18 @@ export function createSpotPage(ctx) {
 
     const ttl = spot => ttlForMode(ctx.settings, spot.mode);
     const color = band => bandColorOf(ctx.settings, band);
-    const visibleCells = () => state.cells.filter(cell => cell.el.style.display !== 'none');
+    /* Layout membership (which cells participate in the current 1x1/2x2/3x3
+     * grid) must stay independent from "currently painted": callsigns, rotation
+     * and history replay keep running while another view hides the whole grid. */
+    const layoutCells = () => state.cells.filter(cell => cell.el.style.display !== 'none');
+    /* A cell is renderable only when it is actually laid out: getClientRects()
+     * is empty when any ancestor is display:none, and the container sizes catch
+     * the zero-height/zero-width case that produced the 0x0 heat canvases. */
+    const cellRenderable = cell => Boolean(cell && cell.map) &&
+        cell.el.getClientRects().length > 0 &&
+        cell.map.getContainer().clientWidth > 0 &&
+        cell.map.getContainer().clientHeight > 0;
+    const visibleCells = () => layoutCells().filter(cellRenderable);
     const heatEnabled = () => readBool(ctx.settings, 'heatShow', true);
     const heatOptions = () => ({
         radius: readNumber(ctx.settings, 'heatRadius', 38, 10, 80),
@@ -60,7 +71,7 @@ export function createSpotPage(ctx) {
         visible: readBool(ctx.settings, 'terminatorShow', true)
     });
     const rotationPages = () => Math.max(1, Math.ceil(
-        state.callsigns.filter(Boolean).length / (visibleCells().length || 1)));
+        state.callsigns.filter(Boolean).length / (layoutCells().length || 1)));
     const rotationNeeded = () => rotationPages() > 1;
 
     function setConnState(value) {
@@ -111,6 +122,9 @@ export function createSpotPage(ctx) {
     }
 
     function updateHeat(cell, band, now = Date.now()) {
+        /* Never create/draw a heat layer on a map that is not laid out: the
+         * canvas would be sized 0x0 and simpleheat's getImageData would throw. */
+        if (!cellRenderable(cell)) return;
         const points = [];
         for (const group of cell.markers) {
             const spot = group._spot;
@@ -134,11 +148,16 @@ export function createSpotPage(ctx) {
             });
             cell.heat[band] = layer;
         }
-        layer.setLatLngs(points);
+        /* Decide visibility first: setLatLngs() queues a redraw frame, so it
+         * must never run on a layer we are about to remove — the frame would
+         * fire after Leaflet nulls _map and read getSize() of null. */
         const show = cell.activeBand === band && points.length > 0;
-        const onMap = cell.map.hasLayer(layer);
-        if (show && !onMap) cell.map.addLayer(layer);
-        if (!show && onMap) cell.map.removeLayer(layer);
+        if (!show) {
+            if (cell.map.hasLayer(layer)) cell.map.removeLayer(layer);
+            return;
+        }
+        if (!cell.map.hasLayer(layer)) cell.map.addLayer(layer);
+        layer.setLatLngs(points);
     }
 
     function refreshActiveBand(cell) {
@@ -152,6 +171,7 @@ export function createSpotPage(ctx) {
         } else if (!cell.bandPinned && cell.activeBand && bands.length) {
             cell.activeBand = bands.reduce((best, band) => counts[band] > counts[best] ? band : best, cell.activeBand);
         }
+        if (!cellRenderable(cell)) return;
         new Set([...Object.keys(cell.heat), ...bands]).forEach(band => updateHeat(cell, band));
     }
 
@@ -164,7 +184,7 @@ export function createSpotPage(ctx) {
     }
 
     function fitCellView(cell) {
-        if (!cell.map) return;
+        if (!cellRenderable(cell)) return;
         const points = [];
         for (const group of cell.markers) {
             const spot = group._spot;
@@ -326,7 +346,7 @@ export function createSpotPage(ctx) {
     }
 
     async function replayHistory() {
-        for (const cell of visibleCells()) {
+        for (const cell of layoutCells()) {
             if (cell.call) await replayCellHistory(cell);
         }
     }
@@ -343,7 +363,7 @@ export function createSpotPage(ctx) {
 
     function assignCalls() {
         const calls = state.callsigns.filter(Boolean);
-        visibleCells().forEach((cell, index) => {
+        layoutCells().forEach((cell, index) => {
             setCellCall(cell, index < calls.length ? calls[(index + state.rotation.offset) % calls.length] : '');
         });
         state.cells.forEach(cell => {
@@ -397,11 +417,9 @@ export function createSpotPage(ctx) {
         $('#grid').className = `grid layout-${layout}`;
         const count = Number(layout[0]) * Number(layout[2]);
         state.cells.forEach((cell, index) => { cell.el.style.display = index < count ? '' : 'none'; });
-        setTimeout(() => state.cells.forEach(cell => {
-            if (cell.el.style.display !== 'none' && cell.map) {
-                cell.map.invalidateSize();
-                fitCellView(cell);
-            }
+        setTimeout(() => visibleCells().forEach(cell => {
+            cell.map.invalidateSize();
+            fitCellView(cell);
         }), 50);
         $$('.layout-btn').forEach(button => button.classList.toggle('active', button.dataset.layout === layout));
         if (!rotationNeeded()) {
@@ -417,10 +435,8 @@ export function createSpotPage(ctx) {
         element.className = 'cell';
         element.dataset.index = index;
         element.innerHTML = `<div class="cell-header"><span class="call-label">—</span><span class="spot-count">0</span><button class="clear-cell-btn" title="${ctx.t('map.clear')}">×</button></div><div class="cell-info"></div><div class="map"></div><div class="cell-empty-hint"><span class="hint-icon">📡</span>${ctx.t('cellHint')}</div>`;
-        const base = createBaseMap(element.querySelector('.map'), {L, provider: ctx.settings.tiles});
-        const terminator = createTerminator(base.map, terminatorOptions());
         const cell = {
-            index, call: '', map: base.map, base, terminator, markers: [], count: 0,
+            index, call: '', map: null, base: null, terminator: null, markers: [], count: 0,
             bandInfo: {}, heat: {}, activeBand: null, bandPinned: false, seen: new Set(),
             el: element, callLabel: element.querySelector('.call-label'),
             countEl: element.querySelector('.spot-count'), hint: element.querySelector('.cell-empty-hint'),
@@ -432,6 +448,15 @@ export function createSpotPage(ctx) {
             if (chip) selectBand(cell, chip.dataset.band);
         });
         return cell;
+    }
+
+    /* Create the Leaflet map only after the cell is attached to the document,
+     * so its first size measurement is the real one instead of 0x0. */
+    function mountCell(cell) {
+        const base = createBaseMap(cell.el.querySelector('.map'), {L, provider: ctx.settings.tiles});
+        cell.base = base;
+        cell.map = base.map;
+        cell.terminator = createTerminator(base.map, terminatorOptions());
     }
 
     function applyCallsigns(calls) {
@@ -527,6 +552,16 @@ export function createSpotPage(ctx) {
         });
     }
 
+    /* Called when the spot grid becomes visible again: heat/fade updates were
+     * skipped while hidden, so recompute them once for the painted cells. */
+    function resync() {
+        const now = Date.now();
+        visibleCells().forEach(cell => {
+            cell.markers.forEach(group => applyMarkerFade(group, now));
+            refreshActiveBand(cell);
+        });
+    }
+
     function applyLang() {
         state.cells.forEach(cell => {
             cell.hint.innerHTML = `<span class="hint-icon">📡</span>${ctx.t('cellHint')}`;
@@ -540,6 +575,7 @@ export function createSpotPage(ctx) {
 
     function tick(now = Date.now()) {
         state.cells.forEach(cell => {
+            if (!cellRenderable(cell)) return;
             cell.markers.forEach(group => applyMarkerFade(group, now));
             Object.keys(cell.heat).forEach(band => updateHeat(cell, band, now));
         });
@@ -567,6 +603,7 @@ export function createSpotPage(ctx) {
             state.cells.push(cell);
             grid.appendChild(cell.el);
         }
+        state.cells.forEach(mountCell);
         setLayout(ctx.settings.layout, false);
         $('#rotSec').value = state.rotation.intervalSec;
     }
@@ -574,7 +611,7 @@ export function createSpotPage(ctx) {
     return {
         state, store, init, applyCallsigns, applyLang, applyBandColors, applyMapSettings, setConnState,
         setLayout, handleSpot, replayHistory,
-        setTileProvider, refreshMaps, fitCellView, visibleCells, clearCell,
+        setTileProvider, refreshMaps, resync, fitCellView, visibleCells, clearCell,
         startRotation, stopRotation, rotateStep, restartRotationTimer, updateRotateUI,
         tick, prune, dotIcon, applyMarkerFade,
         setRotationInterval(value) {

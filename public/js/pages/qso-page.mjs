@@ -713,6 +713,7 @@ export function createQsoPage(ctx) {
         } else {
             hideSpotAlertAndVoice();
             ctx.spot.refreshMaps();
+            ctx.spot.resync();
         }
         ctx.settingsPage?.closeAppMenu();
     }
