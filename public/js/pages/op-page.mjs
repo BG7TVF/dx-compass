@@ -48,6 +48,7 @@ export function createOpPage(ctx) {
         qsos: new Map(),
         mySpots: [],
         allSpots: [],
+        opponentRows: [],
         spotKeys: new Set(),
         monitoredCalls: null,
         opponents: [],
@@ -1135,9 +1136,9 @@ export function createOpPage(ctx) {
         renderMap();
     }
 
-    /* Bootstrap the WS stream once, then let live spots drive the opponent
-       panel. The callsign list is a filter, never a blocker: if it fails the
-       panel still shows every rival seen on the bands. */
+    /* Opponent rows come from the server-side watched scope: the live callsign
+       list and the opponent TTL are applied inside the query, so a call removed
+       from the list stops coming back without waiting for any page state. */
     async function loadOpponents() {
         if (!myCall()) {
             state.opponents = [];
@@ -1150,12 +1151,21 @@ export function createOpPage(ctx) {
         } catch (error) {
             console.warn('op view: opponent bootstrap unavailable', error);
         }
-        if (state.monitoredCalls === null) {
-            try {
-                state.monitoredCalls = await fetchCallsigns();
-            } catch {
-                // Keep null and retry on the next bootstrap; do not drop rivals.
-            }
+        try {
+            state.monitoredCalls = await fetchCallsigns();
+        } catch {
+            // Keep the previous list; the server side already filters.
+        }
+        await refreshOpponentRows();
+    }
+
+    async function refreshOpponentRows() {
+        if (!myCall()) return;
+        try {
+            state.opponentRows = await fetchSpots({scope: 'watched', limit: 400});
+        } catch (error) {
+            // Network hiccup: keep the previous rows instead of blanking the panel.
+            state.opponentRows = state.opponentRows || [];
         }
         recomputeOpponents();
     }
@@ -1170,8 +1180,9 @@ export function createOpPage(ctx) {
          * receiving station in monitored_call, so an empty or failed callsign
          * fetch must hide the section instead of showing every row. */
         const calls = Array.isArray(state.monitoredCalls) ? state.monitoredCalls : [];
-        state.opponents = buildOpponents(state.allSpots, myCall(), bearing, {
-            now: Date.now(), watched: calls
+        const ttlMin = Math.min(180, Math.max(5, Number(ctx.settings && ctx.settings.opponentWindowMin) || 30));
+        state.opponents = buildOpponents(state.opponentRows, myCall(), bearing, {
+            now: Date.now(), watched: calls, windowMs: ttlMin * 60000
         });
         renderOpponents();
         for (const opponent of state.opponents.slice(0, 6)) loadAntenna(opponent.call);
@@ -1368,7 +1379,7 @@ export function createOpPage(ctx) {
                 renderBottom();
             }, 10000),
             // Opponents come from the WS spot stream; this is only recompute.
-            setInterval(() => { if (state.active) recomputeOpponents(); }, 5000),
+            setInterval(() => { if (state.active) refreshOpponentRows(); }, 5000),
             setInterval(() => { if (state.active) loadMySpots(); }, 15000),
             setInterval(() => { if (state.active) loadPaths(); }, 10000),
             setInterval(() => { if (state.active) loadOpponents(); }, 60000),

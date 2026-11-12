@@ -14,9 +14,12 @@ test('spot SQL retains column order, escaping and numeric NULL handling', () => 
     assert.match(sql, /NULL, NULL, 1, 2, 3, 2, '20m', NULL, NULL, NULL, NULL, NULL, NULL\);$/);
     assert.equal(storage.spots.query("k'1", '25'),
         "SELECT * FROM spots WHERE monitored_call = 'K''1' OR spot_call = 'K''1' ORDER BY id DESC LIMIT 25");
-    /* 大屏对手栏目按名单批量取数：只回监控呼号，避免区域邻台挤占最新窗口。 */
-    assert.equal(storage.spots.query('', '25', 'k1, dl1'),
-        "SELECT * FROM spots WHERE monitored_call IN ('K1','DL1') OR spot_call IN ('K1','DL1') ORDER BY id DESC LIMIT 25");
+    /* 对手语义取数：名单 + TTL 都在 SQL 里收敛，区域邻台行不会混入。 */
+    assert.equal(storage.spots.watchedQuery(['k1', 'dl1'], 30, 400),
+        "SELECT * FROM spots WHERE monitored_call IN ('K1','DL1') AND datetime(timestamp) >= datetime('now', '-30 minutes') ORDER BY id DESC LIMIT 400");
+    assert.equal(storage.spots.watchedQuery([], 30, 400), 'SELECT * FROM spots WHERE 1=0;');
+    /* TTL 跟着设置走：窗口从 30 分钟改到 90 分钟，SQL 同步变化。 */
+    assert.match(storage.spots.watchedQuery(['K1'], 90, 400), /'-90 minutes'/);
 });
 
 test('schema migration emits only missing columns in original order', () => {

@@ -216,3 +216,39 @@ test('fresh window follows freshSec instead of the former one-hour constant', ()
     narrow.global.set('uiSettings', {freshSec: 600});
     assert.equal(spots.ingest('dxwatch', stale, narrow).fresh.length, 0);
 });
+
+test('对手查询即时读取当前名单与 TTL：移出名单立刻查不到，改 TTL 窗口跟着变', () => {
+    const e = env();
+    e.global.set('uiSettings', {myCall: 'N0CALL', opponentWindowMin: 45});
+    const first = spots.watchedQuery(e.global, 400);
+    /* 本台呼号由 monitoredCalls 一并注入，不受“对手名单”移除影响。 */
+    assert.match(first, /monitored_call IN \('K1ABC','N0CALL'\)/);
+    assert.match(first, /'-45 minutes'/);
+    assert.match(first, /LIMIT 400/);
+
+    /* K1ABC 被移出名单：同一份历史数据，新查询不再包含它。 */
+    e.global.set('monitoredCalls', ['BA7SAY']);
+    const after = spots.watchedQuery(e.global, 400);
+    assert.equal(after.includes('K1ABC'), false);
+    assert.match(after, /'BA7SAY'/);
+
+    /* TTL 设置变化立即反映在窗口上。 */
+    e.global.set('uiSettings', {myCall: 'N0CALL', opponentWindowMin: 90});
+    assert.match(spots.watchedQuery(e.global, 400), /'-90 minutes'/);
+
+    /* 名单为空时不放行任何行。 */
+    e.global.set('monitoredCalls', []);
+    e.global.set('uiSettings', {opponentWindowMin: 30});
+    assert.equal(spots.watchedQuery(e.global, 400), 'SELECT * FROM spots WHERE 1=0;');
+});
+
+test('spots 清理窗口不短于对手 TTL，行不会被提前删掉', () => {
+    const schema = require('../public/shared/settings/schema.js');
+    const ttl = schema.FIELDS.find(f => f.key === 'opponentWindowMin');
+    const retention = schema.FIELDS.find(f => f.key === 'retentionSpotsDays');
+    assert.equal(typeof ttl, 'object');
+    assert.equal(typeof retention, 'object');
+    /* 0 = 永久保留；启用清理时最小 1 天，仍大于 TTL 上限 3 小时。 */
+    assert.equal(retention.min, 0);
+    assert.ok(1 * 24 * 60 >= ttl.max);
+});

@@ -216,15 +216,13 @@ export async function startWallPage() {
         } catch (error) {
             /* Keep the previous spots. */
         }
-        /* Regional PSKR rows can fill the newest 400 and push the monitored
-         * calls out, so the rival panel reads its own filtered query. */
-        const scope = [state.settings.myCall, ...state.watched].filter(Boolean);
-        if (scope.length) {
-            try {
-                state.watchedRows = await fetchSpots({calls: scope, limit: 400});
-            } catch (error) {
-                /* Keep the previous rival rows. */
-            }
+        /* The opponent scope is filtered server-side by the live callsign list
+         * and the TTL, so a removed call disappears even if this page has a
+         * stale list and regional PSKR rows can never crowd the rivals out. */
+        try {
+            state.watchedRows = await fetchSpots({scope: 'watched', limit: 400});
+        } catch (error) {
+            /* Keep the previous rival rows. */
         }
         wallMap.drawSpots(state.watchedRows, state.settings.myCall, {
             windowMin: numSetting('opponentWindowMin', 30, 5, 180),
