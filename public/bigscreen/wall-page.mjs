@@ -14,7 +14,7 @@ import {
     renderSpotTrend,
     setSpaceDwell
 } from './wall-charts.mjs';
-import {createOpponentRenderer, opponentColorGradient} from './wall-opponents.mjs';
+import {createOpponentRenderer, opponentColorGradient} from '../shared/opponents/opponents.mjs';
 import {
     renderBands,
     renderQsoStats,
@@ -49,6 +49,7 @@ export async function startWallPage() {
     };
     const wallMap = createWallMap();
     const opponents = createOpponentRenderer({
+        t,
         bearing: (lat1, lon1, lat2, lon2) => bearing(
             {lat: lat1, lon: lon1},
             {lat: lat2, lon: lon2}

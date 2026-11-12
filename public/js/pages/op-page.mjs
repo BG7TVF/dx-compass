@@ -14,28 +14,25 @@ import {CONTEST_CATEGORIES, bandLabel, dbRowToQso} from '../settings-model.mjs';
 import {fetchQsos} from '../../shared/data/qsos.mjs';
 import {fetchSpots} from '../../shared/data/spots.mjs';
 import {getPropSnapshot, selectForecast} from '../../shared/data/propagation.mjs';
-import {fetchPaths, fetchEstimate} from '../../shared/data/analysis.mjs';
+import {fetchPaths} from '../../shared/data/analysis.mjs';
 import {fetchMultipliers} from '../../shared/data/multipliers.mjs';
 import {fetchCallsigns, checkCallsign} from '../../shared/data/callsigns.mjs';
 import {fetchAdvice} from '../../shared/data/advice.mjs';
-import {buildOpponents} from '../../bigscreen/wall-opponents.mjs';
+import {createOpponentRenderer} from '../../shared/opponents/opponents.mjs';
 import {bandConditionCells, spaceWeatherCells, bandOf} from '../../bigscreen/wall-cards.mjs';
 import {bearing} from '../../shared/geo/coordinates.mjs';
 import {gridToLatLon} from '../../shared/geo/maidenhead.mjs';
-import {resolveCall} from '../../shared/dxcc/callsign.mjs';
 import {createOpMap} from '../op/op-map.mjs';
 import {createPeripheralHub, deviceDefinitions} from '../op/peripherals.mjs';
 import {changeFrequencyClaim} from '../../shared/data/station.mjs';
 
 const REVIEW_KEY = 'dxcompass-op-call-review';
-const COMPASS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 const RADIO_THEME = {1: 'r1', 2: 'r2', 3: 'r3', 4: 'r4', 5: 'r5', 6: 'r6'};
 
 const timeOf = value => {
     const time = new Date(value).getTime();
     return Number.isFinite(time) ? time : 0;
 };
-const compass = deg => COMPASS[Math.round((((Number(deg) || 0) % 360) + 360) % 360 / 45) % 8];
 const bandKey = value => String(value || '').toUpperCase();
 const mini = value => (value === null || value === undefined || value === '' ? '—' : value);
 
@@ -51,7 +48,6 @@ export function createOpPage(ctx) {
         opponentRows: [],
         spotKeys: new Set(),
         monitoredCalls: null,
-        opponents: [],
         prop: null,
         paths: null,
         multipliers: null,
@@ -59,7 +55,6 @@ export function createOpPage(ctx) {
         multExpanded: false,
         suspects: new Map(),
         review: loadReview(),
-        opponentCache: new Map(),
         adviceDismissed: new Set(),
         adviceEngine: null,
         checking: null,
@@ -74,6 +69,17 @@ export function createOpPage(ctx) {
         const value = ctx.t(key, params);
         return value === undefined || value === null ? key : value;
     }
+
+    /* The wall's opponent panel, unchanged: same aggregation, same cards, same
+     * stylesheet. Only the translator is injected so the panel follows the OP
+     * page language; the rows come from the single watched-scope request. */
+    const opponentPanel = createOpponentRenderer({
+        t,
+        bearing: (lat1, lon1, lat2, lon2) => bearing(
+            {lat: lat1, lon: lon1},
+            {lat: lat2, lon: lon2}
+        )
+    });
 
     function category() {
         const value = String(ctx.settings.category || 'SO1R').toUpperCase();
@@ -403,93 +409,6 @@ export function createOpPage(ctx) {
         host.innerHTML = spaceWeatherCells(state.prop).map(([key, value, className]) =>
             '<div><label>' + esc(key) + '</label><b class="' + esc(className) + '">' +
             esc(value) + '</b></div>').join('');
-    }
-
-    function formatKhz(value) {
-        if (!isFinite(value) || !value) return '—';
-        return String(Math.round(value)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' kHz';
-    }
-
-    function antennaLine(antenna) {
-        if (!antenna || !antenna.ok) {
-            const points = antenna && antenna.points || 0;
-            return {
-                kind: 'insufficient',
-                text: points < 6 ? t('op.opp.insufficient', {n: 6}) : t('op.opp.unknown')
-            };
-        }
-        const probs = antenna.probabilities || {};
-        const prob = Math.round(Number(probs[antenna.type] || 0) * 100);
-        return {
-            kind: 'inferred',
-            text: t('op.antenna.' + (antenna.type || 'unknown')) + ' · ' + prob + '% · ' +
-                t('op.opp.samples', {n: antenna.points || 0})
-        };
-    }
-
-    /* Per-band rows: band name, latest frequency and the antenna verdict for
-     * that band. The estimate endpoint computes them; the page only formats. */
-    function bandLines(call) {
-        const cached = state.opponentCache.get(call);
-        if (!cached || cached.status === 'loading') {
-            return [{band: '', freq: null, kind: 'loading', text: t('op.suspect.checking')}];
-        }
-        if (cached.status === 'error') {
-            return [{band: '', freq: null, kind: 'unknown', text: t('op.opp.unknown')}];
-        }
-        const data = cached.data || {};
-        const bands = Array.isArray(data.bands) ? data.bands : [];
-        if (bands.length) {
-            return bands.map(item => {
-                const line = {band: item.band || '', freq: item.freqKhz, ...antennaLine(item.antenna)};
-                if (line.kind !== 'inferred' && item.samples) {
-                    line.text = t('op.opp.samples', {n: item.samples}) + ' · ' + line.text;
-                }
-                return line;
-            });
-        }
-        return [{band: '', freq: null, ...antennaLine(data.antenna)}];
-    }
-
-    function renderOpponents() {
-        const host = $('#opOpponents');
-        const list = state.opponents.slice(0, 6);
-        if (!list.length) {
-            host.innerHTML = '<div class="op-empty">' + esc(t('op.left.opponents.empty')) + '</div>';
-            return;
-        }
-        host.innerHTML = list.map(opponent => {
-            const identity = resolveCall(opponent.call);
-            const grid = String(opponent.grid || '').trim();
-            const location = [grid || t('op.opp.unknown'), identity && identity.country ||
-                (opponent.dxcc ? t('op.opp.dxcc', {name: opponent.dxcc}) : '')]
-                .filter(Boolean).join(' · ');
-            const targetIdentity = resolveCall(opponent.targetCall);
-            const target = [
-                opponent.targetCall || '',
-                opponent.targetGrid || (targetIdentity && targetIdentity.country) || '',
-                isFinite(opponent.bearing) ? t('op.opp.targetBearing', {deg: Math.round(opponent.bearing)}) +
-                    ' ' + compass(opponent.bearing) : ''
-            ].filter(Boolean).join(' · ') || t('op.opp.noData');
-            const bands = bandLines(opponent.call).map(line =>
-                '<div class="op-opp-band">' +
-                    '<b>' + esc(line.band || '—') + '</b>' +
-                    '<span class="op-opp-khz">' + esc(line.freq ? formatKhz(line.freq) : '—') + '</span>' +
-                    '<span class="op-opp-ant' + (line.kind === 'insufficient' ? ' op-opp-dim' : '') + '">' +
-                        (line.kind === 'inferred'
-                            ? '<em class="op-inferred">' + esc(t('op.opp.inferred')) + '</em>' : '') +
-                        '<span>' + esc(line.text) + '</span></span>' +
-                '</div>').join('');
-            return '<div class="op-opp">' +
-                '<div class="op-opp-head"><b>' + esc(opponent.call) + '</b><span>' +
-                    esc(t('op.opp.samples', {n: opponent.n})) + '</span></div>' +
-                '<div class="op-opp-row"><label>' + esc(t('op.opp.location')) + '</label><span>' +
-                    esc(location) + '</span></div>' +
-                '<div class="op-opp-bands">' + bands + '</div>' +
-                '<div class="op-opp-row op-opp-secondary"><label>' + esc(t('op.opp.target')) +
-                    '</label><span>' + esc(target) + '</span></div>' +
-            '</div>';
-        }).join('');
     }
 
     function contestModes() {
@@ -1144,8 +1063,7 @@ export function createOpPage(ctx) {
        from the list stops coming back without waiting for any page state. */
     async function loadOpponents() {
         if (!myCall()) {
-            state.opponents = [];
-            renderOpponents();
+            opponentPanel.render([], '', []);
             return;
         }
         try {
@@ -1175,8 +1093,7 @@ export function createOpPage(ctx) {
 
     function recomputeOpponents() {
         if (!myCall()) {
-            state.opponents = [];
-            renderOpponents();
+            opponentPanel.render([], '', []);
             return;
         }
         /* Allowlist inside the aggregation: PSKR regional rows carry the
@@ -1184,25 +1101,8 @@ export function createOpPage(ctx) {
          * fetch must hide the section instead of showing every row. */
         const calls = Array.isArray(state.monitoredCalls) ? state.monitoredCalls : [];
         const ttlMin = Math.min(180, Math.max(5, Number(ctx.settings && ctx.settings.opponentWindowMin) || 30));
-        state.opponents = buildOpponents(state.opponentRows, myCall(), bearing, {
-            now: Date.now(), watched: calls, windowMs: ttlMin * 60000
-        });
-        renderOpponents();
-        for (const opponent of state.opponents.slice(0, 6)) loadAntenna(opponent.call);
-    }
-
-    async function loadAntenna(call) {
-        const cached = state.opponentCache.get(call);
-        if (cached && Date.now() - cached.at < 5 * 60000) return;
-        state.opponentCache.set(call, {status: 'loading', at: Date.now()});
-        renderOpponents();
-        try {
-            const data = await fetchEstimate(call);
-            state.opponentCache.set(call, {status: 'ready', at: Date.now(), data});
-        } catch (error) {
-            state.opponentCache.set(call, {status: 'error', at: Date.now()});
-        }
-        renderOpponents();
+        opponentPanel.setOptions({windowMin: ttlMin});
+        opponentPanel.render(state.opponentRows, myCall(), calls);
     }
 
     // ---- call sanity check ------------------------------------------------
@@ -1343,7 +1243,8 @@ export function createOpPage(ctx) {
         renderTop();
         renderBands();
         renderSpace();
-        renderOpponents();
+        /* The shared renderer paints #oppRows from the rows it already holds. */
+        opponentPanel.trim();
         renderWorkability();
         renderSuspects();
         renderMultipliers();
@@ -1477,7 +1378,7 @@ export function createOpPage(ctx) {
     function renderTitles() {
         $('#opBandsTitle').textContent = t('op.left.bands');
         $('#opSpaceTitle').textContent = t('op.left.space');
-        $('#opOppTitle').textContent = t('op.left.opponents');
+        $('#opOppTitleText').textContent = t('op.left.opponents');
         $('#opMapTitle').textContent = t('op.map.title');
         $('#opWorkTitle').textContent = t('op.right.workability');
         $('#opSuspectTitle').textContent = t('op.right.suspicious');

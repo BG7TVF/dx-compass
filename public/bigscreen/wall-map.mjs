@@ -5,7 +5,7 @@ import {gridToLatLon} from '../shared/geo/maidenhead.mjs';
 import {LAND_BOUNDS, mercLat, mercY, WORLD_BOUNDS} from '../shared/map/base-map.mjs';
 import {createMapSurface} from '../shared/map/surface.mjs';
 import {getLeaflet} from '../shared/map/leaflet.mjs';
-import {opponentStyleMap, trackStyle} from './wall-opponents.mjs';
+import {opponentStyleMap, trackStyle} from '../shared/opponents/opponents.mjs';
 import {opponentIcon} from '../shared/map/markers.mjs';
 import {
     addTrackPaths,

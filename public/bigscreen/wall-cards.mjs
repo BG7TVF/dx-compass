@@ -6,7 +6,7 @@ import {
     formatClockDate,
     parseUtcDateTime
 } from '../shared/core/clock.mjs';
-import {WALL_BAND_COLORS} from './wall-opponents.mjs';
+import {WALL_BAND_COLORS} from '../shared/opponents/opponents.mjs';
 import {getLanguage, t} from './wall-i18n.mjs';
 
 const $ = selector => document.querySelector(selector);

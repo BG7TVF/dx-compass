@@ -203,13 +203,13 @@
     text-transform: uppercase;
 }
 .op-card > h3 .op-card-actions { margin-left: auto; display: flex; gap: 4px; }
-.op-card-body, .op-band-grid, .op-space-grid, .op-opp-list,
+.op-card-body, .op-band-grid, .op-space-grid,
 .op-work-list, .op-suspect-list, .op-mult-list {
     min-height: 0;
     overflow: auto;
 }
 .op-band-grid, .op-space-grid { padding: 6px; }
-.op-opp-list, .op-work-list, .op-suspect-list, .op-mult-list { padding: 6px; flex: 1; }
+.op-work-list, .op-suspect-list, .op-mult-list { padding: 6px; flex: 1; }
 
 .op-band-card { flex: 0 0 auto; }
 .op-space-card { flex: 0 0 auto; }
@@ -243,34 +243,8 @@
 .op-space-grid b { font-size: 13px; font-variant-numeric: tabular-nums; }
 .op-space-grid b.bad { color: var(--red); }
 
-/* Opponent cards: three explicit facts, inference visually separated */
-.op-opp { border: 1px solid var(--border); border-radius: var(--r-sm); padding: 6px; margin-bottom: 6px; background: var(--panel-2); }
-.op-opp-head { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
-.op-opp-head b { font-size: 13px; color: var(--text-strong); }
-.op-opp-head span { margin-left: auto; font-size: 9px; color: var(--text-dim); }
-.op-opp-row { display: grid; grid-template-columns: 62px minmax(0, 1fr); gap: 4px; font-size: 10px; line-height: 1.45; padding: 1px 0; }
-.op-opp-row label { color: var(--text-dim); }
-.op-opp-row span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.op-opp-ant { display: flex; align-items: baseline; gap: 4px; flex-wrap: wrap; }
-.op-opp-ant .op-inferred { color: var(--yellow); }
-.op-opp-ant em { font-style: normal; color: var(--text-dim); }
-.op-opp-bands { margin: 4px 0 5px; border-top: 1px dashed var(--border); border-bottom: 1px dashed var(--border); padding: 3px 0; }
-.op-opp-band { display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 0 6px; align-items: baseline; font-size: 10px; line-height: 1.5; padding: 1px 0; }
-.op-opp-band b { color: var(--accent); font-weight: 600; }
-.op-opp-band .op-opp-khz { color: var(--text-dim); white-space: nowrap; font-variant-numeric: tabular-nums; }
-.op-opp-band .op-opp-ant { grid-column: 1 / -1; display: block; min-width: 0; white-space: normal; color: var(--text); font-size: 9.5px; line-height: 1.4; }
-.op-opp-band .op-opp-dim { color: var(--text-dim); }
-.op-opp-secondary { opacity: .7; }
-.op-opp-input {
-    width: 100%;
-    height: 22px;
-    border: 1px solid var(--border);
-    border-radius: var(--r-sm);
-    background: var(--well);
-    color: var(--text);
-    font-size: 10px;
-    padding: 0 4px;
-}
+/* Opponent cards are the wall's component verbatim: markup and every rule
+ * live in shared/opponents/, so nothing is restyled here. */
 .op-link-btn { border: 0; background: none; color: var(--accent); font-size: 9px; cursor: pointer; padding: 0; }
 .op-empty { color: var(--text-dim); font-size: 11px; text-align: center; padding: 18px 8px; }
 

@@ -6,7 +6,8 @@ import {
     OPPONENT_COLORS, OPPONENT_SHAPES, WALL_BAND_COLORS, assignOpponentColors,
     assignOpponentStyles, bandCellHtml, buildOpponents, callColorIndex,
     opponentCardHtml, opponentColorMap, opponentStyleMap, shapeSvg, trackStyle
-} from '../public/bigscreen/wall-opponents.mjs';
+} from '../public/shared/opponents/opponents.mjs';
+import {t as translate} from '../public/bigscreen/wall-i18n.mjs';
 
 /* The card markup is composed from the shared dictionary (wall-i18n reads
  * globalThis.I18N lazily), so load the shipped Chinese/English strings. */
@@ -90,7 +91,7 @@ test('band cell shows frequency in MHz and the heading', () => {
         spot('K1ABC', '20m', 14025, '2026-11-08T11:34:00Z'),
         spot('K1ABC', '20m', 14026, '2026-11-08T11:35:00Z')
     ], '', bearing, {now, watched: ['K1ABC']});
-    const html = opponentCardHtml(opponent);
+    const html = opponentCardHtml(opponent, 12, translate);
     assert.match(html, /K1ABC/);
     assert.match(html, /1 频段 · 2 SPOT/);
     assert.match(html, /20M/);
@@ -182,9 +183,10 @@ test('the map assigns each rival the same colour and glyph as its panel card', (
         assert.equal(map.get(opponent.call), opponent.color);
         assert.equal(mapStyles.get(opponent.call).color, opponent.color);
         assert.equal(mapStyles.get(opponent.call).shape, opponent.shape);
-        assert.match(opponentCardHtml(opponent), new RegExp('--call-color:' + opponent.color));
+        assert.match(opponentCardHtml(opponent, 12, translate),
+            new RegExp('--call-color:' + opponent.color));
     });
-    assert.match(opponentCardHtml(panel[0]), /class="oc-shape"/);
+    assert.match(opponentCardHtml(panel[0], 12, translate), /class="oc-shape"/);
 });
 
 test('neighbouring rivals never share a colour, even when hashes collide', () => {
@@ -219,18 +221,18 @@ test('too few or scattered samples never fake a main direction', () => {
     ], '', bearing, {now, watched: ['K1ABC']})[0].bands[0];
     assert.equal(single.dirSamples, 1);
     assert.equal(single.spread, false);
-    assert.match(bandCellHtml(single), /thin/);
+    assert.match(bandCellHtml(single, translate), /thin/);
 
     const flat = (lat1, lon1, lat2) => lat2;
     const scattered = buildOpponents([0, 90, 180, 270].map((degrees, index) => spot(
         'K1ABC', '20m', 14025, `2026-11-08T11:3${index}:00Z`, {lat: degrees}
     )), '', flat, {now, watched: ['K1ABC']})[0].bands[0];
     assert.equal(scattered.spread, true);
-    assert.match(bandCellHtml(scattered), /多向/);
+    assert.match(bandCellHtml(scattered, translate), /多向/);
 
     const noCoords = buildOpponents([
         spot('K1ABC', '20m', 14025, '2026-11-08T11:34:00Z', {lat: null, lon: null})
     ], '', bearing, {now, watched: ['K1ABC']})[0].bands[0];
     assert.equal(noCoords.dirSamples, 0);
-    assert.match(bandCellHtml(noCoords), /—/);
+    assert.match(bandCellHtml(noCoords, translate), /—/);
 });

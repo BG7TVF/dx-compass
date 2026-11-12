@@ -322,7 +322,7 @@ test('wall and toolbar strings are no longer hard-coded', () => {
     assert.ok(!/传播场|极光|ALL LAYERS/.test(wallPage), 'wall-page.mjs still hard-codes labels');
     assert.ok(!/距开始|距结束|已结束/.test(read('../public/bigscreen/wall-cards.mjs')));
     assert.ok(!/多向|个方向样本|无坐标样本|对手 SPOT/.test(
-        read('../public/bigscreen/wall-opponents.mjs')
+        read('../public/shared/opponents/opponents.mjs')
     ));
     assert.ok(!/趋势等待数据|日趋势|月趋势|小时趋势/.test(
         read('../public/bigscreen/wall-charts.mjs')

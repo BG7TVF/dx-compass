@@ -14,8 +14,8 @@ const MODULE_PATHS = [
     '/wall-map.mjs',
     '/wall-cards.mjs',
     '/wall-charts.mjs',
-    '/wall-opponents.mjs',
     '/wall-i18n.mjs',
+    '/shared/opponents/opponents.mjs',
     '/js/i18n.js',
     '/shared/core/clock.mjs',
     '/shared/core/events.mjs',
@@ -118,6 +118,7 @@ test('wall exposes only an asset fingerprint so a stale tab can reload', async (
 
 test('existing data and vendor whitelist entries remain exact', () => {
     for (const route of [
+        '/shared/opponents/opponents.css',
         '/shared/map/data/land.js',
         '/vendor/leaflet/leaflet.css',
         '/vendor/leaflet/leaflet.js',
