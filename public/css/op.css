@@ -19,7 +19,11 @@
     min-height: 0;
     display: grid;
     grid-template-rows: auto auto minmax(0, 1fr) auto;
-    gap: 8px;
+    /* 6px between the four rows (the grid is single-column, so this is purely
+     * vertical). The 2px saved per separator go straight to .op-body: nine
+     * rivals in the compact grid then fit without scrolling, and nothing else
+     * loses height because the device footer keeps its own 132px cap. */
+    gap: 6px 8px;
     padding: 8px;
     background: var(--bg);
     color: var(--text);
