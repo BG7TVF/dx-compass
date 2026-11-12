@@ -1,6 +1,7 @@
 import {getSettings} from '../shared/data/settings.mjs';
 import {getPropSnapshot} from '../shared/data/propagation.mjs';
 import {fetchSpots} from '../shared/data/spots.mjs';
+import {fetchCallsigns} from '../shared/data/callsigns.mjs';
 import {fetchQsos} from '../shared/data/qsos.mjs';
 import {getStationState} from '../shared/data/station.mjs';
 import {bearing} from '../shared/geo/coordinates.mjs';
@@ -38,6 +39,7 @@ export async function startWallPage() {
         selected: [],
         cycleTimer: null,
         spotRows: [],
+        watched: [],
         qsoRows: [],
         station: null,
         settingsKey: ''
@@ -176,7 +178,7 @@ export async function startWallPage() {
                 tickClock(state.settings);
                 renderRadios(state.station);
                 renderSpaceTrend(state.prop || {});
-                opponents.render(state.spotRows, state.settings.myCall);
+                opponents.render(state.spotRows, state.settings.myCall, state.watched);
             }
         }
         renderBands(state.prop && state.prop.forecast);
@@ -197,6 +199,16 @@ export async function startWallPage() {
         }
     }
 
+    async function refreshCallsigns() {
+        try {
+            state.watched = await fetchCallsigns();
+        } catch (error) {
+            /* Keep the previous allowlist; the wall never widens it on error. */
+            return;
+        }
+        opponents.render(state.spotRows, state.settings.myCall, state.watched);
+    }
+
     async function refreshSpots() {
         try {
             state.spotRows = await fetchSpots({limit: 400});
@@ -204,10 +216,11 @@ export async function startWallPage() {
             /* Keep the previous spots. */
         }
         wallMap.drawSpots(state.spotRows, state.settings.myCall, {
-            windowMin: numSetting('opponentWindowMin', 30, 5, 180)
+            windowMin: numSetting('opponentWindowMin', 30, 5, 180),
+            watched: state.watched
         });
         renderSpotTrend(state.spotRows);
-        opponents.render(state.spotRows, state.settings.myCall);
+        opponents.render(state.spotRows, state.settings.myCall, state.watched);
     }
 
     async function refreshQso() {
@@ -233,6 +246,9 @@ export async function startWallPage() {
 
     const pollers = [
         createPoller(refreshProp, {intervalMs: () => secSetting('propPollSec', 60, 30, 600), immediate: false}),
+        /* The monitored list changes rarely; one tiny read per minute keeps the
+         * rival allowlist current without waiting for a page reload. */
+        createPoller(refreshCallsigns, {intervalMs: () => 60000, immediate: false}),
         createPoller(refreshSpots, {intervalMs: () => secSetting('wallSpotSec', 30, 5, 300), immediate: false}),
         createPoller(refreshQso, {intervalMs: () => secSetting('wallQsoSec', 30, 5, 300), immediate: false}),
         createPoller(refreshStation, {intervalMs: () => secSetting('wallStationSec', 15, 5, 120), immediate: false}),
@@ -240,7 +256,7 @@ export async function startWallPage() {
          * wall promptly, even when the configured sync interval is longer. */
         createPoller(refreshSettings, {intervalMs: () => Math.min(secSetting('syncSec', 60, 10, 300), 15000), immediate: false})
     ];
-    const [propPoller, spotPoller, qsoPoller, stationPoller, settingsPoller] = pollers;
+    const [propPoller, callsignPoller, spotPoller, qsoPoller, stationPoller, settingsPoller] = pollers;
 
     let resizeTimer = null;
     window.addEventListener('resize', () => {
@@ -265,6 +281,9 @@ export async function startWallPage() {
     applyStatic(document);
 
     await settingsPoller.run();
+    /* Allowlist before first paint: an empty list must never fall back to
+     * "every monitored_call is a rival". */
+    await callsignPoller.run();
     await Promise.all([
         propPoller.run(),
         spotPoller.run(),

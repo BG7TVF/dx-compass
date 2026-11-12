@@ -32,7 +32,9 @@ test('opponents are grouped by call, bands nested inside, recent spots only', ()
         spot('MYCALL', '20m', 14020, '2026-11-08T11:55:00Z'),
         spot('K1ABC', '15m', 21020, '2026-11-08T09:00:00Z')
     ];
-    const opponents = buildOpponents(rows, 'mycall', bearing, {now});
+    const opponents = buildOpponents(rows, 'mycall', bearing, {
+        now, watched: ['K1ABC', 'DL1ABC']
+    });
     assert.deepEqual(opponents.map(item => item.call), ['K1ABC', 'DL1ABC']);
     const k1 = opponents[0];
     assert.equal(k1.n, 3);
@@ -43,6 +45,31 @@ test('opponents are grouped by call, bands nested inside, recent spots only', ()
     assert.equal(k1.bands[0].spread, false);
 });
 
+test('不在 monitoredCalls 里的呼号永远不会进入对手栏目', () => {
+    const rows = [
+        spot('K1ABC', '20m', 14020, '2026-11-08T11:31:00Z'),
+        /* PSKR 区域邻台：接收台被写进 monitored_call，但它不是对手。 */
+        spot('JA1REG', '20m', 14074, '2026-11-08T11:32:00Z', {
+            de: 'JA1REG', spot_call: 'BG7XLH',
+            sender_grid: 'OL53PL', receiver_grid: 'PM95QM'
+        }),
+        /* 已从名单移除的呼号，窗口内还留着历史 spot。 */
+        spot('OLD1CALL', '20m', 14030, '2026-11-08T11:33:00Z')
+    ];
+    const opponents = buildOpponents(rows, '', bearing, {now, watched: ['k1abc']});
+    assert.deepEqual(opponents.map(item => item.call), ['K1ABC']);
+
+    /* 名单为空或接口失败时收敛为空，而不是退回“全部放行”。 */
+    assert.deepEqual(buildOpponents(rows, '', bearing, {now, watched: []}), []);
+    assert.deepEqual(buildOpponents(rows, '', bearing, {now}), []);
+
+    /* 本台呼号即便写进名单也不会成为对手。 */
+    assert.deepEqual(buildOpponents(
+        [spot('K1ABC', '20m', 14020, '2026-11-08T11:31:00Z')],
+        'k1abc', bearing, {now, watched: ['K1ABC']}
+    ), []);
+});
+
 test('each rival keeps its own per-band direction on the same band', () => {
     const flat = (lat1, lon1, lat2) => lat2;
     const rows = [
@@ -51,7 +78,7 @@ test('each rival keeps its own per-band direction on the same band', () => {
         spot('BB2BB', '20m', 14030, '2026-11-08T11:33:00Z', {lat: 180}),
         spot('BB2BB', '20m', 14031, '2026-11-08T11:34:00Z', {lat: 180})
     ];
-    const opponents = buildOpponents(rows, '', flat, {now});
+    const opponents = buildOpponents(rows, '', flat, {now, watched: ['AA1AA', 'BB2BB']});
     const aa = opponents.find(item => item.call === 'AA1AA');
     const bb = opponents.find(item => item.call === 'BB2BB');
     assert.equal(Math.round(aa.bands[0].dir), 90);
@@ -62,7 +89,7 @@ test('band cell shows frequency in MHz and the heading', () => {
     const [opponent] = buildOpponents([
         spot('K1ABC', '20m', 14025, '2026-11-08T11:34:00Z'),
         spot('K1ABC', '20m', 14026, '2026-11-08T11:35:00Z')
-    ], '', bearing, {now});
+    ], '', bearing, {now, watched: ['K1ABC']});
     const html = opponentCardHtml(opponent);
     assert.match(html, /K1ABC/);
     assert.match(html, /1 频段 · 2 SPOT/);
@@ -146,9 +173,10 @@ test('the map assigns each rival the same colour and glyph as its panel card', (
         spot('DL1ABC', '20m', 14030, '2026-11-08T11:40:00Z'),
         spot('JA1XYZ', '15m', 21030, '2026-11-08T11:45:00Z')
     ];
-    const panel = buildOpponents(rows, '', bearing, {now});
-    const map = opponentColorMap(rows, '', {now});
-    const mapStyles = opponentStyleMap(rows, '', {now});
+    const watched = ['K1ABC', 'DL1ABC', 'JA1XYZ'];
+    const panel = buildOpponents(rows, '', bearing, {now, watched});
+    const map = opponentColorMap(rows, '', {now, watched});
+    const mapStyles = opponentStyleMap(rows, '', {now, watched});
     assert.equal(map.size, panel.length);
     panel.forEach(opponent => {
         assert.equal(map.get(opponent.call), opponent.color);
@@ -188,7 +216,7 @@ test('neighbouring rivals never share a colour, even when hashes collide', () =>
 test('too few or scattered samples never fake a main direction', () => {
     const single = buildOpponents([
         spot('K1ABC', '20m', 14025, '2026-11-08T11:34:00Z')
-    ], '', bearing, {now})[0].bands[0];
+    ], '', bearing, {now, watched: ['K1ABC']})[0].bands[0];
     assert.equal(single.dirSamples, 1);
     assert.equal(single.spread, false);
     assert.match(bandCellHtml(single), /thin/);
@@ -196,13 +224,13 @@ test('too few or scattered samples never fake a main direction', () => {
     const flat = (lat1, lon1, lat2) => lat2;
     const scattered = buildOpponents([0, 90, 180, 270].map((degrees, index) => spot(
         'K1ABC', '20m', 14025, `2026-11-08T11:3${index}:00Z`, {lat: degrees}
-    )), '', flat, {now})[0].bands[0];
+    )), '', flat, {now, watched: ['K1ABC']})[0].bands[0];
     assert.equal(scattered.spread, true);
     assert.match(bandCellHtml(scattered), /多向/);
 
     const noCoords = buildOpponents([
         spot('K1ABC', '20m', 14025, '2026-11-08T11:34:00Z', {lat: null, lon: null})
-    ], '', bearing, {now})[0].bands[0];
+    ], '', bearing, {now, watched: ['K1ABC']})[0].bands[0];
     assert.equal(noCoords.dirSamples, 0);
     assert.match(bandCellHtml(noCoords), /—/);
 });

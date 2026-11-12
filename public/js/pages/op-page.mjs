@@ -1166,12 +1166,13 @@ export function createOpPage(ctx) {
             renderOpponents();
             return;
         }
-        const list = buildOpponents(state.allSpots, myCall(), bearing, {now: Date.now()});
-        const calls = state.monitoredCalls;
-        state.opponents = Array.isArray(calls) && calls.length
-            ? list.filter(opponent => calls.some(call =>
-                String(call).toUpperCase() === opponent.call))
-            : list;
+        /* Allowlist inside the aggregation: PSKR regional rows carry the
+         * receiving station in monitored_call, so an empty or failed callsign
+         * fetch must hide the section instead of showing every row. */
+        const calls = Array.isArray(state.monitoredCalls) ? state.monitoredCalls : [];
+        state.opponents = buildOpponents(state.allSpots, myCall(), bearing, {
+            now: Date.now(), watched: calls
+        });
         renderOpponents();
         for (const opponent of state.opponents.slice(0, 6)) loadAntenna(opponent.call);
     }

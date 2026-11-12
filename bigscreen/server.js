@@ -64,6 +64,7 @@ const STATIC = {
     '/shared/data/spots.mjs': ['data/spots.mjs', JS, 'shared'],
     '/shared/data/qsos.mjs': ['data/qsos.mjs', JS, 'shared'],
     '/shared/data/station.mjs': ['data/station.mjs', JS, 'shared'],
+    '/shared/data/callsigns.mjs': ['data/callsigns.mjs', JS, 'shared'],
     '/shared/geo/coordinates.mjs': ['geo/coordinates.mjs', JS, 'shared'],
     '/shared/geo/great-circle.mjs': ['geo/great-circle.mjs', JS, 'shared'],
     '/shared/geo/maidenhead.mjs': ['geo/maidenhead.mjs', JS, 'shared'],

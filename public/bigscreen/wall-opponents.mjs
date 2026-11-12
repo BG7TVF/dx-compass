@@ -156,13 +156,23 @@ function finishBand(entry, concentrationMin) {
 }
 
 export function buildOpponents(rows, myCall, bearing, {
-    now = Date.now(), windowMs = WINDOW_MS, concentrationMin = CONCENTRATION_MIN
+    now = Date.now(), windowMs = WINDOW_MS, concentrationMin = CONCENTRATION_MIN,
+    watched = []
 } = {}) {
     const my = String(myCall || '').toUpperCase();
+    /* Only calls the operator explicitly monitors may become rival cards.
+     * PSKR regional rows are stored with the receiving station in
+     * monitored_call even when neither end is monitored, and rows of a call
+     * removed from the list survive in the spots window, so the allowlist is
+     * the only reliable filter. No list means no rivals. */
+    const allowed = new Set((Array.isArray(watched) ? watched : [])
+        .map(call => String(call || '').trim().toUpperCase())
+        .filter(Boolean));
     const opponents = new Map();
     (Array.isArray(rows) ? rows : []).forEach(row => {
         const call = String(row.monitored_call || row.dx_call || '').toUpperCase();
         if (!call || call === my) return;
+        if (!allowed.has(call)) return;
         const time = new Date(row.timestamp).getTime();
         if (!isFinite(time) || now - time > windowMs) return;
         const band = String(row.band || '').toUpperCase();
@@ -318,6 +328,7 @@ export function createOpponentRenderer({bearing, windowMin = 30, concentrationMi
     let opponents = [];
     let lastRows = [];
     let lastCall = '';
+    let lastWatched = [];
     const config = {windowMin, concentrationMin, compactMin, bandsMax};
     const windowMs = () => Math.max(1, Number(config.windowMin) || 30) * 60000;
 
@@ -356,12 +367,14 @@ export function createOpponentRenderer({bearing, windowMin = 30, concentrationMi
         }
     }
 
-    function render(rows, myCall) {
+    function render(rows, myCall, watched) {
         lastRows = Array.isArray(rows) ? rows : [];
         lastCall = myCall;
+        lastWatched = Array.isArray(watched) ? watched : [];
         opponents = buildOpponents(lastRows, lastCall, bearing, {
             windowMs: windowMs(),
-            concentrationMin: config.concentrationMin
+            concentrationMin: config.concentrationMin,
+            watched: lastWatched
         });
         paint();
     }
@@ -375,7 +388,7 @@ export function createOpponentRenderer({bearing, windowMin = 30, concentrationMi
         read('concentrationMin', 0.4, 0, 1);
         read('compactMin', 5, 2, 12);
         read('bandsMax', 12, 3, 12);
-        if (lastRows.length) render(lastRows, lastCall);
+        if (lastRows.length) render(lastRows, lastCall, lastWatched);
         else paint();
     }
 

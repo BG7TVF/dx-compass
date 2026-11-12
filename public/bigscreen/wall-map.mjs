@@ -161,14 +161,20 @@ export function createWallMap() {
         setLayerVisible(map, nightOverlay, visible.prop);
     }
 
-    function drawSpots(rows, myCall, {windowMin = 30} = {}) {
+    function drawSpots(rows, myCall, {windowMin = 30, watched = []} = {}) {
         const my = String(myCall || '').toUpperCase();
         const windowMs = Math.min(180, Math.max(5, Number(windowMin) || 30)) * 60000;
         const cutoff = Date.now() - windowMs;
+        /* Same allowlist as the opponent panel: PSKR regional rows carry the
+         * receiving station in monitored_call, so only monitored calls are
+         * rivals; my own rows stay in the "my spots" layer. */
+        const allowed = new Set((Array.isArray(watched) ? watched : [])
+            .map(call => String(call || '').trim().toUpperCase())
+            .filter(Boolean));
         /* Same call -> colour + glyph assignment as the opponent panel, so a
          * rival's markers and its card always match. Calls the panel cannot
          * aggregate (no band) keep the neutral DX red dot. */
-        const styles = opponentStyleMap(rows, my, {windowMs});
+        const styles = opponentStyleMap(rows, my, {windowMs, watched});
         const painted = new Set();
         views.myspot.clearLayers();
         views.dxspot.clearLayers();
@@ -177,6 +183,7 @@ export function createWallMap() {
             if (!isFinite(time) || time < cutoff) return;
             const call = String(row.monitored_call || row.dx_call || '').toUpperCase();
             const mine = String(row.monitored_call || '').toUpperCase() === my;
+            if (!mine && !allowed.has(call)) return;
             const style = mine ? null : styles.get(call);
             const color = mine ? COLORS.myspot : (style ? style.color : COLORS.dxspot);
             const group = mine ? views.myspot : views.dxspot;

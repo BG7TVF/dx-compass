@@ -25,6 +25,7 @@ const MODULE_PATHS = [
     '/shared/data/spots.mjs',
     '/shared/data/qsos.mjs',
     '/shared/data/station.mjs',
+    '/shared/data/callsigns.mjs',
     '/shared/geo/coordinates.mjs',
     '/shared/geo/great-circle.mjs',
     '/shared/geo/maidenhead.mjs',
