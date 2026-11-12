@@ -631,7 +631,8 @@
 .op-bandqso-card canvas {
     display: block;
     width: 100%;
-    height: 44px;
+    flex: 1 1 auto;
+    min-height: 36px;
 }
 .op-bandqso-labels {
     display: flex;
