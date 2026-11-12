@@ -18,6 +18,11 @@
     min-width: 0;
     min-height: 0;
     display: grid;
+    /* Contain Leaflet's panes (z-index 400-800) inside this view, exactly like
+     * .cell and .qso-view do. Without it the panes join the root stacking
+     * context and paint over the settings panel (z-index 90) while it is open. */
+    position: relative;
+    z-index: 0;
     /* Five columns: opponents | map (two tracks) | devices | side stack. */
     grid-template-columns: 272px minmax(0, 1fr) minmax(0, 1fr) 300px 280px;
     grid-template-rows: auto auto minmax(0, 1fr) 118px;
