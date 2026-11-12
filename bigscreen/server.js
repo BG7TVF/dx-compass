@@ -224,6 +224,7 @@ const server = http.createServer((req, res) => {
     }
 
     if (url.pathname === '/wall-build.json') {
+        log(req, 200);
         sendJson(res, 200, {build: wallBuildId(Date.now())});
         return;
     }
