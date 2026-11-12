@@ -14,6 +14,9 @@ test('spot SQL retains column order, escaping and numeric NULL handling', () => 
     assert.match(sql, /NULL, NULL, 1, 2, 3, 2, '20m', NULL, NULL, NULL, NULL, NULL, NULL\);$/);
     assert.equal(storage.spots.query("k'1", '25'),
         "SELECT * FROM spots WHERE monitored_call = 'K''1' OR spot_call = 'K''1' ORDER BY id DESC LIMIT 25");
+    /* 大屏对手栏目按名单批量取数：只回监控呼号，避免区域邻台挤占最新窗口。 */
+    assert.equal(storage.spots.query('', '25', 'k1, dl1'),
+        "SELECT * FROM spots WHERE monitored_call IN ('K1','DL1') OR spot_call IN ('K1','DL1') ORDER BY id DESC LIMIT 25");
 });
 
 test('schema migration emits only missing columns in original order', () => {

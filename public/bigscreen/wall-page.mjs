@@ -40,6 +40,7 @@ export async function startWallPage() {
         cycleTimer: null,
         spotRows: [],
         watched: [],
+        watchedRows: [],
         qsoRows: [],
         station: null,
         settingsKey: ''
@@ -178,7 +179,7 @@ export async function startWallPage() {
                 tickClock(state.settings);
                 renderRadios(state.station);
                 renderSpaceTrend(state.prop || {});
-                opponents.render(state.spotRows, state.settings.myCall, state.watched);
+                opponents.render(state.watchedRows, state.settings.myCall, state.watched);
             }
         }
         renderBands(state.prop && state.prop.forecast);
@@ -206,7 +207,7 @@ export async function startWallPage() {
             /* Keep the previous allowlist; the wall never widens it on error. */
             return;
         }
-        opponents.render(state.spotRows, state.settings.myCall, state.watched);
+        opponents.render(state.watchedRows, state.settings.myCall, state.watched);
     }
 
     async function refreshSpots() {
@@ -215,12 +216,22 @@ export async function startWallPage() {
         } catch (error) {
             /* Keep the previous spots. */
         }
-        wallMap.drawSpots(state.spotRows, state.settings.myCall, {
+        /* Regional PSKR rows can fill the newest 400 and push the monitored
+         * calls out, so the rival panel reads its own filtered query. */
+        const scope = [state.settings.myCall, ...state.watched].filter(Boolean);
+        if (scope.length) {
+            try {
+                state.watchedRows = await fetchSpots({calls: scope, limit: 400});
+            } catch (error) {
+                /* Keep the previous rival rows. */
+            }
+        }
+        wallMap.drawSpots(state.watchedRows, state.settings.myCall, {
             windowMin: numSetting('opponentWindowMin', 30, 5, 180),
             watched: state.watched
         });
         renderSpotTrend(state.spotRows);
-        opponents.render(state.spotRows, state.settings.myCall, state.watched);
+        opponents.render(state.watchedRows, state.settings.myCall, state.watched);
     }
 
     async function refreshQso() {

@@ -8,16 +8,17 @@ import {createEmitter} from '../core/events.mjs';
 
 const defaultTransport = {getJson, postJson};
 
-function spotUrl(path, {call, limit} = {}) {
+function spotUrl(path, {call, calls, limit} = {}) {
     const query = new URLSearchParams();
     if (call) query.set('call', String(call));
+    if (Array.isArray(calls) && calls.length) query.set('calls', calls.join(','));
     if (limit !== undefined) query.set('limit', String(limit));
     const suffix = query.toString();
     return `${path}${suffix ? `?${suffix}` : ''}`;
 }
 
-export async function fetchSpots({transport = defaultTransport, call, limit = 1000, ...options} = {}) {
-    const rows = await transport.getJson(spotUrl('/api/spots', {call, limit}), options);
+export async function fetchSpots({transport = defaultTransport, call, calls, limit = 1000, ...options} = {}) {
+    const rows = await transport.getJson(spotUrl('/api/spots', {call, calls, limit}), options);
     if (!Array.isArray(rows)) throw new TypeError('/api/spots returned a non-array DTO');
     return rows;
 }

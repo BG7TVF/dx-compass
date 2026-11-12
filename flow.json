@@ -637,7 +637,7 @@
         "type": "function",
         "z": "dxc0000000000001",
         "name": "Build query SQL",
-        "func": "const dx = global.get('dx');\nmsg.topic = dx.storage.spots.query(msg.req.query.call, msg.req.query.limit);\nmsg.headers = {'Content-Type': 'application/json'};\nreturn msg;",
+        "func": "const dx = global.get('dx');\nmsg.topic = dx.storage.spots.query(msg.req.query.call, msg.req.query.limit, msg.req.query.calls);\nmsg.headers = {'Content-Type': 'application/json'};\nreturn msg;",
         "outputs": 1,
         "noerr": 0,
         "initialize": "",
