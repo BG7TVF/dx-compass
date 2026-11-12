@@ -604,7 +604,9 @@
 .op-view .op-center .op-map-head { padding: 0 10px; }
 .op-view .op-center .op-map-wrap { border: 0; border-radius: 0 0 4px 4px; }
 
-/* Device column: one stacked card per device, scrollable when the list grows. */.op-device-card { min-height: 0; }
+/* Device column: one stacked card per device, scrollable when the list grows.
+ * The card itself stays unclipped so the "+" dropdown can open past its edge. */
+.op-device-card { min-height: 0; overflow: visible; }
 .op-device-card .op-bottom-body {
     flex-direction: column;
     overflow-x: hidden;
