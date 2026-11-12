@@ -637,7 +637,7 @@
         "type": "function",
         "z": "dxc0000000000001",
         "name": "Build query SQL",
-        "func": "const dx = global.get('dx');\nconst q = msg.req.query || {};\n// scope=watched：只回当前对手名单且在 TTL 内的行，名单在查询时现读。\nmsg.topic = q.scope === 'watched'\n    ? dx.spots.watchedQuery(global, q.limit)\n    : dx.storage.spots.query(q.call, q.limit);\nmsg.headers = {'Content-Type': 'application/json'};\nreturn msg;",
+        "func": "const dx = global.get('dx');\nconst q = msg.req.query || {};\n// scope=watched：只回当前对手名单且在 TTL 内的行，名单在查询时现读。\nmsg.topic = q.scope === 'watched'\n    ? dx.spots.watchedQuery(global, q.limit)\n    : q.calls\n        ? dx.spots.watchedQuery(global, q.limit, q.calls)\n        : dx.storage.spots.query(q.call, q.limit);\nmsg.headers = {'Content-Type': 'application/json'};\nreturn msg;",
         "outputs": 1,
         "noerr": 0,
         "initialize": "",

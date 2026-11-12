@@ -100,6 +100,22 @@ test('wall keeps only the six read API routes', () => {
     ].sort());
 });
 
+test('wall exposes only an asset fingerprint so a stale tab can reload', async () => {
+    const first = await request('GET', '/wall-build.json');
+    assert.equal(first.status, 200);
+    assert.match(first.headers['content-type'], /^application\/json;\s*charset=utf-8$/);
+    assert.equal(first.headers['cache-control'], 'no-store');
+    const body = JSON.parse(first.body.toString());
+    assert.match(body.build, /^[0-9a-f]{16}$/);
+    /* Stable between requests and across the five second cache. */
+    const second = await request('GET', '/wall-build.json');
+    assert.equal(JSON.parse(second.body.toString()).build, body.build);
+
+    const head = await request('HEAD', '/wall-build.json');
+    assert.equal(head.status, 200);
+    assert.equal(head.body.length, 0);
+});
+
 test('existing data and vendor whitelist entries remain exact', () => {
     for (const route of [
         '/shared/map/data/land.js',

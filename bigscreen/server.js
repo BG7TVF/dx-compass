@@ -13,12 +13,15 @@
  *     here instead of reaching Node-RED;
  *   - only explicitly whitelisted static files are served, so no path can
  *     escape their configured roots;
+ *   - /wall-build.json exposes only a fingerprint of the served asset files,
+ *     so a long-running wall tab can reload itself after a deploy;
  *   - nothing writes to the database, the flow or the global context.
  *
  * Start it next to Node-RED:
  *     node bigscreen/server.js
  */
 
+const crypto = require('crypto');
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -93,6 +96,50 @@ const BASES = {
     shared: path.join(ROOT, '..', 'shared'),
     public: path.join(ROOT, '..')
 };
+
+/* The wall runs unattended for days, so a browser that keeps its tab open can
+ * still be executing yesterday's modules. /wall-build.json fingerprints the
+ * files a wall page actually loads (size + mtime, five second cache); the page
+ * compares it on a timer and reloads once it changes. No file contents are
+ * read and nothing is written. */
+const BUILD_DIRS = [ROOT, BASES.shared];
+const BUILD_FILES = [path.join(BASES.public, 'js', 'i18n.js')];
+const BUILD_TTL = 5 * 1000;
+let buildCache = {id: '', at: 0};
+
+function collectFiles(dir, out) {
+    let entries;
+    try {
+        entries = fs.readdirSync(dir, {withFileTypes: true});
+    } catch (error) {
+        return out;
+    }
+    entries.forEach(entry => {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) collectFiles(full, out);
+        else if (entry.isFile()) out.push(full);
+    });
+    return out;
+}
+
+function wallBuildId(now) {
+    if (buildCache.id && now - buildCache.at < BUILD_TTL) return buildCache.id;
+    const files = BUILD_FILES.slice();
+    BUILD_DIRS.forEach(dir => collectFiles(dir, files));
+    const hash = crypto.createHash('sha1');
+    files.sort().forEach(file => {
+        const relative = path.relative(BASES.public, file);
+        try {
+            const stat = fs.statSync(file);
+            hash.update(relative + ':' + stat.size + ':' + Math.round(stat.mtimeMs) + '\n');
+        } catch (error) {
+            /* A file disappearing still needs to change the fingerprint. */
+            hash.update(relative + ':missing\n');
+        }
+    });
+    buildCache = {id: hash.digest('hex').slice(0, 16), at: now};
+    return buildCache.id;
+}
 
 function log(req, status) {
     const t = new Date().toISOString().slice(11, 19);
@@ -173,6 +220,11 @@ const server = http.createServer((req, res) => {
 
     if (READ_API.has(url.pathname)) {
         proxy(req, res, url);
+        return;
+    }
+
+    if (url.pathname === '/wall-build.json') {
+        sendJson(res, 200, {build: wallBuildId(Date.now())});
         return;
     }
 

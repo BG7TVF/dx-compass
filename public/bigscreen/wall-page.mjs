@@ -5,6 +5,7 @@ import {fetchCallsigns} from '../shared/data/callsigns.mjs';
 import {fetchQsos} from '../shared/data/qsos.mjs';
 import {getStationState} from '../shared/data/station.mjs';
 import {bearing} from '../shared/geo/coordinates.mjs';
+import {getJson} from '../shared/core/transport.mjs';
 import {createPoller} from '../shared/monitoring/poller.mjs';
 import {
     renderQsoTrend,
@@ -43,7 +44,8 @@ export async function startWallPage() {
         watchedRows: [],
         qsoRows: [],
         station: null,
-        settingsKey: ''
+        settingsKey: '',
+        build: ''
     };
     const wallMap = createWallMap();
     const opponents = createOpponentRenderer({
@@ -253,6 +255,24 @@ export async function startWallPage() {
         renderRadios(state.station);
     }
 
+    /* A wall tab stays open for days; when the deployed modules change this
+     * page reloads itself instead of keeping an old opponent filter alive. */
+    async function refreshBuild() {
+        let data;
+        try {
+            data = await getJson('/wall-build.json');
+        } catch (error) {
+            return;
+        }
+        const build = data && data.build;
+        if (!build) return;
+        if (!state.build) {
+            state.build = build;
+            return;
+        }
+        if (build !== state.build) location.reload();
+    }
+
     const pollers = [
         createPoller(refreshProp, {intervalMs: () => secSetting('propPollSec', 60, 30, 600), immediate: false}),
         /* The monitored list changes rarely; one tiny read per minute keeps the
@@ -263,9 +283,12 @@ export async function startWallPage() {
         createPoller(refreshStation, {intervalMs: () => secSetting('wallStationSec', 15, 5, 120), immediate: false}),
         /* Capped at 15 s so a language switch on the settings page reaches the
          * wall promptly, even when the configured sync interval is longer. */
-        createPoller(refreshSettings, {intervalMs: () => Math.min(secSetting('syncSec', 60, 10, 300), 15000), immediate: false})
+        createPoller(refreshSettings, {intervalMs: () => Math.min(secSetting('syncSec', 60, 10, 300), 15000), immediate: false}),
+        /* One tiny check per minute; a changed fingerprint reloads the tab. */
+        createPoller(refreshBuild, {intervalMs: () => 60000, immediate: false})
     ];
-    const [propPoller, callsignPoller, spotPoller, qsoPoller, stationPoller, settingsPoller] = pollers;
+    const [propPoller, callsignPoller, spotPoller, qsoPoller, stationPoller,
+        settingsPoller] = pollers;
 
     let resizeTimer = null;
     window.addEventListener('resize', () => {
@@ -290,6 +313,8 @@ export async function startWallPage() {
     applyStatic(document);
 
     await settingsPoller.run();
+    /* Baseline the deployed build now; a later change reloads this tab. */
+    await refreshBuild();
     /* Allowlist before first paint: an empty list must never fall back to
      * "every monitored_call is a rival". */
     await callsignPoller.run();

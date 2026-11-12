@@ -242,6 +242,22 @@ test('对手查询即时读取当前名单与 TTL：移出名单立刻查不到�
     assert.equal(spots.watchedQuery(e.global, 400), 'SELECT * FROM spots WHERE 1=0;');
 });
 
+test('旧版大屏传来的 calls 只与当前名单取交集，已移除的呼号不会回流', () => {
+    const e = env();
+    e.global.set('uiSettings', {myCall: 'N0CALL', opponentWindowMin: 30});
+    /* 长期不刷新的页面仍在传 calls=，其中 BG7XLH 早已不在名单里。 */
+    const legacy = spots.watchedQuery(e.global, 400, 'K1ABC,BG7XLH');
+    assert.match(legacy, /monitored_call IN \('K1ABC'\)/);
+    assert.equal(legacy.includes('BG7XLH'), false);
+
+    /* 候选名单与当前名单无交集时回空集，绝不回退成全量查询。 */
+    assert.equal(spots.watchedQuery(e.global, 400, 'BG7XLH,DL1ABC'),
+        'SELECT * FROM spots WHERE 1=0;');
+
+    /* 候选呼号的大小写与空格先归一化再取交集。 */
+    assert.match(spots.watchedQuery(e.global, 400, ' k1abc '), /'K1ABC'/);
+});
+
 test('spots 清理窗口不短于对手 TTL，行不会被提前删掉', () => {
     const schema = require('../public/shared/settings/schema.js');
     const ttl = schema.FIELDS.find(f => f.key === 'opponentWindowMin');
