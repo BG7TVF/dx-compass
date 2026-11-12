@@ -17,6 +17,8 @@ import {getPropSnapshot, selectForecast} from '../../shared/data/propagation.mjs
 import {fetchPaths} from '../../shared/data/analysis.mjs';
 import {fetchMultipliers} from '../../shared/data/multipliers.mjs';
 import {fetchCallsigns, checkCallsign} from '../../shared/data/callsigns.mjs';
+import {getStationState} from '../../shared/data/station.mjs';
+import {drawBars, perMinute} from '../../bigscreen/wall-charts.mjs';
 import {fetchAdvice} from '../../shared/data/advice.mjs';
 import {createOpponentRenderer} from '../../shared/opponents/opponents.mjs';
 import {bandConditionCells, spaceWeatherCells, bandOf} from '../../bigscreen/wall-cards.mjs';
@@ -48,6 +50,7 @@ export function createOpPage(ctx) {
         opponentRows: [],
         spotKeys: new Set(),
         monitoredCalls: null,
+        stationScore: null,
         prop: null,
         paths: null,
         multipliers: null,
@@ -370,6 +373,7 @@ export function createOpPage(ctx) {
     function renderSeatOptions() {
         const select = $('#opSeat');
         const label = $('#opSeatLabel');
+        const name = $('#opSeatName');
         if (!select) return;
         const choices = seatChoices();
         const show = choices.length > 1;
@@ -383,6 +387,49 @@ export function createOpPage(ctx) {
             choices.map(choice => '<option value="' + esc(choice.value) + '">' +
                 esc(seatLabel(choice)) + '</option>').join('');
         select.value = current === 'all' && show ? 'all' : current;
+        /* One seat means no dropdown: the card shows the seat name instead. */
+        if (name) {
+            const active = choices.find(choice => choice.value === current);
+            name.textContent = show ? '' : (active ? seatLabel(active) : t('op.seat.all'));
+        }
+    }
+
+    /** QSO total and contest score: the score comes from the station snapshot,
+     *  the total from the shared QSO repository the rest of the page uses. */
+    function renderScore() {
+        const total = $('#opQsoTotal');
+        if (total) total.textContent = state.qsos.size;
+        const value = state.stationScore && Number(state.stationScore.score);
+        const score = $('#opScore');
+        if (score) score.textContent = Number.isFinite(value) ? value : '—';
+    }
+
+    /** Bottom data cells: last-hour rate bars and per-band QSO bars, both drawn
+     *  with the wall's binning/drawing helpers so the charts match the wall. */
+    function renderCharts() {
+        const rows = [...state.qsos.values()];
+        /* The shared binner reads row.timestamp; QSO rows carry ts. */
+        const timed = rows.map(qso => ({timestamp: qso.timestamp || qso.ts}));
+        if ($('#opRateChart')) drawBars('#opRateChart', perMinute(timed, 60), '#35d6a4');
+        const note = $('#opRateNote');
+        if (note) {
+            const rates = visibleSeats().map(key => radioName(key) + ' ' + rateFor(key));
+            rates.push(t('op.top.rateGlobal') + ' ' + rateFor('all'));
+            note.textContent = rates.join(' · ');
+        }
+        const bands = new Map();
+        rows.forEach(qso => {
+            const key = bandKey(qso.band || bandLabel(qso.freqKhz));
+            if (key) bands.set(key, (bands.get(key) || 0) + 1);
+        });
+        const entries = [...bands.entries()].sort((a, b) => b[1] - a[1]);
+        if ($('#opBandChart')) drawBars('#opBandChart', entries.map(entry => entry[1]), '#4cc9f0');
+        const labels = $('#opBandLabels');
+        if (labels) {
+            labels.innerHTML = entries.map(([band, count]) =>
+                '<span>' + esc(band) + ' <b>' + count + '</b></span>').join('') ||
+                '<span>—</span>';
+        }
     }
 
     function renderBands() {
@@ -1010,6 +1057,18 @@ export function createOpPage(ctx) {
         renderAdvice();
     }
 
+    /* Contest score comes from the station snapshot; the QSO total is counted
+     * from the same repository rows the rest of the page uses. */
+    async function loadScore() {
+        try {
+            const snapshot = await getStationState();
+            state.stationScore = snapshot && snapshot.score || null;
+        } catch (error) {
+            state.stationScore = null;
+        }
+        renderScore();
+    }
+
     async function loadMultipliers() {
         try {
             const mode = contestModes().length === 1 ? contestModes()[0] : 'ALL';
@@ -1243,6 +1302,8 @@ export function createOpPage(ctx) {
         renderTop();
         renderBands();
         renderSpace();
+        renderScore();
+        renderCharts();
         /* The shared renderer paints #oppRows from the rows it already holds. */
         opponentPanel.trim();
         renderWorkability();
@@ -1262,6 +1323,7 @@ export function createOpPage(ctx) {
         requestAnimationFrame(() => state.map && state.map.resize());
         refreshAll();
         loadQsos();
+        loadScore();
         loadPropagation();
         loadPaths();
         loadMultipliers();
@@ -1274,6 +1336,7 @@ export function createOpPage(ctx) {
             setInterval(() => {
                 if (!state.active) return;
                 renderTop();
+                renderScore();
                 renderAdvice();
             }, 2000),
             // Map markers are heavier; the WS handlers redraw immediately.
@@ -1281,6 +1344,7 @@ export function createOpPage(ctx) {
                 if (!state.active) return;
                 renderMap();
                 renderBottom();
+                renderCharts();
             }, 10000),
             // Opponents come from the WS spot stream; this is only recompute.
             setInterval(() => { if (state.active) refreshOpponentRows(); }, 5000),
@@ -1289,6 +1353,7 @@ export function createOpPage(ctx) {
             setInterval(() => { if (state.active) loadOpponents(); }, 60000),
             setInterval(() => { if (state.active) loadPropagation(); }, 120000),
             setInterval(() => { if (state.active) loadMultipliers(); }, 60000),
+            setInterval(() => { if (state.active) loadScore(); }, 30000),
             setInterval(() => { if (state.active) loadAdvice(); },
                 Math.max(15, Number(ctx.settings.adviceRefreshSec) || 60) * 1000)
         ];
@@ -1321,6 +1386,8 @@ export function createOpPage(ctx) {
             if (key.startsWith('run|')) state.adviceDismissed.delete(key);
         }
         renderTop();
+        renderScore();
+        renderCharts();
         renderMap();
         renderBottom();
         renderAdvice();
@@ -1341,6 +1408,8 @@ export function createOpPage(ctx) {
         renderMap();
         renderBottom();
         renderAdvice();
+        renderScore();
+        renderCharts();
         scheduleMultiplierRefresh();
         scheduleAdviceRefresh();
     }
@@ -1367,6 +1436,7 @@ export function createOpPage(ctx) {
 
     function resize() {
         if (state.map) state.map.resize();
+        if (state.active) renderCharts();
     }
 
     function applyLang() {
@@ -1376,6 +1446,11 @@ export function createOpPage(ctx) {
     }
 
     function renderTitles() {
+        $('#opSeatTitle').textContent = t('op.seat');
+        $('#opRateTitle').textContent = t('qsoRate');
+        $('#opBandQsoTitle').textContent = t('op.top.bandCounts');
+        $('#opQsoLabel').textContent = t('stQsos');
+        $('#opScoreLabel').textContent = t('stScore');
         $('#opBandsTitle').textContent = t('op.left.bands');
         $('#opSpaceTitle').textContent = t('op.left.space');
         $('#opOppTitleText').textContent = t('op.left.opponents');

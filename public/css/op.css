@@ -18,24 +18,29 @@
     min-width: 0;
     min-height: 0;
     display: grid;
-    grid-template-rows: auto auto minmax(0, 1fr) auto;
-    /* 6px between the four rows (the grid is single-column, so this is purely
-     * vertical). The 2px saved per separator go straight to .op-body: nine
-     * rivals in the compact grid then fit without scrolling, and nothing else
-     * loses height because the device footer keeps its own 132px cap. */
+    /* Five columns: opponents | map (two tracks) | devices | side stack. */
+    grid-template-columns: 272px minmax(0, 1fr) minmax(0, 1fr) 300px 280px;
+    grid-template-rows: auto auto minmax(0, 1fr) 118px;
     gap: 6px 8px;
     padding: 8px;
     background: var(--bg);
     color: var(--text);
 }
-/* Pin every child to its own track. #opAdvice is display:none most of the
- * time; without explicit rows the hidden banner is dropped from auto-placement
- * and .op-body falls into the auto track while the footer takes the 1fr one,
- * leaving ~260px of the page empty under the status bar. */
-.op-view > .op-head { grid-row: 1; }
-.op-view > .op-advice { grid-row: 2; }
-.op-view > .op-body { grid-row: 3; }
-.op-view > .op-bottom { grid-row: 4; }
+/* Every child owns an explicit cell: #opAdvice is display:none most of the
+ * time, and auto-placement would otherwise push the body into the auto row
+ * and leave the 1fr track to whatever comes last. */
+.op-view > .op-top { grid-column: 1 / -1; grid-row: 1; }
+.op-view > .op-seat-card { grid-column: 1; grid-row: 2; }
+.op-view > .op-advice { grid-column: 2 / -1; grid-row: 2; }
+.op-view > .op-opp-card { grid-column: 1; grid-row: 3; }
+.op-view > .op-center { grid-column: 2 / 4; grid-row: 3; }
+.op-view > .op-device-card { grid-column: 4; grid-row: 3; }
+.op-view > .op-right { grid-column: 5; grid-row: 3; }
+.op-view > .op-rate-card { grid-column: 1; grid-row: 4; }
+.op-view > .op-total-card { grid-column: 2; grid-row: 4; }
+.op-view > .op-bandqso-card { grid-column: 3; grid-row: 4; }
+.op-view > .op-suspect-card { grid-column: 4; grid-row: 4; }
+.op-view > .op-mult-card { grid-column: 5; grid-row: 4; }
 
 .op-top {
     display: flex;
@@ -48,20 +53,18 @@
     background: var(--panel);
 }
 
-/* Top strip: the header keeps the left, band conditions and space weather ride
- * beside it. That empties the left rail so opponent intel gets its full height
- * instead of the 139px it used to share with the two modules. */
-.op-head {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 360px 300px;
-    gap: 8px;
+/* Seat picker keeps its own cell under the header; the advice banner spans
+ * the remaining four columns beside it. */
+.op-seat-card { padding: 6px 9px; gap: 5px; justify-content: center; }
+.op-seat-body { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.op-seat-name {
     min-width: 0;
-    min-height: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+    color: var(--text-strong);
 }
-.op-head .op-top { min-width: 0; }
-/* Wider card than the old 272px rail, so the same twelve bands fit in four
- * rows instead of six and the strip stays short. */
-.op-head .op-band-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 
 .op-top-id { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
 .op-kicker { font-size: 13px; font-weight: 700; letter-spacing: .12em; color: var(--accent); }
@@ -191,20 +194,15 @@
     letter-spacing: .02em;
 }
 
-.op-body {
-    min-width: 0;
-    min-height: 0;
-    display: grid;
-    grid-template-columns: 272px minmax(0, 1fr) 348px;
-    gap: 8px;
-}
-
 .op-rail { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
-.op-right {
-    display: grid;
-    grid-template-rows: minmax(170px, 1.2fr) minmax(112px, .68fr) minmax(150px, 1fr);
-    gap: 8px;
-}
+/* Side stack: space weather and band conditions keep their natural height,
+ * workability takes the rest so the column bottom lands on the grid line. */
+.op-right { min-height: 0; }
+.op-right > .op-space-card,
+.op-right > .op-band-card { flex: 0 0 auto; }
+.op-right > .op-work-card { flex: 1 1 auto; min-height: 0; }
+.op-right .op-band-grid { grid-template-columns: 1fr 1fr; }
+.op-right .op-space-grid { grid-template-columns: 1fr 1fr; }
 
 .op-card {
     min-width: 0;
@@ -506,20 +504,161 @@
 
 /* Narrow laptops: shrink the rails before the map, never below the usable map */
 @media (max-width: 1500px) {
-    .op-body { grid-template-columns: 236px minmax(0, 1fr) 312px; }
-    .op-head { grid-template-columns: minmax(0, 1fr) 320px 272px; }
-    .op-space-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .op-view { grid-template-columns: 236px minmax(0, 1fr) minmax(0, 1fr) 264px 248px; }
+    .op-space-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .op-metric { min-width: 78px; padding: 3px 6px; }
     .op-subtitle { display: none; }
 }
 @media (max-width: 1200px) {
-    .op-body { grid-template-columns: 220px minmax(0, 1fr) 300px; }
-    .op-head { grid-template-columns: minmax(0, 1fr) 280px 240px; }
+    .op-view { grid-template-columns: 220px minmax(0, 1fr) minmax(0, 1fr) 236px 228px; }
     .op-metrics .op-band-chips { display: none; }
 }
 @media (max-height: 800px) {
     .op-view { gap: 5px; padding: 5px; }
-    .op-body { gap: 5px; }
-    .op-right { grid-template-rows: minmax(150px, 1.15fr) minmax(96px, .65fr) minmax(130px, 1fr); }
     .op-bottom { min-height: 96px; max-height: 110px; }
 }
+
+/* ---- console skin ------------------------------------------------------- */
+/* Mission-control styling for the OP station: hairline panels, uppercase
+ * micro-labels with an accent tick, tabular numerals for every readout. The
+ * layout above stays untouched; this layer only changes the surface. */
+.op-view {
+    --op-num: "Bahnschrift", "DIN Alternate", "Segoe UI Variable", "Segoe UI", sans-serif;
+    --op-rule: rgba(122, 168, 255, .14);
+    --op-face-top: rgba(21, 30, 43, .94);
+    --op-face-bottom: rgba(12, 19, 28, .94);
+}
+.op-view .op-card,
+.op-view .op-top,
+.op-view .op-center {
+    border: 1px solid var(--op-rule);
+    border-radius: 4px;
+    background: linear-gradient(180deg, var(--op-face-top), var(--op-face-bottom));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .035);
+}
+.op-view .op-card > h3,
+.op-view .op-bottom-head,
+.op-view .op-map-head {
+    border-bottom: 1px solid var(--op-rule);
+}
+.op-view .op-card > h3,
+.op-view .op-bottom-head h3,
+.op-view .op-map-head h3 {
+    min-height: 26px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: .13em;
+    text-transform: uppercase;
+    color: #8fa6c2;
+}
+.op-view .op-card > h3::before {
+    content: '';
+    flex: 0 0 auto;
+    width: 2px;
+    height: 11px;
+    background: var(--accent);
+    box-shadow: 0 0 7px rgba(96, 165, 250, .55);
+}
+.op-view .op-kicker {
+    font-size: 13px;
+    letter-spacing: .18em;
+}
+.op-view .op-metrics { gap: 0; }
+.op-view .op-metric {
+    padding: 2px 12px;
+    border-left: 1px solid var(--op-rule);
+}
+.op-view .op-metric b,
+.op-view .op-total b,
+.op-view .op-work-row b,
+.op-view .op-mult-band,
+.op-view .op-device b {
+    font-family: var(--op-num);
+    font-variant-numeric: tabular-nums;
+}
+.op-view .op-seat-card {
+    justify-content: center;
+}
+.op-view .op-seat-card > h3 {
+    border-bottom: 0;
+    min-height: 0;
+    padding: 0;
+    color: var(--text-dim);
+}
+.op-view .op-seat-card > h3::before { display: none; }
+.op-view .op-seat-name {
+    margin-left: auto;
+    font-family: var(--op-num);
+    color: var(--accent);
+    letter-spacing: .04em;
+}
+
+/* The map is its own panel now: one frame (the card skin) instead of a card
+ * wrapped around an already bordered map. */
+.op-view .op-center { padding: 0; gap: 0; }
+.op-view .op-center .op-map-head { padding: 0 10px; }
+.op-view .op-center .op-map-wrap { border: 0; border-radius: 0 0 4px 4px; }
+
+/* Device column: one stacked card per device, scrollable when the list grows. */.op-device-card { min-height: 0; }
+.op-device-card .op-bottom-body {
+    flex-direction: column;
+    overflow-x: hidden;
+    overflow-y: auto;
+    gap: 6px;
+}
+.op-device-card .op-device { flex: 0 0 auto; }
+.op-device-card .op-filler { flex-direction: column; }
+.op-device-card .op-radio-card { flex: 0 0 auto; }
+.op-device-card .op-recent { flex: 0 0 auto; }
+
+/* Bottom data cells: chart, totals, per-band bars, suspects, multipliers. */
+.op-rate-card,
+.op-bandqso-card { padding: 0 8px 6px; }
+.op-rate-card > h3,
+.op-bandqso-card > h3 { margin: 0 -8px 4px; padding: 0 8px; }
+.op-rate-note {
+    margin-left: auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 9px;
+    letter-spacing: .02em;
+    text-transform: none;
+    color: var(--text-dim);
+}
+.op-rate-card canvas,
+.op-bandqso-card canvas {
+    display: block;
+    width: 100%;
+    height: 44px;
+}
+.op-bandqso-labels {
+    display: flex;
+    gap: 8px;
+    margin-top: 2px;
+    overflow: hidden;
+    font-size: 8px;
+    letter-spacing: .04em;
+    color: var(--text-dim);
+    white-space: nowrap;
+}
+.op-total-card { padding: 6px 12px; justify-content: center; gap: 6px; }
+.op-total { display: flex; align-items: baseline; gap: 10px; }
+.op-total label {
+    font-size: 9px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+}
+.op-total b {
+    margin-left: auto;
+    font-size: 22px;
+    line-height: 1;
+    color: var(--text-strong);
+}
+.op-total-score b { color: var(--green); }
+.op-suspect-card > h3,
+.op-mult-card > h3 { min-height: 26px; }
+.op-suspect-card .op-suspect-list,
+.op-mult-card .op-mult-list { padding: 4px 6px; }

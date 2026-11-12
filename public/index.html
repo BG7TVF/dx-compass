@@ -7,7 +7,7 @@
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%230b1220'/%3E%3Ccircle cx='8' cy='8' r='4' fill='%2300e08a'/%3E%3C/svg%3E">
     <link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
     <link rel="stylesheet" href="css/style.css?v=2.3.4">
-    <link rel="stylesheet" href="css/op.css?v=1.0.3">
+    <link rel="stylesheet" href="css/op.css?v=1.1.0">
     <link rel="stylesheet" href="css/devices.css?v=1.0.0">
     <link rel="stylesheet" href="shared/opponents/opponents.css?v=2.3.4">
 </head>
@@ -108,43 +108,34 @@
             <div id="propCredit" class="prop-credit"></div>
         </div>
 
-        <!-- OP view: ring layout, fixed offline map in the centre -->
+        <!-- OP view: five columns (header / seat + advice / opponents | map | devices | side stack / five data cells) -->
         <div id="opView" class="op-view hidden">
-            <!-- Top strip: the operator header keeps the left side, the band and
-                 space-weather modules sit beside it so the left rail below can
-                 belong to opponent intel alone. -->
-            <div class="op-head">
-                <header class="op-top">
-                    <div class="op-top-id">
-                        <span class="op-kicker" id="opKicker">OP VIEW</span>
-                        <label class="op-cat-label" for="opSeat" id="opSeatLabel">Seat</label>
-                        <select id="opSeat" class="op-cat-select"></select>
-                        <span class="op-subtitle" id="opSubtitle"></span>
-                    </div>
-                    <div class="op-metrics" id="opMetrics"></div>
-                </header>
+            <!-- row 1: header, full width -->
+            <header class="op-top">
+                <div class="op-top-id">
+                    <span class="op-kicker" id="opKicker">OP VIEW</span>
+                    <span class="op-subtitle" id="opSubtitle"></span>
+                </div>
+                <div class="op-metrics" id="opMetrics"></div>
+            </header>
 
-                <section class="op-card op-band-card">
-                    <h3 id="opBandsTitle">Band conditions</h3>
-                    <div class="op-band-grid" id="opBandGrid"></div>
-                </section>
-                <section class="op-card op-space-card">
-                    <h3 id="opSpaceTitle">Space weather</h3>
-                    <div class="op-space-grid" id="opSpaceGrid"></div>
-                </section>
-            </div>
+            <section class="op-card op-seat-card">
+                <h3 id="opSeatTitle">Seat</h3>
+                <div class="op-seat-body">
+                    <label class="op-cat-label" for="opSeat" id="opSeatLabel">Seat</label>
+                    <select id="opSeat" class="op-cat-select"></select>
+                    <span class="op-seat-name" id="opSeatName"></span>
+                </div>
+            </section>
 
             <div id="opAdvice" class="op-advice hidden" aria-live="polite"></div>
 
-            <div class="op-body">
-                <aside class="op-rail op-left">
-                    <section class="op-card op-opp-card">
+            <section class="op-card op-opp-card">
                         <h3 id="opOppTitle"><span id="opOppTitleText">Opponent intel</span><i class="opp-sum" id="oppSummary"></i></h3>
                         <div class="opp-rows" id="oppRows"></div>
-                    </section>
-                </aside>
+            </section>
 
-                <section class="op-center">
+            <section class="op-center">
                     <div class="op-map-head">
                         <h3 id="opMapTitle">Radio map</h3>
                         <span id="opMapHint" class="op-map-hint"></span>
@@ -156,29 +147,7 @@
                     </div>
                 </section>
 
-                <aside class="op-rail op-right">
-                    <section class="op-card op-work-card">
-                        <h3><span id="opWorkTitle">Workability</span><b id="opWorkMode" class="op-chip"></b></h3>
-                        <div class="op-work-list" id="opWorkability"></div>
-                    </section>
-                    <section class="op-card op-suspect-card">
-                        <h3 id="opSuspectTitle">Suspected call check</h3>
-                        <div class="op-suspect-list" id="opSuspicious"></div>
-                    </section>
-                    <section class="op-card op-mult-card">
-                        <h3>
-                            <span id="opMultTitle">Multiplier matrix</span>
-                            <span class="op-card-actions">
-                                <button class="op-mini" id="opMultExpand" type="button"></button>
-                            </span>
-                        </h3>
-                        <div class="op-mult-band" id="opMultBand"></div>
-                        <div class="op-mult-list" id="opMultipliers"></div>
-                    </section>
-                </aside>
-            </div>
-
-            <footer class="op-bottom">
+            <section class="op-card op-device-card">
                 <div class="op-bottom-head">
                     <h3 id="opBottomTitle" data-i18n="op.bottom.devices">Device control</h3>
                     <span id="opBottomNote" class="op-bottom-note"></span>
@@ -188,7 +157,55 @@
                     </div>
                 </div>
                 <div class="op-bottom-body" id="opBottom"></div>
-            </footer>
+            </section>
+
+            <aside class="op-rail op-right">
+                <section class="op-card op-space-card">
+                    <h3 id="opSpaceTitle">Space weather</h3>
+                    <div class="op-space-grid" id="opSpaceGrid"></div>
+                </section>
+                <section class="op-card op-band-card">
+                    <h3 id="opBandsTitle">Band conditions</h3>
+                    <div class="op-band-grid" id="opBandGrid"></div>
+                </section>
+                <section class="op-card op-work-card">
+                    <h3><span id="opWorkTitle">Workability</span><b id="opWorkMode" class="op-chip"></b></h3>
+                    <div class="op-work-list" id="opWorkability"></div>
+                </section>
+            </aside>
+
+            <!-- row 4: five data cells -->
+            <section class="op-card op-rate-card">
+                <h3><span id="opRateTitle">QSO rate</span><span class="op-rate-note" id="opRateNote"></span></h3>
+                <canvas id="opRateChart"></canvas>
+            </section>
+
+            <section class="op-card op-total-card">
+                <div class="op-total"><label id="opQsoLabel">QSO</label><b id="opQsoTotal">0</b></div>
+                <div class="op-total op-total-score"><label id="opScoreLabel">Score</label><b id="opScore">—</b></div>
+            </section>
+
+            <section class="op-card op-bandqso-card">
+                <h3 id="opBandQsoTitle">QSOs by band</h3>
+                <canvas id="opBandChart"></canvas>
+                <div class="op-bandqso-labels" id="opBandLabels"></div>
+            </section>
+
+            <section class="op-card op-suspect-card">
+                <h3 id="opSuspectTitle">Suspected call check</h3>
+                <div class="op-suspect-list" id="opSuspicious"></div>
+            </section>
+
+            <section class="op-card op-mult-card">
+                <h3>
+                    <span id="opMultTitle">Multiplier matrix</span>
+                    <span class="op-card-actions">
+                        <button class="op-mini" id="opMultExpand" type="button"></button>
+                    </span>
+                </h3>
+                <div class="op-mult-band" id="opMultBand"></div>
+                <div class="op-mult-list" id="opMultipliers"></div>
+            </section>
         </div>
 
         <!-- Devices view: unified tree + read-only status (no device control in this phase) -->
