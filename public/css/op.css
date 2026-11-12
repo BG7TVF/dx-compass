@@ -104,41 +104,6 @@
 .op-station-tab.r5 { border-left: 3px solid var(--op-r5); }
 .op-station-tab.r6 { border-left: 3px solid var(--op-r6); }
 
-.op-metrics { display: flex; align-items: stretch; gap: 8px; margin-left: auto; min-width: 0; flex: 1 1 auto; justify-content: flex-end; }
-.op-metric {
-    min-width: 92px;
-    padding: 3px 9px;
-    border-left: 1px solid var(--border);
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    gap: 2px;
-}
-.op-metric label { font-size: 9px; letter-spacing: .06em; color: var(--text-dim); text-transform: uppercase; white-space: nowrap; }
-.op-metric b { font-size: clamp(14px, 1.15vw, 20px); line-height: 1; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.op-metric small { font-size: 10px; color: var(--text-dim); }
-.op-metric.radio1 b { color: var(--op-r1); }
-.op-metric.radio2 b { color: var(--op-r2); }
-.op-metric.r1 b { color: var(--op-r1); }
-.op-metric.r2 b { color: var(--op-r2); }
-.op-metric.r3 b { color: var(--op-r3); }
-.op-metric.r4 b { color: var(--op-r4); }
-.op-metric.r5 b { color: var(--op-r5); }
-.op-metric.r6 b { color: var(--op-r6); }
-.op-bands { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; max-width: 300px; }
-.op-band-chip {
-    display: inline-flex;
-    align-items: baseline;
-    gap: 3px;
-    padding: 2px 6px;
-    border: 1px solid var(--border);
-    border-radius: 999px;
-    font-size: 10px;
-    color: var(--text-dim);
-    background: var(--panel-2);
-}
-.op-band-chip b { color: var(--text); font-size: 11px; }
-
 /* Live decision strip: multiplier openings and RUN-idle advice. It sits
    between the header and the ring, so it never steals space from the map. */
 .op-advice {
@@ -511,12 +476,10 @@
 @media (max-width: 1500px) {
     .op-view { grid-template-columns: 236px minmax(0, 1fr) minmax(0, 1fr) 264px 248px; }
     .op-space-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .op-metric { min-width: 78px; padding: 3px 6px; }
     .op-subtitle { display: none; }
 }
 @media (max-width: 1200px) {
     .op-view { grid-template-columns: 220px minmax(0, 1fr) minmax(0, 1fr) 236px 228px; }
-    .op-metrics .op-band-chips { display: none; }
 }
 @media (max-height: 800px) {
     .op-view { gap: 5px; padding: 5px; }
@@ -568,12 +531,6 @@
     font-size: 13px;
     letter-spacing: .18em;
 }
-.op-view .op-metrics { gap: 0; }
-.op-view .op-metric {
-    padding: 2px 12px;
-    border-left: 1px solid var(--op-rule);
-}
-.op-view .op-metric b,
 .op-view .op-total b,
 .op-view .op-work-row b,
 .op-view .op-mult-band,

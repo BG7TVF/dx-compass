@@ -296,7 +296,6 @@ export function createOpPage(ctx) {
             fallback.forEach(addQso);
             console.warn('op view: qso history unavailable', error);
         }
-        renderTop();
         renderMap();
         scheduleSuspects();
     }
@@ -317,57 +316,6 @@ export function createOpPage(ctx) {
     function lastQsoFor(key) {
         const list = qsosFor(key);
         return list.length ? list[list.length - 1] : null;
-    }
-
-    function renderTop() {
-        const keys = visibleSeats();
-        const globalRate = rateFor('all');
-        const parts = [];
-        for (const key of keys) {
-            const radio = radioOf(key);
-            const lane = seatLane(key);
-            const laneState = lane
-                ? ((lane.radio && lane.radio.isRunning === false) ? 'S&P' : 'RUN') +
-                    (lane.gates && lane.gates.quota
-                        ? ' · chg ' + lane.changesThisHour + '/' + lane.gates.quota : '')
-                : '';
-            parts.push('<div class="op-metric ' + radioTheme(key) + '"><label>' +
-                esc(radioName(key)) + (laneState ? ' · ' + esc(laneState) : '') +
-                ' · ' + esc(t('op.top.rateNow')) +
-                '</label><b>' + rateFor(key) + '</b><small>' + esc(t('op.top.perHour')) +
-                '</small></div>');
-            if (radio && radio.isTransmitting) {
-                parts.push('<div class="op-metric ' + radioTheme(key) + '"><label>' +
-                    esc(radio.freqKhz ? (bandOf(radio.freqKhz) + ' ' + mini(radio.mode)) : '') +
-                    '</label><b>' + esc(t('op.radio.tx')) + '</b></div>');
-            }
-        }
-        parts.push('<div class="op-metric"><label>' + esc(t('op.top.rateGlobal')) +
-            '</label><b>' + globalRate + '</b><small>' + esc(t('op.top.perHour')) + '</small></div>');
-        const lasts = keys.map(key => ({key, qso: lastQsoFor(key)}));
-        const lastHtml = lasts.filter(item => item.qso).map(item =>
-            '<div class="op-metric op-last ' + radioTheme(item.key) + '"><label>' +
-            esc(radioName(item.key) + ' · ' + t('op.top.lastQso')) +
-            '</label><b>' + esc(item.qso.call) + '</b><small>' +
-            esc([bandLabel(item.qso.freqKhz || item.qso.band), item.qso.mode,
-                new Date(item.qso.ts).toISOString().slice(11, 16) + 'Z'].filter(Boolean).join(' · ')) +
-            '</small></div>').join('');
-        parts.push(lastHtml || '<div class="op-metric op-last"><label>' +
-            esc(t('op.top.lastQso')) + '</label><b>—</b><small>' + esc(t('op.top.noQso')) + '</small></div>');
-        const bands = new Map();
-        for (const qso of state.qsos.values()) {
-            const key = bandKey(qso.band || bandLabel(qso.freqKhz));
-            bands.set(key, (bands.get(key) || 0) + 1);
-        }
-        parts.push('<div class="op-metric op-bands-metric"><label>' + esc(t('op.top.bandCounts')) +
-            '</label><div class="op-bands">' + ([...bands.entries()]
-                .sort((a, b) => b[1] - a[1]).map(([band, n]) =>
-                    '<span class="op-band-chip"><b>' + esc(band) + '</b>' + n + '</span>').join('') ||
-                '<span class="op-band-chip">—</span>') + '</div></div>');
-        $('#opMetrics').innerHTML = parts.join('');
-        $('#opKicker').textContent = t('op.title');
-        $('#opSubtitle').textContent = t('op.subtitle');
-        renderSeatOptions();
     }
 
     function renderSeatOptions() {
@@ -701,12 +649,6 @@ export function createOpPage(ctx) {
 
     /* Server-side rule engine output. When it is live it replaces the local
        RUN-idle reminder, so there is only one reminder path in the OP view. */
-    function seatLane(key) {
-        const data = state.adviceEngine;
-        if (!data || !Array.isArray(data.seats)) return null;
-        return data.seats.find(item => item.seat === String(key)) || null;
-    }
-
     function laneLabel(lane) {
         const radio = lane && lane.radio || {};
         const seatValue = String(lane && lane.seat || '');
@@ -1299,7 +1241,7 @@ export function createOpPage(ctx) {
     }
 
     function refreshAll() {
-        renderTop();
+        renderSeatOptions();
         renderBands();
         renderSpace();
         renderScore();
@@ -1335,7 +1277,6 @@ export function createOpPage(ctx) {
             // Numbers and advice: 2 s local recompute, WS updates are instant.
             setInterval(() => {
                 if (!state.active) return;
-                renderTop();
                 renderScore();
                 renderAdvice();
             }, 2000),
@@ -1371,7 +1312,7 @@ export function createOpPage(ctx) {
 
     function handleStation() {
         if (!state.active) return;
-        renderTop();
+        renderSeatOptions();
         renderBottom();
         renderMultipliers();
         renderAdvice();
@@ -1385,7 +1326,6 @@ export function createOpPage(ctx) {
         for (const key of [...state.adviceDismissed]) {
             if (key.startsWith('run|')) state.adviceDismissed.delete(key);
         }
-        renderTop();
         renderScore();
         renderCharts();
         renderMap();
@@ -1404,7 +1344,6 @@ export function createOpPage(ctx) {
         for (const [key, qso] of state.qsos.entries()) {
             if (String(qso.n1mmId) === String(id)) state.qsos.delete(key);
         }
-        renderTop();
         renderMap();
         renderBottom();
         renderAdvice();
@@ -1446,6 +1385,8 @@ export function createOpPage(ctx) {
     }
 
     function renderTitles() {
+        $('#opKicker').textContent = t('op.title');
+        $('#opSubtitle').textContent = t('op.subtitle');
         $('#opSeatTitle').textContent = t('op.seat');
         $('#opRateTitle').textContent = t('qsoRate');
         $('#opBandQsoTitle').textContent = t('op.top.bandCounts');
