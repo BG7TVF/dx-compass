@@ -159,3 +159,25 @@ test('太阳几何：赤纬、高度角、灰线与季节', () => {
     assert.equal(typeof gray.ok, 'boolean');
     assert.equal(typeof gray.elevA, 'number');
 });
+
+test('建议文案按语言返回：九种非中英语言可用且不含中文', () => {
+    const result = run({});
+    assert.ok(result.advice.length > 0);
+    const langs = ['de', 'fr', 'es', 'pt', 'ru', 'it', 'ar', 'ko', 'ja'];
+    for (const advice of result.advice) {
+        for (const field of ['title', 'detail']) {
+            const value = advice[field];
+            if (!value || typeof value !== 'object') continue;
+            for (const lang of langs) {
+                assert.equal(typeof value[lang], 'string', `${advice.id}.${field}.${lang}`);
+                if (['de', 'fr', 'es', 'pt', 'ru', 'it', 'ar'].includes(lang)) {
+                    assert.ok(!/[\u3400-\u4DBF\u4E00-\u9FFF]/.test(value[lang]),
+                        `${advice.id}.${field}.${lang} contains Chinese`);
+                }
+                assert.ok(value[lang] && value[lang] !== value.zh, `${advice.id}.${field}.${lang} is empty or Chinese`);
+                assert.ok(!/\{[a-zA-Z]\w*\}/.test(value[lang]), `${advice.id}.${field}.${lang} has an unresolved placeholder`);
+            }
+        }
+    }
+});
+

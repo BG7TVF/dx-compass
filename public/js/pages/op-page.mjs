@@ -721,13 +721,16 @@ export function createOpPage(ctx) {
     }
 
     function adviceLang() {
-        return ctx.i18n && ctx.i18n.language === 'en' ? 'en' : 'zh';
+        return (ctx.settings && ctx.settings.lang) || (ctx.i18n && ctx.i18n.language) || 'en';
     }
 
+    /* Prefer the UI language, then English. Chinese is only used when the UI
+       itself is Chinese, so a non-Chinese operator never sees a Chinese card. */
     function pickText(value) {
         if (!value) return '';
         if (typeof value === 'string') return value;
-        return value[adviceLang()] || value.zh || value.en || '';
+        const lang = adviceLang();
+        return value[lang] || value.en || (lang === 'zh' ? value.zh : '') || '';
     }
 
     /* Server-side rule engine output. When it is live it replaces the local

@@ -6676,6 +6676,7 @@ const OP_I18N = {
         'settings.field.towerPulseWidthMs.label': '天线塔启动脉冲宽度（ms）',
         'settings.field.towerPulseWidthMs.desc': '脉冲过短接触器可能不吸合，过长会增加误动作窗口；随时可改。',
         'dev.title': '设备',
+        'dev.kicker': '设备',
         'dev.subtitle': '设备树 · 只读状态与席位归属',
         'dev.add': '添加设备',
         'dev.empty': '还没有配置设备。',
@@ -6968,6 +6969,7 @@ const OP_I18N = {
         'settings.field.towerPulseWidthMs.label': 'Tower start pulse width (ms)',
         'settings.field.towerPulseWidthMs.desc': 'Too short may not pull in the contactor; too long widens the misoperation window. Editable at any time.',
         'dev.title': 'Devices',
+        'dev.kicker': 'Devices',
         'dev.subtitle': 'Device tree · read-only status and seat ownership',
         'dev.add': 'Add device',
         'dev.empty': 'No devices configured yet.',
@@ -7116,3 +7118,16 @@ for (const l of LANGS) {
     }
 }
 if (typeof globalThis !== 'undefined') globalThis.I18N_MERGE_DUPLICATES = I18N_MERGE_DUPLICATES;
+
+/* Late merge for locales that historically fell back to English. Only keys that
+ * are still missing or still identical to the English source are replaced, so a
+ * hand-written translation already present above always wins. */
+const I18N_GAP_SOURCE = (typeof globalThis !== 'undefined' && globalThis.I18N_GAP) || {};
+for (const l of LANGS) {
+    const gap = I18N_GAP_SOURCE[l];
+    if (!gap) continue;
+    for (const key of Object.keys(gap)) {
+        const current = I18N[l][key];
+        if (current === undefined || current === I18N.en[key]) I18N[l][key] = gap[key];
+    }
+}

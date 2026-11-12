@@ -19,7 +19,7 @@
                 <button class="menu-item view-btn" id="btnQsoView" title="QSO map">QSO</button>
                 <button class="menu-item view-btn" id="btnPropView" title="Propagation map">Propagation</button>
                 <button class="menu-item view-btn" id="btnOpView" title="Operator position view">OP View</button>
-                <button class="menu-item view-btn" id="btnDevView" title="Devices">Devices</button>
+                <button class="menu-item view-btn" id="btnDevView" title="Devices" data-i18n="dev.title">Devices</button>
                 <div class="menu-sep"></div>
                 <button class="menu-item" id="btnConfig" title="Settings">Settings</button>
             </div>
@@ -173,7 +173,7 @@
 
             <footer class="op-bottom">
                 <div class="op-bottom-head">
-                    <h3 id="opBottomTitle">Device control</h3>
+                    <h3 id="opBottomTitle" data-i18n="op.bottom.devices">Device control</h3>
                     <span id="opBottomNote" class="op-bottom-note"></span>
                     <div class="op-add-wrap">
                         <button class="op-mini" id="opAddPeripheral" type="button">+</button>
@@ -188,8 +188,8 @@
         <div id="devView" class="dev-view hidden">
             <header class="dev-top">
                 <div class="dev-top-id">
-                    <span class="dev-kicker">DEVICES</span>
-                    <h2 id="devTitle">Devices</h2>
+                    <span class="dev-kicker" id="devKicker" data-i18n="dev.kicker">DEVICES</span>
+                    <h2 id="devTitle" data-i18n="dev.title">Devices</h2>
                     <span class="dev-subtitle" id="devSubtitle"></span>
                 </div>
                 <div class="dev-top-actions">
@@ -690,6 +690,7 @@
 
     <script src="vendor/leaflet/leaflet.js"></script>
     <script src="vendor/leaflet-heat.js"></script>
+    <script src="js/i18n-gap.js?v=2.3.4"></script>
     <script src="js/i18n.js?v=2.3.4"></script>
     <script>
         /* Classic top-level const declarations are not window properties. */

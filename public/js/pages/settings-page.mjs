@@ -683,6 +683,9 @@ export function createSettingsPage(ctx) {
         if (configPanel) configPanel.dir = ctx.settings.lang === 'ar' ? 'rtl' : 'ltr';
         document.body.classList.toggle('lang-ar', ctx.settings.lang === 'ar');
         document.title = `DX-Compass · ${t('subtitle')}`;
+        document.querySelectorAll('[data-i18n]').forEach(element => {
+            element.textContent = t(element.dataset.i18n);
+        });
         const texts = {
             '#btnConfig': 'settings', '#recordsPanel .panel-title': 'records',
             '#btnRefreshRecords': 'refresh', '#btnExportCsv': 'exportCsv', '#btnClearDb': 'clearDb',

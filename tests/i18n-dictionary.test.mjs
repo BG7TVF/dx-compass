@@ -10,7 +10,9 @@ const require = createRequire(import.meta.url);
 const schema = require('../public/shared/settings/schema.js');
 
 const I18N_FILE = new URL('../public/js/i18n.js', import.meta.url);
+const GAP_FILE = new URL('../public/js/i18n-gap.js', import.meta.url);
 const source = fs.readFileSync(I18N_FILE, 'utf8');
+const gapSource = fs.readFileSync(GAP_FILE, 'utf8');
 
 const LANGS = ['zh', 'en', 'de', 'fr', 'es', 'pt', 'ru', 'it', 'ar', 'ko', 'ja'];
 
@@ -18,7 +20,8 @@ function loadDictionary() {
     const sandbox = {};
     vm.createContext(sandbox);
     vm.runInContext(
-        `${source}
+        `${gapSource}
+         ${source}
          globalThis.__dict = {I18N, LANGS, I18N_EXTRA, I18N_MERGE_DUPLICATES, PROP_I18N, PROP_CARD_I18N};`,
         sandbox
     );
