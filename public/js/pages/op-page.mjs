@@ -1386,7 +1386,6 @@ export function createOpPage(ctx) {
 
     function renderTitles() {
         $('#opKicker').textContent = t('op.title');
-        $('#opSubtitle').textContent = t('op.subtitle');
         $('#opSeatTitle').textContent = t('op.seat');
         $('#opRateTitle').textContent = t('qsoRate');
         $('#opBandQsoTitle').textContent = t('op.top.bandCounts');
