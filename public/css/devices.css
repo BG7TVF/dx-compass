@@ -501,13 +501,13 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 20px;
+    width: 24px;
     height: 20px;
     border-radius: 5px;
     background: var(--well);
     border: 1px solid var(--border);
     color: var(--text);
-    font-size: 10px;
+    font-size: 9px;
     font-weight: 700;
 }
 

@@ -20,8 +20,14 @@ const NODE_W = 210;
 const NODE_H = 76;
 const CANVAS_MIN_W = 1600;
 const CANVAS_MIN_H = 1000;
-const TYPE_OPTIONS = ['tower', 'rotator', 'antenna', 'matrix', 'switch', 'other'];
-const TYPE_BADGE = {tower: 'T', rotator: 'R', antenna: 'A', matrix: 'M', switch: 'S', other: 'O'};
+// 面板只提供这七种可拖出的设备；前五种是射频链路组成部分，后两种是机械支撑。
+const PALETTE_TYPES = ['radio', 'swr', 'bpf', 'amp', 'antenna', 'tower', 'rotator'];
+// 旧版本已存在的类型仍可编辑与显示，但不从面板新建。
+const TYPE_OPTIONS = PALETTE_TYPES.concat(['matrix', 'switch', 'other']);
+const TYPE_BADGE = {
+    radio: 'RX', swr: 'SW', bpf: 'BP', amp: 'PA', antenna: 'AN', tower: 'TW', rotator: 'RT',
+    matrix: 'MX', switch: 'CX', other: 'OT'
+};
 const STATUS_KEYS = {online: 'dev.status.online', offline: 'dev.status.offline', unknown: 'dev.status.unknown'};
 const TOWER_KEYS = {
     erected: 'dev.tower.erected',
@@ -481,7 +487,7 @@ export function createDevicesPage(ctx) {
     }
 
     function paletteHtml() {
-        return TYPE_OPTIONS.map(type => `<div class="dev-palette-item" draggable="true" role="button" tabindex="0" data-type="${esc(type)}">
+        return PALETTE_TYPES.map(type => `<div class="dev-palette-item" draggable="true" role="button" tabindex="0" data-type="${esc(type)}">
             <span class="dev-node-badge">${esc(TYPE_BADGE[type] || 'O')}</span>
             <span>${esc(typeLabel(type))}</span>
         </div>`).join('');
@@ -1116,7 +1122,7 @@ export function createDevicesPage(ctx) {
         canvas.addEventListener('drop', event => {
             event.preventDefault();
             const type = event.dataTransfer.getData('text/plain');
-            if (!TYPE_OPTIONS.includes(type)) return;
+            if (!PALETTE_TYPES.includes(type)) return;
             const rect = canvas.getBoundingClientRect();
             createDraft(type, event.clientX - rect.left - NODE_W / 2, event.clientY - rect.top - NODE_H / 2);
         });
