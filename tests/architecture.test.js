@@ -326,8 +326,10 @@ test('cold-start entry points wait for the readiness gate', () => {
         'the gate must be a global middleware registered before http-in routes');
     assert.match(gate, /flows:started/,
         'the gate must wait for http-in routes to be registered');
-    assert.match(gate, /require\('\.\.\/lib\/ready\.js'\)/);
+    assert.match(gate, /prependListener\('upgrade'/,
+        'websocket upgrades must also wait for route registration');
     assert.match(gate, /ready\.whenReady\(\)/);
+    assert.match(gate, /require\('\.\.\/lib\/ready\.js'\)/);
     assert.match(gate, /schema-init-failed/);
 
     const flow = JSON.parse(read('flow.json'));
@@ -362,20 +364,27 @@ test('schema self-check builder does not await the gate it feeds', () => {
         'schema probing must not wait on the gate it is responsible for resolving');
 });
 
-test('global gate holds requests until schema and flows are ready', async () => {
+test('global gate holds HTTP and WebSocket until schema and flows are ready', async () => {
     const ready = require('../lib/ready.js');
     const gatePath = path.join(ROOT, 'nodes', 'ready-gate.js');
     delete require.cache[require.resolve(gatePath)];
 
     const middleware = [];
     const listeners = {};
+    const upgrades = [];
+    const emitted = [];
     require(gatePath)({
         httpNode: {use(fn) { middleware.push(fn); }},
+        server: {
+            prependListener(name, fn) { if (name === 'upgrade') upgrades.push(fn); },
+            emit(name, req, socket, head) { if (name === 'upgrade') emitted.push(req); }
+        },
         events: {on(name, fn) { (listeners[name] = listeners[name] || []).push(fn); }},
         log: {info() {}},
         nodes: {createNode() {}, registerType() {}}
     });
-    assert.equal(middleware.length, 1);
+    assert.equal(middleware.length, 1, 'HTTP gate must be registered once');
+    assert.equal(upgrades.length, 1, 'upgrade gate must be registered once');
 
     let nextCalled = false;
     let status = 0;
@@ -390,18 +399,32 @@ test('global gate holds requests until schema and flows are ready', async () => 
         middleware[0]({}, res, () => { nextCalled = true; resolve(); });
     });
 
+    const socket = {
+        destroyed: false,
+        on() {},
+        destroy() { this.destroyed = true; }
+    };
+    const wsRequest = {url: '/ws'};
+    upgrades[0](wsRequest, socket, Buffer.alloc(0));
+
     await new Promise(resolve => setTimeout(resolve, 20));
     assert.equal(nextCalled, false, 'request must not pass while schema is pending');
+    assert.equal(emitted.length, 0, 'websocket upgrade must be held while routes are pending');
 
     ready.markReady();
     await new Promise(resolve => setTimeout(resolve, 20));
     assert.equal(nextCalled, false, 'schema alone is not enough; routes must be registered');
+    assert.equal(emitted.length, 0);
 
     for (const listener of listeners['flows:started'] || []) listener();
     await held;
+    await new Promise(resolve => setTimeout(resolve, 20));
     assert.equal(nextCalled, true);
     assert.equal(status, 0);
     assert.equal(body, '');
+    assert.equal(emitted.length, 1, 'held websocket upgrade must be re-emitted once routes are up');
+    assert.equal(emitted[0], wsRequest);
+    assert.equal(socket.destroyed, false);
 });
 
 test('read-only wall keeps an exact static whitelist and GET/HEAD boundary', () => {
