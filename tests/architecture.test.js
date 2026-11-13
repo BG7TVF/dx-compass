@@ -319,9 +319,9 @@ test('startup readiness probe covers every schema object', () => {
 });
 
 test('cold-start entry points wait for the readiness gate', () => {
-    assert.match(read('settings.js'), /nodesDir:\s*["']nodes["']/,
-        'custom nodes must be scanned so the gate is armed before listen');
     const gate = read('nodes', 'ready-gate.js');
+    assert.ok(fs.existsSync(path.join(ROOT, 'nodes', 'ready-gate.html')),
+        'Node-RED only loads a local node file when a sibling .html exists');
     assert.match(gate, /RED\.httpNode\.use\(/,
         'the gate must be a global middleware registered before http-in routes');
     assert.match(gate, /flows:started/,
