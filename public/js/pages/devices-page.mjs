@@ -12,6 +12,8 @@ import {
     saveDevice,
     deleteDevice,
     saveDeviceLayouts,
+    saveRfLink,
+    deleteRfLink,
     sendDeviceCommand
 } from '../../shared/data/devices.mjs';
 
@@ -51,7 +53,19 @@ const ERROR_KEYS = {
     'antenna-band-required': 'dev.error.antenna-band-required',
     'invalid-offset': 'dev.error.invalid-offset',
     'unknown-device': 'dev.error.unknown-device',
+    'unknown-port': 'dev.error.unknown-port',
+    'unknown-link': 'dev.error.unknown-link',
+    'invalid-link': 'dev.error.invalid-link',
     'unknown-parent': 'dev.error.unknown-parent',
+    'combiner-band-required': 'dev.error.combiner-band-required',
+    'bpf-band-required': 'dev.error.bpf-band-required',
+    'invalid-seat': 'dev.error.invalid-seat',
+    'invalid-config-ports': 'dev.error.invalid-config-ports',
+    'invalid-config-port-key': 'dev.error.invalid-config-port-key',
+    'invalid-config-port-dir': 'dev.error.invalid-config-port-dir',
+    'invalid-config-port-band': 'dev.error.invalid-config-port-band',
+    'invalid-config-out_count': 'dev.error.invalid-config-out_count',
+    'invalid-config-in_count': 'dev.error.invalid-config-in_count',
     'invalid-band': 'dev.error.invalid-band',
     'seat-required': 'dev.error.seat-required',
     'invalid-device-token': 'dev.error.invalid-device-token',
@@ -95,6 +109,7 @@ export function createDevicesPage(ctx) {
     let towerDirection = null;
     let dragging = null;
     let wiring = null;
+    let rfWiring = null;
     let localLayout = null;
 
     function t(key, params) {
@@ -157,6 +172,52 @@ export function createDevicesPage(ctx) {
         return device.layout || {x: 80, y: 80};
     }
 
+    function rfView() {
+        return snapshot && snapshot.rf ? snapshot.rf : {links: [], ports: {}, warnings: []};
+    }
+
+    function rfPorts(deviceId) {
+        const ports = rfView().ports || {};
+        return Array.isArray(ports[deviceId]) ? ports[deviceId] : [];
+    }
+
+    function rfPortPoint(deviceId, portKey) {
+        const device = deviceById(deviceId);
+        if (!device) return null;
+        const ports = rfPorts(deviceId);
+        const index = ports.findIndex(port => port.key === portKey);
+        if (index < 0 || !ports.length) return null;
+        const pos = positionOf(device);
+        return {
+            x: pos.x + ((index + 1) / (ports.length + 1)) * NODE_W,
+            y: pos.y + NODE_H
+        };
+    }
+
+    function rfWirePath(from, to) {
+        const dy = Math.max(36, Math.abs(to.y - from.y) / 2);
+        return `M${from.x},${from.y} C${from.x},${from.y + dy} ${to.x},${to.y + dy} ${to.x},${to.y}`;
+    }
+
+    function rfWarningText(warning) {
+        const item = warning || {};
+        if (item.code === 'antenna-multi-upstream') {
+            return t('dev.rf.warn.multiUpstream', {
+                name: item.name || item.device_id,
+                count: item.count
+            });
+        }
+        if (item.code === 'combiner-antenna-band-uncovered') {
+            return t('dev.rf.warn.combinerCoverage', {
+                combiner: item.combiner_id,
+                antenna: item.antenna_id,
+                bands: (item.missing || []).join(', ')
+            });
+        }
+        if (item.code === 'rf-link-orphan') return t('dev.rf.warn.orphan');
+        return '';
+    }
+
     function seatsView() {
         return snapshot ? snapshot.ownership : {seats: [], by_seat: {}, antennas: []};
     }
@@ -177,6 +238,7 @@ export function createDevicesPage(ctx) {
 
     function nodeMeta(device) {
         const parts = [];
+        if (device.type === 'radio' && device.seat) parts.push(t('dev.node.seat', {seat: device.seat}));
         if (device.bands && device.bands.length) {
             parts.push(t('dev.bands', {bands: device.bands.join(' ')}));
         }
@@ -213,9 +275,15 @@ export function createDevicesPage(ctx) {
             : '';
         const ports = node.draft ? '' : '<span class="dev-port dev-port-in" title="in"></span>' +
             '<span class="dev-port dev-port-out" title="out"></span>';
+        const rfPortsHtml = node.draft ? '' : rfPorts(device.id).map((port, index, list) => {
+            const title = port.band ? `${port.key} · ${port.band}` : port.key;
+            return `<span class="dev-rf-port dev-rf-${esc(port.dir)}" style="left:${((index + 1) / (list.length + 1)) * 100}%"
+                data-rf-device="${esc(device.id)}" data-rf-port="${esc(port.key)}" title="${esc(title)}"></span>`;
+        }).join('');
         return `<div class="${classes.join(' ')}" role="button" tabindex="0" data-node-key="${esc(node.key)}"${node.draft ? '' : ` data-real-id="${esc(device.id)}"`}
                 style="left:${node.layout.x}px;top:${node.layout.y}px;width:${NODE_W}px;height:${NODE_H}px">
             ${ports}
+            ${rfPortsHtml ? `<div class="dev-rf-ports">${rfPortsHtml}</div>` : ''}
             <div class="dev-node-head">
                 <span class="dev-node-badge">${esc(TYPE_BADGE[device.type] || 'O')}</span>
                 <span class="dev-node-name">${esc(device.name)}</span>
@@ -285,8 +353,20 @@ export function createDevicesPage(ctx) {
             parts.push(`<path class="dev-wire" d="${d}"></path>`);
             parts.push(`<path class="dev-wire-hit" d="${d}" data-wire-child="${esc(node.device.id)}"><title>${esc(t('dev.wire.remove'))}</title></path>`);
         }
+        for (const link of rfView().links || []) {
+            if (!byId.has(link.a_device) || !byId.has(link.b_device)) continue;
+            const from = rfPortPoint(link.a_device, link.a_port);
+            const to = rfPortPoint(link.b_device, link.b_port);
+            if (!from || !to) continue;
+            const d = rfWirePath(from, to);
+            parts.push(`<path class="dev-rf-wire" d="${d}"></path>`);
+            parts.push(`<path class="dev-rf-wire-hit" d="${d}" data-rf-link="${esc(link.link_id)}"><title>${esc(t('dev.rf.remove'))}</title></path>`);
+        }
         if (wiring) {
             parts.push(`<path class="dev-wire dev-wire-draft" d="${draftWirePath(wiring.x1, wiring.y1, wiring.x2, wiring.y2)}"></path>`);
+        }
+        if (rfWiring) {
+            parts.push(`<path class="dev-rf-wire dev-rf-wire-draft" d="${rfWirePath({x: rfWiring.x1, y: rfWiring.y1}, {x: rfWiring.x2, y: rfWiring.y2})}"></path>`);
         }
         svg.innerHTML = parts.join('');
     }
@@ -334,6 +414,7 @@ export function createDevicesPage(ctx) {
                 name: defaultDraftName(type),
                 type,
                 parent_id: null,
+                seat: '',
                 bands: [],
                 install_offset_deg: 0,
                 exclusive: false,
@@ -395,10 +476,18 @@ export function createDevicesPage(ctx) {
                 <label>${t('dev.config.port')}<input name="cfg_port" type="number" min="1" max="65535" step="1" value="${esc(config.port || '')}"></label>`;
         }
         if (value.type === 'matrix' || value.type === 'switch') {
+            const counts = value.type === 'switch'
+                ? `<label>${t('dev.config.outCount')}<input name="cfg_out_count" type="number" min="1" max="16" step="1" value="${esc(config.out_count === undefined ? '' : config.out_count)}"></label>`
+                : `<label>${t('dev.config.inCount')}<input name="cfg_in_count" type="number" min="1" max="16" step="1" value="${esc(config.in_count === undefined ? '' : config.in_count)}"></label>
+                   <label>${t('dev.config.outCount')}<input name="cfg_out_count" type="number" min="1" max="16" step="1" value="${esc(config.out_count === undefined ? '' : config.out_count)}"></label>`;
             return `<label>${t('dev.config.relayUrl')}<input name="cfg_relay_url" maxlength="300" value="${esc(config.relay_url || '')}"></label>
                 <label>${t('dev.config.relayToken')}<input name="cfg_relay_token" type="password" autocomplete="off" placeholder="${esc(t('dev.config.keepToken'))}"></label>
                 <label>${t('dev.config.channels')}<textarea name="cfg_channels" rows="3" spellcheck="false">${esc(JSON.stringify(config.channels || {}))}</textarea></label>
-                <label>${t('dev.config.pulse')}<input name="cfg_pulse_ms" type="number" min="50" max="5000" step="1" value="${esc(config.pulse_ms || '')}"></label>`;
+                <label>${t('dev.config.pulse')}<input name="cfg_pulse_ms" type="number" min="50" max="5000" step="1" value="${esc(config.pulse_ms || '')}"></label>
+                ${counts}`;
+        }
+        if (value.type === 'combiner') {
+            return `<p class="dev-note">${t('dev.config.combinerHint')}</p>`;
         }
         if (value.type === 'tower') {
             return `<label>${t('dev.config.relayUrl')}<input name="cfg_relay_url" maxlength="300" value="${esc(config.relay_url || '')}"></label>
@@ -420,6 +509,7 @@ export function createDevicesPage(ctx) {
                 <label>${t('dev.form.type')}
                     <input name="type" list="devTypeList" maxlength="32" required value="${esc(value.type)}">
                 </label>
+                ${value.type === 'radio' ? `<label>${t('dev.form.seat')}<input name="seat" maxlength="64" value="${esc(value.seat || '')}"></label>` : ''}
                 <label>${t('dev.form.bands')}<input name="bands" placeholder="20m, 15m" value="${esc((value.bands || []).join(', '))}"></label>
                 <label>${t('dev.form.offset')}<input name="install_offset_deg" type="number" min="0" max="359" step="1" value="${esc(value.install_offset_deg)}"></label>
                 <label>${t('dev.form.port')}<input name="port_label" maxlength="32" value="${esc(value.port_label)}"></label>
@@ -428,6 +518,7 @@ export function createDevicesPage(ctx) {
                 ${configFields(value)}
             </div>
             <p class="dev-note">${t('dev.form.parentFixed')} · ${esc(isDraft ? '—' : parentLabel(value))}</p>
+            <p class="dev-note">${t('dev.form.rfPorts')} · ${esc(isDraft ? '—' : (rfPorts(value.id).map(port => port.band ? `${port.key} (${port.band})` : port.key).join(' · ') || '—'))}</p>
             <label class="dev-check"><input name="exclusive" type="checkbox"${value.exclusive ? ' checked' : ''}> ${t('dev.form.exclusive')}</label>
             <label class="dev-check"><input name="enabled" type="checkbox"${value.enabled !== false ? ' checked' : ''}> ${t('dev.form.enabled')}</label>
             <label>${t('dev.form.notes')}<input name="notes" maxlength="200" value="${esc(value.notes)}"></label>
@@ -699,6 +790,8 @@ export function createDevicesPage(ctx) {
             seats: seats.length,
             antennas: snapshot.ownership.antennas.length
         }) + ' · ' + t('dev.hint.canvas');
+        const warnings = (rfView().warnings || []).map(rfWarningText).filter(Boolean);
+        $('#devHint').textContent = warnings.length ? warnings.join(' · ') : t('dev.hint.server');
         if (document.activeElement !== $('#devSeat')) {
             $('#devSeat').innerHTML = seatOptions();
         }
@@ -773,6 +866,8 @@ export function createDevicesPage(ctx) {
             notes: String(data.get('notes') || '')
         };
         if (form.dataset.devId) device.id = form.dataset.devId;
+        const seat = data.get('seat');
+        if (seat !== null) device.seat = String(seat);
         const password = String(data.get('password') || '');
         if (password) device.password = password;
         device.config = formConfig(data, device.type);
@@ -791,6 +886,12 @@ export function createDevicesPage(ctx) {
             const relayToken = String(data.get('cfg_relay_token') || '');
             if (relayToken) config.relay_token = relayToken;
             config.pulse_ms = String(data.get('cfg_pulse_ms') || '');
+            if (type === 'switch') {
+                config.out_count = String(data.get('cfg_out_count') || '');
+            } else {
+                config.in_count = String(data.get('cfg_in_count') || '');
+                config.out_count = String(data.get('cfg_out_count') || '');
+            }
             const channelsText = String(data.get('cfg_channels') || '').trim();
             if (channelsText) {
                 try {
@@ -919,6 +1020,42 @@ export function createDevicesPage(ctx) {
         }
     }
 
+    async function connectRfPorts(from, to) {
+        if (!from || !to || !from.deviceId || !to.deviceId) return;
+        if (from.deviceId === to.deviceId && from.port === to.port) return;
+        try {
+            const result = await saveRfLink({
+                a_device: from.deviceId,
+                a_port: from.port,
+                b_device: to.deviceId,
+                b_port: to.port
+            });
+            if (!result || !result.ok) {
+                showToast(errorText(result && result.error));
+                return;
+            }
+            await refresh();
+        } catch (error) {
+            showToast(apiError(error));
+        }
+    }
+
+    async function removeRfLinkById(linkId) {
+        if (!linkId) return;
+        const confirmed = await showConfirm(ctx, t('dev.rf.remove'), {danger: true});
+        if (!confirmed) return;
+        try {
+            const result = await deleteRfLink(linkId);
+            if (!result || !result.ok) {
+                showToast(errorText(result && result.error));
+                return;
+            }
+            await refresh();
+        } catch (error) {
+            showToast(apiError(error));
+        }
+    }
+
     async function removeWire(childId) {
         const node = deviceById(childId);
         if (!node) return;
@@ -1029,15 +1166,59 @@ export function createDevicesPage(ctx) {
         renderWires(canvasNodes());
     }
 
-    function moveWire(event) {
-        if (!wiring) return;
+    function beginRfWire(portEl, event) {
+        const deviceId = portEl.dataset.rfDevice;
+        const port = portEl.dataset.rfPort;
+        const point = rfPortPoint(deviceId, port);
+        if (!deviceId || !port || !point) return;
         const rect = $('#devCanvas').getBoundingClientRect();
-        wiring.x2 = event.clientX - rect.left;
-        wiring.y2 = event.clientY - rect.top;
+        rfWiring = {
+            fromDevice: deviceId,
+            fromPort: port,
+            x1: point.x,
+            y1: point.y,
+            x2: event.clientX - rect.left,
+            y2: event.clientY - rect.top
+        };
+        event.preventDefault();
+        event.stopPropagation();
         renderWires(canvasNodes());
     }
 
+    function moveWire(event) {
+        if (!wiring && !rfWiring) return;
+        const rect = $('#devCanvas').getBoundingClientRect();
+        if (rfWiring) {
+            rfWiring.x2 = event.clientX - rect.left;
+            rfWiring.y2 = event.clientY - rect.top;
+        } else {
+            wiring.x2 = event.clientX - rect.left;
+            wiring.y2 = event.clientY - rect.top;
+        }
+        renderWires(canvasNodes());
+    }
+
+    async function endRfWire(event) {
+        if (!rfWiring) return;
+        const from = {deviceId: rfWiring.fromDevice, port: rfWiring.fromPort};
+        rfWiring = null;
+        const x = event ? event.clientX : 0;
+        const y = event ? event.clientY : 0;
+        const targetEl = document.elementFromPoint(x, y);
+        const portEl = targetEl ? targetEl.closest('.dev-rf-port') : null;
+        renderWires(canvasNodes());
+        if (!portEl) return;
+        const to = {deviceId: portEl.dataset.rfDevice, port: portEl.dataset.rfPort};
+        if (!to.deviceId || !to.port) return;
+        if (to.deviceId === from.deviceId && to.port === from.port) return;
+        await connectRfPorts(from, to);
+    }
+
     async function endWire(event) {
+        if (rfWiring) {
+            await endRfWire(event);
+            return;
+        }
         if (!wiring) return;
         const fromKey = wiring.fromKey;
         wiring = null;
@@ -1130,6 +1311,7 @@ export function createDevicesPage(ctx) {
         canvas.addEventListener('click', event => {
             if (event.target.closest('[data-node-key]')) return;
             if (event.target.closest('[data-wire-child]')) return;
+            if (event.target.closest('[data-rf-link]')) return;
             if (draft && selectedId === draft.key) {
                 void confirmDiscard().then(ok => { if (ok) discardDraft(); });
                 return;
@@ -1141,6 +1323,11 @@ export function createDevicesPage(ctx) {
         });
 
         $('#devNodes').addEventListener('pointerdown', event => {
+            const rfPort = event.target.closest('.dev-rf-port');
+            if (rfPort) {
+                beginRfWire(rfPort, event);
+                return;
+            }
             const port = event.target.closest('.dev-port-out');
             const node = event.target.closest('[data-node-key]');
             if (!node) return;
@@ -1164,6 +1351,11 @@ export function createDevicesPage(ctx) {
             void selectNode(key);
         });
         $('#devWires').addEventListener('click', event => {
+            const rfHit = event.target.closest('[data-rf-link]');
+            if (rfHit) {
+                void removeRfLinkById(rfHit.dataset.rfLink);
+                return;
+            }
             const hit = event.target.closest('[data-wire-child]');
             if (hit) void removeWire(hit.dataset.wireChild);
         });
@@ -1235,6 +1427,7 @@ export function createDevicesPage(ctx) {
         stopTower();
         dragging = null;
         wiring = null;
+        rfWiring = null;
         if (timer) {
             clearInterval(timer);
             timer = null;

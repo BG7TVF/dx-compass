@@ -552,6 +552,52 @@
 .dev-port-in { left: -6px; }
 .dev-port-out { right: -6px; cursor: crosshair; border-color: var(--accent); }
 
+/* RF ports sit on the bottom edge; mechanical mounting stays on the sides. */
+.dev-rf-ports {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -7px;
+    height: 14px;
+}
+
+.dev-rf-port {
+    position: absolute;
+    top: 0;
+    width: 12px;
+    height: 12px;
+    margin-left: -6px;
+    border-radius: 3px;
+    border: 2px solid #f0a020;
+    background: var(--well);
+    cursor: crosshair;
+    z-index: 4;
+}
+
+.dev-rf-in { border-color: #4aa3ff; }
+.dev-rf-out { border-color: #f0a020; }
+.dev-rf-bidir { border-color: #9adf6a; }
+.dev-rf-port:hover { transform: scale(1.18); }
+
+.dev-rf-wire {
+    fill: none;
+    stroke: #f0a020;
+    stroke-width: 2;
+    pointer-events: none;
+}
+
+.dev-rf-wire-draft { stroke-dasharray: 5 4; }
+
+.dev-rf-wire-hit {
+    fill: none;
+    stroke: transparent;
+    stroke-width: 14;
+    pointer-events: stroke;
+    cursor: pointer;
+}
+
+.dev-rf-wire-hit:hover { stroke: rgba(240, 160, 32, .35); }
+
 .dev-canvas-empty {
     position: absolute;
     left: 50%;

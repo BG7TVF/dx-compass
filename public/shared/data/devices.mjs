@@ -25,6 +25,18 @@ export function saveDeviceLayouts(layouts, {transport = defaultTransport, ...opt
     return transport.postJson('/api/devices', {action: 'layout', layouts}, options);
 }
 
+/** Attach one RF link between two device ports (undirected, reverse deduped). */
+export function saveRfLink(link, {transport = defaultTransport, ...options} = {}) {
+    return transport.postJson('/api/devices', {action: 'rf-link', link}, options);
+}
+
+/** Remove one RF link by id or by its endpoint pair. */
+export function deleteRfLink(link, {transport = defaultTransport, ...options} = {}) {
+    const id = typeof link === 'string' ? link : (link && link.link_id);
+    const payload = id ? {link_id: id} : {link};
+    return transport.postJson('/api/devices', Object.assign({action: 'rf-unlink'}, payload), options);
+}
+
 /** Create or update one TX status source. */
 export function saveTxSource(source, {transport = defaultTransport, ...options} = {}) {
     return transport.postJson('/api/devices', {action: 'tx-source', source}, options);

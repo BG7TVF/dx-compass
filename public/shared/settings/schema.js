@@ -312,30 +312,6 @@
             label: 'OP view: allow QRZ review', zh: 'OP 视图：允许 QRZ 复核',
             desc: 'Only called when SCP misses; off = the call stays unconfirmed.'
         }),
-        field('opRotatorConfigured', 'qso', 'bool', false, {
-            label: 'OP view: rotator configured', zh: 'OP 视图：已配置旋转器',
-            desc: 'Map clicks send a target bearing to the rotator adapter.'
-        }),
-        field('opRotatorName', 'qso', 'string', 'Rotator', {
-            maxLen: 40, allowEmpty: true, label: 'OP view: rotator name', zh: 'OP 视图：旋转器名称',
-            desc: 'Shown in the bottom device bay.'
-        }),
-        field('opAntennaSwitchConfigured', 'qso', 'bool', false, {
-            label: 'OP view: antenna switch configured', zh: 'OP 视图：已配置天线切换器',
-            desc: 'Shows the antenna switch card in the bottom bay.'
-        }),
-        field('opAntennaSwitchName', 'qso', 'string', 'Antenna switch', {
-            maxLen: 40, allowEmpty: true, label: 'OP view: antenna switch name', zh: 'OP 视图：天线切换器名称',
-            desc: 'Shown in the bottom device bay.'
-        }),
-        field('opTowerConfigured', 'qso', 'bool', false, {
-            label: 'OP view: tower configured', zh: 'OP 视图：已配置天线塔',
-            desc: 'Shows the tower lift card in the bottom bay.'
-        }),
-        field('opTowerName', 'qso', 'string', 'Tower', {
-            maxLen: 40, allowEmpty: true, label: 'OP view: tower name', zh: 'OP 视图：天线塔名称',
-            desc: 'Shown in the bottom device bay.'
-        }),
         field('towerLimitType', 'qso', 'enum', 'NO', {
             values: ['NO', 'NC'], scope: 'both',
             label: 'Tower limit switch type', zh: '天线塔限位开关类型',

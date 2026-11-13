@@ -25,7 +25,7 @@ import {bandConditionCells, spaceWeatherCells, bandOf} from '../../bigscreen/wal
 import {bearing} from '../../shared/geo/coordinates.mjs';
 import {gridToLatLon} from '../../shared/geo/maidenhead.mjs';
 import {createOpMap} from '../op/op-map.mjs';
-import {createPeripheralHub, deviceDefinitions} from '../op/peripherals.mjs';
+import {getDevicesSnapshot, sendDeviceCommand} from '../../shared/data/devices.mjs';
 import {changeFrequencyClaim} from '../../shared/data/station.mjs';
 
 const REVIEW_KEY = 'dxcompass-op-call-review';
@@ -39,7 +39,6 @@ const bandKey = value => String(value || '').toUpperCase();
 const mini = value => (value === null || value === undefined || value === '' ? '—' : value);
 
 export function createOpPage(ctx) {
-    const hub = createPeripheralHub();
     const state = {
         active: false,
         map: null,
@@ -65,6 +64,9 @@ export function createOpPage(ctx) {
         adviceTimer: null,
         rotorTarget: null,
         claimFeedback: null,
+        devices: null,
+        towerHold: null,
+        towerTimer: null,
         timers: []
     };
 
@@ -822,7 +824,7 @@ export function createOpPage(ctx) {
 
     function updateMapHint() {
         const parts = [t('op.map.hintNoZoom')];
-        if (ctx.settings.opRotatorConfigured) parts.push(t('op.map.hintClick'));
+        if (rotatorDevice()) parts.push(t('op.map.hintClick'));
         $('#opMapHint').textContent = parts.join(' · ');
     }
 
@@ -841,16 +843,21 @@ export function createOpPage(ctx) {
     }
 
     function handleMapBearing(deg, info) {
-        if (!ctx.settings.opRotatorConfigured || info && info.blocked) {
+        const rotator = rotatorDevice();
+        if (!rotator || info && info.blocked) {
             showMapFlag(t('op.map.rotatorOff'));
             return;
         }
         state.rotorTarget = Math.round(deg);
-        const result = hub.command('rotator', 'bearing', deg);
-        showMapFlag(result.ok
-            ? t('op.device.rotator.target', {deg: state.rotorTarget})
-            : t('op.device.rotator.target', {deg: state.rotorTarget}) + ' · ' + t('op.device.rotator.previewOnly'));
-        renderBottom();
+        void sendDeviceCommand(rotator.id, {command: 'rotate', azimuth: state.rotorTarget}, {seat: commandSeat()})
+            .then(result => {
+                const ok = !!result && result.ok !== false;
+                showMapFlag(t('op.device.rotator.target', {deg: state.rotorTarget}) +
+                    (ok ? '' : ' · ' + t('op.device.commandFailed') + errorNote(result)));
+                if (ok) void loadDevices();
+                renderBottom();
+            })
+            .catch(error => showMapFlag(t('op.device.commandFailed') + errorNote(null, error)));
     }
 
     function claimControls(key, radio) {
@@ -880,11 +887,43 @@ export function createOpPage(ctx) {
         return '<div class="op-claim"><span>' + esc(note) + '</span>' + button + '</div>' + feedback;
     }
 
+    function deviceSnapshot() {
+        return state.devices;
+    }
+
+    function controlDevices() {
+        const snapshot = deviceSnapshot();
+        if (!snapshot || !Array.isArray(snapshot.devices)) return [];
+        return snapshot.devices.filter(device => ['rotator', 'switch', 'matrix', 'tower'].includes(device.type) &&
+            device.enabled !== false);
+    }
+
+    function commandSeat() {
+        const key = currentSeat();
+        if (key !== 'all') return key;
+        const seats = visibleSeats();
+        return seats.length ? seats[0] : 'OP';
+    }
+
+    function rotatorDevice() {
+        return controlDevices().find(device => device.type === 'rotator') || null;
+    }
+
+    async function loadDevices() {
+        try {
+            const data = await getDevicesSnapshot();
+            state.devices = data && data.ok ? data : null;
+        } catch (error) {
+            state.devices = null;
+        }
+        renderBottom();
+        updateMapHint();
+    }
+
     function renderBottom() {
         const host = $('#opBottom');
-        const devices = deviceDefinitions(ctx.settings);
+        const devices = controlDevices();
         $('#opBottomNote').textContent = devices.length ? '' : t('op.bottom.none');
-        renderAddMenu(devices);
         if (devices.length) {
             host.innerHTML = devices.map(device => deviceCard(device)).join('');
             return;
@@ -909,72 +948,107 @@ export function createOpPage(ctx) {
     }
 
     function deviceCard(device) {
-        const ready = hub.status(device.type) === 'ready';
-        const badge = ready
-            ? '<span class="ok">' + esc(t('op.device.ready')) + '</span>'
-            : '<span>' + esc(t('op.device.noDriver')) + '</span>';
+        const snapshot = deviceSnapshot() || {};
+        const statuses = snapshot.status || {};
+        const status = statuses[device.id] || {state: 'unknown'};
+        const badge = '<span class="op-device-status ' + esc(status.state) + '">' +
+            esc(t('dev.status.' + status.state)) + '</span>';
         let controls = '';
-        if (device.type === 'antenna') {
-            controls = '<select data-op-antenna="1"' + (ready ? '' : ' disabled') + '><option>' +
-                esc(t('op.device.antenna.ports')) + '</option>' + [1, 2, 3, 4, 5, 6].map(port =>
-                    '<option value="' + port + '">' + port + '</option>').join('') + '</select>';
+        if (device.type === 'rotator') {
+            const view = (snapshot.rotators || {})[device.id] || {};
+            const current = view.physical_azimuth === null || view.physical_azimuth === undefined
+                ? '—' : view.physical_azimuth;
+            controls = '<span class="op-device-note">' + esc(t('op.device.rotator.current', {deg: current})) +
+                '</span><label>' + esc(t('op.device.rotator.targetInput')) +
+                '<input data-op-azimuth type="number" min="0" max="360" step="1" inputmode="numeric"></label>' +
+                '<button type="button" data-op-cmd="rotate">' + esc(t('op.device.rotator.rotate')) + '</button>' +
+                '<button type="button" data-op-cmd="stop">' + esc(t('op.device.rotator.stop')) + '</button>';
+        } else if (device.type === 'switch' || device.type === 'matrix') {
+            const ports = ((snapshot.rf || {}).ports || {})[device.id] || [];
+            const inputs = ports.filter(port => port.role !== 'out');
+            const outputs = ports.filter(port => port.role === 'out');
+            const selected = ((snapshot.controls || {})[device.id] || {}).ports || {};
+            const firstInput = inputs.length ? inputs[0].key : '';
+            const chosen = selected[firstInput] || (outputs.length ? outputs[0].key : '');
+            const inputOptions = inputs.map(port => '<option value="' + esc(port.key) + '"' +
+                (port.key === firstInput ? ' selected' : '') + '>' + esc(port.key) + '</option>').join('');
+            const outputOptions = outputs.map(port => '<option value="' + esc(port.key) + '"' +
+                (port.key === chosen ? ' selected' : '') + '>' + esc(port.key) + '</option>').join('');
+            controls = '<label>' + esc(t('op.device.port')) + '<select data-op-port>' + inputOptions +
+                '</select></label><label>' + esc(t('op.device.outlet')) + '<select data-op-outlet>' +
+                outputOptions + '</select></label>' +
+                '<button type="button" data-op-cmd="select">' + esc(t('op.device.select')) + '</button>';
         } else if (device.type === 'tower') {
             controls = [
                 ['up', 'op.device.tower.up'],
-                ['down', 'op.device.tower.down'],
-                ['stop', 'op.device.tower.stop']
-            ].map(([direction, key]) => '<button type="button" data-op-direction="' + direction + '"' +
-                (ready ? '' : ' disabled') + '>' + esc(t(key)) + '</button>').join('');
-        } else {
-            const deg = state.rotorTarget === null ? '—' : state.rotorTarget;
-            controls = '<span class="op-device-note">' + esc(ready
-                ? t('op.device.rotator.target', {deg})
-                : t('op.device.rotator.previewOnly')) + '</span>';
+                ['down', 'op.device.tower.down']
+            ].map(([direction, key]) => '<button type="button" data-op-tower="' + direction + '">' +
+                esc(t(key)) + '</button>').join('') +
+                '<button type="button" data-op-tower="stop">' + esc(t('op.device.tower.stop')) + '</button>';
         }
-        const note = ready ? '' : '<span class="op-device-note">' + esc(t('op.device.unconfigured')) +
-            ' · ' + esc(t('op.device.settingsHint')) + '</span>';
-        return '<div class="op-device' + (ready ? ' ready' : '') + '"><div class="op-device-head"><b>' +
+        return '<div class="op-device" data-op-device="' + esc(device.id) + '"><div class="op-device-head"><b>' +
             esc(device.name) + '</b>' + badge + '</div><div class="op-device-controls">' + controls +
-            '</div>' + note +
-            '<button type="button" class="op-link-btn" data-op-remove="' + esc(device.type) + '">' +
-            esc(t('op.device.remove')) + '</button></div>';
+            '</div><span class="op-device-result"></span>' +
+            '<span class="op-device-note">' + esc(t('op.device.hint')) + '</span></div>';
     }
 
-    function deviceFeedback(target, ok) {
-        const card = target.closest('.op-device');
+    function deviceFeedback(target, ok, text) {
+        const card = target && target.closest ? target.closest('.op-device') : null;
         if (!card) return;
-        let note = card.querySelector('.op-device-result');
-        if (!note) {
-            note = document.createElement('span');
-            note.className = 'op-device-result';
-            card.appendChild(note);
-        }
-        note.textContent = ok ? t('op.device.commandSent') : t('op.device.commandFailed');
+        const note = card.querySelector('.op-device-result');
+        if (!note) return;
+        note.textContent = text || (ok ? t('op.device.commandSent') : t('op.device.commandFailed'));
         note.classList.toggle('bad', !ok);
     }
 
-    function renderAddMenu(devices) {
-        const menu = $('#opAddMenu');
-        const have = new Set(devices.map(device => device.type));
-        const options = ['antenna', 'tower', 'rotator'].filter(type => !have.has(type));
-        menu.innerHTML = options.map(type =>
-            '<button type="button" data-op-add="' + type + '">+ ' + esc(t('op.device.' + type)) + '</button>'
-        ).join('');
-        menu.classList.toggle('hidden', !options.length);
+    function errorNote(result, error) {
+        const code = result && result.error
+            ? result.error
+            : (error && error.body && error.body.error ? error.body.error : '');
+        if (!code) return '';
+        const key = 'dev.error.' + code;
+        const text = t(key);
+        return text === key ? '' : ' · ' + text;
     }
 
-    function configureDevice(type, enabled) {
-        const map = {
-            antenna: 'opAntennaSwitchConfigured',
-            tower: 'opTowerConfigured',
-            rotator: 'opRotatorConfigured'
-        };
-        if (!map[type]) return;
-        ctx.settings[map[type]] = enabled;
-        if (ctx.saveSettings) ctx.saveSettings();
-        renderBottom();
-        updateMapHint();
-        renderMap();
+    async function runDeviceCommand(card, device, body) {
+        try {
+            const result = await sendDeviceCommand(device.id, body, {seat: commandSeat()});
+            const ok = !!result && result.ok !== false;
+            deviceFeedback(card, ok, (ok ? t('op.device.commandSent') : t('op.device.commandFailed')) +
+                (ok ? '' : errorNote(result)));
+            if (ok) {
+                if (body.command === 'rotate') state.rotorTarget = body.azimuth;
+                await loadDevices();
+            }
+            return ok;
+        } catch (error) {
+            deviceFeedback(card, false, t('op.device.commandFailed') + errorNote(null, error));
+            return false;
+        }
+    }
+
+    function stopTowerHold() {
+        if (state.towerTimer) {
+            clearInterval(state.towerTimer);
+            state.towerTimer = null;
+        }
+        const id = state.towerHold;
+        state.towerHold = null;
+        if (id) void sendDeviceCommand(id, {command: 'tower_release'}, {seat: commandSeat()});
+    }
+
+    function startTowerHold(card, device, direction) {
+        stopTowerHold();
+        state.towerHold = device.id;
+        state.towerTimer = setInterval(() => {
+            if (state.towerHold !== device.id) {
+                stopTowerHold();
+                return;
+            }
+            void sendDeviceCommand(device.id, {command: 'tower_hold', direction}, {seat: commandSeat()});
+        }, 500);
+        void runDeviceCommand(card, device, {command: 'tower_hold', direction});
     }
 
     // ---- async data -------------------------------------------------------
@@ -1234,7 +1308,7 @@ export function createOpPage(ctx) {
         if (state.map) return;
         state.map = createOpMap($('#opMap'), {
             onBearing: handleMapBearing,
-            canRotate: () => Boolean(ctx.settings.opRotatorConfigured)
+            canRotate: () => Boolean(rotatorDevice())
         });
         state.map.resize();
         renderMap();
@@ -1264,6 +1338,7 @@ export function createOpPage(ctx) {
         ensureMap();
         requestAnimationFrame(() => state.map && state.map.resize());
         refreshAll();
+        void loadDevices();
         loadQsos();
         loadScore();
         loadPropagation();
@@ -1287,6 +1362,8 @@ export function createOpPage(ctx) {
                 renderBottom();
                 renderCharts();
             }, 10000),
+            // Device snapshot drives every OP control; never cache it locally.
+            setInterval(() => { if (state.active) void loadDevices(); }, 3000),
             // Opponents come from the WS spot stream; this is only recompute.
             setInterval(() => { if (state.active) refreshOpponentRows(); }, 5000),
             setInterval(() => { if (state.active) loadMySpots(); }, 15000),
@@ -1302,6 +1379,7 @@ export function createOpPage(ctx) {
 
     function hide() {
         state.active = false;
+        stopTowerHold();
         document.querySelector('.main')?.classList.remove('op-active');
         $('#opView').classList.add('hidden');
         state.timers.forEach(timer => clearInterval(timer));
@@ -1400,7 +1478,6 @@ export function createOpPage(ctx) {
         $('#opMultTitle').textContent = t('op.right.multipliers');
         $('#opMultExpand').textContent = state.multExpanded ? t('op.mult.collapse') : t('op.mult.expand');
         $('#opBottomTitle').textContent = t('op.bottom.devices');
-        $('#opAddPeripheral').title = t('op.bottom.add');
     }
 
     function bind() {
@@ -1411,24 +1488,12 @@ export function createOpPage(ctx) {
             renderAdvice();
         });
         $('#opSeat')?.addEventListener('change', event => {
+            stopTowerHold();
             state.selectedSeat = event.target.value;
             refreshAll();
             renderMap();
             renderMultipliers();
             loadAdvice();
-        });
-        $('#opAddPeripheral')?.addEventListener('click', event => {
-            event.stopPropagation();
-            $('#opAddMenu').classList.toggle('hidden');
-        });
-        document.addEventListener('click', event => {
-            if (!event.target.closest('.op-add-wrap')) $('#opAddMenu')?.classList.add('hidden');
-        });
-        $('#opAddMenu')?.addEventListener('click', event => {
-            const button = event.target.closest('[data-op-add]');
-            if (!button) return;
-            configureDevice(button.dataset.opAdd, true);
-            $('#opAddMenu').classList.add('hidden');
         });
         $('#opBottom')?.addEventListener('click', async event => {
             const claimButton = event.target.closest('[data-op-claim]');
@@ -1457,23 +1522,46 @@ export function createOpPage(ctx) {
                 renderBottom();
                 return;
             }
-            const remove = event.target.closest('[data-op-remove]');
-            if (remove) {
-                configureDevice(remove.dataset.opRemove, false);
+            const card = event.target.closest('.op-device');
+            if (!card) return;
+            const device = controlDevices().find(item => item.id === card.dataset.opDevice);
+            if (!device) return;
+            const towerStop = event.target.closest('[data-op-tower="stop"]');
+            if (towerStop) {
+                void runDeviceCommand(card, device, {command: 'tower_stop'});
                 return;
             }
-            const direction = event.target.closest('[data-op-direction]');
-            if (direction) {
-                const result = hub.command('tower', 'direction', direction.dataset.opDirection);
-                deviceFeedback(direction, result.ok);
+            const command = event.target.closest('[data-op-cmd]');
+            if (!command) return;
+            if (command.dataset.opCmd === 'rotate') {
+                const input = card.querySelector('[data-op-azimuth]');
+                const azimuth = input ? Number(input.value) : NaN;
+                if (!Number.isFinite(azimuth)) return;
+                void runDeviceCommand(card, device, {command: 'rotate', azimuth});
+            } else if (command.dataset.opCmd === 'stop') {
+                void runDeviceCommand(card, device, {command: 'stop'});
+            } else if (command.dataset.opCmd === 'select') {
+                const port = card.querySelector('[data-op-port]');
+                const outlet = card.querySelector('[data-op-outlet]');
+                void runDeviceCommand(card, device, {
+                    command: 'select',
+                    port: port ? port.value : '',
+                    outlet: outlet ? outlet.value : ''
+                });
             }
         });
-        $('#opBottom')?.addEventListener('change', event => {
-            const select = event.target.closest('[data-op-antenna]');
-            if (!select) return;
-            const result = hub.command('antenna', 'antenna', Number(select.value));
-            deviceFeedback(select, result.ok);
+        $('#opBottom')?.addEventListener('pointerdown', event => {
+            const button = event.target.closest('[data-op-tower]');
+            if (!button || button.dataset.opTower === 'stop') return;
+            const card = event.target.closest('.op-device');
+            if (!card) return;
+            const device = controlDevices().find(item => item.id === card.dataset.opDevice);
+            if (!device) return;
+            event.preventDefault();
+            startTowerHold(card, device, button.dataset.opTower);
         });
+        document.addEventListener('pointerup', stopTowerHold);
+        window.addEventListener('blur', stopTowerHold);
         $('#opSuspicious')?.addEventListener('click', event => {
             const ok = event.target.closest('[data-op-ok]');
             if (ok) acceptSuspect(ok.dataset.opOk, 'ok');
