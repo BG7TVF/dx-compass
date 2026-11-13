@@ -6,6 +6,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const model = require('../lib/devices/model.js');
+const rf = require('../lib/devices/rf.js');
 const ownership = require('../lib/devices/ownership.js');
 const runtime = require('../lib/devices/runtime.js');
 const tower = require('../lib/devices/tower.js');
@@ -521,13 +522,16 @@ test('TX source configuration keeps the token private and validates ranges', () 
 
 test('storage creates both tables and migrates missing columns idempotently', () => {
     const schema = storage.devices.createSchema();
-    assert.equal(schema.length, 4);
+    assert.equal(schema.length, 6);
     assert.match(schema[0], /CREATE TABLE IF NOT EXISTS devices/);
     assert.match(schema[1], /CREATE TABLE IF NOT EXISTS tx_sources/);
     assert.match(schema[2], /CREATE TABLE IF NOT EXISTS device_commands/);
     assert.match(schema[3], /CREATE TABLE IF NOT EXISTS device_layout/);
+    assert.match(schema[4], /CREATE TABLE IF NOT EXISTS rf_links/);
+    assert.match(schema[5], /CREATE UNIQUE INDEX IF NOT EXISTS rf_links_pair/);
     assert.match(storage.devices.snapshotQuery(), /UNION ALL/);
     assert.match(storage.devices.snapshotQuery(), /LEFT JOIN device_layout/);
+    assert.match(storage.devices.snapshotQuery(), /FROM rf_links/);
     assert.match(storage.devices.columnsQuery(), /pragma_table_info\('devices'\)/);
 
     assert.deepEqual(storage.devices.addMissingColumns([]), []);
@@ -1163,8 +1167,9 @@ test('layout action writes separate rows and delete cleans them up', () => {
 
     const removed = service.handle(globalCtx, rows, {action: 'delete', id: 'tower-1'}, now);
     assert.equal(removed.status, 200);
-    assert.equal(removed.sql.length, 2);
+    assert.equal(removed.sql.length, 3);
     assert.match(removed.sql[1], /DELETE FROM device_layout WHERE device_id = 'tower-1'/);
+    assert.match(removed.sql[2], /DELETE FROM rf_links/);
 });
 
 test('snapshot prefers saved layout and falls back to auto layout', () => {
@@ -1300,4 +1305,393 @@ test('rotator motion state follows the target and the travel window', async () =
     service.handle(globalCtx, rows, {action: 'report', device_id: 'rotator-1', azimuth: 10}, late);
     view = service.snapshot(globalCtx, rows, late).rotators['rotator-1'];
     assert.equal(view.motion_state, 'unknown');
+});
+
+function rfRow(aDevice, aPort, bDevice, bPort) {
+    const swap = aDevice > bDevice || (aDevice === bDevice && aPort > bPort);
+    const link = swap
+        ? {a_device: bDevice, a_port: bPort, b_device: aDevice, b_port: aPort}
+        : {a_device: aDevice, a_port: aPort, b_device: bDevice, b_port: bPort};
+    link.link_id = 'rf:' + link.a_device + ':' + link.a_port + '~' + link.b_device + ':' + link.b_port;
+    link.created_ts = '2026-01-01T00:00:00.000Z';
+    return {
+        kind: 'rf',
+        id: link.link_id,
+        link_id: link.link_id,
+        a_device: link.a_device,
+        a_port: link.a_port,
+        b_device: link.b_device,
+        b_port: link.b_port,
+        created_ts: link.created_ts
+    };
+}
+
+test('RF ports are derived from type, counts and combiner bands', () => {
+    assert.deepEqual(rf.portsFor(device({id: 'radio-1', type: 'radio', bands: ''})),
+        [{key: 'ant', dir: 'bidir', role: 'bidir'}]);
+    assert.deepEqual(rf.portsFor(device({id: 'swr-1', type: 'swr', bands: ''})).map(port => port.key),
+        ['in', 'out']);
+    const swr = rf.portsFor(device({id: 'swr-1', type: 'swr', bands: ''}));
+    assert.equal(swr[1].dir, 'out');
+
+    const switchPorts = rf.portsFor(device({
+        id: 'switch-1', type: 'switch', bands: '', config_json: '{"out_count":4}'
+    })).map(port => port.key);
+    assert.deepEqual(switchPorts, ['common', 'out1', 'out2', 'out3', 'out4']);
+
+    const matrixPorts = rf.portsFor(device({
+        id: 'matrix-1', type: 'matrix', bands: '', config_json: '{"in_count":3,"out_count":5}'
+    })).map(port => port.key);
+    assert.deepEqual(matrixPorts, ['in1', 'in2', 'in3', 'out1', 'out2', 'out3', 'out4', 'out5']);
+
+    const combiner = rf.portsFor(device({id: 'combiner-1', type: 'combiner', bands: '20m,15m'}));
+    assert.deepEqual(combiner.map(port => port.key), ['in:20m', 'in:15m', 'out']);
+    assert.equal(combiner[0].band, '20m');
+    assert.equal(combiner[0].dir, 'in');
+    assert.equal(combiner[2].dir, 'out');
+
+    assert.deepEqual(rf.portsFor(device({id: 'tower-1', type: 'tower', bands: ''})), []);
+    assert.deepEqual(rf.portsFor(device({id: 'rotator-1', type: 'rotator', bands: ''})), []);
+
+    const custom = device({
+        id: 'other-1', type: 'other', bands: '',
+        config_json: JSON.stringify({ports: [{key: 'a', dir: 'bidir'}, {key: 'b', dir: 'out'}]})
+    });
+    assert.deepEqual(rf.portsFor(custom).map(port => port.key), ['a', 'b']);
+});
+
+test('RF links are undirected, canonical and reject unknown ports', () => {
+    const devices = [
+        device({id: 'radio-1', type: 'radio', bands: ''}),
+        device({id: 'bpf-1', type: 'bpf', bands: '20m'}),
+        device({id: 'other-1', type: 'other', bands: ''})
+    ];
+    const first = rf.normalizeLink({
+        a_device: 'radio-1', a_port: 'ant', b_device: 'bpf-1', b_port: 'in'
+    }, {devices, links: []});
+    assert.equal(first.ok, true);
+    assert.equal(first.existing, false);
+    const link = Object.assign({created_ts: '2026-01-01T00:00:00.000Z'}, first.link);
+
+    // 反向插入视为同一条，不产生第二条记录。
+    const reverse = rf.normalizeLink({
+        a: {device: 'bpf-1', port: 'in'}, b: {device: 'radio-1', port: 'ant'}
+    }, {devices, links: [link]});
+    assert.equal(reverse.ok, true);
+    assert.equal(reverse.existing, true);
+    assert.equal(reverse.link.link_id, link.link_id);
+
+    assert.equal(rf.normalizeLink({
+        a_device: 'radio-1', a_port: 'nope', b_device: 'bpf-1', b_port: 'in'
+    }, {devices, links: []}).error, 'unknown-port');
+    assert.equal(rf.normalizeLink({
+        a_device: 'radio-1', a_port: 'ant', b_device: 'missing', b_port: 'in'
+    }, {devices, links: []}).status, 404);
+    assert.equal(rf.normalizeLink({
+        a_device: 'radio-1', a_port: 'ant', b_device: 'radio-1', b_port: 'ant'
+    }, {devices, links: []}).error, 'invalid-link');
+});
+
+test('TX reachability follows port direction and prunes bands per device', () => {
+    const devices = [
+        device({id: 'radio-1', type: 'radio', bands: ''}),
+        device({id: 'amp-1', type: 'amp', bands: ''}),
+        device({id: 'bpf-20', type: 'bpf', bands: '20m'}),
+        device({id: 'switch-1', type: 'switch', bands: '', config_json: '{"out_count":2}'}),
+        device({id: 'ant-20', type: 'antenna', bands: '20m'}),
+        device({id: 'ant-15', type: 'antenna', bands: '15m'})
+    ];
+    const links = [
+        rfRow('radio-1', 'ant', 'amp-1', 'in'),
+        rfRow('amp-1', 'out', 'bpf-20', 'in'),
+        rfRow('bpf-20', 'out', 'switch-1', 'common'),
+        rfRow('switch-1', 'out1', 'ant-20', 'feed'),
+        rfRow('switch-1', 'out2', 'ant-15', 'feed')
+    ];
+    const reach = (band, selection) => rf.reachableAntennas({
+        devices,
+        links,
+        band,
+        startDeviceId: 'radio-1',
+        selections: selection ? {'switch-1': selection} : {}
+    }).map(hit => hit.device.id);
+
+    assert.deepEqual(reach('20m', {common: 'out1'}), ['ant-20']);
+    // 波段不匹配 BPF：20m BPF 会剪掉 15m 的整条路径。
+    assert.deepEqual(reach('15m', {common: 'out2'}), []);
+    assert.deepEqual(reach('15m', {common: 'out1'}), []);
+
+    // 去掉 BPF 后，波段剪枝仍然发生在天线自身。
+    const noBpf = devices.filter(item => item.id !== 'bpf-20');
+    const noBpfLinks = [
+        rfRow('radio-1', 'ant', 'amp-1', 'in'),
+        rfRow('amp-1', 'out', 'switch-1', 'common'),
+        rfRow('switch-1', 'out1', 'ant-20', 'feed'),
+        rfRow('switch-1', 'out2', 'ant-15', 'feed')
+    ];
+    const reachNoBpf = (band, selection) => rf.reachableAntennas({
+        devices: noBpf,
+        links: noBpfLinks,
+        band,
+        startDeviceId: 'radio-1',
+        selections: {'switch-1': selection}
+    }).map(hit => hit.device.id);
+    assert.deepEqual(reachNoBpf('15m', {common: 'out2'}), ['ant-15']);
+    assert.deepEqual(reachNoBpf('15m', {common: 'out1'}), []);
+    // 切换器没有选定输出时不假装导通。
+    assert.deepEqual(reach('20m', null), []);
+    // 只有一个输出时选择唯一，不依赖运行态。
+    const single = devices.map(item => item.id === 'switch-1'
+        ? device({id: 'switch-1', type: 'switch', bands: '', config_json: '{"out_count":1}'})
+        : item);
+    assert.deepEqual(rf.reachableAntennas({
+        devices: single,
+        links: links.filter(link => link.a_port !== 'out2' && link.b_port !== 'out2'),
+        band: '20m',
+        startDeviceId: 'radio-1'
+    }).map(hit => hit.device.id), ['ant-20']);
+
+    // 端口方向：从电台直接接到功放的输出端，TX 不应倒灌。
+    const wrong = rf.reachableAntennas({
+        devices: [devices[0], devices[1]],
+        links: [rfRow('radio-1', 'ant', 'amp-1', 'out')],
+        band: '20m',
+        startDeviceId: 'radio-1'
+    });
+    assert.deepEqual(wrong, []);
+});
+
+test('combiner matches the band at its in port and still lands on one antenna', () => {
+    const devices = [
+        device({id: 'radio-20', type: 'radio', bands: ''}),
+        device({id: 'radio-15', type: 'radio', bands: ''}),
+        device({id: 'combiner-1', type: 'combiner', bands: '20m,15m'}),
+        device({id: 'ant-multi', type: 'antenna', bands: '20m,15m'})
+    ];
+    const links = [
+        rfRow('radio-20', 'ant', 'combiner-1', 'in:20m'),
+        rfRow('radio-15', 'ant', 'combiner-1', 'in:15m'),
+        rfRow('combiner-1', 'out', 'ant-multi', 'feed')
+    ];
+    const reach = (start, band) => rf.reachableAntennas({
+        devices, links, band, startDeviceId: start
+    }).map(hit => hit.device.id);
+
+    assert.deepEqual(reach('radio-20', '20m'), ['ant-multi']);
+    // 20m 电台不能从 15m 的 in 口进入：波段剪枝下沉到端口。
+    assert.deepEqual(reach('radio-20', '15m'), []);
+    assert.deepEqual(reach('radio-15', '15m'), ['ant-multi']);
+
+    // 方向接反（电台接到 out 口）不导通。
+    const reversed = rf.reachableAntennas({
+        devices,
+        links: [rfRow('radio-20', 'ant', 'combiner-1', 'out'), rfRow('combiner-1', 'out', 'ant-multi', 'feed')],
+        band: '20m',
+        startDeviceId: 'radio-20'
+    });
+    assert.deepEqual(reversed, []);
+});
+
+test('RF warnings flag multi-upstream antennas, combiner coverage and orphan links', () => {
+    const devices = [
+        device({id: 'radio-1', type: 'radio', bands: ''}),
+        device({id: 'switch-1', type: 'switch', bands: '', config_json: '{"out_count":1}'}),
+        device({id: 'ant-20', type: 'antenna', bands: '20m'}),
+        device({id: 'combiner-1', type: 'combiner', bands: '20m,15m'}),
+        device({id: 'ant-multi', type: 'antenna', bands: '20m'})
+    ];
+    const links = [
+        rfRow('radio-1', 'ant', 'switch-1', 'common'),
+        rfRow('switch-1', 'out1', 'ant-20', 'feed'),
+        // 同一副天线再接第二个上游：配置错误，只提示不仲裁。
+        rfRow('radio-1', 'ant', 'ant-20', 'feed'),
+        rfRow('combiner-1', 'out', 'ant-multi', 'feed'),
+        // 端口已不存在：孤立连线。
+        {kind: 'rf', link_id: 'rf:switch-1:out2~ant-20:feed', a_device: 'switch-1',
+            a_port: 'out2', b_device: 'ant-20', b_port: 'feed', created_ts: '2026-01-01T00:00:00.000Z'}
+    ];
+    const codes = rf.warnings(devices, links).map(item => item.code);
+    assert.ok(codes.includes('antenna-multi-upstream'));
+    assert.ok(codes.includes('combiner-antenna-band-uncovered'));
+    assert.ok(codes.includes('rf-link-orphan'));
+});
+
+test('ownership follows RF reachability and falls back to band matching', () => {
+    const now = new Date('2026-03-01T12:00:00.000Z');
+    const devices = [
+        device({id: 'radio-1', type: 'radio', bands: '', seat: 'OP-A'}),
+        device({id: 'amp-1', type: 'amp', bands: ''}),
+        device({id: 'ant-20', type: 'antenna', bands: '20m'}),
+        device({id: 'ant-other', type: 'antenna', bands: '20m'})
+    ];
+    const links = [
+        rfRow('radio-1', 'ant', 'amp-1', 'in'),
+        rfRow('amp-1', 'out', 'ant-20', 'feed')
+    ];
+    const radioStates = {'OP-A': {ts: now.toISOString(), freqKhz: 14020}};
+
+    const linked = ownership.project({devices, links, radioStates, now});
+    assert.equal(linked.by_seat['OP-A'].source, 'rf');
+    assert.deepEqual(linked.by_seat['OP-A'].candidates, ['ant-20']);
+    assert.deepEqual(linked.by_seat['OP-A'].radios, ['radio-1']);
+    assert.equal(linked.by_seat['OP-A'].colors['ant-20'], 'red');
+    assert.equal(linked.by_seat['OP-A'].colors['ant-other'], 'green');
+    assert.deepEqual(linked.antennas.find(item => item.id === 'ant-20').owners, ['OP-A']);
+
+    // 没有 RF 连线时保持旧的波段归属，并标记来源。
+    const fallback = ownership.project({devices, links: [], radioStates, now});
+    assert.equal(fallback.by_seat['OP-A'].source, 'band-fallback');
+    assert.deepEqual(fallback.by_seat['OP-A'].candidates.sort(), ['ant-20', 'ant-other']);
+    assert.equal(fallback.by_seat['OP-A'].ambiguous, true);
+
+    // 席位切换波段后，RF 路径重新按当前波段判定。
+    const switched = ownership.project({
+        devices,
+        links,
+        radioStates: {'OP-A': {ts: now.toISOString(), freqKhz: 21020}},
+        now
+    });
+    assert.deepEqual(switched.by_seat['OP-A'].candidates, []);
+    assert.equal(switched.by_seat['OP-A'].colors['ant-20'], 'green');
+});
+
+test('combiner and BPF require bands; radio seat binding is validated', () => {
+    const combiner = model.normalizeDevice({type: 'combiner', name: 'Combiner'}, {devices: []});
+    assert.equal(combiner.status, 400);
+    assert.equal(combiner.error, 'combiner-band-required');
+
+    const bpf = model.normalizeDevice({type: 'bpf', name: 'BPF'}, {devices: []});
+    assert.equal(bpf.error, 'bpf-band-required');
+
+    const radio = model.normalizeDevice({
+        type: 'radio', name: 'Radio', seat: 'OP-A'
+    }, {devices: []});
+    assert.equal(radio.ok, true);
+    assert.equal(radio.device.seat, 'OP-A');
+
+    assert.equal(model.normalizeDevice({
+        type: 'radio', name: 'Radio', seat: 'bad seat'
+    }, {devices: []}).error, 'invalid-seat');
+
+    const saved = model.normalizeDevice({
+        type: 'combiner', name: 'Combiner', bands: '20m,15m'
+    }, {devices: []});
+    assert.equal(saved.ok, true);
+    assert.deepEqual(rf.portsFor(saved.device).map(port => port.key), ['in:20m', 'in:15m', 'out']);
+});
+
+test('RF link actions attach, dedupe and remove links; port edits clean stale links', () => {
+    const now = new Date('2026-03-01T12:00:00.000Z');
+    const globalCtx = makeContext();
+    const devices = [
+        device({id: 'radio-1', type: 'radio', bands: ''}),
+        device({id: 'amp-1', type: 'amp', bands: ''}),
+        device({id: 'combiner-1', type: 'combiner', bands: '20m,15m'}),
+        device({id: 'ant-multi', type: 'antenna', bands: '20m,15m'})
+    ];
+
+    const created = service.handle(globalCtx, devices, {
+        action: 'rf-link', link: {a_device: 'radio-1', a_port: 'ant', b_device: 'amp-1', b_port: 'in'}
+    }, now);
+    assert.equal(created.status, 201);
+    assert.match(created.sql[0], /INSERT OR REPLACE INTO rf_links/);
+    const link = created.payload.link;
+
+    const duplicate = service.handle(globalCtx, devices.concat([Object.assign({kind: 'rf'}, link)]), {
+        action: 'rf-link', link: {a_device: 'amp-1', a_port: 'in', b_device: 'radio-1', b_port: 'ant'}
+    }, now);
+    assert.equal(duplicate.status, 200);
+    assert.equal(duplicate.payload.duplicate, true);
+    assert.deepEqual(duplicate.sql, []);
+
+    const linkRow = Object.assign({kind: 'rf'}, link);
+    const removed = service.handle(globalCtx, devices.concat([linkRow]),
+        {action: 'rf-unlink', link_id: link.link_id}, now);
+    assert.equal(removed.status, 200);
+    assert.match(removed.sql[0], /DELETE FROM rf_links/);
+
+    // 合路器波段从 20m,15m 改为 20m：in:15m 的连线随保存清理。
+    const linkRows = [
+        rfRow('combiner-1', 'in:15m', 'ant-multi', 'feed'),
+        rfRow('combiner-1', 'out', 'ant-multi', 'feed')
+    ];
+    const saved = service.handle(globalCtx, devices.concat(linkRows), {
+        action: 'save', device: {id: 'combiner-1', bands: '20m'}
+    }, now);
+    assert.equal(saved.status, 200);
+    assert.equal(saved.payload.removed_links, 1);
+    assert.ok(saved.sql.some(sql => /DELETE FROM rf_links/.test(sql)));
+});
+
+test('TX interlock only locks the switches on the transmitting path', async () => {
+    fakeTransports();
+    const now = new Date('2026-03-01T12:00:00.000Z');
+    const globalCtx = makeContext();
+    const rows = [
+        deviceRow({id: 'radio-a', name: 'Radio A', type: 'radio', bands: '', seat: 'OP-A'}),
+        deviceRow({id: 'amp-a', name: 'Amp A', type: 'amp', bands: ''}),
+        deviceRow({id: 'switch-a', name: 'Switch A', type: 'switch', bands: '',
+            config_json: JSON.stringify({out_count: 1, channels: {'common:out1': 1}})}),
+        deviceRow({id: 'ant-a', name: 'Ant A', type: 'antenna', bands: '20m'}),
+        deviceRow({id: 'radio-b', name: 'Radio B', type: 'radio', bands: '', seat: 'OP-B'}),
+        deviceRow({id: 'amp-b', name: 'Amp B', type: 'amp', bands: ''}),
+        deviceRow({id: 'switch-b', name: 'Switch B', type: 'switch', bands: '',
+            config_json: JSON.stringify({out_count: 1, channels: {'common:out1': 2}})}),
+        deviceRow({id: 'ant-b', name: 'Ant B', type: 'antenna', bands: '20m'}),
+        sourceRow({id: 'src-a', name: 'Amp A TX', priority: 1, timeout_ms: 2000, device_id: 'amp-a'}),
+        rfRow('radio-a', 'ant', 'amp-a', 'in'),
+        rfRow('amp-a', 'out', 'switch-a', 'common'),
+        rfRow('switch-a', 'out1', 'ant-a', 'feed'),
+        rfRow('radio-b', 'ant', 'amp-b', 'in'),
+        rfRow('amp-b', 'out', 'switch-b', 'common'),
+        rfRow('switch-b', 'out1', 'ant-b', 'feed')
+    ];
+    const headers = {'X-DX-Seat': 'OP-A'};
+    service.ingestTx(globalCtx, [storage.devices.toTxSource(sourceRow({
+        id: 'src-a', name: 'Amp A TX', priority: 1, timeout_ms: 2000, device_id: 'amp-a'
+    }))], {source_id: 'src-a', tx_active: true}, {}, now);
+
+    // 同一台设备、不同链路：不在 TX 路径上的切换器照常放行。
+    let result = await service.handleCommand(globalCtx, rows, 'switch-b',
+        {command: 'select', port: 'common', outlet: 'out1'}, headers, now);
+    assert.equal(result.status, 202);
+
+    result = await service.handleCommand(globalCtx, rows, 'switch-a',
+        {command: 'select', port: 'common', outlet: 'out1'}, headers, now);
+    assert.equal(result.status, 423);
+    assert.equal(result.payload.scope, 'path');
+});
+
+test('TX interlock follows the selected matrix input instead of the whole matrix', async () => {
+    fakeTransports();
+    const now = new Date('2026-03-01T12:00:00.000Z');
+    const globalCtx = makeContext();
+    const rows = [
+        deviceRow({id: 'radio-a', name: 'Radio A', type: 'radio', bands: '', seat: 'OP-A'}),
+        deviceRow({id: 'radio-b', name: 'Radio B', type: 'radio', bands: '', seat: 'OP-B'}),
+        deviceRow({id: 'matrix-1', name: 'Matrix', type: 'matrix', bands: '',
+            config_json: JSON.stringify({in_count: 2, out_count: 2, channels: {'in1:out1': 1, 'in2:out2': 2}})}),
+        deviceRow({id: 'ant-a', name: 'Ant A', type: 'antenna', bands: '20m'}),
+        deviceRow({id: 'ant-b', name: 'Ant B', type: 'antenna', bands: '20m'}),
+        sourceRow({id: 'src-a', name: 'Radio A TX', priority: 1, timeout_ms: 2000, device_id: 'radio-a'}),
+        rfRow('radio-a', 'ant', 'matrix-1', 'in1'),
+        rfRow('radio-b', 'ant', 'matrix-1', 'in2'),
+        rfRow('matrix-1', 'out1', 'ant-a', 'feed'),
+        rfRow('matrix-1', 'out2', 'ant-b', 'feed')
+    ];
+    runtime.updateEntry(globalCtx, 'matrix-1', {ports: {in1: 'out1', in2: 'out2'}}, now);
+    service.ingestTx(globalCtx, [storage.devices.toTxSource(sourceRow({
+        id: 'src-a', name: 'Radio A TX', priority: 1, timeout_ms: 2000, device_id: 'radio-a'
+    }))], {source_id: 'src-a', tx_active: true}, {}, now);
+    const headers = {'X-DX-Seat': 'OP-B'};
+
+    // 另一个输入口的切换与发射链路无关，应放行。
+    let result = await service.handleCommand(globalCtx, rows, 'matrix-1',
+        {command: 'select', port: 'in2', outlet: 'out2'}, headers, now);
+    assert.equal(result.status, 202);
+
+    // 正在发射的输入口必须锁定。
+    result = await service.handleCommand(globalCtx, rows, 'matrix-1',
+        {command: 'select', port: 'in1', outlet: 'out1'}, headers, now);
+    assert.equal(result.status, 423);
 });
