@@ -319,6 +319,8 @@ test('startup readiness probe covers every schema object', () => {
 });
 
 test('cold-start entry points wait for the readiness gate', () => {
+    assert.match(read('settings.js'), /nodesDir:\s*["']nodes["']/,
+        'custom nodes must be scanned so the gate is armed before listen');
     const gate = read('nodes', 'ready-gate.js');
     assert.match(gate, /RED\.httpNode\.use\(/,
         'the gate must be a global middleware registered before http-in routes');
@@ -370,6 +372,7 @@ test('global gate holds requests until schema and flows are ready', async () => 
     require(gatePath)({
         httpNode: {use(fn) { middleware.push(fn); }},
         events: {on(name, fn) { (listeners[name] = listeners[name] || []).push(fn); }},
+        log: {info() {}},
         nodes: {createNode() {}, registerType() {}}
     });
     assert.equal(middleware.length, 1);

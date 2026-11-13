@@ -26,6 +26,11 @@ module.exports = {
     // Root for HTTP-in nodes (REST API)
     httpNodeRoot: "/",
 
+    // Custom nodes are scanned during the palette load, i.e. before the HTTP
+    // server starts listening. This is what lets nodes/ready-gate.js install
+    // its global middleware ahead of every http-in route.
+    nodesDir: "nodes",
+
     // functionGlobalContext exposes the shared dx domain facade to function
     // nodes. functionExternalModules is intentionally NOT enabled here -- it
     // spins up the runtime npm loader on startup, which can crash Node-RED if

@@ -20,6 +20,7 @@ const ROUTES_TIMEOUT_MS = 30000;
 
 module.exports = function(RED) {
     const ready = require('../lib/ready.js');
+    RED.log.info('ready-gate: HTTP startup gate armed');
 
     let resolveRoutes;
     let rejectRoutes;
