@@ -20,6 +20,11 @@ export function deleteDevice(id, {transport = defaultTransport, ...options} = {}
     return transport.postJson('/api/devices', {action: 'delete', id}, options);
 }
 
+/** Persist canvas positions only; layout never mixes into device configuration. */
+export function saveDeviceLayouts(layouts, {transport = defaultTransport, ...options} = {}) {
+    return transport.postJson('/api/devices', {action: 'layout', layouts}, options);
+}
+
 /** Create or update one TX status source. */
 export function saveTxSource(source, {transport = defaultTransport, ...options} = {}) {
     return transport.postJson('/api/devices', {action: 'tx-source', source}, options);

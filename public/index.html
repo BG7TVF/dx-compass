@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
     <link rel="stylesheet" href="css/style.css?v=2.3.4">
     <link rel="stylesheet" href="css/op.css?v=1.2.1">
-    <link rel="stylesheet" href="css/devices.css?v=1.0.0">
+    <link rel="stylesheet" href="css/devices.css?v=2.0.0">
     <link rel="stylesheet" href="shared/opponents/opponents.css?v=2.3.4">
 </head>
 <body>
@@ -206,7 +206,7 @@
             </section>
         </div>
 
-        <!-- Devices view: unified tree + read-only status (no device control in this phase) -->
+        <!-- Devices view: palette + canvas editor + inspector, with read-only monitoring below -->
         <div id="devView" class="dev-view hidden">
             <header class="dev-top">
                 <div class="dev-top-id">
@@ -222,15 +222,39 @@
                 </div>
             </header>
             <p class="dev-summary" id="devSummary"></p>
-            <div class="dev-body">
-                <aside class="dev-tree-panel"><div id="devTree" class="dev-tree"></div></aside>
-                <section class="dev-detail">
-                    <section class="dev-card" id="devForm"></section>
-                    <section class="dev-card" id="devControl"></section>
-                    <section class="dev-card" id="devSeats"></section>
-                    <section class="dev-card" id="devTx"></section>
+            <div class="dev-editor">
+                <aside class="dev-palette">
+                    <h3 id="devPaletteTitle"></h3>
+                    <div id="devPalette" class="dev-palette-list"></div>
+                    <p class="dev-note" id="devPaletteHint"></p>
+                    <h3 id="devTxPaletteTitle"></h3>
+                    <div id="devTxPalette" class="dev-palette-tx"></div>
+                </aside>
+                <section class="dev-canvas-wrap">
+                    <div class="dev-canvas" id="devCanvas">
+                        <svg class="dev-wires" id="devWires"></svg>
+                        <div class="dev-nodes" id="devNodes"></div>
+                        <p class="dev-canvas-empty" id="devCanvasEmpty"></p>
+                    </div>
                 </section>
+                <aside class="dev-inspector">
+                    <div class="dev-inspector-head">
+                        <h3 id="devInspectorTitle"></h3>
+                        <button class="dev-btn dev-icon-btn" id="devInspectorClose" type="button">×</button>
+                    </div>
+                    <div class="dev-inspector-body">
+                        <section id="devForm"></section>
+                        <section id="devControl"></section>
+                    </div>
+                </aside>
             </div>
+            <details class="dev-monitor" id="devMonitor">
+                <summary id="devMonitorTitle"></summary>
+                <div class="dev-monitor-grid">
+                    <section id="devSeats"></section>
+                    <section id="devTx"></section>
+                </div>
+            </details>
             <footer class="dev-foot"><span id="devHint"></span></footer>
         </div>
 

@@ -521,11 +521,13 @@ test('TX source configuration keeps the token private and validates ranges', () 
 
 test('storage creates both tables and migrates missing columns idempotently', () => {
     const schema = storage.devices.createSchema();
-    assert.equal(schema.length, 3);
+    assert.equal(schema.length, 4);
     assert.match(schema[0], /CREATE TABLE IF NOT EXISTS devices/);
     assert.match(schema[1], /CREATE TABLE IF NOT EXISTS tx_sources/);
     assert.match(schema[2], /CREATE TABLE IF NOT EXISTS device_commands/);
+    assert.match(schema[3], /CREATE TABLE IF NOT EXISTS device_layout/);
     assert.match(storage.devices.snapshotQuery(), /UNION ALL/);
+    assert.match(storage.devices.snapshotQuery(), /LEFT JOIN device_layout/);
     assert.match(storage.devices.columnsQuery(), /pragma_table_info\('devices'\)/);
 
     assert.deepEqual(storage.devices.addMissingColumns([]), []);
@@ -1091,6 +1093,95 @@ test('tower commands go through the command channel with heartbeats and audit', 
     assert.equal(runtime.stateOf(globalCtx, 'tower-1').tower_direction, null);
 
     relay.reset();
+});
+
+const layout = require('../lib/devices/layout.js');
+
+test('auto layout is deterministic and keeps every device on the canvas', () => {
+    const devices = [
+        device({id: 'tower-1', name: 'Tower', type: 'tower', bands: ''}),
+        device({id: 'rotator-1', name: 'Rotator', type: 'rotator', bands: '', parent_id: 'tower-1'}),
+        device({id: 'ant-20', name: '20m', type: 'antenna', bands: '20m', parent_id: 'rotator-1'}),
+        device({id: 'ant-15', name: '15m', type: 'antenna', bands: '15m', parent_id: 'tower-1'}),
+        device({id: 'loose-1', name: 'Loose', type: 'switch', bands: ''})
+    ];
+    const first = layout.autoLayout(devices);
+    assert.equal(first['tower-1'].x, layout.ORIGIN);
+    assert.equal(first['rotator-1'].x, layout.ORIGIN + layout.X_GAP);
+    assert.equal(first['ant-20'].x, layout.ORIGIN + layout.X_GAP * 2);
+    assert.equal(first['ant-15'].x, layout.ORIGIN + layout.X_GAP);
+    assert.notEqual(first['rotator-1'].y, first['ant-15'].y);
+    // 输入顺序打乱后布局不变。
+    const shuffled = layout.autoLayout(devices.slice().reverse());
+    assert.deepEqual(shuffled, first);
+    // 环内节点也有坐标，不会渲染丢失。
+    const cyclic = [
+        device({id: 'a', name: 'A', type: 'other', bands: '', parent_id: 'b'}),
+        device({id: 'b', name: 'B', type: 'other', bands: '', parent_id: 'a'})
+    ];
+    const positions = layout.autoLayout(cyclic);
+    assert.ok(positions.a && positions.b);
+});
+
+test('layout writes validate coordinates and device ids', () => {
+    const devices = [
+        device({id: 'tower-1', name: 'Tower', type: 'tower', bands: ''}),
+        device({id: 'ant-20', name: '20m', type: 'antenna', bands: '20m', parent_id: 'tower-1'})
+    ];
+    const ok = layout.normalizeLayouts([{id: 'tower-1', x: 120, y: 340}, {id: 'tower-1', x: 1, y: 2}], devices);
+    assert.equal(ok.ok, true);
+    assert.deepEqual(ok.layouts, [{id: 'tower-1', x: 120, y: 340}]);
+
+    assert.equal(layout.normalizeLayouts(null, devices).status, 400);
+    assert.equal(layout.normalizeLayouts([{id: 'nope', x: 1, y: 2}], devices).status, 404);
+    assert.equal(layout.normalizeLayouts([{id: 'tower-1', x: -1, y: 2}], devices).error, 'invalid-layout');
+    assert.equal(layout.normalizeLayouts([{id: 'tower-1', x: 1.5, y: 2}], devices).error, 'invalid-layout');
+    assert.equal(layout.normalizeLayouts([{id: 'tower-1', x: 1, y: 2}].concat(
+        Array.from({length: 200}, () => ({id: 'tower-1', x: 1, y: 2}))), devices).error, 'too-many-layouts');
+});
+
+test('layout action writes separate rows and delete cleans them up', () => {
+    const now = new Date('2026-03-01T12:00:00.000Z');
+    const globalCtx = makeContext();
+    const rows = [deviceRow({id: 'tower-1', name: 'Tower', type: 'tower', bands: ''})];
+
+    const saved = service.handle(globalCtx, rows, {
+        action: 'layout',
+        layouts: [{id: 'tower-1', x: 120, y: 340}]
+    }, now);
+    assert.equal(saved.status, 200);
+    assert.equal(saved.sql.length, 1);
+    assert.match(saved.sql[0], /INSERT OR REPLACE INTO device_layout/);
+    assert.match(saved.sql[0], /'tower-1', 120, 340/);
+    assert.deepEqual(saved.broadcast, {type: 'devices', action: 'layout'});
+
+    const unknown = service.handle(globalCtx, rows, {
+        action: 'layout', layouts: [{id: 'nope', x: 1, y: 2}]
+    }, now);
+    assert.equal(unknown.status, 404);
+    assert.equal(unknown.payload.error, 'unknown-device');
+
+    const removed = service.handle(globalCtx, rows, {action: 'delete', id: 'tower-1'}, now);
+    assert.equal(removed.status, 200);
+    assert.equal(removed.sql.length, 2);
+    assert.match(removed.sql[1], /DELETE FROM device_layout WHERE device_id = 'tower-1'/);
+});
+
+test('snapshot prefers saved layout and falls back to auto layout', () => {
+    const now = new Date('2026-03-01T12:00:00.000Z');
+    const globalCtx = makeContext();
+    const rows = [
+        deviceRow({id: 'tower-1', name: 'Tower', type: 'tower', bands: '', layout_x: 500, layout_y: 260}),
+        deviceRow({id: 'ant-20', name: '20m', type: 'antenna', bands: '20m', parent_id: 'tower-1'})
+    ];
+    const snap = service.snapshot(globalCtx, rows, now);
+    const tower = snap.devices.find(item => item.id === 'tower-1');
+    const antenna = snap.devices.find(item => item.id === 'ant-20');
+    assert.deepEqual(tower.layout, {x: 500, y: 260});
+    assert.equal(tower.layout_saved, true);
+    assert.equal(antenna.layout_saved, false);
+    assert.equal(antenna.layout.x, layout.ORIGIN + layout.X_GAP);
+    assert.ok(Number.isFinite(antenna.layout.y));
 });
 
 function fakeSocket(handler) {

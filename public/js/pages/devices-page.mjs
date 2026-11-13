@@ -1,17 +1,27 @@
 ﻿/**
- * Devices view: unified node tree, configuration editing, and read-only status.
+ * Devices view: a Node-RED style canvas editor.
  *
- * Every rendered state comes from GET /api/devices; the page keeps no device
- * state of its own. When a refresh fails the view is cleared to `unknown`
- * rather than showing the previous values.
- *
- * This phase has no device commands: save/delete only touch configuration.
+ * Left palette drags out new device drafts, wires on the canvas express the
+ * single-parent tree, and the inspector edits one device at a time. Positions
+ * are layout-only data stored in SQLite; every device state still comes from
+ * GET /api/devices, and a failed refresh clears the view to `unknown`.
  */
 import {$, escapeHtml as esc, showToast, showConfirm} from '../ui.mjs';
-import {getDevicesSnapshot, saveDevice, deleteDevice, sendDeviceCommand} from '../../shared/data/devices.mjs';
+import {
+    getDevicesSnapshot,
+    saveDevice,
+    deleteDevice,
+    saveDeviceLayouts,
+    sendDeviceCommand
+} from '../../shared/data/devices.mjs';
 
 const POLL_MS = 2000;
+const NODE_W = 210;
+const NODE_H = 76;
+const CANVAS_MIN_W = 1600;
+const CANVAS_MIN_H = 1000;
 const TYPE_OPTIONS = ['tower', 'rotator', 'antenna', 'matrix', 'switch', 'other'];
+const TYPE_BADGE = {tower: 'T', rotator: 'R', antenna: 'A', matrix: 'M', switch: 'S', other: 'O'};
 const STATUS_KEYS = {online: 'dev.status.online', offline: 'dev.status.offline', unknown: 'dev.status.unknown'};
 const TOWER_KEYS = {
     erected: 'dev.tower.erected',
@@ -55,7 +65,10 @@ const ERROR_KEYS = {
     'unknown-channel': 'dev.error.unknown-channel',
     'invalid-direction': 'dev.error.invalid-direction',
     'unknown-command': 'dev.error.unknown-command',
-    'direction-switch-too-fast': 'dev.error.direction-switch-too-fast'
+    'direction-switch-too-fast': 'dev.error.direction-switch-too-fast',
+    'invalid-layout': 'dev.error.invalid-layout',
+    'invalid-layouts': 'dev.error.invalid-layouts',
+    'too-many-layouts': 'dev.error.too-many-layouts'
 };
 
 export function createDevicesPage(ctx) {
@@ -64,7 +77,8 @@ export function createDevicesPage(ctx) {
     let snapshot = null;
     let selectedId = null;
     let seatKey = null;
-    let creating = false;
+    let draft = null;
+    let draftSeq = 0;
     let formDirty = false;
     let formSignature = null;
     let ctrlSignature = null;
@@ -72,6 +86,9 @@ export function createDevicesPage(ctx) {
     let towerTimer = null;
     let towerHoldDevice = null;
     let towerDirection = null;
+    let dragging = null;
+    let wiring = null;
+    let localLayout = null;
 
     function t(key, params) {
         const value = ctx.t(key, params);
@@ -100,9 +117,41 @@ export function createDevicesPage(ctx) {
         return iso ? t('dev.lastReport', {time: clock(iso)}) : t('dev.never');
     }
 
+    function realDevices() {
+        return snapshot ? snapshot.devices : [];
+    }
+
+    function deviceById(id) {
+        if (!snapshot) return null;
+        return snapshot.devices.find(device => device.id === id) || null;
+    }
+
     function selectedDevice() {
-        if (!snapshot || !selectedId) return null;
-        return snapshot.devices.find(device => device.id === selectedId) || null;
+        if (!selectedId) return null;
+        return deviceById(selectedId);
+    }
+
+    function selectedDraft() {
+        return draft && selectedId === draft.key ? draft : null;
+    }
+
+    function selectedValue() {
+        const draftItem = selectedDraft();
+        if (draftItem) return Object.assign({}, draftItem.device, {layout: draftItem.layout});
+        return selectedDevice();
+    }
+
+    function isDraftKey(key) {
+        return !!(draft && key === draft.key);
+    }
+
+    function positionOf(device) {
+        if (localLayout && localLayout[device.id]) return localLayout[device.id];
+        return device.layout || {x: 80, y: 80};
+    }
+
+    function seatsView() {
+        return snapshot ? snapshot.ownership : {seats: [], by_seat: {}, antennas: []};
     }
 
     function seatView() {
@@ -147,52 +196,189 @@ export function createDevicesPage(ctx) {
     }
 
     function nodeHtml(node) {
-        const device = snapshot.devices.find(item => item.id === node.id);
-        if (!device) return '';
-        const status = deviceStatus(device.id);
-        const activeClass = node.id === selectedId ? ' active' : '';
-        const colorChip = device.type === 'antenna'
+        const device = node.device;
+        const status = node.draft ? {state: 'unknown', last_report: null} : deviceStatus(device.id);
+        const classes = ['dev-canvas-node'];
+        if (node.key === selectedId) classes.push('active');
+        if (node.draft) classes.push('draft');
+        const color = device.type === 'antenna'
             ? `<span class="dev-chip dev-color-${antennaColor(device.id)}">${t(COLOR_KEYS[antennaColor(device.id)])}</span>`
             : '';
-        return `<div class="dev-node${activeClass}" role="button" tabindex="0" data-dev-id="${esc(device.id)}" style="--depth:${node.depth}">
-            <span class="dev-node-main">
+        const ports = node.draft ? '' : '<span class="dev-port dev-port-in" title="in"></span>' +
+            '<span class="dev-port dev-port-out" title="out"></span>';
+        return `<div class="${classes.join(' ')}" role="button" tabindex="0" data-node-key="${esc(node.key)}"${node.draft ? '' : ` data-real-id="${esc(device.id)}"`}
+                style="left:${node.layout.x}px;top:${node.layout.y}px;width:${NODE_W}px;height:${NODE_H}px">
+            ${ports}
+            <div class="dev-node-head">
+                <span class="dev-node-badge">${esc(TYPE_BADGE[device.type] || 'O')}</span>
                 <span class="dev-node-name">${esc(device.name)}</span>
-                <span class="dev-node-type">${esc(typeLabel(device.type))}</span>
-                ${device.enabled ? '' : '<span class="dev-chip dev-chip-muted">off</span>'}
-                ${colorChip}
-            </span>
-            <span class="dev-node-meta">${esc(nodeMeta(device))}</span>
-            <span class="dev-node-status">
+            </div>
+            <div class="dev-node-meta">${esc(nodeMeta(device))}</div>
+            <div class="dev-node-foot">
                 <span class="dev-dot dev-dot-${status.state}"></span>
-                <span>${t(STATUS_KEYS[status.state] || STATUS_KEYS.unknown)}</span>
-                <span class="dev-node-report">${esc(lastReportText(status.last_report))}</span>
-            </span>
+                <span>${node.draft ? t('dev.draft.chip') : t(STATUS_KEYS[status.state] || STATUS_KEYS.unknown)}</span>
+                ${node.draft ? '' : `<span class="dev-node-report">${esc(lastReportText(status.last_report))}</span>`}
+                ${color}
+            </div>
         </div>`;
     }
 
-    function treeHtml(nodes, seen = new Set()) {
-        if (!nodes.length) return `<p class="dev-empty">${t('dev.empty')}</p>`;
-        return nodes.map(node => {
-            if (seen.has(node.id)) return '';
-            seen.add(node.id);
-            return nodeHtml(node) + treeHtml(node.children || [], seen);
-        }).join('');
+    function renderCanvas() {
+        const nodesBox = $('#devNodes');
+        const canvas = $('#devCanvas');
+        if (!nodesBox || !canvas) return;
+        const nodes = [];
+        for (const device of realDevices()) {
+            nodes.push({key: device.id, device, layout: positionOf(device), draft: false});
+        }
+        if (draft) {
+            nodes.push({key: draft.key, device: Object.assign({}, draft.device), layout: draft.layout, draft: true});
+        }
+        let maxX = CANVAS_MIN_W;
+        let maxY = CANVAS_MIN_H;
+        for (const node of nodes) {
+            maxX = Math.max(maxX, node.layout.x + NODE_W + 260);
+            maxY = Math.max(maxY, node.layout.y + NODE_H + 220);
+        }
+        canvas.style.width = maxX + 'px';
+        canvas.style.height = maxY + 'px';
+        const svg = $('#devWires');
+        if (svg) {
+            svg.setAttribute('viewBox', `0 0 ${maxX} ${maxY}`);
+            svg.setAttribute('width', String(maxX));
+            svg.setAttribute('height', String(maxY));
+        }
+        nodesBox.innerHTML = nodes.map(nodeHtml).join('');
+        $('#devCanvasEmpty')?.classList.toggle('hidden', nodes.length > 0);
+        renderWires(nodes);
     }
 
-    function parentOptions(device) {
-        const current = device ? device.parent_id : null;
-        const options = [`<option value="">${esc(t('dev.form.root'))}</option>`];
-        for (const item of snapshot.devices) {
-            if (device && (item.id === device.id || item.id === current)) continue;
-            options.push(`<option value="${esc(item.id)}"${current === item.id ? ' selected' : ''}>${esc(item.name)} · ${esc(typeLabel(item.type))}</option>`);
+    function wirePath(from, to) {
+        const x1 = from.x + NODE_W;
+        const y1 = from.y + NODE_H / 2;
+        const x2 = to.x;
+        const y2 = to.y + NODE_H / 2;
+        const mx = (x1 + x2) / 2;
+        return `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`;
+    }
+
+    function renderWires(nodes) {
+        const svg = $('#devWires');
+        if (!svg) return;
+        const list = nodes || [];
+        const byId = new Map();
+        for (const node of list) byId.set(node.key, node);
+        const parts = [];
+        for (const node of list) {
+            if (node.draft) continue;
+            const parentId = node.device.parent_id;
+            const parent = parentId ? byId.get(parentId) : null;
+            if (!parent) continue;
+            const d = wirePath(parent.layout, node.layout);
+            parts.push(`<path class="dev-wire" d="${d}"></path>`);
+            parts.push(`<path class="dev-wire-hit" d="${d}" data-wire-child="${esc(node.device.id)}"><title>${esc(t('dev.wire.remove'))}</title></path>`);
         }
-        if (current) {
-            const parent = snapshot.devices.find(item => item.id === current);
-            if (parent) {
-                options.splice(1, 0, `<option value="${esc(parent.id)}" selected>${esc(parent.name)} · ${esc(typeLabel(parent.type))}</option>`);
+        if (wiring) {
+            parts.push(`<path class="dev-wire dev-wire-draft" d="${draftWirePath(wiring.x1, wiring.y1, wiring.x2, wiring.y2)}"></path>`);
+        }
+        svg.innerHTML = parts.join('');
+    }
+
+    function draftWirePath(x1, y1, x2, y2) {
+        const mx = (x1 + x2) / 2;
+        return `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`;
+    }
+
+    function canvasNodes() {
+        const nodes = [];
+        for (const device of realDevices()) {
+            nodes.push({key: device.id, device, layout: positionOf(device), draft: false});
+        }
+        if (draft) nodes.push({key: draft.key, device: Object.assign({}, draft.device), layout: draft.layout, draft: true});
+        return nodes;
+    }
+
+    function defaultSlot() {
+        const count = realDevices().length + (draft ? 1 : 0);
+        return {x: 80 + (count % 4) * 250, y: 80 + Math.floor(count / 4) * 140};
+    }
+
+    function defaultDraftName(type) {
+        const label = typeLabel(type);
+        const used = realDevices().filter(device => device.type === type).length + 1;
+        return `${label} ${used}`;
+    }
+
+    function createDraft(type, x, y) {
+        if (draft) {
+            showToast(t('dev.draft.single'));
+            return;
+        }
+        const slot = defaultSlot();
+        const pos = {
+            x: Math.max(0, Math.round(Number.isFinite(x) ? x : slot.x)),
+            y: Math.max(0, Math.round(Number.isFinite(y) ? y : slot.y))
+        };
+        draft = {
+            key: 'draft-' + (++draftSeq),
+            layout: pos,
+            device: {
+                id: '',
+                name: defaultDraftName(type),
+                type,
+                parent_id: null,
+                bands: [],
+                install_offset_deg: 0,
+                exclusive: false,
+                port_label: '',
+                enabled: true,
+                travel_timeout_sec: 120,
+                notes: '',
+                config: {},
+                has_password: false,
+                has_relay_token: false
             }
+        };
+        selectNode(draft.key);
+    }
+
+    function discardDraft() {
+        if (!draft) return;
+        const wasSelected = selectedId === draft.key;
+        draft = null;
+        if (wasSelected) {
+            selectedId = null;
+            formDirty = false;
+            formSignature = null;
+            ctrlSignature = null;
         }
-        return options.join('');
+        render();
+    }
+
+    async function confirmDiscard() {
+        if (!formDirty) return true;
+        return showConfirm(ctx, t('dev.draft.discard'), {danger: true});
+    }
+
+    async function selectNode(key) {
+        if (key === selectedId) return;
+        if (draft && selectedId === draft.key && formDirty && key !== draft.key) {
+            const ok = await confirmDiscard();
+            if (!ok) return;
+            draft = null;
+        }
+        stopTower();
+        selectedId = key;
+        formDirty = false;
+        formSignature = null;
+        ctrlSignature = null;
+        render();
+    }
+
+    function parentLabel(device) {
+        if (!device || !device.parent_id) return t('dev.form.root');
+        const parent = deviceById(device.parent_id);
+        return parent ? parent.name : device.parent_id;
     }
 
     function configFields(value) {
@@ -217,32 +403,31 @@ export function createDevicesPage(ctx) {
     }
 
     function formHtml() {
-        const device = selectedDevice();
-        if (!device && !creating) return `<p class="dev-empty">${t('dev.noSelection')}</p>`;
-        const value = device || {id: '', name: '', type: 'antenna', parent_id: null, bands: [], install_offset_deg: 0,
-            exclusive: false, port_label: '', enabled: true, travel_timeout_sec: 120, notes: '', has_password: false};
-        return `<form id="devFormEl" class="dev-form" data-dev-id="${esc(value.id || '')}">
-            <h3>${t(device ? 'dev.form.edit' : 'dev.form.new')}</h3>
+        const value = selectedValue();
+        if (!value) return '';
+        const isDraft = !!selectedDraft();
+        return `<form id="devFormEl" class="dev-form" data-dev-id="${esc(isDraft ? '' : value.id)}" data-draft="${isDraft ? '1' : '0'}">
+            <h3>${t(isDraft ? 'dev.form.new' : 'dev.form.edit')}</h3>
             <div class="dev-grid">
                 <label>${t('dev.form.name')}<input name="name" maxlength="60" required value="${esc(value.name)}"></label>
                 <label>${t('dev.form.type')}
                     <input name="type" list="devTypeList" maxlength="32" required value="${esc(value.type)}">
                 </label>
-                <label>${t('dev.form.parent')}<select name="parent_id">${parentOptions(device)}</select></label>
                 <label>${t('dev.form.bands')}<input name="bands" placeholder="20m, 15m" value="${esc((value.bands || []).join(', '))}"></label>
                 <label>${t('dev.form.offset')}<input name="install_offset_deg" type="number" min="0" max="359" step="1" value="${esc(value.install_offset_deg)}"></label>
                 <label>${t('dev.form.port')}<input name="port_label" maxlength="32" value="${esc(value.port_label)}"></label>
-                <label>${t('dev.form.password')}<input name="password" type="password" maxlength="200" autocomplete="new-password" placeholder="${esc(device && device.has_password ? t('dev.form.passwordKeep') : '')}"></label>
+                <label>${t('dev.form.password')}<input name="password" type="password" maxlength="200" autocomplete="new-password" placeholder="${esc(!isDraft && value.has_password ? t('dev.form.passwordKeep') : '')}"></label>
                 <label>${t('dev.form.travel')}<input name="travel_timeout_sec" type="number" min="5" max="3600" step="1" value="${esc(value.travel_timeout_sec)}"></label>
                 ${configFields(value)}
             </div>
+            <p class="dev-note">${t('dev.form.parentFixed')} · ${esc(isDraft ? '—' : parentLabel(value))}</p>
             <label class="dev-check"><input name="exclusive" type="checkbox"${value.exclusive ? ' checked' : ''}> ${t('dev.form.exclusive')}</label>
             <label class="dev-check"><input name="enabled" type="checkbox"${value.enabled !== false ? ' checked' : ''}> ${t('dev.form.enabled')}</label>
             <label>${t('dev.form.notes')}<input name="notes" maxlength="200" value="${esc(value.notes)}"></label>
             <p class="dev-form-error hidden" id="devFormError"></p>
             <div class="dev-form-actions">
                 <button class="dev-btn primary" type="submit">${t('save')}</button>
-                ${device ? `<button class="dev-btn danger" type="button" id="devDelete">${t('danger')}</button>` : ''}
+                ${isDraft ? '' : `<button class="dev-btn danger" type="button" id="devDelete">${t('danger')}</button>`}
             </div>
             <datalist id="devTypeList">
                 ${TYPE_OPTIONS.map(type => `<option value="${type}">${esc(typeLabel(type))}</option>`).join('')}
@@ -251,15 +436,15 @@ export function createDevicesPage(ctx) {
     }
 
     function seatsHtml() {
-        const view = snapshot.ownership;
+        const view = seatsView();
         const header = `<h3>${t('dev.seat.title')}</h3>`;
         if (!view.seats.length) return header + `<p class="dev-empty">${t('dev.seat.none')}</p>`;
         const rows = view.seats.map(seat => {
-            const seatViewItem = view.by_seat[seat.seat] || {colors: {}, band: '', online: false};
-            const chips = view.antennas.map(antenna => `<span class="dev-chip dev-color-${seatViewItem.colors[antenna.id]}">${esc(antenna.name)}</span>`).join('');
+            const item = view.by_seat[seat.seat] || {colors: {}, band: '', online: false};
+            const chips = view.antennas.map(antenna => `<span class="dev-chip dev-color-${item.colors[antenna.id]}">${esc(antenna.name)}</span>`).join('');
             const notes = [];
-            if (seatViewItem.unassigned) notes.push(t('dev.seat.unassigned'));
-            if (seatViewItem.ambiguous) notes.push(t('dev.seat.ambiguous'));
+            if (item.unassigned) notes.push(t('dev.seat.unassigned'));
+            if (item.ambiguous) notes.push(t('dev.seat.ambiguous'));
             return `<tr class="${seat.seat === seatKey ? 'active' : ''}" data-dev-seat="${esc(seat.seat)}">
                 <td>${esc(seat.seat)}</td>
                 <td>${esc(seat.band || '—')}</td>
@@ -293,6 +478,26 @@ export function createDevicesPage(ctx) {
             ${rows ? `<table class="dev-table">
                 <thead><tr><th>${t('dev.form.name')}</th><th>${t('dev.tx.priority')}</th><th>${t('dev.tx.health')}</th><th>TX</th><th>${t('dev.tx.lastSeen')}</th></tr></thead>
                 <tbody>${rows}</tbody></table>` : ''}`;
+    }
+
+    function paletteHtml() {
+        return TYPE_OPTIONS.map(type => `<div class="dev-palette-item" draggable="true" role="button" tabindex="0" data-type="${esc(type)}">
+            <span class="dev-node-badge">${esc(TYPE_BADGE[type] || 'O')}</span>
+            <span>${esc(typeLabel(type))}</span>
+        </div>`).join('');
+    }
+
+    function txPaletteHtml() {
+        const view = snapshot.tx;
+        const head = view.state === 'none'
+            ? `<p class="dev-empty">${t('dev.tx.none')}</p>`
+            : `<p class="dev-note">${esc(view.current ? view.current.name : t('dev.tx.interrupted'))}</p>`;
+        const rows = view.sources.map(source => `<div class="dev-palette-tx-row">
+            <span class="dev-dot dev-dot-${source.health === 'ok' ? 'online' : (source.health === 'stale' ? 'unknown' : 'offline')}"></span>
+            <span class="dev-palette-tx-name">${esc(source.name)}</span>
+            <span class="dev-chip">${source.priority}</span>
+        </div>`).join('');
+        return head + rows;
     }
 
     function controlHtml(device) {
@@ -349,9 +554,7 @@ export function createDevicesPage(ctx) {
         const control = snapshot.controls && snapshot.controls[device.id];
         if (control && control.lease) parts.push(t('dev.control.lease', {seat: control.lease.seat}));
         if (control && control.ports) {
-            const ports = Object.keys(control.ports)
-                .map(port => port + '→' + control.ports[port])
-                .join(' ');
+            const ports = Object.keys(control.ports).map(port => port + '→' + control.ports[port]).join(' ');
             if (ports) parts.push(ports);
         }
         box.textContent = parts.join(' · ');
@@ -362,7 +565,7 @@ export function createDevicesPage(ctx) {
         if (!container) return;
         const device = selectedDevice();
         if (!device) {
-            container.innerHTML = '';
+            container.innerHTML = selectedDraft() ? `<p class="dev-empty">${t('dev.control.draft')}</p>` : '';
             ctrlSignature = null;
             return;
         }
@@ -436,60 +639,108 @@ export function createDevicesPage(ctx) {
     }
 
     function seatOptions() {
-        if (!snapshot.ownership.seats.length) return `<option value="">—</option>`;
-        return snapshot.ownership.seats.map(seat => `<option value="${esc(seat.seat)}"${seat.seat === seatKey ? ' selected' : ''}>${esc(seat.seat)}${seat.band ? ' · ' + esc(seat.band) : ''}</option>`).join('');
+        const seats = seatsView().seats;
+        if (!seats.length) return `<option value="">—</option>`;
+        return seats.map(seat => `<option value="${esc(seat.seat)}"${seat.seat === seatKey ? ' selected' : ''}>${esc(seat.seat)}${seat.band ? ' · ' + esc(seat.band) : ''}</option>`).join('');
+    }
+
+    function renderInspector() {
+        const value = selectedValue();
+        const title = $('#devInspectorTitle');
+        if (title) title.textContent = value ? value.name : t('dev.inspector.title');
+        const formBox = $('#devForm');
+        if (!formBox) return;
+        if (!value) {
+            formBox.innerHTML = `<p class="dev-empty">${t('dev.inspector.none')}</p>`;
+            formSignature = null;
+            renderControl();
+            return;
+        }
+        const signature = [selectedId, value.type, value.has_password ? 1 : 0].join('|');
+        if (!formDirty && signature !== formSignature) {
+            formBox.innerHTML = formHtml();
+            formSignature = signature;
+        }
+        renderControl();
+    }
+
+    function renderMonitors() {
+        $('#devSeats').innerHTML = seatsHtml();
+        $('#devTx').innerHTML = txHtml();
+        $('#devTxPalette').innerHTML = txPaletteHtml();
     }
 
     function render() {
         if (!snapshot) {
             $('#devSummary').textContent = '';
-            $('#devTree').innerHTML = `<p class="dev-empty">${t('dev.status.unknown')}</p>`;
+            $('#devNodes').innerHTML = '';
+            $('#devWires').innerHTML = '';
+            $('#devCanvasEmpty')?.classList.remove('hidden');
             $('#devForm').innerHTML = `<p class="dev-empty">${t('dev.error.generic')}</p>`;
-            formSignature = null;
             $('#devControl').innerHTML = '';
-            ctrlSignature = null;
+            $('#devInspectorTitle').textContent = t('dev.inspector.title');
             $('#devSeats').innerHTML = '';
             $('#devTx').innerHTML = '';
+            $('#devTxPalette').innerHTML = '';
+            formSignature = null;
+            ctrlSignature = null;
             return;
         }
-        const seats = snapshot.ownership.seats;
+        const seats = seatsView().seats;
         $('#devSummary').textContent = t('dev.summary', {
             devices: snapshot.devices.length,
             seats: seats.length,
             antennas: snapshot.ownership.antennas.length
-        });
+        }) + ' · ' + t('dev.hint.canvas');
         if (document.activeElement !== $('#devSeat')) {
             $('#devSeat').innerHTML = seatOptions();
         }
-        $('#devTree').innerHTML = treeHtml(snapshot.tree);
-        // 轮询不覆盖正在编辑的表单；选中项变化或保存后才重建。
-        const signature = creating ? 'new' : (selectedId || '');
-        if (!formDirty && signature !== formSignature) {
-            $('#devForm').innerHTML = formHtml();
-            formSignature = signature;
+        renderPalette();
+        renderCanvas();
+        renderInspector();
+        renderMonitors();
+    }
+
+    function renderPalette() {
+        const box = $('#devPalette');
+        if (box) box.innerHTML = paletteHtml();
+    }
+
+    function applyLayouts(snapshotData) {
+        if (!localLayout) return;
+        for (const id of Object.keys(localLayout)) {
+            const device = snapshotData.devices.find(item => item.id === id);
+            const local = localLayout[id];
+            if (!device) {
+                delete localLayout[id];
+                continue;
+            }
+            if (device.layout_saved && device.layout && device.layout.x === local.x && device.layout.y === local.y) {
+                delete localLayout[id];
+            }
         }
-        $('#devSeats').innerHTML = seatsHtml();
-        $('#devTx').innerHTML = txHtml();
-        renderControl();
+        if (!Object.keys(localLayout).length) localLayout = null;
     }
 
     async function refresh() {
-        if (busy) return;
+        if (busy || dragging || wiring) return;
         busy = true;
         try {
             const data = await getDevicesSnapshot();
-            snapshot = data && data.ok ? data : null;
-            if (!snapshot) throw new Error('invalid snapshot');
+            const next = data && data.ok ? data : null;
+            if (!next) throw new Error('invalid snapshot');
+            snapshot = next;
+            applyLayouts(snapshot);
             const seats = snapshot.ownership.seats;
             if (!seatKey || !seats.some(seat => seat.seat === seatKey)) {
                 const online = seats.find(seat => seat.online);
                 seatKey = online ? online.seat : (seats.length ? seats[0].seat : null);
             }
-            if (selectedId && !snapshot.devices.some(device => device.id === selectedId)) {
+            if (selectedId && !isDraftKey(selectedId) && !deviceById(selectedId)) {
                 selectedId = null;
-                creating = false;
                 formDirty = false;
                 formSignature = null;
+                ctrlSignature = null;
             }
             render();
         } catch (error) {
@@ -501,34 +752,11 @@ export function createDevicesPage(ctx) {
         }
     }
 
-    function selectDevice(id) {
-        stopTower();
-        selectedId = id;
-        creating = false;
-        formDirty = false;
-        formSignature = null;
-        ctrlSignature = null;
-        render();
-        const form = $('#devFormEl');
-        if (form) form.querySelector('input[name="name"]')?.focus();
-    }
-
-    function startCreate() {
-        selectedId = null;
-        creating = true;
-        formDirty = false;
-        formSignature = null;
-        ctrlSignature = null;
-        render();
-        $('#devFormEl')?.querySelector('input[name="name"]')?.focus();
-    }
-
     function formValues(form) {
         const data = new FormData(form);
         const device = {
             name: String(data.get('name') || ''),
             type: String(data.get('type') || ''),
-            parent_id: String(data.get('parent_id') || '') || null,
             bands: String(data.get('bands') || ''),
             install_offset_deg: String(data.get('install_offset_deg') || '0'),
             port_label: String(data.get('port_label') || ''),
@@ -579,6 +807,16 @@ export function createDevicesPage(ctx) {
         return errorText(body && body.error ? body.error : 'generic');
     }
 
+    async function persistDraftLayout(id) {
+        if (!draft) return;
+        const pos = draft.layout;
+        try {
+            await saveDeviceLayouts([{id, x: pos.x, y: pos.y}]);
+        } catch (error) {
+            // 位置写失败不影响设备本身，下一次刷新会用自动布局补位。
+        }
+    }
+
     async function submitForm(event) {
         event.preventDefault();
         const form = event.target;
@@ -588,7 +826,8 @@ export function createDevicesPage(ctx) {
             errorBox.classList.add('hidden');
         }
         try {
-            const result = await saveDevice(formValues(form));
+            const values = formValues(form);
+            const result = await saveDevice(values);
             if (!result || !result.ok) {
                 if (errorBox) {
                     errorBox.textContent = errorText(result && result.error);
@@ -596,8 +835,13 @@ export function createDevicesPage(ctx) {
                 }
                 return;
             }
-            selectedId = result.device && result.device.id ? result.device.id : selectedId;
-            creating = false;
+            const created = !form.dataset.devId;
+            const id = result.device && result.device.id ? result.device.id : selectedId;
+            if (created) {
+                await persistDraftLayout(id);
+                draft = null;
+            }
+            selectedId = id;
             formDirty = false;
             formSignature = null;
             ctrlSignature = null;
@@ -635,6 +879,176 @@ export function createDevicesPage(ctx) {
         }
     }
 
+    function wouldCycleClient(childId, parentId) {
+        let cursor = parentId;
+        const seen = new Set();
+        while (cursor) {
+            if (cursor === childId || seen.has(cursor)) return true;
+            seen.add(cursor);
+            const node = deviceById(cursor);
+            cursor = node ? node.parent_id : null;
+        }
+        return false;
+    }
+
+    async function connectNodes(parentId, childId) {
+        if (!parentId || !childId || parentId === childId) {
+            showToast(t('dev.error.cycle'));
+            return;
+        }
+        if (wouldCycleClient(childId, parentId)) {
+            showToast(t('dev.error.cycle'));
+            return;
+        }
+        try {
+            const result = await saveDevice({id: childId, parent_id: parentId});
+            if (!result || !result.ok) {
+                showToast(errorText(result && result.error));
+                return;
+            }
+            await refresh();
+        } catch (error) {
+            showToast(apiError(error));
+        }
+    }
+
+    async function removeWire(childId) {
+        const node = deviceById(childId);
+        if (!node) return;
+        const confirmed = await showConfirm(ctx, t('dev.wire.remove'), {danger: true});
+        if (!confirmed) return;
+        try {
+            const result = await saveDevice({id: childId, parent_id: null});
+            if (!result || !result.ok) {
+                showToast(errorText(result && result.error));
+                return;
+            }
+            await refresh();
+        } catch (error) {
+            showToast(apiError(error));
+        }
+    }
+
+    function keyFromEvent(event) {
+        const node = event.target.closest('[data-node-key]');
+        return node ? node.dataset.nodeKey : null;
+    }
+
+    function nodeElement(key) {
+        const nodes = document.querySelectorAll('#devNodes [data-node-key]');
+        for (const node of nodes) {
+            if (node.dataset.nodeKey === key) return node;
+        }
+        return null;
+    }
+
+    function beginDrag(key, event) {
+        const base = isDraftKey(key) && draft ? draft.layout : positionOf(deviceById(key));
+        dragging = {
+            key,
+            pointerId: event.pointerId,
+            startX: event.clientX,
+            startY: event.clientY,
+            originX: base.x,
+            originY: base.y,
+            x: base.x,
+            y: base.y,
+            moved: false
+        };
+        const node = nodeElement(key);
+        try {
+            if (node) node.setPointerCapture(event.pointerId);
+        } catch (error) {
+            // 某些浏览器不支持节点级捕获，window 监听仍可完成拖动。
+        }
+    }
+
+    function moveDrag(event) {
+        if (!dragging) return;
+        const dx = event.clientX - dragging.startX;
+        const dy = event.clientY - dragging.startY;
+        if (!dragging.moved && Math.abs(dx) + Math.abs(dy) < 4) return;
+        dragging.moved = true;
+        dragging.x = Math.max(0, Math.round(dragging.originX + dx));
+        dragging.y = Math.max(0, Math.round(dragging.originY + dy));
+        const node = nodeElement(dragging.key);
+        if (node) {
+            node.style.left = dragging.x + 'px';
+            node.style.top = dragging.y + 'px';
+        }
+        if (isDraftKey(dragging.key) && draft) {
+            draft.layout = {x: dragging.x, y: dragging.y};
+        }
+        renderWires(canvasNodes());
+    }
+
+    async function endDrag() {
+        if (!dragging) return;
+        const drag = dragging;
+        dragging = null;
+        if (!drag.moved) return;
+        if (isDraftKey(drag.key)) {
+            if (draft) draft.layout = {x: drag.x, y: drag.y};
+            renderCanvas();
+            return;
+        }
+        localLayout = Object.assign({}, localLayout, {[drag.key]: {x: drag.x, y: drag.y}});
+        try {
+            const result = await saveDeviceLayouts([{id: drag.key, x: drag.x, y: drag.y}]);
+            if (!result || !result.ok) throw new Error('layout rejected');
+        } catch (error) {
+            delete localLayout[drag.key];
+            showToast(errorText('invalid-layout'));
+        }
+        renderCanvas();
+    }
+
+    function beginWire(node, event) {
+        const key = node.dataset.nodeKey;
+        if (isDraftKey(key)) {
+            showToast(t('dev.wire.firstSave'));
+            return;
+        }
+        const layoutPos = positionOf(deviceById(key));
+        const rect = $('#devCanvas').getBoundingClientRect();
+        wiring = {
+            fromKey: key,
+            x1: layoutPos.x + NODE_W,
+            y1: layoutPos.y + NODE_H / 2,
+            x2: event.clientX - rect.left,
+            y2: event.clientY - rect.top
+        };
+        event.preventDefault();
+        renderWires(canvasNodes());
+    }
+
+    function moveWire(event) {
+        if (!wiring) return;
+        const rect = $('#devCanvas').getBoundingClientRect();
+        wiring.x2 = event.clientX - rect.left;
+        wiring.y2 = event.clientY - rect.top;
+        renderWires(canvasNodes());
+    }
+
+    async function endWire(event) {
+        if (!wiring) return;
+        const fromKey = wiring.fromKey;
+        wiring = null;
+        const x = event ? event.clientX : 0;
+        const y = event ? event.clientY : 0;
+        const targetEl = document.elementFromPoint(x, y);
+        const targetNode = targetEl ? targetEl.closest('[data-node-key]') : null;
+        renderWires(canvasNodes());
+        if (!targetNode) return;
+        const childKey = targetNode.dataset.nodeKey;
+        if (childKey === fromKey) return;
+        if (isDraftKey(childKey)) {
+            showToast(t('dev.wire.firstSave'));
+            return;
+        }
+        await connectNodes(fromKey, childKey);
+    }
+
     function applyLabels() {
         $('#devTitle').textContent = t('dev.title');
         $('#devSubtitle').textContent = t('dev.subtitle');
@@ -642,27 +1056,32 @@ export function createDevicesPage(ctx) {
         $('#devRefresh').textContent = t('refresh');
         $('#devNew').textContent = t('dev.add');
         $('#devHint').textContent = t('dev.hint.server');
+        $('#devPaletteTitle').textContent = t('dev.palette.title');
+        $('#devPaletteHint').textContent = t('dev.palette.hint');
+        $('#devTxPaletteTitle').textContent = t('dev.palette.tx');
+        $('#devCanvasEmpty').textContent = t('dev.canvas.empty');
+        $('#devInspectorTitle').textContent = t('dev.inspector.title');
+        $('#devMonitorTitle').textContent = t('dev.monitor.title');
     }
 
     function init() {
         applyLabels();
         $('#devRefresh').addEventListener('click', () => { void refresh(); });
-        $('#devNew').addEventListener('click', startCreate);
+        $('#devNew').addEventListener('click', () => createDraft('antenna'));
+        $('#devInspectorClose').addEventListener('click', () => {
+            if (draft && selectedId === draft.key) {
+                void confirmDiscard().then(ok => { if (ok) discardDraft(); });
+                return;
+            }
+            selectedId = null;
+            formDirty = false;
+            formSignature = null;
+            ctrlSignature = null;
+            render();
+        });
         $('#devSeat').addEventListener('change', event => {
             seatKey = event.target.value || null;
             render();
-        });
-        $('#devTree').addEventListener('click', event => {
-            const node = event.target.closest('[data-dev-id]');
-            if (node) selectDevice(node.dataset.devId);
-        });
-        $('#devTree').addEventListener('keydown', event => {
-            if (event.key !== 'Enter' && event.key !== ' ') return;
-            const node = event.target.closest('[data-dev-id]');
-            if (node) {
-                event.preventDefault();
-                selectDevice(node.dataset.devId);
-            }
         });
         $('#devSeats').addEventListener('click', event => {
             const row = event.target.closest('[data-dev-seat]');
@@ -670,6 +1089,87 @@ export function createDevicesPage(ctx) {
             seatKey = row.dataset.devSeat;
             render();
         });
+
+        $('#devPalette').addEventListener('dragstart', event => {
+            const item = event.target.closest('[data-type]');
+            if (!item) return;
+            event.dataTransfer.setData('text/plain', item.dataset.type);
+            event.dataTransfer.effectAllowed = 'copy';
+        });
+        $('#devPalette').addEventListener('dblclick', event => {
+            const item = event.target.closest('[data-type]');
+            if (item) createDraft(item.dataset.type);
+        });
+        $('#devPalette').addEventListener('keydown', event => {
+            if (event.key !== 'Enter' && event.key !== ' ') return;
+            const item = event.target.closest('[data-type]');
+            if (!item) return;
+            event.preventDefault();
+            createDraft(item.dataset.type);
+        });
+
+        const canvas = $('#devCanvas');
+        canvas.addEventListener('dragover', event => {
+            event.preventDefault();
+            event.dataTransfer.dropEffect = 'copy';
+        });
+        canvas.addEventListener('drop', event => {
+            event.preventDefault();
+            const type = event.dataTransfer.getData('text/plain');
+            if (!TYPE_OPTIONS.includes(type)) return;
+            const rect = canvas.getBoundingClientRect();
+            createDraft(type, event.clientX - rect.left - NODE_W / 2, event.clientY - rect.top - NODE_H / 2);
+        });
+        canvas.addEventListener('click', event => {
+            if (event.target.closest('[data-node-key]')) return;
+            if (event.target.closest('[data-wire-child]')) return;
+            if (draft && selectedId === draft.key) {
+                void confirmDiscard().then(ok => { if (ok) discardDraft(); });
+                return;
+            }
+            selectedId = null;
+            formSignature = null;
+            ctrlSignature = null;
+            render();
+        });
+
+        $('#devNodes').addEventListener('pointerdown', event => {
+            const port = event.target.closest('.dev-port-out');
+            const node = event.target.closest('[data-node-key]');
+            if (!node) return;
+            if (port) {
+                beginWire(node, event);
+                return;
+            }
+            if (event.button !== undefined && event.button !== 0) return;
+            const key = node.dataset.nodeKey;
+            void (async () => {
+                await selectNode(key);
+                // 用户可能在「放弃草稿」确认里取消，此时不启动拖动。
+                if (selectedId === key) beginDrag(key, event);
+            })();
+        });
+        $('#devNodes').addEventListener('keydown', event => {
+            if (event.key !== 'Enter' && event.key !== ' ') return;
+            const key = keyFromEvent(event);
+            if (!key) return;
+            event.preventDefault();
+            void selectNode(key);
+        });
+        $('#devWires').addEventListener('click', event => {
+            const hit = event.target.closest('[data-wire-child]');
+            if (hit) void removeWire(hit.dataset.wireChild);
+        });
+
+        window.addEventListener('pointermove', event => {
+            moveDrag(event);
+            moveWire(event);
+        });
+        window.addEventListener('pointerup', event => {
+            void endDrag();
+            void endWire(event);
+        });
+
         $('#devControl').addEventListener('click', event => {
             const button = event.target.closest('[data-cmd]');
             const device = selectedDevice();
@@ -699,10 +1199,17 @@ export function createDevicesPage(ctx) {
         });
         document.addEventListener('pointerup', stopTower);
         window.addEventListener('blur', stopTower);
+
         $('#devForm').addEventListener('submit', submitForm);
         $('#devForm').addEventListener('input', () => { formDirty = true; });
         $('#devForm').addEventListener('click', event => {
             if (event.target.id === 'devDelete') void removeSelected();
+        });
+        $('#devView').addEventListener('keydown', event => {
+            if (event.key !== 'Delete') return;
+            const tag = document.activeElement ? document.activeElement.tagName : '';
+            if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)) return;
+            if (selectedDevice()) void removeSelected();
         });
     }
 
@@ -719,11 +1226,17 @@ export function createDevicesPage(ctx) {
     function hide() {
         active = false;
         stopTower();
+        dragging = null;
+        wiring = null;
         if (timer) {
             clearInterval(timer);
             timer = null;
         }
     }
 
-    return {init, show, hide, refresh};
+    function resize() {
+        renderWires(canvasNodes());
+    }
+
+    return {init, show, hide, refresh, resize};
 }
