@@ -295,27 +295,64 @@ test('analysis routes always answer with a JSON error instead of hanging', () =>
     }
 });
 
-test('startup self-check warns when neighbors schema is missing', () => {
+test('startup readiness probe covers every schema object', () => {
     const flow = JSON.parse(read('flow.json'));
     const inject = flow.find(node => node.type === 'inject' && node.name === 'DB self-check on startup');
-    assert.ok(inject && inject.once === true, 'self-check must run once on startup');
+    assert.ok(inject && inject.once === true, 'readiness probe must run once on startup');
+    assert.ok(Number(inject.onceDelay) < 1, 'probe must start immediately instead of after a guessed delay');
     const query = flow.find(node => node.name === 'Build DB self-check query');
-    assert.ok(query, 'self-check query builder must exist');
-    assert.match(query.func, /dx\.storage\.schema\.selfCheckQuery\(\)/);
-    const schema = require('../lib/storage/schema.js');
-    const sql = schema.selfCheckQuery();
+    assert.ok(query, 'probe query builder must exist');
+    assert.match(query.func, /dx\.ready\.probeQuery\(\)/);
+    const sql = require('../lib/storage/ready-sql.js').probeQuery();
     assert.match(sql, /pragma_table_info\('spots'\)/);
-    assert.match(sql, /'column' AS kind/);
-    assert.match(sql, /name='neighbors'/);
-    assert.match(sql, /trg_spots_neighbor_%/);
-    const check = flow.find(node => node.name === 'Check DB self-check result');
-    assert.ok(check, 'self-check result handler must exist');
-    for (const token of ['sender_grid', 'receiver_grid', 'dxcc_sender', 'dxcc_receiver', 'neighbors']) {
-        assert.match(check.func, new RegExp(token));
+    assert.match(sql, /sqlite_master/);
+    for (const token of ['rf_links', 'rf_links_pair', 'alert_rules', 'devices', 'tx_sources']) {
+        assert.match(sql, new RegExp(token));
     }
-    assert.match(check.func, /MISSING/, 'missing items must be named explicitly');
-    assert.match(check.func, /actual spots columns/, 'log the actual column list for reconciliation');
+    const check = flow.find(node => node.name === 'Check DB self-check result');
+    assert.ok(check, 'probe result handler must exist');
+    assert.match(check.func, /dx\.ready\.missing\(/);
+    assert.match(check.func, /dx\.ready\.markReady\(\)/);
+    assert.match(check.func, /dx\.ready\.markFailed\(/);
+    assert.match(check.func, /PROBE_TIMEOUT_MS/);
     assert.match(check.func, /node\.warn\(/);
+});
+
+test('cold-start entry points wait for the readiness gate', () => {
+    const settings = read('settings.js');
+    assert.match(settings, /httpNodeMiddleware/);
+    assert.match(settings, /dx\.ready\.whenReady\(\)/);
+
+    const flow = JSON.parse(read('flow.json'));
+    const gated = [
+        'Parse PSKR spot',
+        'Parse RadioInfo',
+        'Parse QSO',
+        'Parse Score',
+        'Build INSERT SQL',
+        'Build alert rules query',
+        'Build alert index query',
+        'Station state query',
+        'Build retention SQL',
+        'Prepare rotator poll',
+        'Prepare tower release',
+        'Prepare tower watchdog',
+        'Run rotator poll',
+        'Run tower release on start',
+        'Run tower watchdog'
+    ];
+    for (const name of gated) {
+        const node = flow.find(item => item.type === 'function' && item.name === name);
+        assert.ok(node, name + ' must exist');
+        assert.match(node.func, /ready\.whenReady\(\)/, name + ' must await schema readiness');
+    }
+});
+
+test('schema self-check builder does not await the gate it feeds', () => {
+    const flow = JSON.parse(read('flow.json'));
+    const builder = flow.find(node => node.name === 'Build DB self-check query');
+    assert.doesNotMatch(builder.func, /whenReady/,
+        'schema probing must not wait on the gate it is responsible for resolving');
 });
 
 test('read-only wall keeps an exact static whitelist and GET/HEAD boundary', () => {
