@@ -20,14 +20,14 @@ const NODE_W = 210;
 const NODE_H = 76;
 const CANVAS_MIN_W = 1600;
 const CANVAS_MIN_H = 1000;
-// 面板提供这九种可拖出的设备；前五种是射频链路组成部分，后四种是机械与切换支撑。
+// 面板提供这十一种可拖出的设备；前五种是射频链路组成部分，后六种是机械与射频路由/分合路支撑。
 // 切换器（1×n）与矩阵切换器（n×n）是两种不同类型，占用判定也不同。
-const PALETTE_TYPES = ['radio', 'swr', 'bpf', 'amp', 'antenna', 'tower', 'rotator', 'switch', 'matrix'];
+const PALETTE_TYPES = ['radio', 'swr', 'bpf', 'amp', 'antenna', 'tower', 'rotator', 'switch', 'matrix', 'divider', 'combiner'];
 // 旧版本已有的兜底类型仍可编辑与显示，但不从面板新建。
 const TYPE_OPTIONS = PALETTE_TYPES.concat(['other']);
 const TYPE_BADGE = {
     radio: 'RX', swr: 'SW', bpf: 'BP', amp: 'PA', antenna: 'AN', tower: 'TW', rotator: 'RT',
-    matrix: 'MX', switch: 'CX', other: 'OT'
+    switch: 'CX', matrix: 'MX', divider: 'DV', combiner: 'CB', other: 'OT'
 };
 const STATUS_KEYS = {online: 'dev.status.online', offline: 'dev.status.offline', unknown: 'dev.status.unknown'};
 const TOWER_KEYS = {
