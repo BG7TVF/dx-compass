@@ -319,9 +319,14 @@ test('startup readiness probe covers every schema object', () => {
 });
 
 test('cold-start entry points wait for the readiness gate', () => {
-    const settings = read('settings.js');
-    assert.match(settings, /httpNodeMiddleware/);
-    assert.match(settings, /dx\.ready\.whenReady\(\)/);
+    const gate = read('nodes', 'ready-gate.js');
+    assert.match(gate, /RED\.httpNode\.use\(/,
+        'the gate must be a global middleware registered before http-in routes');
+    assert.match(gate, /flows:started/,
+        'the gate must wait for http-in routes to be registered');
+    assert.match(gate, /require\('\.\.\/lib\/ready\.js'\)/);
+    assert.match(gate, /ready\.whenReady\(\)/);
+    assert.match(gate, /schema-init-failed/);
 
     const flow = JSON.parse(read('flow.json'));
     const gated = [
@@ -353,6 +358,47 @@ test('schema self-check builder does not await the gate it feeds', () => {
     const builder = flow.find(node => node.name === 'Build DB self-check query');
     assert.doesNotMatch(builder.func, /whenReady/,
         'schema probing must not wait on the gate it is responsible for resolving');
+});
+
+test('global gate holds requests until schema and flows are ready', async () => {
+    const ready = require('../lib/ready.js');
+    const gatePath = path.join(ROOT, 'nodes', 'ready-gate.js');
+    delete require.cache[require.resolve(gatePath)];
+
+    const middleware = [];
+    const listeners = {};
+    require(gatePath)({
+        httpNode: {use(fn) { middleware.push(fn); }},
+        events: {on(name, fn) { (listeners[name] = listeners[name] || []).push(fn); }},
+        nodes: {createNode() {}, registerType() {}}
+    });
+    assert.equal(middleware.length, 1);
+
+    let nextCalled = false;
+    let status = 0;
+    let body = '';
+    const res = {
+        setHeader() {},
+        end(payload) { body = payload; },
+        get statusCode() { return status; },
+        set statusCode(value) { status = value; }
+    };
+    const held = new Promise(resolve => {
+        middleware[0]({}, res, () => { nextCalled = true; resolve(); });
+    });
+
+    await new Promise(resolve => setTimeout(resolve, 20));
+    assert.equal(nextCalled, false, 'request must not pass while schema is pending');
+
+    ready.markReady();
+    await new Promise(resolve => setTimeout(resolve, 20));
+    assert.equal(nextCalled, false, 'schema alone is not enough; routes must be registered');
+
+    for (const listener of listeners['flows:started'] || []) listener();
+    await held;
+    assert.equal(nextCalled, true);
+    assert.equal(status, 0);
+    assert.equal(body, '');
 });
 
 test('read-only wall keeps an exact static whitelist and GET/HEAD boundary', () => {

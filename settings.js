@@ -26,25 +26,6 @@ module.exports = {
     // Root for HTTP-in nodes (REST API)
     httpNodeRoot: "/",
 
-    // Do not guess how long schema migration takes. Every HTTP-in request
-    // waits for the real readiness gate (tables + columns + indexes +
-    // triggers verified against sqlite), so a cold start can never serve a
-    // query against a half-built schema.
-    httpNodeMiddleware: function(req, res, next) {
-        const dx = require("./lib");
-        dx.ready.whenReady().then(function() {
-            next();
-        }).catch(function(error) {
-            res.statusCode = 500;
-            res.setHeader("Content-Type", "application/json; charset=utf-8");
-            res.end(JSON.stringify({
-                ok: false,
-                error: "schema-init-failed",
-                detail: String(error && error.message ? error.message : error)
-            }));
-        });
-    },
-
     // functionGlobalContext exposes the shared dx domain facade to function
     // nodes. functionExternalModules is intentionally NOT enabled here -- it
     // spins up the runtime npm loader on startup, which can crash Node-RED if
