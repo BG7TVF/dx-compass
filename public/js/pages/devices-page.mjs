@@ -245,6 +245,10 @@ export function createDevicesPage(ctx) {
         if (item.kind === 'alarm') {
             return value ? `${t(item.label)} 0x${Number(amp.alarm_word || 0).toString(16).toUpperCase()}` : '';
         }
+        if (item.kind === 'fault') {
+            return value ? `${t(item.label)} ${amp.fault_code || amp.alarm_word}` : '';
+        }
+        if (item.kind === 'text') return value ? String(value) : '';
         return '';
     }
 
@@ -283,8 +287,11 @@ export function createDevicesPage(ctx) {
         // 品牌换了以后，旧型号不再属于当前品牌，按「未指定」处理。
         const modelValue = modelId === 'other' || models.some(item => item.id === modelId) ? modelId : '';
         const modelOptions = [`<option value="">${esc(t('dev.config.modelNone'))}</option>`]
-            .concat(models.map(model =>
-                `<option value="${esc(model.id)}"${modelValue === model.id ? ' selected' : ''}>${esc(model.name)}</option>`))
+            .concat(models.map(model => {
+                const unsupported = model.supported === false;
+                const suffix = unsupported ? ' · ' + t('dev.config.communityOnly') : '';
+                return `<option value="${esc(model.id)}"${modelValue === model.id ? ' selected' : ''}${unsupported ? ' disabled' : ''}>${esc(model.name + suffix)}</option>`;
+            }))
             .concat([`<option value="other"${modelValue === 'other' ? ' selected' : ''}>${esc(t('dev.config.modelOther'))}</option>`]);
         const definition = ampDefinitionFor(Object.assign({}, merged, {model: modelValue}));
         const protocol = definition ? String(definition.protocol || 'mqtt') : 'mqtt';
@@ -293,6 +300,7 @@ export function createDevicesPage(ctx) {
             <label>${t('dev.config.brand')}<select name="cfg_brand">${brandOptions.join('')}</select></label>
             <label>${t('dev.config.ampModel')}<select name="cfg_amp_model">${modelOptions.join('')}</select></label>
             <p class="dev-note">${t('dev.config.resolvedProtocol', {protocol: protocol.toUpperCase()})}</p>
+            ${definition && definition.hint ? `<p class="dev-note">${esc(t(definition.hint))}</p>` : ''}
             ${fields.map(field => ampFieldHtml(field, merged)).join('')}
         </div>`;
     }

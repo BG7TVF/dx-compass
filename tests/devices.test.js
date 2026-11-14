@@ -2252,6 +2252,147 @@ test('AMP1000 下发命令只走白名单，校准/工程参数一律拒绝', as
     assert.equal(result.payload.error, 'unknown-command');
 });
 
+test('Elecraft KPA500：ASCII 状态解析与串口动作白名单', async () => {
+    const definition = ampModels.resolve('elecraft', 'kpa500');
+    assert.ok(definition, 'KPA500 definition must exist');
+    assert.equal(definition.transport, 'elecraft-ascii');
+    assert.equal(definition.protocol, 'serial');
+    assert.equal(ampModels.transportOf({brand: 'elecraft', model: 'kpa500'}), 'elecraft-ascii');
+    assert.equal(ampModels.transportOf({brand: 'guohe', model: 'amp1000'}), 'mqtt');
+    // 描述表里只有面板等效动作，没有 ^PJ/^AL 等调整与阈值命令。
+    assert.deepEqual(definition.controls.map(item => item.delta.action),
+        ['power_on', 'power_off', 'operate', 'standby', 'clear_fault']);
+
+    const state = {};
+    assert.equal(ampLink.applyElecraftFrame(state, '^OS1'), true);
+    assert.equal(state.operating, 1);
+    assert.equal(state.power_on, 1);
+    assert.equal(ampLink.applyElecraftFrame(state, '^BN05'), true);
+    assert.equal(state.band, '20m');
+    assert.equal(ampLink.applyElecraftFrame(state, '^WS100 018'), true);
+    assert.equal(state.out_fwd_power, 100);
+    assert.equal(state.out_swr, 1.8);
+    assert.equal(ampLink.applyElecraftFrame(state, '^TM045'), true);
+    assert.equal(state.current_temperature, 45);
+    assert.equal(ampLink.applyElecraftFrame(state, '^VI480 012'), true);
+    assert.equal(state.current_voltage, 48);
+    assert.equal(state.current_current, 1.2);
+    assert.equal(ampLink.applyElecraftFrame(state, '^FL03'), true);
+    assert.equal(state.alarm_active, true);
+    assert.equal(state.fault_code, '0x03');
+    assert.equal(ampLink.applyElecraftFrame(state, '^RVM01.20'), true);
+    assert.equal(state.firmware_version, '01.20');
+
+    // 串口服务器寻址：KPA500 不填 host/port 时，经控制连线继承串口服务器地址。
+    const serialServer = device({
+        id: 'serial-1', name: 'Serial', type: 'serial', bands: '',
+        config_json: JSON.stringify({host: '127.0.0.1', port: 5001, port_count: 1})
+    });
+    const linkedAmp = device({
+        id: 'kpa-2', name: 'KPA500 linked', type: 'amp', bands: '',
+        config_json: JSON.stringify({brand: 'elecraft', model: 'kpa500', protocol: 'serial'})
+    });
+    const link = control.normalizeLink({
+        a: {device: 'kpa-2', port: 'keying'},
+        b: {device: 'serial-1', port: 'serial1'}
+    }, {devices: [serialServer, linkedAmp], links: []}).link;
+    const address = control.resolveFor(linkedAmp, {devices: [serialServer, linkedAmp], links: [link]});
+    assert.equal(address.mode, 'serial');
+    assert.equal(address.host, '127.0.0.1');
+    assert.equal(address.port, 5001);
+    assert.equal(address.serial_port, 1);
+
+    // 模拟串口服务器：socket 工厂注入，验证连接后轮询与动作下发。
+    class FakeSocket extends require('node:events') {
+        constructor() {
+            super();
+            this.writes = [];
+        }
+        write(chunk, callback) {
+            this.writes.push(String(chunk));
+            if (typeof callback === 'function') callback();
+            return true;
+        }
+        removeAllListeners() { super.removeAllListeners(); return this; }
+        destroy() { return this; }
+    }
+    ampLink.resetForTests();
+    let fake = null;
+    ampLink.setSocketFactory(() => { fake = new FakeSocket(); return fake; });
+    const globalCtx = makeContext();
+    const kpa = storage.devices.toDevice(deviceRow({
+        id: 'kpa-1', name: 'KPA500', type: 'amp', bands: '',
+        config_json: JSON.stringify({
+            brand: 'elecraft', model: 'kpa500', protocol: 'serial', host: '10.0.0.5', port: 4001
+        })
+    }));
+    ampLink.pollAmps(globalCtx, [kpa], new Date(), {devices: [kpa], links: []});
+    assert.ok(fake, 'socket must be created for a configured serial model');
+    fake.emit('connect');
+    fake.emit('data', Buffer.from('^OS1;^WS100 018;^VI480 012;^FL00;'));
+    const entry = runtime.stateOf(globalCtx, 'kpa-1');
+    assert.equal(entry.amp_connected, true);
+    assert.equal(entry.amp.operating, 1);
+    assert.equal(entry.amp.band, '');
+    assert.equal(entry.amp.out_fwd_power, 100);
+    assert.equal(entry.amp.out_swr, 1.8);
+    assert.equal(entry.amp.current_voltage, 48);
+    assert.equal(entry.amp.current_current, 1.2);
+
+    const sent = await ampLink.publish(kpa, {action: 'standby'}, new Date(), globalCtx);
+    assert.equal(sent.ok, true);
+    assert.ok(fake.writes.includes('^OS0;'));
+    assert.equal(runtime.stateOf(globalCtx, 'kpa-1').amp.operating, 0);
+
+    const denied = await ampLink.publish(kpa, {action: 'calibrate'}, new Date(), globalCtx);
+    assert.equal(denied.ok, false);
+    assert.equal(denied.status, 400);
+
+    ampLink.resetForTests();
+    let linkedSocket = null;
+    ampLink.setSocketFactory(() => { linkedSocket = new FakeSocket(); return linkedSocket; });
+    ampLink.pollAmps(globalCtx, [linkedAmp], new Date(), {devices: [serialServer, linkedAmp], links: [link]});
+    assert.ok(linkedSocket, 'linked serial amp must connect through the serial server address');
+    ampLink.resetForTests();
+});
+
+test('KPA500 命令入口：只接受型号描述表里的动作', async () => {
+    fakeTransports();
+    const now = new Date('2026-03-01T12:00:00.000Z');
+    const globalCtx = makeContext();
+    const kpaRow = deviceRow({
+        id: 'kpa-1', name: 'KPA500', type: 'amp', bands: '',
+        config_json: JSON.stringify({brand: 'elecraft', model: 'kpa500', protocol: 'serial'})
+    });
+    const headers = {'X-DX-Seat': 'OP-A'};
+    let result = await service.handleCommand(globalCtx, [kpaRow], 'kpa-1',
+        {command: 'amp_set', args: {action: 'operate'}}, headers, now);
+    assert.equal(result.status, 202);
+    assert.deepEqual(result.payload.delta, {action: 'operate'});
+
+    result = await service.handleCommand(globalCtx, [kpaRow], 'kpa-1',
+        {command: 'amp_set', args: {action: 'calibrate'}}, headers, now);
+    assert.equal(result.status, 400);
+    assert.equal(result.payload.error, 'invalid-arg');
+
+    // 串口型号不接受 MQTT 的 delta 字段，避免把字段写到错误协议上。
+    result = await service.handleCommand(globalCtx, [kpaRow], 'kpa-1',
+        {command: 'amp_set', args: {pa_switch: 0}}, headers, now);
+    assert.equal(result.status, 400);
+
+    // 反过来，MQTT 型号也不接受串口动作。
+    result = await service.handleCommand(globalCtx, [ampRow()], 'amp-1',
+        {command: 'amp_set', args: {action: 'operate'}}, headers, now);
+    assert.equal(result.status, 400);
+
+    // 未公开协议/未实现的型号只能留记录，不能保存。
+    const unsupported = model.normalizeDevice({
+        type: 'amp', name: 'KPA1500', config: {brand: 'elecraft', model: 'kpa1500'}
+    }, {devices: []});
+    assert.equal(unsupported.ok, false);
+    assert.equal(unsupported.error, 'invalid-amp-model');
+});
+
 test('AMP1000 配置：MQTT 字段白名单与口令隐藏', () => {
     const saved = model.normalizeDevice({
         type: 'amp', name: 'AMP1000',
@@ -2274,8 +2415,11 @@ test('AMP1000 配置：MQTT 字段白名单与口令隐藏', () => {
 
 test('功放型号描述表：品牌/型号解析与协议派生', () => {
     const catalog = ampModels.catalog();
-    assert.equal(catalog.brands.length, 1);
-    assert.equal(catalog.brands[0].id, 'guohe');
+    const guohe = catalog.brands.find(brand => brand.id === 'guohe');
+    assert.ok(guohe, 'guohe brand must exist');
+    assert.ok(catalog.brands.length >= 2, 'brand catalog covers community amplifier brands');
+    assert.ok(catalog.brands.some(brand => brand.models.some(item => item.supported === false)),
+        'community-only models must be recorded as unsupported');
     const definition = ampModels.resolve('guohe', 'amp1000');
     assert.ok(definition, 'AMP1000 definition must exist');
     assert.equal(definition.protocol, 'mqtt');
