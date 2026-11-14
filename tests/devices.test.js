@@ -16,6 +16,7 @@ const commands = require('../lib/devices/commands.js');
 const rotatorLink = require('../lib/devices/rotator-link.js');
 const ampLink = require('../lib/devices/amp-link.js');
 const ampModels = require('../lib/devices/amp-models.js');
+const rotatorModels = require('../lib/devices/rotator-models.js');
 const service = require('../lib/devices/service.js');
 
 function fakeTransports() {
@@ -1217,6 +1218,89 @@ function fakeSocket(handler) {
     return socket;
 }
 
+test('rotator model catalog drives protocol and action whitelist', () => {
+    const yaesu = rotatorModels.resolve('yaesu', 'g-2800dxa');
+    assert.ok(yaesu);
+    assert.equal(yaesu.protocol, 'gs232');
+    assert.deepEqual(yaesu.protocols, ['gs232', 'rotctld']);
+    assert.deepEqual(yaesu.controls.map(item => item.action), ['rotate', 'stop']);
+    assert.deepEqual(yaesu.limits.azimuth, [0, 360]);
+    assert.equal(rotatorModels.transportOf({brand: 'yaesu', model: 'g-2800dxa'}), 'gs232');
+    assert.equal(rotatorModels.transportOf({brand: 'yaesu', model: 'g-2800dxa', protocol: 'rotctld'}), 'rotctld');
+    assert.equal(rotatorModels.transportOf({brand: 'greenheron', model: 'rt-21'}), 'rotctld');
+    assert.equal(rotatorModels.transportOf({}), 'rotctld');
+    assert.ok(rotatorModels.protocols().includes('gs232'));
+
+    const saved = model.normalizeDevice({
+        type: 'rotator', name: 'G-2800',
+        config: {brand: 'yaesu', model: 'g-2800dxa', host: '10.0.0.1', port: 4001}
+    }, {devices: []});
+    assert.equal(saved.ok, true);
+    assert.equal(saved.device.config.protocol, 'gs232');
+    assert.equal(model.normalizeDevice({
+        type: 'rotator', name: 'x', config: {brand: 'nope', model: 'x'}
+    }, {devices: []}).error, 'invalid-rotator-brand');
+    assert.equal(model.normalizeDevice({
+        type: 'rotator', name: 'x', config: {brand: 'yaesu', model: 'nope'}
+    }, {devices: []}).error, 'invalid-rotator-model');
+});
+
+test('GS-232 link sends C2/Mxxx/S and parses both reply formats', async () => {
+    const writes = [];
+    rotatorLink.setSocketFactory(() => fakeSocket(line => {
+        writes.push(line);
+        return line === 'C2;' ? '+0180+0000\r\n' : 'RPRT 0\r\n';
+    }));
+    const link = new rotatorLink.Gs232Link({host: '127.0.0.1', port: 4001, timeoutMs: 200});
+    await link.setPosition(359.6);
+    const position = await link.getPosition();
+    await link.stop();
+
+    assert.equal(writes[0], 'M000;');
+    assert.equal(writes[1], 'C2;');
+    assert.equal(writes[2], 'S;');
+    assert.equal(position.azimuth, 180);
+    assert.equal(position.elevation, 0);
+    assert.equal(rotatorLink.parseGs232Position('AZ=090 EL=015').azimuth, 90);
+    assert.equal(rotatorLink.parseGs232Position('AZ=090 EL=015').elevation, 15);
+    assert.equal(rotatorLink.parseGs232Position('nonsense'), null);
+    assert.equal(rotatorLink.formatGs232Set(45), 'M045;');
+
+    link.close();
+    rotatorLink.resetLinks();
+    rotatorLink.setSocketFactory(null);
+});
+
+test('rotator transport resolves GS-232 from the model and requires a port', async () => {
+    const writes = [];
+    rotatorLink.setSocketFactory(() => fakeSocket(line => {
+        writes.push(line);
+        return line === 'C2;' ? 'AZ=300 EL=0\r\n' : 'RPRT 0\r\n';
+    }));
+    const device = {
+        id: 'rotator-1', type: 'rotator',
+        config: {brand: 'k3ng', model: 'gs232', host: '10.0.0.9', port: 30001}
+    };
+    const turned = await rotatorLink.rotate(device, 300);
+    assert.equal(turned.ok, true);
+    const read = await rotatorLink.read(device);
+    assert.equal(read.ok, true);
+    assert.equal(read.azimuth, 300);
+    assert.equal(writes[0], 'M300;');
+    assert.equal(writes[1], 'C2;');
+
+    // GS-232 没有端口时不猜默认值。
+    const missing = await rotatorLink.rotate({
+        id: 'rotator-2', type: 'rotator',
+        config: {brand: 'k3ng', model: 'gs232', host: '10.0.0.9'}
+    }, 10);
+    assert.equal(missing.ok, false);
+    assert.equal(missing.error, 'transport-not-configured');
+
+    rotatorLink.resetLinks();
+    rotatorLink.setSocketFactory(null);
+});
+
 test('rotctld link formats GS-232 commands and parses the position reply', async () => {
     const writes = [];
     rotatorLink.setSocketFactory(() => fakeSocket(line => {
@@ -2385,12 +2469,15 @@ test('KPA500 命令入口：只接受型号描述表里的动作', async () => {
         {command: 'amp_set', args: {action: 'operate'}}, headers, now);
     assert.equal(result.status, 400);
 
-    // 未公开协议/未实现的型号只能留记录，不能保存。
-    const unsupported = model.normalizeDevice({
-        type: 'amp', name: 'LUX', config: {brand: 'mercury', model: 'lux'}
+    // 已下线的型号不再出现在型号表里，旧配置回退为「未指定」但保留地址。
+    const retired = model.normalizeDevice({
+        type: 'amp', name: 'LUX',
+        config: {brand: 'mercury', model: 'lux', host: '10.0.0.5'}
     }, {devices: []});
-    assert.equal(unsupported.ok, false);
-    assert.equal(unsupported.error, 'invalid-amp-model');
+    assert.equal(retired.ok, true);
+    assert.equal(retired.device.config.brand, undefined);
+    assert.equal(retired.device.config.model, undefined);
+    assert.equal(retired.device.config.host, '10.0.0.5');
 });
 
 /** 构造一条合法的 ACOM 遥测帧：固定 72 字节，末字节补足和校验。 */
@@ -2890,7 +2977,7 @@ test('RF-Kit RF2K-S：只读 /info 身份与版本', async () => {
     }
 });
 
-test('OM Power：2501A/3501A/4001A 走原生 TCP，2500A 保持禁选', () => {
+test('OM Power：2501A/3501A/4001A 走原生 TCP，2500A 已下线', () => {
     for (const id of ['2501a', '3501a', '4001a']) {
         const definition = ampModels.resolve('ompower', id);
         assert.ok(definition, `OM Power ${id} definition must exist`);
@@ -2913,15 +3000,13 @@ test('OM Power：2501A/3501A/4001A 走原生 TCP，2500A 保持禁选', () => {
         }
     }
 
-    // 2500A 没有 rev.4 协议证据：保留条目但禁选，协议也不派生。
-    const legacy = ampModels.resolve('ompower', '2500a');
-    assert.ok(legacy, '2500A entry must stay in the catalog');
-    assert.equal(legacy.supported, false);
-    assert.equal(ampModels.supported(legacy), false);
+    // 2500A 已从型号表删除；旧配置按「已下线」回退，不再派生协议。
+    assert.equal(ampModels.resolve('ompower', '2500a'), null);
+    assert.equal(ampModels.retired('ompower', '2500a'), true);
     assert.equal(ampModels.transportOf({brand: 'ompower', model: '2500a'}), 'mqtt');
     assert.equal(model.normalizeDevice({
         type: 'amp', name: '2500A', config: {brand: 'ompower', model: '2500a'}
-    }, {devices: []}).error, 'invalid-amp-model');
+    }, {devices: []}).device.config.brand, undefined);
 });
 
 function omFrame(bytes) {
@@ -3093,7 +3178,7 @@ test('OM Power：TCP 握手、轮询与五个动作下发', async () => {
     }
 });
 
-test('OM Power 命令入口：只接受五个动作，2500A 仍禁选', async () => {
+test('OM Power 命令入口：只接受五个动作，已下线的 2500A 拒绝', async () => {
     fakeTransports();
     const globalCtx = makeContext();
     const row = deviceRow({
@@ -3153,8 +3238,22 @@ test('功放型号描述表：品牌/型号解析与协议派生', () => {
     const guohe = catalog.brands.find(brand => brand.id === 'guohe');
     assert.ok(guohe, 'guohe brand must exist');
     assert.ok(catalog.brands.length >= 2, 'brand catalog covers community amplifier brands');
-    assert.ok(catalog.brands.some(brand => brand.models.some(item => item.supported === false)),
-        'community-only models must be recorded as unsupported');
+    // 型号表只保留可实际接入的型号，不再有禁选占位。
+    for (const brand of catalog.brands) {
+        for (const item of brand.models) {
+            assert.notEqual(item.supported, false, `${brand.id}/${item.id} must be usable`);
+        }
+    }
+    // 旧设备投影：品牌/型号被清空，并带一个只读提示标志。
+    const legacyDevice = storage.devices.toDevice(deviceRow({
+        id: 'amp-legacy', name: 'LA-1K', type: 'amp', bands: '',
+        config_json: JSON.stringify({brand: 'palstar', model: 'la-1k', host: '10.0.0.6', port: 4001})
+    }));
+    const pub = model.publicDevice(legacyDevice);
+    assert.equal(pub.amp_model_removed, true);
+    assert.equal(pub.config.brand, undefined);
+    assert.equal(pub.config.model, undefined);
+    assert.equal(pub.config.host, '10.0.0.6');
     const definition = ampModels.resolve('guohe', 'amp1000');
     assert.ok(definition, 'AMP1000 definition must exist');
     assert.equal(definition.protocol, 'mqtt');

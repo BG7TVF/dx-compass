@@ -222,6 +222,85 @@ export function createDevicesPage(ctx) {
         return catalog.generic || null;
     }
 
+    function rotatorCatalog() {
+        return (snapshot && snapshot.rotator_models) || {brands: [], generic: null};
+    }
+
+    function rotatorBrands() {
+        return rotatorCatalog().brands || [];
+    }
+
+    /** 解析旋转器型号；未选或「其他」时用通用定义（rotctld / GS-232 二选一）。 */
+    function rotatorDefinitionFor(config) {
+        const source = config || {};
+        const brandId = String(source.brand || '');
+        const modelId = String(source.model || '');
+        if (modelId && modelId !== 'other' && brandId !== 'other') {
+            const brands = rotatorBrands().filter(item => !brandId || item.id === brandId);
+            for (const brand of brands) {
+                const found = (brand.models || []).find(item => item.id === modelId);
+                if (found) return found;
+            }
+        }
+        return rotatorCatalog().generic || null;
+    }
+
+    function rotatorProtocols(definition) {
+        if (!definition) return ['rotctld'];
+        return definition.protocols || [definition.protocol || 'rotctld'];
+    }
+
+    function rotatorConfigFields(config) {
+        const merged = Object.assign({}, config || {});
+        const brandId = String(merged.brand || '');
+        const modelId = String(merged.model || '');
+        const brandOptions = [`<option value="">${esc(t('dev.config.brandNone'))}</option>`]
+            .concat(rotatorBrands().map(brand =>
+                `<option value="${esc(brand.id)}"${brandId === brand.id ? ' selected' : ''}>${esc(brand.name)}</option>`))
+            .concat([`<option value="other"${brandId === 'other' ? ' selected' : ''}>${esc(t('dev.config.brandOther'))}</option>`]);
+        const brand = rotatorBrands().find(item => item.id === brandId);
+        const models = brand ? (brand.models || []) : [];
+        const modelValue = modelId === 'other' || models.some(item => item.id === modelId) ? modelId : '';
+        const modelOptions = [`<option value="">${esc(t('dev.config.modelNone'))}</option>`]
+            .concat(models.map(model =>
+                `<option value="${esc(model.id)}"${modelValue === model.id ? ' selected' : ''}>${esc(model.name)}</option>`))
+            .concat([`<option value="other"${modelValue === 'other' ? ' selected' : ''}>${esc(t('dev.config.modelOther'))}</option>`]);
+        const definition = rotatorDefinitionFor(Object.assign({}, merged, {model: modelValue}));
+        const protocols = rotatorProtocols(definition);
+        const current = protocols.includes(String(merged.protocol || '')) ? String(merged.protocol) : protocols[0];
+        const protocolOptions = protocols.map(item =>
+            `<option value="${esc(item)}"${item === current ? ' selected' : ''}>${esc(item.toUpperCase())}</option>`).join('');
+        const fields = (definition && definition.fields) || [];
+        return `<div class="dev-config-fields" id="devConfigFields">
+            <label>${t('dev.config.brand')}<select name="cfg_rotator_brand">${brandOptions.join('')}</select></label>
+            <label>${t('dev.config.ampModel')}<select name="cfg_rotator_model">${modelOptions.join('')}</select></label>
+            ${protocols.length > 1
+                ? `<label>${t('dev.config.protocol')}<select name="cfg_rotator_protocol">${protocolOptions}</select></label>`
+                : `<p class="dev-note">${t('dev.config.resolvedProtocol', {protocol: current.toUpperCase()})}</p>`}
+            ${definition && definition.hint ? `<p class="dev-note">${esc(t(definition.hint))}</p>` : ''}
+            ${fields.map(field => ampFieldHtml(field, merged)).join('')}
+        </div>`;
+    }
+
+    /** 只重绘旋转器配置字段：切型号保留已填写的地址，协议回到该型号默认值。 */
+    function refreshRotatorConfigFields() {
+        const box = document.getElementById('devConfigFields');
+        if (!box) return;
+        const values = {};
+        for (const input of box.querySelectorAll('input[name^="cfg_"]')) {
+            values[input.name.slice(4)] = input.value;
+        }
+        const brandSelect = box.querySelector('select[name="cfg_rotator_brand"]');
+        const modelSelect = box.querySelector('select[name="cfg_rotator_model"]');
+        const protocolSelect = box.querySelector('select[name="cfg_rotator_protocol"]');
+        values.brand = brandSelect ? brandSelect.value : '';
+        values.model = modelSelect ? modelSelect.value : '';
+        if (protocolSelect) values.protocol = protocolSelect.value;
+        else delete values.protocol;
+        box.outerHTML = rotatorConfigFields(values);
+        formDirty = true;
+    }
+
     function ampStatusItems(config, cardOnly) {
         const definition = ampDefinitionFor(config);
         const items = (definition && definition.status) || [];
@@ -286,7 +365,7 @@ export function createDevicesPage(ctx) {
     }
 
     /** 型号决定字段集合；values 是当前表单里已填的内容（切换型号时原样带入）。 */
-    function ampConfigFields(config, values) {
+    function ampConfigFields(config, values, removed) {
         const merged = Object.assign({}, config || {}, values || {});
         const brandId = String(merged.brand || '');
         const modelId = String(merged.model || '');
@@ -299,11 +378,8 @@ export function createDevicesPage(ctx) {
         // 品牌换了以后，旧型号不再属于当前品牌，按「未指定」处理。
         const modelValue = modelId === 'other' || models.some(item => item.id === modelId) ? modelId : '';
         const modelOptions = [`<option value="">${esc(t('dev.config.modelNone'))}</option>`]
-            .concat(models.map(model => {
-                const unsupported = model.supported === false;
-                const suffix = unsupported ? ' · ' + t('dev.config.communityOnly') : '';
-                return `<option value="${esc(model.id)}"${modelValue === model.id ? ' selected' : ''}${unsupported ? ' disabled' : ''}>${esc(model.name + suffix)}</option>`;
-            }))
+            .concat(models.map(model =>
+                `<option value="${esc(model.id)}"${modelValue === model.id ? ' selected' : ''}>${esc(model.name)}</option>`))
             .concat([`<option value="other"${modelValue === 'other' ? ' selected' : ''}>${esc(t('dev.config.modelOther'))}</option>`]);
         const definition = ampDefinitionFor(Object.assign({}, merged, {model: modelValue}));
         const protocol = definition ? String(definition.protocol || 'mqtt') : 'mqtt';
@@ -311,6 +387,7 @@ export function createDevicesPage(ctx) {
         return `<div class="dev-config-fields" id="devConfigFields">
             <label>${t('dev.config.brand')}<select name="cfg_brand">${brandOptions.join('')}</select></label>
             <label>${t('dev.config.ampModel')}<select name="cfg_amp_model">${modelOptions.join('')}</select></label>
+            ${removed ? `<p class="dev-note">${esc(t('dev.config.ampModelRemoved'))}</p>` : ''}
             <p class="dev-note">${t('dev.config.resolvedProtocol', {protocol: protocol.toUpperCase()})}</p>
             ${definition && definition.hint ? `<p class="dev-note">${esc(t(definition.hint))}</p>` : ''}
             ${fields.map(field => ampFieldHtml(field, merged)).join('')}
@@ -1197,15 +1274,14 @@ export function createDevicesPage(ctx) {
                 <p class="dev-note dev-candidate-hint hidden" id="devCandidateHint"></p>`;
         }
         if (value.type === 'amp') {
-            return ampConfigFields(config);
+            return ampConfigFields(config, null, value.amp_model_removed);
         }
         if (value.type === 'swr') {
             return `<label>${t('dev.form.reportHost')}<input name="cfg_host" maxlength="100" value="${esc(config.host || '')}"></label>
                 <label>${t('dev.config.port')}<input name="cfg_port" type="number" min="1" max="65535" step="1" value="${esc(config.port || '')}"></label>`;
         }
         if (value.type === 'rotator') {
-            return `<label>${t('dev.config.host')}<input name="cfg_host" maxlength="100" value="${esc(config.host || '')}"></label>
-                <label>${t('dev.config.port')}<input name="cfg_port" type="number" min="1" max="65535" step="1" value="${esc(config.port || '')}"></label>`;
+            return rotatorConfigFields(config);
         }
         if (value.type === 'serial') {
             const baud = String(config.baud || 9600);
@@ -1675,10 +1751,21 @@ export function createDevicesPage(ctx) {
                 }
                 config[field.key] = value;
             }
-        } else if (type === 'swr' || type === 'rotator') {
+        } else if (type === 'swr') {
             config.host = String(data.get('cfg_host') || '');
             config.port = String(data.get('cfg_port') || '');
-            if (type === 'rotator') config.protocol = config.host ? 'rotctld' : '';
+        } else if (type === 'rotator') {
+            config.brand = String(data.get('cfg_rotator_brand') || '');
+            config.model = String(data.get('cfg_rotator_model') || '');
+            const definition = rotatorDefinitionFor(config);
+            const protocols = rotatorProtocols(definition);
+            const chosen = String(data.get('cfg_rotator_protocol') || '');
+            config.protocol = protocols.includes(chosen) ? chosen : protocols[0];
+            for (const field of (definition && definition.fields) || []) {
+                const raw = data.get('cfg_' + field.key);
+                if (raw === null) continue;
+                config[field.key] = String(raw);
+            }
         } else if (type === 'serial') {
             config.host = String(data.get('cfg_host') || '');
             config.port = String(data.get('cfg_port') || '');
@@ -2525,6 +2612,10 @@ export function createDevicesPage(ctx) {
             // 功放品牌/型号决定字段集合；切换时保留已填写的地址与凭据。
             if (event.target.matches('select[name="cfg_brand"], select[name="cfg_amp_model"]')) {
                 refreshAmpConfigFields();
+                return;
+            }
+            if (event.target.matches('select[name="cfg_rotator_brand"], select[name="cfg_rotator_model"], select[name="cfg_rotator_protocol"]')) {
+                refreshRotatorConfigFields();
                 return;
             }
             if (!event.target.matches('select[name="cfg_computer"], select[name="cfg_model"]')) return;

@@ -420,38 +420,9 @@
   不据此实现功率/驻波，避免把单个逆向项目当成稳定协议。
 - 无任何控制动作；`amp_set` 会被 `commands.js` 直接拒绝。
 
-## 14. 仍未接入的型号：证据与边界
+## 14. 功放接入：OM Power 2501A / 3501A / 4001A（rev.4 TCP）
 
-以下型号保留在下拉中但禁选，型号名后直接标注限制，避免被误认为“能读完整状态”。
-
-### 14.1 Palstar LA-1K
-
-- 公开资料：wo2x Node-RED flow；Kenwood / Icom 波段口 + RS-232。
-- 本质：功放只跟随激励器频率（波段/频率输入），没有公开的独立状态查询命令。
-- 明确拿不到：输出功率、驻波、温度、电压、故障码。
-- 结论：不实现轮询，避免把“频率跟随”包装成“遥测”。型号名标注为“仅 Kenwood 频率跟随”。
-
-### 14.2 OM Power 2500A
-
-- 公开资料：S53ZO flow，功放设为 Kenwood 模式；没有厂商命令表。
-- 专有 LAN 面板 `Adminotech/remoteom`（Apache-2.0，2013）只有单字节 ASCII 开关机/模式/
-  故障命令，没有功率、驻波、温度、电压、波段读数。
-- 目前唯一能读功率与驻波的公开实现是 `grmi64/OM-Power-Control`（MIT），但它面向
-  OM2501A / 3501A / 4001A 的 rev.4 协议（TCP 10001），不覆盖 2500A；没有证据表明
-  2500A 的选配 Remote Box 使用同一套新协议。
-- 结论：2500A 保留型号条目但标记为未支持（型号名“无协议依据，暂不支持”），不接遥测、
-  不猜字段。若将来实测抓包证明 Remote Box 走 10001 新协议，再单独评估。rev.4 的
-  已接入型号见 §15。
-
-### 14.3 其他
-
-- FlexRadio PowerGenius XL：只有社区 flow/HTTP JSON 线索，控制 API 未公开。
-- Mercury LUX：仅社区提及，无命令表。
-- 以上均保持 `supported: false`，不进入传输层。
-
-## 15. 功放接入：OM Power 2501A / 3501A / 4001A（rev.4 TCP）
-
-### 15.1 来源与许可
+### 14.1 来源与许可
 
 - 实现依据：`github.com/grmi64/OM-Power-Control`，MIT 许可。本系统移植的是它的
   `decoder.py`（帧/token 解析）、`session_protocol.py`（TCP 会话）与 `controls.py`
@@ -464,7 +435,7 @@
   属于测试策略，不是设备协议；`*`（退出自动调谐）与 `8`（停止自动调谐）本轮不开放，
   避免开放未验证的现场操作。
 
-### 15.2 连接方式
+### 14.2 连接方式
 
 - 传输：原生 TCP（Lantronix XPort），默认端口 **10001**，无 TLS、无登录。
 - 本系统中地址仍走 `control.resolveFor`：可直连 `host` / `port`，也可经串口服务器
@@ -474,7 +445,7 @@
 - 轮询：`#`（测量）每 1 秒、`?`（状态）每 2 秒、`F`（频率）每 5 秒；有命令待确认时
   暂停 `?` / `F`，只保留 `#`。10 秒没有任何数据判 `transport-timeout`。
 
-### 15.3 帧格式
+### 14.3 帧格式
 
 测量帧固定 10 字节，二进制：
 
@@ -510,12 +481,12 @@ ASCII token（`;` 结尾）：
 | `AUTO`、`AUTO:*`、`AUTOESC` | 自动调谐阶段 |
 | `CON` / `COFF` | 远程会话状态 |
 
-### 15.4 可读项（上卡）
+### 14.4 可读项（上卡）
 
 正向功率、反射功率、SWR、输入功率、板流、帘栅流、板压、帘栅压、栅压 A/B、灯丝 A/B、
 市电电压、温度、频率、天线名、工作状态（含预热/冷却）、发射标志。
 
-### 15.5 可控项
+### 14.5 可控项
 
 只开放仓库真实存在的五个动作，且都必须出现在型号描述表的 `controls` 中：
 
@@ -536,7 +507,7 @@ ASCII token（`;` 结尾）：
 - 与仓库的唯一差异：本实现不开放 `*` 退出自动调谐，因此 `AUTO:AUTOTUNE ABORTED`
   被视为流程结束，允许后续操作，避免把设备永久卡在“调谐中”。
 
-### 15.6 明确拿不到的东西
+### 14.6 明确拿不到的东西
 
 - 仓库没有波段读取/波段切换命令，本系统不提供波段项与波段动作。
 - 没有故障码、故障复位命令；不显示故障、不提供 `clear_fault`。
@@ -544,12 +515,106 @@ ASCII token（`;` 结尾）：
 - b5–b7 及 `LO` / `TU` / `OT` 原始位置值仓库未换算成工程单位，本系统不展示。
 - 不实现仓库的只读/调谐/电源循环测试包装，也不实现 `*` / `8`。
 
-### 15.7 2500A 为什么不支持
+### 14.7 未覆盖的 2500A
 
 - rev.4 依据的仓库只覆盖 2501A / 3501A / 4001A（固件 ≥3.16），没有 2500A 的抓包、
   命令表或分支。
 - 2500A 机背只有 REMOTE 模拟口与 TCVR CAT 输入；公开资料（S53ZO flow）只证明它能
   跟随 Kenwood 频率，`Adminotech/remoteom` 也只提供单字节开关机/模式/故障。
-- 因此 2500A 保留型号条目但 `supported: false`，地址与轮询都不进入 `om-tcp`；
-  等拿到真机抓包确认后再改型号表。
+- 因此 2500A 不进入型号表，也不进入 `om-tcp` 轮询；等拿到真机抓包确认后再评估。
+
+## 15. 旋转器接入：型号表、rotctld 与 GS-232
+
+### 15.1 调研来源与范围
+
+- 论坛：`groups.io/g/nodered-hamradio`。该组设置为“Archive is visible to anyone”，
+  公开帖子可直接阅读；Wiki 与 Files 仅成员可见，本次未登录、未订阅，因此**没有读过
+  任何 flow 文件内容**，只依据帖子正文与公开手册。
+- 官方/项目文档：
+  - Hamlib `rotctl` 手册（rotctld 默认 4533，命令 `p` / `P az el` / `S`）；
+  - Yaesu GS-232A/B 手册与 K3NG 的 GS-232 模拟命令表（`C2`、`Mxxx`、`S`）；
+  - Green Heron RT-21 手册（RS-232 4800 8N1，DCU-1 超集）；
+  - Node-RED 论坛中 rotctld、Yaesu、K3NG、RT-21、PST Rotator 的实践帖。
+- 取舍原则：能拿到官方文档的协议才实现。GS-232 与 rotctld 有公开命令表；
+  RT-21 的 DCU-1 细节、AlfaSpid 私有文本、Yaesu 二进制没有可核对的完整命令表，
+  本轮不实现，统一走 rotctld 代理。
+
+### 15.2 社区在控什么
+
+| 设备/控制器 | 社区常见做法 | 是否适合本系统 |
+|---|---|---|
+| Yaesu G-800DXA / G-1000DXA / G-2800DXA / G-450A / G-650A | GS-232A/B 文本，串口或串口服务器；DJ2VA 等 flow | 适合，GS-232 直连 + rotctld 都支持 |
+| K3NG Arduino | 模拟 GS-232，常经 ser2net 转 TCP（如 30001） | 适合，按 GS-232 处理 |
+| Green Heron RT-21 | USB/RS-232 4800 8N1，DCU-1 超集；多数经串口或 PST | 走 rotctld；不实现 DCU-1 |
+| M2 Orion 2800 | 多由 RT-21 或 rotctld 代管 | 走 rotctld |
+| Prosistel D / PRO | 论坛明确用 rotctld 4533 | 走 rotctld |
+| AlfaSpid RAK / RAS | 直连 Node-RED 的成熟案例很少 | 走 rotctld |
+| Hy-Gain HAM IV / T2X | 依赖外部控制器 | 走 rotctld |
+| ERC-4 | USB 串口控制器，社区有 ERC flow | 走 rotctld |
+| PST Rotator | Windows 程序，UDP 12000/12001/12005 | 不适合：依赖 Windows 与商业软件 |
+
+其他结论：
+
+- rotctld/Hamlib 是社区最可持续的抽象层，换旋转器通常不用改 Node-RED 流程；
+  有帖子专门讨论“转向反向前先停止”，并把命令闸门放在运动期间。
+- 论坛没有找到成熟的“Yaesu 二进制”Node-RED 用法，实际使用的都是 GS-232 文本；
+  本系统不凭猜测实现二进制。
+- Node-RED 侧普遍是串口/TCP 节点 + 定时轮询（GS-232 用 `C2` 约 1 秒一次），
+  Dashboard/SVG 地图显示；限位与刹车多由控制器自身完成，软件侧做目标校验和超时。
+
+### 15.3 型号表与协议
+
+实现文件：`lib/devices/rotator-models.js`。新增型号只加一条定义，传输层不按品牌写分支。
+
+| 品牌 | 型号 | 默认协议 | 可选协议 |
+|---|---|---|---|
+| Yaesu | G-800DXA / G-1000DXA / G-2800DXA / G-450A / G-650A | GS-232 | GS-232、rotctld |
+| K3NG | Arduino（GS-232 模拟） | GS-232 | GS-232、rotctld |
+| Green Heron | RT-21 | rotctld | rotctld |
+| M2 | Orion 2800 | rotctld | rotctld |
+| Prosistel | D / PRO | rotctld | rotctld |
+| AlfaSpid | RAK / RAS | rotctld | rotctld |
+| Hy-Gain | HAM IV / T2X | rotctld | rotctld |
+| ERC | ERC-4 | rotctld | rotctld |
+
+未选品牌/型号时保持通用定义：默认 rotctld，也可显式选 GS-232。地址继续走
+`control.resolveFor`：直连填 host/port，或经串口服务器 `serialN` 继承地址与串口参数。
+
+### 15.4 协议细节
+
+rotctld（默认 4533，文本行）：
+
+```
+P <az> <el>\n   设定目标
+p\n             回读 "az el"
+S\n             停止
+```
+
+GS-232（TCP 串口服务器或直连；端口必须显式填写）：
+
+```
+C2;             回读方位/仰角
+Mxxx;           转向到方位 xxx（三位，360 归 000）
+S;              停止
+```
+
+- 回读兼容 `+0aaa+0eee`（GS-232A）、`AZ=aaa EL=eee`（GS-232B）与 `aaa eee` 三种格式。
+- GS-232 回复不一定带换行：收到换行立即结束，否则以 120ms 静默作为一帧结束；
+  单条命令超时 2 秒，不重试。
+- 串口参数（常见 4800/9600、8N1）由串口服务器或控制器决定，本系统不下发、不修改。
+
+### 15.5 动作与保护
+
+- 只开放转向 `rotate` 与停止 `stop`，且必须出现在型号定义的 `controls` 中。
+- 目标方位校验：0–359.999，越界拒绝；360 归 0；GS-232 下发取整到整度。
+- 超时保护：沿用设备属性 `travel_timeout_sec`（默认 120 秒）判断“运动中/已到位”；
+  到位后不再显示运动，超时未到位则回到未知，不伪造位置。
+- 明确不做：限位标定、刹车/速度设置、控制器内部参数、任何校准类写入。
+
+### 15.6 明确拿不到的东西
+
+- RT-21 的 DCU-1 私有命令细节、AlfaSpid 私有文本、Yaesu 二进制：没有可核对的完整
+  命令表，本轮不实现。
+- 控制器内部软限位、刹车状态、转速档位：GS-232/rotctld 通用命令不暴露，不读取。
+- PST Rotator 的 UDP 接口依赖 Windows 程序，不作为服务端方案。
 
