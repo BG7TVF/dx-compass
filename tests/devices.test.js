@@ -252,8 +252,10 @@ test('unknown is the default device state and is never back-filled from old valu
     ];
 
     const empty = service.snapshot(globalCtx, rows, now);
-    assert.equal(empty.status['tower-1'].state, 'unknown');
+    // 塔有状态源（继电器/限位上报），只是还没上报 → 等待上报；旋转器未配地址 → 无状态源。
+    assert.equal(empty.status['tower-1'].state, 'awaiting');
     assert.equal(empty.towers['tower-1'].state, 'unknown');
+    assert.equal(empty.status['rotator-1'].state, 'no-source');
     assert.equal(empty.rotators['rotator-1'].state, 'unknown');
     assert.equal(empty.rotators['rotator-1'].physical_azimuth, null);
 
@@ -454,9 +456,9 @@ test('device reports validate type-specific fields and are stored server-side on
     assert.equal(ok.status, 200);
     assert.equal(globalCtx.get('deviceRuntime')['ant-20'].port, '3');
 
-    // 运行态只在服务端内存里；重启后为空 → unknown。
+    // 运行态只在服务端内存里；重启后为空，且天线本来就没有状态源。
     runtime.reset(globalCtx);
-    assert.equal(service.snapshot(globalCtx, rows, now).status['ant-20'].state, 'unknown');
+    assert.equal(service.snapshot(globalCtx, rows, now).status['ant-20'].state, 'no-source');
 });
 
 test('device writes keep only type-owned fields and never expose relay tokens', () => {
@@ -1282,9 +1284,53 @@ test('rotator polling turns a successful read into a real state report', async (
     assert.equal(failed.errors[0].error, 'transport-timeout');
     const offline = service.snapshot(globalCtx, rows, new Date(now.getTime() + 11000));
     assert.equal(offline.status['rotator-1'].state, 'offline');
+    // 失败原因要留在状态里，界面显示「通信中断（响应超时）」，而不是「状态未知」。
+    assert.equal(offline.status['rotator-1'].error, 'transport-timeout');
 
     rotatorLink.resetLinks();
     rotatorLink.setSocketFactory(null);
+});
+
+test('radio status comes from the bound seat instead of device reports', () => {
+    const now = new Date('2026-03-01T12:00:00.000Z');
+    const globalCtx = makeContext();
+    const rows = [deviceRow({
+        id: 'radio-1', name: 'Radio', type: 'radio', bands: '',
+        config_json: JSON.stringify({computer: 'BG7TVF-2', model: 'FT-817'})
+    })];
+    globalCtx.set('radioStates', {
+        'BG7TVF-2:1': {
+            seat: 'BG7TVF-2:1', ts: now.toISOString(), freqKhz: 14025, mode: 'CW',
+            isTransmitting: true, opCall: 'BG7TVF', radioNr: '1',
+            stationName: 'BG7TVF-2', radioName: 'FT-817'
+        }
+    });
+
+    const view = service.snapshot(globalCtx, rows, now);
+    assert.equal(view.devices[0].seat, 'BG7TVF-2:1');
+    const status = view.status['radio-1'];
+    assert.equal(status.state, 'online');
+    assert.equal(status.radio.freq_khz, 14025);
+    assert.equal(status.radio.mode, 'CW');
+    assert.equal(status.radio.band, '20m');
+    assert.equal(status.radio.is_transmitting, true);
+    assert.equal(status.radio.operator, 'BG7TVF');
+
+    // 60 秒无心跳 → 通信中断，但最后已知频率仍可展示。
+    const stale = service.snapshot(globalCtx, rows, new Date(now.getTime() + 61000));
+    assert.equal(stale.status['radio-1'].state, 'offline');
+    assert.equal(stale.status['radio-1'].radio.freq_khz, 14025);
+
+    // 没配席位 → 未绑定席位；切换器/天线这类无源部件 → 无状态源。
+    const unbound = [deviceRow({id: 'radio-2', name: 'Radio 2', type: 'radio', bands: '', config_json: '{}'})];
+    assert.equal(service.snapshot(globalCtx, unbound, now).status['radio-2'].state, 'unbound');
+    const passive = [
+        deviceRow({id: 'sw-1', name: 'Switch', type: 'switch', bands: '', config_json: '{}'}),
+        deviceRow({id: 'ant-1', name: '20m', type: 'antenna', bands: '20m'})
+    ];
+    const passiveView = service.snapshot(globalCtx, passive, now);
+    assert.equal(passiveView.status['sw-1'].state, 'no-source');
+    assert.equal(passiveView.status['ant-1'].state, 'no-source');
 });
 
 test('rotator motion state follows the target and the travel window', async () => {

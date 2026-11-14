@@ -159,6 +159,9 @@
 .dev-dot-online { background: var(--green); }
 .dev-dot-offline { background: var(--red); }
 .dev-dot-unknown { background: var(--yellow); }
+.dev-dot-unbound { background: var(--yellow); }
+.dev-dot-awaiting { background: var(--yellow); }
+.dev-dot-no-source { background: var(--text-dim); opacity: .5; }
 
 .dev-chip {
     display: inline-block;

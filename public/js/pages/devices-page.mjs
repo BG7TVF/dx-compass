@@ -50,7 +50,14 @@ const BAND_OPTIONS = ['160m', '80m', '60m', '40m', '30m', '20m', '17m', '15m', '
 const BAND_TYPES = ['amp', 'bpf', 'antenna', 'combiner'];
 const TRAVEL_TYPES = ['tower', 'rotator'];
 const RELAY_TYPES = ['switch', 'matrix', 'tower'];
-const STATUS_KEYS = {online: 'dev.status.online', offline: 'dev.status.offline', unknown: 'dev.status.unknown'};
+const STATUS_KEYS = {
+    online: 'dev.status.online',
+    offline: 'dev.status.offline',
+    unknown: 'dev.status.unknown',
+    'no-source': 'dev.status.noSource',
+    unbound: 'dev.status.unbound',
+    awaiting: 'dev.status.awaiting'
+};
 const TOWER_KEYS = {
     erected: 'dev.tower.erected',
     retracted: 'dev.tower.retracted',
@@ -100,8 +107,8 @@ const ERROR_KEYS = {
     'invalid-azimuth': 'dev.error.invalid-azimuth',
     'transport-error': 'dev.error.transport-error',
     'transport-timeout': 'dev.error.transport-timeout',
-    'transport-connect': 'dev.error.transport-error',
-    'transport-protocol': 'dev.error.transport-error',
+    'transport-connect': 'dev.error.transport-connect',
+    'transport-protocol': 'dev.error.transport-protocol',
     'transport-not-configured': 'dev.error.transport-not-configured',
     'tx-active': 'dev.error.tx-active',
     'invalid-config': 'dev.error.invalid-config',
@@ -168,6 +175,23 @@ export function createDevicesPage(ctx) {
     function errorText(code, params) {
         const key = ERROR_KEYS[code];
         return key ? t(key, params) : t('dev.error.generic');
+    }
+
+    /** 状态文案：通信中断时把原因一并说出来，不再只给一个「未知」。 */
+    function statusText(status) {
+        const value = status || {};
+        const label = t(STATUS_KEYS[value.state] || STATUS_KEYS.unknown);
+        return value.error ? t('dev.status.withError', {status: label, reason: errorText(value.error)}) : label;
+    }
+
+    function radioLiveText(status) {
+        const radio = status && status.radio;
+        if (!radio || !Number.isFinite(radio.freq_khz)) return '';
+        return t('dev.radio.live', {
+            freq: (radio.freq_khz / 1000).toFixed(3),
+            mode: radio.mode || '—',
+            tx: t(radio.is_transmitting ? 'dev.radio.txOn' : 'dev.radio.txOff')
+        });
     }
 
     function clock(iso) {
@@ -434,6 +458,10 @@ export function createDevicesPage(ctx) {
         const parts = [];
         if (device.type === 'radio' && device.seat) parts.push(t('dev.node.seat', {seat: device.seat}));
         if (device.type === 'radio' && !device.seat) parts.push(t('dev.radio.unbound'));
+        if (device.type === 'radio' && snapshot) {
+            const live = radioLiveText(snapshot.status[device.id]);
+            if (live) parts.push(live);
+        }
         if (device.bands && device.bands.length) parts.push(t('dev.bands', {bands: device.bands.join(' ')}));
         if (device.type === 'antenna' && snapshot) {
             const antenna = snapshot.ownership.antennas.find(item => item.id === device.id);
@@ -509,7 +537,7 @@ export function createDevicesPage(ctx) {
             <div class="dev-node-meta">${esc(nodeMeta(device))}</div>
             <div class="dev-node-foot">
                 <span class="dev-dot dev-dot-${status.state}"></span>
-                <span>${node.draft ? t('dev.draft.chip') : t(STATUS_KEYS[status.state] || STATUS_KEYS.unknown)}</span>
+                <span>${node.draft ? t('dev.draft.chip') : statusText(status)}</span>
                 ${node.draft ? '' : `<span class="dev-node-report">${esc(lastReportText(status.last_report))}</span>`}
                 ${node.draft ? '' : antennaChip(device)}
             </div>
@@ -1221,7 +1249,7 @@ export function createDevicesPage(ctx) {
         if (!box) return;
         const parts = [];
         const status = deviceStatus(device.id);
-        parts.push(t(STATUS_KEYS[status.state] || STATUS_KEYS.unknown));
+        parts.push(statusText(status));
         if (device.type === 'rotator') {
             const rotator = (snapshot.rotators && snapshot.rotators[device.id]) || {};
             parts.push(t('dev.rotator.physical', {deg: rotator.physical_azimuth === null || rotator.physical_azimuth === undefined ? '—' : rotator.physical_azimuth}));
