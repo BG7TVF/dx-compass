@@ -533,10 +533,26 @@ export function createDevicesPage(ctx) {
         return {x: 80 + (count % 4) * 250, y: 80 + Math.floor(count / 4) * 150};
     }
 
+    /**
+     * 默认名按类型分别递增：已保存设备与草稿一起参与计数，取同类型里最小的未占用序号，
+     * 这样连续加草稿不会重名，删掉中间某一台后再新建也不会和现存设备撞名。
+     */
     function defaultDraftName(type) {
         const label = typeLabel(type);
-        const used = realDevices().filter(device => device.type === type).length + 1;
-        return `${label} ${used}`;
+        const pattern = new RegExp('^' + label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*(\\d+)$');
+        const names = new Set();
+        const numbers = new Set();
+        for (const device of realDevices().concat(drafts.map(item => item.device))) {
+            if (!device || device.type !== type) continue;
+            const name = String(device.name || '').trim();
+            if (!name) continue;
+            names.add(name);
+            const match = name.match(pattern);
+            if (match) numbers.add(Number(match[1]));
+        }
+        let index = 1;
+        while (numbers.has(index) || names.has(`${label} ${index}`)) index += 1;
+        return `${label} ${index}`;
     }
 
     function createDraft(type, x, y) {
