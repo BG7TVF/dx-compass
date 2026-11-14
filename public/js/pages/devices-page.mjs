@@ -39,7 +39,7 @@ const MAX_ZOOM = 2.5;
 // 面板提供这十种可拖出的设备；前五种是射频链路组成部分，后五种是机械与射频路由支撑。
 const PALETTE_TYPES = ['radio', 'swr', 'bpf', 'amp', 'antenna', 'tower', 'rotator', 'switch', 'matrix', 'combiner', 'serial'];
 const TYPE_BADGE = {
-    radio: 'RX', swr: 'SW', bpf: 'BP', amp: 'PA', antenna: 'AN', tower: 'TW', rotator: 'RT',
+    radio: 'RIG', swr: 'SW', bpf: 'BP', amp: 'PA', antenna: 'AN', tower: 'TW', rotator: 'RT',
     switch: 'CX', matrix: 'MX', divider: 'DV', combiner: 'CB', serial: 'SS', other: 'OT'
 };
 // 控制口之间的连线表达“串口设备 → 串口服务器”的从属关系；与 RF 链路无关。

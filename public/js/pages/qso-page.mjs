@@ -29,7 +29,7 @@ export function createQsoPage(ctx) {
         view: 'spots', map: null, base: null, terminator: null, homeLayer: null,
         qsos: [], byId: new Map(), latestId: null, mySpots: new Map(),
         allTs: new Map(), all: new Map(), radio: null, score: null, lastQso: null,
-        radios: {}, station: {radio: null, radios: {}, score: null}
+        radios: {}, seats: [], station: {radio: null, radios: {}, seats: [], score: null}
     };
     let alertTimer = null;
     /* 「我的 SPOT」在 30 秒窗口内合并为一次告警。 */
@@ -438,12 +438,54 @@ export function createQsoPage(ctx) {
         renderDist($('#qBandDist'), bands, true);
     }
 
-    function radioNumbers(active) {
-        const numbers = Object.keys(state.radios).map(Number).filter(number => number > 0).sort((a, b) => a - b);
-        const current = active && active.radioNr ? active.radioNr : 0;
-        if (current && !numbers.includes(current)) numbers.push(current);
-        if (!numbers.length) numbers.push(1);
-        return numbers.sort((a, b) => a - b);
+    /* 与 lib/devices/ownership.js 的 SEAT_HEARTBEAT_TIMEOUT_MS 一致：60 秒无报文即离线。 */
+    const RADIO_HEARTBEAT_TIMEOUT_MS = 60000;
+
+    function normalizeRadio(source, seat) {
+        return {
+            seat: String(seat || ''),
+            radioNr: source && source.radioNr !== undefined ? String(source.radioNr || '') : '',
+            freqKhz: Number(source && source.freqKhz),
+            mode: source && source.mode ? String(source.mode) : '',
+            isTransmitting: !!(source && source.isTransmitting === true),
+            ts: (source && source.ts) || null,
+            stationName: (source && source.stationName) || '',
+            computerName: (source && source.computerName) || '',
+            radioName: (source && source.radioName) || '',
+            opCall: (source && (source.opCall || source.operator)) || ''
+        };
+    }
+
+    /**
+     * 本台状态栏的数据源：服务端 /api/station/state 的 seats（N1MM RadioInfo
+     * 按席位/RadioNr 区分）+ 实时 WS 报文，按 RadioNr 稳定排序，报文到达顺序不影响。
+     */
+    function liveRadios() {
+        const bySeat = new Map();
+        const merge = radio => {
+            if (!radio.seat) return;
+            const previous = bySeat.get(radio.seat) || {};
+            bySeat.set(radio.seat, Object.assign({}, previous, radio));
+        };
+        for (const seat of Array.isArray(state.seats) ? state.seats : []) {
+            if (seat && seat.seat) merge(normalizeRadio(seat, seat.seat));
+        }
+        for (const [key, message] of Object.entries(state.radios || {})) {
+            if (!message || typeof message !== 'object') continue;
+            merge(normalizeRadio(message, message.seat || key));
+        }
+        return [...bySeat.values()].sort((a, b) => {
+            const an = Number(a.radioNr), bn = Number(b.radioNr);
+            const av = Number.isFinite(an) ? an : Number.MAX_SAFE_INTEGER;
+            const bv = Number.isFinite(bn) ? bn : Number.MAX_SAFE_INTEGER;
+            if (av !== bv) return av - bv;
+            return String(a.seat).localeCompare(String(b.seat));
+        });
+    }
+
+    function radioOnline(radio) {
+        const ts = radio && radio.ts ? Date.parse(radio.ts) : NaN;
+        return Number.isFinite(ts) && Date.now() - ts <= RADIO_HEARTBEAT_TIMEOUT_MS;
     }
 
     function updateQsoAge() {
@@ -469,31 +511,57 @@ export function createQsoPage(ctx) {
         $('#qtOp').textContent = qso && qso.operator || radio && radio.opCall || '—';
         let text = '';
         if (ctx.settings.category !== 'SO1R') {
-            text = radioNumbers(radio).map(number => {
-                const item = state.radios[number];
-                return item && typeof item.freqKhz === 'number' ? `R${number} ${item.freqKhz.toFixed(2)}` : '';
-            }).filter(Boolean).join(' / ');
+            text = liveRadios()
+                .filter(item => Number.isFinite(item.freqKhz))
+                .map(item => `R${item.radioNr || '?'} ${item.freqKhz.toFixed(2)}`)
+                .join(' / ');
             if (text) text = `${ctx.settings.category} · ${text}`;
         }
         $('#qtRadios').textContent = text;
         updateQsoAge();
     }
 
-    function renderQsoHero(active) {
-        const multi = ctx.settings.category !== 'SO1R';
-        $('#qsoHero').innerHTML = radioNumbers(active).map(number => {
-            const radio = state.radios[number] ||
-                (active && number === (active.radioNr || 0) ? active : null) || {};
-            const frequency = typeof radio.freqKhz === 'number' && Number.isFinite(radio.freqKhz)
-                ? radio.freqKhz.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '--.--';
-            const subtitle = [radio.opCall, radio.radioName].filter(Boolean).join(' · ');
-            return `<div class="qso-radio-card"><div class="qso-freq-row">${multi ? `<span class="qr-badge">R${number}</span>` : ''}<span class="qso-freq">${frequency}</span><span class="qso-unit">kHz</span><span class="st-mode">${escapeHtml(radio.mode || '---')}</span><span class="st-tx${radio.isTransmitting ? '' : ' hidden'}">${escapeHtml(ctx.t('stTx'))}</span></div><div class="qso-opcall">${escapeHtml(subtitle)}</div></div>`;
+    function renderQsoHero() {
+        const radios = liveRadios();
+        if (!radios.length) {
+            $('#qsoHero').innerHTML = '<div class="qso-radio-card"><div class="qso-freq-row">' +
+                '<span class="qso-freq">--.--</span><span class="qso-unit">kHz</span>' +
+                '<span class="st-mode">---</span></div><div class="qso-opcall"></div></div>';
+            return;
+        }
+        $('#qsoHero').innerHTML = radios.map(radio => {
+            const online = radioOnline(radio);
+            const frequency = Number.isFinite(radio.freqKhz)
+                ? radio.freqKhz.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})
+                : '--.--';
+            // 能区分是哪部电台：RadioNr 徽标 + 席位/计算机名 + 操作员/型号。
+            const identity = [
+                radio.stationName || radio.computerName || radio.seat,
+                radio.opCall,
+                radio.radioName
+            ].filter(Boolean).join(' · ');
+            const classes = ['qso-radio-card'];
+            if (radio.isTransmitting) classes.push('is-tx');
+            if (!online) classes.push('is-offline');
+            return '<div class="' + classes.join(' ') + '">' +
+                '<div class="qso-freq-row">' +
+                '<span class="qr-badge">R' + escapeHtml(radio.radioNr || '?') + '</span>' +
+                '<span class="qso-freq">' + frequency + '</span>' +
+                '<span class="qso-unit">kHz</span>' +
+                '<span class="st-mode">' + escapeHtml(radio.mode || '---') + '</span>' +
+                (radio.isTransmitting
+                    ? '<span class="st-tx">' + escapeHtml(ctx.t('stTx')) + '</span>' : '') +
+                '</div>' +
+                '<div class="qso-opcall">' + escapeHtml(identity) + '</div>' +
+                (online ? '' : '<div class="qso-radio-offline">' +
+                    escapeHtml(ctx.t('dev.status.offline')) + '</div>') +
+                '</div>';
         }).join('');
     }
 
     function renderQsoPanel() {
         renderQsoTopbar();
-        renderQsoHero(state.radio);
+        renderQsoHero();
         const score = state.score, qso = state.lastQso;
         if (score) {
             $('#qQsos').textContent = score.qsos || 0;
@@ -519,6 +587,16 @@ export function createQsoPage(ctx) {
         if (message.type === 'radio') {
             state.radio = state.station.radio;
             state.radios = state.station.radios;
+            // 实时报文同样写进 seats，状态栏不依赖报文到达顺序。
+            const key = String(message.seat || message.radioNr || '');
+            if (key) {
+                const list = (Array.isArray(state.seats) ? state.seats : []).slice();
+                const index = list.findIndex(item => item && String(item.seat) === key);
+                const entry = normalizeRadio(message, key);
+                if (index >= 0) list[index] = Object.assign({}, list[index], entry);
+                else list.push(entry);
+                state.seats = list;
+            }
         }
         renderQsoPanel();
     }
@@ -527,6 +605,7 @@ export function createQsoPage(ctx) {
         try {
             const station = await getStationState();
             if (station && station.radios) state.radios = station.radios;
+            if (station && Array.isArray(station.seats)) state.seats = station.seats;
             if (station && station.radio) state.radio = station.radio;
             if (station && station.score) state.score = station.score;
             state.station = station || state.station;

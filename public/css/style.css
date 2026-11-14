@@ -1394,6 +1394,9 @@ body.qso-mode .status-group .sep { display: none; }
     border: 1px solid var(--border);
     border-radius: var(--r-md);
     padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
 }
 .qso-freq-row { display: flex; align-items: baseline; gap: 8px; }
 .qso-freq {
@@ -1412,11 +1415,24 @@ body.qso-mode .status-group .sep { display: none; }
     letter-spacing: .5px;
     min-height: 15px;
 }
-/* SO2R / MS / MM: one stacked card per radio announced by N1MM+ */
-.qso-radio-card + .qso-radio-card {
-    margin-top: 10px;
-    padding-top: 10px;
-    border-top: 1px dashed var(--border);
+/* SO2R / MS / MM: one independent card per radio announced by N1MM+ */
+.qso-radio-card {
+    padding: 6px 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    background: color-mix(in srgb, var(--well) 55%, transparent);
+    min-width: 0;
+}
+.qso-radio-card.is-tx {
+    border-color: color-mix(in srgb, var(--red) 55%, transparent);
+    background: color-mix(in srgb, var(--red) 9%, transparent);
+}
+.qso-radio-card.is-offline .qso-freq { opacity: .45; }
+.qso-radio-offline {
+    margin-top: 4px;
+    color: var(--red);
+    font-size: 11px;
+    font-weight: 700;
 }
 .qr-badge {
     background: color-mix(in srgb, var(--accent) 12%, transparent);
