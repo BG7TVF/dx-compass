@@ -443,7 +443,15 @@
     white-space: nowrap;
 }
 
+.dev-canvas-area {
+    position: relative;
+    display: flex;
+    min-width: 0;
+    min-height: 0;
+}
+
 .dev-canvas-wrap {
+    flex: 1;
     min-width: 0;
     min-height: 0;
     overflow: auto;
@@ -452,16 +460,66 @@
     background: var(--bg);
 }
 
-.dev-canvas {
+.dev-canvas-stage {
     position: relative;
     width: 1600px;
     height: 1000px;
+}
+
+.dev-canvas {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 1600px;
+    height: 1000px;
+    transform-origin: 0 0;
     background-image:
         linear-gradient(var(--row-border) 1px, transparent 1px),
         linear-gradient(90deg, var(--row-border) 1px, transparent 1px);
     background-size: 40px 40px;
     background-position: -1px -1px;
 }
+
+.dev-zoom-bar {
+    position: absolute;
+    right: 10px;
+    top: 10px;
+    z-index: 6;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 3px 5px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    background: color-mix(in srgb, var(--panel) 88%, transparent);
+    backdrop-filter: blur(4px);
+}
+
+.dev-zoom-btn {
+    min-width: 24px;
+    height: 24px;
+    padding: 0 6px;
+    border: 1px solid transparent;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--text);
+    font-size: 13px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.dev-zoom-btn:hover { border-color: var(--border); background: var(--row-hover, rgba(255, 255, 255, .06)); }
+.dev-zoom-btn:active { background: var(--accent-weak, rgba(255, 255, 255, .12)); }
+.dev-zoom-text { font-size: 11px; letter-spacing: .02em; }
+.dev-zoom-value {
+    min-width: 44px;
+    text-align: center;
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    color: var(--muted);
+}
+.dev-zoom-sep { width: 1px; height: 16px; margin: 0 3px; background: var(--border); }
+.dev-canvas-wrap.panning { cursor: grabbing; user-select: none; }
 
 .dev-wires {
     position: absolute;

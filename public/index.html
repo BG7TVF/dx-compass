@@ -225,13 +225,25 @@
                     <h3 id="devTxPaletteTitle"></h3>
                     <div id="devTxPalette" class="dev-palette-tx"></div>
                 </aside>
-                <section class="dev-canvas-wrap">
-                    <div class="dev-canvas" id="devCanvas">
-                        <svg class="dev-wires" id="devWires"></svg>
-                        <div class="dev-nodes" id="devNodes"></div>
-                        <p class="dev-canvas-empty" id="devCanvasEmpty"></p>
+                <div class="dev-canvas-area">
+                    <section class="dev-canvas-wrap" id="devCanvasWrap">
+                        <div class="dev-canvas-stage" id="devCanvasStage">
+                            <div class="dev-canvas" id="devCanvas">
+                                <svg class="dev-wires" id="devWires"></svg>
+                                <div class="dev-nodes" id="devNodes"></div>
+                                <p class="dev-canvas-empty" id="devCanvasEmpty"></p>
+                            </div>
+                        </div>
+                    </section>
+                    <div class="dev-zoom-bar" id="devZoomBar">
+                        <button class="dev-zoom-btn" id="devZoomOut" type="button" aria-label="Zoom out">−</button>
+                        <span class="dev-zoom-value" id="devZoomValue">100%</span>
+                        <button class="dev-zoom-btn" id="devZoomIn" type="button" aria-label="Zoom in">+</button>
+                        <span class="dev-zoom-sep" aria-hidden="true"></span>
+                        <button class="dev-zoom-btn dev-zoom-text" id="devZoomFit" type="button">Fit</button>
+                        <button class="dev-zoom-btn dev-zoom-text" id="devZoomReset" type="button">1:1</button>
                     </div>
-                </section>
+                </div>
                 <aside class="dev-inspector">
                     <div class="dev-inspector-head">
                         <h3 id="devInspectorTitle"></h3>

@@ -33,6 +33,8 @@ const NODE_W = 210;
 const NODE_H = 84;
 const CANVAS_MIN_W = 1600;
 const CANVAS_MIN_H = 1000;
+const MIN_ZOOM = 0.25;
+const MAX_ZOOM = 2.5;
 // 面板提供这十种可拖出的设备；前五种是射频链路组成部分，后五种是机械与射频路由支撑。
 const PALETTE_TYPES = ['radio', 'swr', 'bpf', 'amp', 'antenna', 'tower', 'rotator', 'switch', 'matrix', 'combiner', 'serial'];
 const TYPE_BADGE = {
@@ -138,6 +140,10 @@ export function createDevicesPage(ctx) {
     let rfWiring = null;
     let ctlWiring = null;
     let localLayout = null;
+    // 画布缩放：transform-origin 在左上角，所有指针坐标统一除以 zoom 回到画布坐标系。
+    let zoom = 1;
+    let panning = null;
+    let spaceHeld = false;
     // 草稿阶段的端口与连线：只活在页面内存里，保存全部时随设备一起落库。
     let draftPorts = {rf: {}, ctl: {}};
     let draftRfLinks = [];
@@ -232,6 +238,97 @@ export function createDevicesPage(ctx) {
         if (draft) return draft.layout;
         const device = deviceById(id);
         return device ? positionOf(device) : {x: 0, y: 0};
+    }
+
+    /* ---- 画布缩放与平移 ------------------------------------------------ */
+
+    /**
+     * 以某个客户端坐标为锚点缩放：先把锚点换算成画布坐标，缩放后再反推滚动位置，
+     * 这样光标下的那一点在缩放前后保持不动。
+     */
+    function applyZoom(next, anchor) {
+        const wrap = $('#devCanvasWrap');
+        const canvas = $('#devCanvas');
+        const stage = $('#devCanvasStage');
+        if (!wrap || !canvas || !stage) return;
+        const clamped = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, next));
+        const rect = wrap.getBoundingClientRect();
+        if (!rect.width || !rect.height) return;
+        const point = anchor || {x: rect.left + rect.width / 2, y: rect.top + rect.height / 2};
+        const localX = point.x - rect.left;
+        const localY = point.y - rect.top;
+        const contentX = (wrap.scrollLeft + localX) / zoom;
+        const contentY = (wrap.scrollTop + localY) / zoom;
+        zoom = clamped;
+        canvas.style.transform = `scale(${zoom})`;
+        stage.style.width = `${canvas.offsetWidth * zoom}px`;
+        stage.style.height = `${canvas.offsetHeight * zoom}px`;
+        wrap.scrollLeft = contentX * zoom - localX;
+        wrap.scrollTop = contentY * zoom - localY;
+        const label = $('#devZoomValue');
+        if (label) label.textContent = `${Math.round(zoom * 100)}%`;
+    }
+
+    function zoomBy(factor, anchor) {
+        applyZoom(zoom * factor, anchor);
+    }
+
+    /** 适应全部：把所有卡片（含草稿）框进视口，最大回到 150%，避免单台设备被放得过大。 */
+    function fitAll() {
+        const wrap = $('#devCanvasWrap');
+        if (!wrap) return;
+        const nodes = canvasNodes();
+        if (!nodes.length) {
+            applyZoom(1);
+            wrap.scrollLeft = 0;
+            wrap.scrollTop = 0;
+            return;
+        }
+        const pad = 80;
+        const minX = Math.min(...nodes.map(node => node.layout.x));
+        const minY = Math.min(...nodes.map(node => node.layout.y));
+        const maxX = Math.max(...nodes.map(node => node.layout.x + NODE_W));
+        const maxY = Math.max(...nodes.map(node => node.layout.y + NODE_H));
+        const width = Math.max(1, maxX - minX) + pad * 2;
+        const height = Math.max(1, maxY - minY) + pad * 2;
+        const rect = wrap.getBoundingClientRect();
+        const next = Math.min(1.5, rect.width / width, rect.height / height);
+        applyZoom(Math.max(MIN_ZOOM, next));
+        wrap.scrollLeft = (minX - pad) * zoom;
+        wrap.scrollTop = (minY - pad) * zoom;
+    }
+
+    function resetZoom() {
+        applyZoom(1);
+    }
+
+    function beginPan(event) {
+        const wrap = $('#devCanvasWrap');
+        if (!wrap) return;
+        panning = {
+            pointerId: event.pointerId,
+            x: event.clientX,
+            y: event.clientY,
+            left: wrap.scrollLeft,
+            top: wrap.scrollTop
+        };
+        wrap.classList.add('panning');
+        try { wrap.setPointerCapture(event.pointerId); } catch (error) { /* 捕获失败不影响滚动逻辑 */ }
+        event.preventDefault();
+    }
+
+    function movePan(event) {
+        if (!panning) return;
+        const wrap = $('#devCanvasWrap');
+        if (!wrap) return;
+        wrap.scrollLeft = panning.left - (event.clientX - panning.x);
+        wrap.scrollTop = panning.top - (event.clientY - panning.y);
+    }
+
+    function endPan() {
+        if (!panning) return;
+        panning = null;
+        $('#devCanvasWrap')?.classList.remove('panning');
     }
 
     function controlLinks() {
@@ -1519,8 +1616,8 @@ export function createDevicesPage(ctx) {
 
     function moveDrag(event) {
         if (!dragging) return;
-        const dx = event.clientX - dragging.startX;
-        const dy = event.clientY - dragging.startY;
+        const dx = (event.clientX - dragging.startX) / zoom;
+        const dy = (event.clientY - dragging.startY) / zoom;
         if (!dragging.moved && Math.abs(dx) + Math.abs(dy) < 4) return;
         dragging.moved = true;
         dragging.x = Math.max(0, Math.round(dragging.originX + dx));
@@ -1569,8 +1666,8 @@ export function createDevicesPage(ctx) {
             fromKey: key,
             x1: layoutPos.x + NODE_W,
             y1: layoutPos.y + NODE_H / 2,
-            x2: event.clientX - rect.left,
-            y2: event.clientY - rect.top
+            x2: (event.clientX - rect.left) / zoom,
+            y2: (event.clientY - rect.top) / zoom
         };
         event.preventDefault();
         renderWires(canvasNodes());
@@ -1587,8 +1684,8 @@ export function createDevicesPage(ctx) {
             fromPort: port,
             x1: point.x,
             y1: point.y,
-            x2: event.clientX - rect.left,
-            y2: event.clientY - rect.top
+            x2: (event.clientX - rect.left) / zoom,
+            y2: (event.clientY - rect.top) / zoom
         };
         event.preventDefault();
         event.stopPropagation();
@@ -1650,8 +1747,8 @@ export function createDevicesPage(ctx) {
             dir: point.dir,
             x1: point.x,
             y1: point.y,
-            x2: event.clientX - rect.left,
-            y2: event.clientY - rect.top
+            x2: (event.clientX - rect.left) / zoom,
+            y2: (event.clientY - rect.top) / zoom
         };
         event.preventDefault();
         event.stopPropagation();
@@ -1662,14 +1759,14 @@ export function createDevicesPage(ctx) {
         if (!wiring && !rfWiring && !ctlWiring) return;
         const rect = $('#devCanvas').getBoundingClientRect();
         if (rfWiring) {
-            rfWiring.x2 = event.clientX - rect.left;
-            rfWiring.y2 = event.clientY - rect.top;
+            rfWiring.x2 = (event.clientX - rect.left) / zoom;
+            rfWiring.y2 = (event.clientY - rect.top) / zoom;
         } else if (ctlWiring) {
-            ctlWiring.x2 = event.clientX - rect.left;
-            ctlWiring.y2 = event.clientY - rect.top;
+            ctlWiring.x2 = (event.clientX - rect.left) / zoom;
+            ctlWiring.y2 = (event.clientY - rect.top) / zoom;
         } else if (wiring) {
-            wiring.x2 = event.clientX - rect.left;
-            wiring.y2 = event.clientY - rect.top;
+            wiring.x2 = (event.clientX - rect.left) / zoom;
+            wiring.y2 = (event.clientY - rect.top) / zoom;
         }
         renderWires(canvasNodes());
     }
@@ -1727,7 +1824,7 @@ export function createDevicesPage(ctx) {
 
     function canvasPoint(event) {
         const rect = $('#devCanvas').getBoundingClientRect();
-        return {x: event.clientX - rect.left, y: event.clientY - rect.top};
+        return {x: (event.clientX - rect.left) / zoom, y: (event.clientY - rect.top) / zoom};
     }
 
     function startMarquee(event) {
@@ -1802,6 +1899,12 @@ export function createDevicesPage(ctx) {
         $('#devCanvasEmpty').textContent = t('dev.canvas.empty');
         $('#devInspectorTitle').textContent = t('dev.inspector.title');
         $('#devMonitorTitle').textContent = t('dev.monitor.title');
+        $('#devZoomIn').title = t('dev.zoom.in');
+        $('#devZoomOut').title = t('dev.zoom.out');
+        $('#devZoomFit').textContent = t('dev.zoom.fit');
+        $('#devZoomFit').title = t('dev.zoom.fit');
+        $('#devZoomReset').title = t('dev.zoom.reset');
+        $('#devZoomValue').title = t('dev.zoom.level');
     }
 
     function init() {
@@ -1850,17 +1953,66 @@ export function createDevicesPage(ctx) {
             const type = event.dataTransfer.getData('text/plain');
             if (!PALETTE_TYPES.includes(type)) return;
             const rect = canvas.getBoundingClientRect();
-            createDraft(type, event.clientX - rect.left - NODE_W / 2, event.clientY - rect.top - NODE_H / 2);
+            createDraft(type,
+                (event.clientX - rect.left) / zoom - NODE_W / 2,
+                (event.clientY - rect.top) / zoom - NODE_H / 2);
         });
         canvas.addEventListener('pointerdown', event => {
             if (event.button !== undefined && event.button !== 0) return;
+            if (spaceHeld) return;
             const target = event.target;
             if (target.closest('[data-node-key]') || target.closest('[data-wire-child]') ||
                 target.closest('[data-rf-link]')) return;
             startMarquee(event);
         });
 
+        const wrap = $('#devCanvasWrap');
+        wrap.addEventListener('wheel', event => {
+            event.preventDefault();
+            const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? 400 : 1;
+            zoomBy(Math.exp(-event.deltaY * unit * 0.0015), {x: event.clientX, y: event.clientY});
+        }, {passive: false});
+
+        // 平移：中键拖动，或按住空格后左键拖动；空出左键给框选。
+        wrap.addEventListener('pointerdown', event => {
+            if (event.button !== 1 && !(event.button === 0 && spaceHeld)) return;
+            beginPan(event);
+            event.stopPropagation();
+        });
+        wrap.addEventListener('pointermove', event => {
+            if (!panning || event.pointerId !== panning.pointerId) return;
+            movePan(event);
+        });
+        wrap.addEventListener('pointerup', event => {
+            if (!panning || event.pointerId !== panning.pointerId) return;
+            endPan();
+        });
+        wrap.addEventListener('pointercancel', endPan);
+        wrap.addEventListener('mousedown', event => {
+            if (event.button === 1) event.preventDefault();
+        });
+
+        window.addEventListener('keydown', event => {
+            if (event.code !== 'Space' || event.repeat) return;
+            const element = event.target;
+            const typing = element && element.closest &&
+                element.closest('input, textarea, select, button, a, [role="button"], [contenteditable="true"]');
+            if (typing || $('#devView').classList.contains('hidden')) return;
+            spaceHeld = true;
+            event.preventDefault();
+        });
+        window.addEventListener('keyup', event => {
+            if (event.code === 'Space') spaceHeld = false;
+        });
+        window.addEventListener('blur', () => { spaceHeld = false; });
+
+        $('#devZoomIn')?.addEventListener('click', () => zoomBy(1.2));
+        $('#devZoomOut')?.addEventListener('click', () => zoomBy(1 / 1.2));
+        $('#devZoomFit')?.addEventListener('click', fitAll);
+        $('#devZoomReset')?.addEventListener('click', resetZoom);
+
         $('#devNodes').addEventListener('pointerdown', event => {
+            if (spaceHeld) return;
             const ctlPort = event.target.closest('[data-ctl-device]');
             if (ctlPort) {
                 beginCtlWire(ctlPort, event);
