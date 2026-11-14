@@ -293,3 +293,158 @@
 - 仓库没有串口开机命令，因此不提供 `power_on`；也不提供清故障动作。
 - 校准、偏置、保护阈值、工程参数一律不实现，动作只经 `commands.js` 白名单下发。
 
+## 11. 功放接入：Elecraft KPA1500（只读）
+
+### 11.1 依据
+
+- 官方文档：Elecraft《KPA1500 Programming Reference》rev 1.47（`E740328`），
+  路径 `ftp.elecraft.com/KPA1500/Manuals Downloads/archive/`。
+- 社区实现：wo2x Node-RED flow 通过 TCP 轮询同一组 ASCII 命令；本实现以官方命令格式为准。
+
+### 11.2 连接方式
+
+- USB “Host PC” 虚拟串口：4800 / 9600 / 19200 / 38400 / 57600 / 115200 / 230400，
+  8 数据位、1 停止位、无校验、无流控；命令之间要等响应，不能连续灌命令。
+- 原生 TCP：默认端口 1500，可用 `^CP` 改；命令集与串口完全相同。
+- 在本系统中地址仍统一走 `control.resolveFor`：可直连 `host` / `port`，也可经串口服务器
+  `serialN` 继承地址（此时端口字段不参与）。
+
+### 11.3 可读项（本轮轮询）
+
+| 命令 | 含义 | 解析 |
+|---|---|---|
+| `^OS;` | Operate / Standby | `^OSx;`，1 = Operate，0 = Standby |
+| `^BN;` | 当前波段 | `^BNbb;`，K3 波段号 00=160m … 10=6m |
+| `^WS;` | 正向功率与 SWR | `^WSwwww swr;`，wwww 为瓦，swr 以十分之一为单位 |
+| `^TM;` | 散热器温度 | `^TMxxx;`，摄氏度 |
+| `^VI;` | PA 电压与电流 | `^VIvvv iii;`，电压十分之一伏，电流**整安**（与 KPA500 不同） |
+| `^FS;` | 风扇档位 | `^FSn;`，0–5 |
+| `^FL;` | 当前故障码 | `^FLhh;`，两位十六进制，00 无故障 |
+| `^RVM;` | 固件版本 | `^RVMnn.nn;` |
+
+`^VI` 的电流单位在 KPA500 与 KPA1500 之间不一致：KPA500 是十分之一安，KPA1500 是整安。
+解析器按型号描述表的 `parser.current_divisor` 处理，不靠猜。
+
+### 11.4 可控项与明确拿不到的东西
+
+- 本轮**只读**：动作表为空，`amp_set` 会被 `commands.js` 直接拒绝。等真机状态稳定后再开
+  开关机、Operate/Standby、清故障。
+- 明确不实现：ATU 调谐/存储、波段切换、天线选择、功率校准、保护阈值、`^PJ`/`^AL`/`^STA`
+  等工程参数。
+- 未解析：`^ON` 的电源主开关状态（官方只写了 GET/SET 形式，响应格式未明确），因此卡片上
+  不显示“电源开/关”，只用 `^OS` 的 Operate/Standby 表达工作模式。
+
+## 12. 功放接入：SPE Expert 1.3K-FA / 1.5K-FA / 2K-FA（只读）
+
+### 12.1 依据
+
+- 官方文档：SPE《Application Programmer's Guide》Rev. 1.1（2015-10-15），覆盖
+  Expert 1.3K-FA、1.5K-FA、2K-FA；下载地址 `spetlc.com/images/download/SPE_Application_Programmers_Guide.pdf`。
+- 交叉验证：公开 Python 实现 `github.com/albertM-hub/SPE-monitor`（最后更新 2026-05-22，
+  仓库未声明许可证）。本实现只按官方文档的帧格式与字段表编写，未复制该仓库代码。
+
+### 12.2 连接方式
+
+- USB 或 RS-232，异步串口：8 数据位、1 停止位、无校验；最高 115200，功放会自动适配更低速率。
+- USB 与 RS-232 两个口不能同时使用；同一时间只能有一个客户端（KTerm 要关闭）。
+- 本系统中地址仍走 `control.resolveFor`：可直接填 `host` / `port`，也可经串口服务器
+  `serialN` 继承地址。
+
+### 12.3 帧格式
+
+- 主机 → 功放：`55 55 55 | CNT | DATA... | CHK`；单字节命令时 `CNT=1`、`CHK` 等于命令本身。
+- 功放 → 主机：`AA AA AA | CNT | DATA... | CHK0 CHK1 | CR LF`；
+  `CHK` 为数据字节和，`CHK0` 取低 8 位、`CHK1` 取高 8 位。
+- 状态查询命令 `0x90`，响应固定 67 字节 ASCII CSV、19 个字段。
+
+### 12.4 19 字段与可读项
+
+| # | 字段 | 说明 |
+|---|---|---|
+| 0 | ID | 2K-FA 为 `20K`，1.3K-FA 为 `13K`；官方表未列 1.5K 的 ID，故本实现不校验 ID |
+| 1 | S / O | Standby / Operate |
+| 2 | R / T | RX / TX |
+| 3 | A / B | 记忆库（2K 固定 `x`） |
+| 4 | 1 / 2 | 输入端口 |
+| 5 | 00–11 | 波段，00=160m … 10=6m、11=4m |
+| 6 | TX 天线 + ATU | 第二个字符 t/b/a 表示可调/旁路/启用 |
+| 7 | RX 天线 | 未单独设置时读 `0r` |
+| 8 | L / M / H | 功率档 |
+| 9 | 0000 | 输出功率（W），RX 为 0 |
+| 10 | 0.00 | ATU 前 SWR |
+| 11 | 0.00 | 天线 SWR |
+| 12 | 0.0 | PA 电压（V） |
+| 13 | 0.0 | PA 电流（A） |
+| 14 | 000 | 上层散热器温度（°C） |
+| 15 | 000 | 下层散热器温度，1.3K/1.5K 固定 000 |
+| 16 | 000 | 合成器温度，1.3K/1.5K 固定 000 |
+| 17 | N | 告警（WARNING），N 表示无 |
+| 18 | N | 报警（ALARM），N 表示无 |
+
+本实现上卡的项：工作模式、TX 状态、波段、输出功率、天线 SWR、ATU 前 SWR、PA 电压/电流、
+上层温度；2K-FA 额外显示下层与合成器温度。告警/报警合并为“故障”标记，原始字母保存在
+`fault_code`。
+
+### 12.5 可控项与明确拿不到的东西
+
+- 本轮**只读**：动作表为空，`amp_set` 会被 `commands.js` 直接拒绝。协议本身有
+  OPERATE `0x0D`、OFF `0x0A`、TUNE `0x09`、波段/天线/功率档等按键码，但先不开，
+  等状态串在真机稳定后再评估。
+- 明确不实现：调谐/天线预设、功率校准、保护阈值、固件升级、工程参数。
+- 状态串里还有记忆库、输入端口、TX/RX 天线、功率档，本轮未上卡；固件版本不在状态串中，
+  因此无法从该协议读取。
+
+## 13. 功放接入：RF-Kit RF2K-S / RF2K+（只读身份）
+
+### 13.1 依据
+
+- 官方手册：RF-KIT《Power Amplifier RF2K-S》用户手册（LAN / Wi-Fi、VNC 5900、CAT/UDP
+  接口），**没有公开 HTTP API 章节**。
+- 身份字段来源：公开项目 `github.com/tnxqso/rf2k-trainer` 的 `rf2ks_client.py`
+  （最后更新 2025-08-20，仓库已归档、未声明许可证）。它读取
+  `GET http://<host>:8080/info`，字段为 `device`、`custom_device_name`、
+  `software_version.GUI`、`software_version.controller`。
+
+### 13.2 连接与可读项
+
+- 原生 HTTP，默认端口 8080；请求头 `Accept: application/json`。
+- 本系统中地址仍走 `control.resolveFor`：可直连 `host` / `port`，也可继承控制连线地址。
+- 只上卡三项：设备名称（`custom_device_name`，缺省退回 `device`）、设备型号（`device`）、
+  固件版本（GUI / controller 合并显示）。
+
+### 13.3 明确拿不到的东西
+
+- 官方手册没有功率、驻波、温度、电压、波段、故障的 HTTP 读取说明，本实现一律不猜。
+- 同一公开项目还调用了 `/power`（`forward.max_value`、`swr.max_value`）、`/operate-mode`、
+  `/data`、`/tuner`，但这些端点不在官方手册中，且该项目已归档、无许可证，因此本轮
+  不据此实现功率/驻波，避免把单个逆向项目当成稳定协议。
+- 无任何控制动作；`amp_set` 会被 `commands.js` 直接拒绝。
+
+## 14. 仍未接入的型号：证据与边界
+
+以下型号保留在下拉中但禁选，型号名后直接标注限制，避免被误认为“能读完整状态”。
+
+### 14.1 Palstar LA-1K
+
+- 公开资料：wo2x Node-RED flow；Kenwood / Icom 波段口 + RS-232。
+- 本质：功放只跟随激励器频率（波段/频率输入），没有公开的独立状态查询命令。
+- 明确拿不到：输出功率、驻波、温度、电压、故障码。
+- 结论：不实现轮询，避免把“频率跟随”包装成“遥测”。型号名标注为“仅 Kenwood 频率跟随”。
+
+### 14.2 OM Power 2500A
+
+- 公开资料：S53ZO flow，功放设为 Kenwood 模式；没有厂商命令表。
+- 专有 LAN 面板 `Adminotech/remoteom`（Apache-2.0，2013）只有单字节 ASCII 开关机/模式/
+  故障命令，没有功率、驻波、温度、电压、波段读数。
+- 目前唯一能读功率与驻波的公开实现是 `grmi64/OM-Power-Control`（MIT），但它面向
+  OM2501A / 3501A / 4001A 的 rev.4 协议（TCP 10001），不覆盖 2500A；没有证据表明
+  2500A 的选配 Remote Box 使用同一套新协议。
+- 结论：2500A 只按“CAT 频率跟随”标注，不接遥测、不猜字段。若将来实测抓包证明
+  Remote Box 走 10001 新协议，再单独评估。
+
+### 14.3 其他
+
+- FlexRadio PowerGenius XL：只有社区 flow/HTTP JSON 线索，控制 API 未公开。
+- Mercury LUX：仅社区提及，无命令表。
+- 以上均保持 `supported: false`，不进入传输层。
+

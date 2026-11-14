@@ -2387,7 +2387,7 @@ test('KPA500 命令入口：只接受型号描述表里的动作', async () => {
 
     // 未公开协议/未实现的型号只能留记录，不能保存。
     const unsupported = model.normalizeDevice({
-        type: 'amp', name: 'KPA1500', config: {brand: 'elecraft', model: 'kpa1500'}
+        type: 'amp', name: 'LUX', config: {brand: 'mercury', model: 'lux'}
     }, {devices: []});
     assert.equal(unsupported.ok, false);
     assert.equal(unsupported.error, 'invalid-amp-model');
@@ -2588,6 +2588,306 @@ test('ACOM 命令入口：只接受三个动作，拒绝校准与 MQTT 字段', 
     const mqttDelta = await service.handleCommand(globalCtx, [row], 'acom-1',
         {command: 'amp_set', args: {pa_switch: 0}}, headers, now);
     assert.equal(mqttDelta.status, 400);
+});
+
+test('Elecraft KPA1500：只读轮询的型号表与 ASCII 解析', async () => {
+    const definition = ampModels.resolve('elecraft', 'kpa1500');
+    assert.ok(definition, 'KPA1500 definition must exist');
+    assert.equal(definition.supported, true);
+    assert.equal(definition.transport, 'elecraft-ascii');
+    assert.equal(definition.protocol, 'serial');
+    assert.equal(ampModels.transportOf({brand: 'elecraft', model: 'kpa1500'}), 'elecraft-ascii');
+    // 本轮只读：动作表为空，命令入口会拒绝所有 amp_set。
+    assert.deepEqual(definition.controls, []);
+    assert.equal(definition.fields.find(field => field.key === 'port').default, 1500);
+    assert.deepEqual(definition.parser.poll,
+        ['^OS;', '^BN;', '^WS;', '^TM;', '^VI;', '^FS;', '^FL;', '^RVM;']);
+
+    const state = {};
+    assert.equal(ampLink.applyElecraftFrame(state, '^OS1'), true);
+    assert.equal(state.operating, 1);
+    assert.equal(ampLink.applyElecraftFrame(state, '^BN05'), true);
+    assert.equal(state.band, '20m');
+    // KPA1500 的 ^WS 用四位瓦数；SWR 仍以十分之一为单位。
+    assert.equal(ampLink.applyElecraftFrame(state, '^WS1204 014'), true);
+    assert.equal(state.out_fwd_power, 1204);
+    assert.equal(state.out_swr, 1.4);
+    assert.equal(ampLink.applyElecraftFrame(state, '^PWF1204'), true);
+    assert.equal(state.out_fwd_power, 1204);
+    assert.equal(ampLink.applyElecraftFrame(state, '^PWR018'), true);
+    assert.equal(state.out_rev_power, 18);
+    assert.equal(ampLink.applyElecraftFrame(state, '^PWI045'), true);
+    assert.equal(state.in_fwd_power, 45);
+    assert.equal(ampLink.applyElecraftFrame(state, '^TM055'), true);
+    assert.equal(state.current_temperature, 55);
+    assert.equal(ampLink.applyElecraftFrame(state, '^VI513 061', {current_divisor: 1}), true);
+    assert.equal(state.current_voltage, 51.3);
+    assert.equal(state.current_current, 61);
+    assert.equal(ampLink.applyElecraftFrame(state, '^FS3'), true);
+    assert.equal(state.fan_speed, 3);
+    assert.equal(ampLink.applyElecraftFrame(state, '^FL20'), true);
+    assert.equal(state.alarm_active, true);
+    assert.equal(state.fault_code, '0x20');
+    assert.equal(ampLink.applyElecraftFrame(state, '^RVM01.47'), true);
+    assert.equal(state.firmware_version, '01.47');
+
+    // 串口链路：连接后按 KPA1500 的命令表轮询，状态能上卡。
+    class FakeSocket extends require('node:events') {
+        constructor() {
+            super();
+            this.writes = [];
+        }
+        write(chunk, callback) {
+            this.writes.push(String(chunk));
+            if (typeof callback === 'function') callback();
+            return true;
+        }
+        removeAllListeners() { super.removeAllListeners(); return this; }
+        destroy() { return this; }
+    }
+    ampLink.resetForTests();
+    let fake = null;
+    ampLink.setSocketFactory(() => { fake = new FakeSocket(); return fake; });
+    const globalCtx = makeContext();
+    const kpa = storage.devices.toDevice(deviceRow({
+        id: 'kpa1500-1', name: 'KPA1500', type: 'amp', bands: '',
+        config_json: JSON.stringify({
+            brand: 'elecraft', model: 'kpa1500', protocol: 'serial', host: '10.0.0.9', port: 1500
+        })
+    }));
+    ampLink.pollAmps(globalCtx, [kpa], new Date(), {devices: [kpa], links: []});
+    assert.ok(fake, 'KPA1500 must create a serial link');
+    fake.emit('connect');
+    assert.equal(fake.writes[0], '^OS;');
+    fake.emit('data', Buffer.from('^OS1;^WS1204 014;^TM055;^FL00;^FS2;'));
+    const entry = runtime.stateOf(globalCtx, 'kpa1500-1');
+    assert.equal(entry.amp_connected, true);
+    assert.equal(entry.amp.operating, 1);
+    assert.equal(entry.amp.out_fwd_power, 1204);
+    assert.equal(entry.amp.out_swr, 1.4);
+    assert.equal(entry.amp.current_temperature, 55);
+    assert.equal(entry.amp.fan_speed, 2);
+    assert.equal(entry.amp.alarm_active, false);
+    ampLink.resetForTests();
+
+    // 只读阶段：动作一律拒绝，MQTT 字段也拒绝。
+    fakeTransports();
+    const row = deviceRow({
+        id: 'kpa1500-1', name: 'KPA1500', type: 'amp', bands: '',
+        config_json: JSON.stringify({brand: 'elecraft', model: 'kpa1500', protocol: 'serial'})
+    });
+    const headers = {'X-DX-Seat': 'OP-A'};
+    let result = await service.handleCommand(globalCtx, [row], 'kpa1500-1',
+        {command: 'amp_set', args: {action: 'operate'}}, headers, new Date());
+    assert.equal(result.status, 400);
+    result = await service.handleCommand(globalCtx, [row], 'kpa1500-1',
+        {command: 'amp_set', args: {pa_switch: 0}}, headers, new Date());
+    assert.equal(result.status, 400);
+});
+
+/** 构造一条 SPE 状态响应：AA AA AA | CNT | CSV | CHK0 CHK1 | CR LF。 */
+function speFrame(csv) {
+    const payload = Buffer.from(csv, 'ascii');
+    let sum = 0;
+    for (const byte of payload) sum += byte;
+    return Buffer.concat([
+        Buffer.from([0xaa, 0xaa, 0xaa, payload.length]),
+        payload,
+        Buffer.from([sum & 0xff, (sum >> 8) & 0xff, 0x0d, 0x0a])
+    ]);
+}
+
+test('SPE Expert：三个型号共用状态串，2K 额外两层温度', () => {
+    const models = [['expert-13k', false], ['expert-15k', false], ['expert-2k', true]];
+    for (const [id, extraTemps] of models) {
+        const definition = ampModels.resolve('spe', id);
+        assert.ok(definition, `SPE ${id} definition must exist`);
+        assert.equal(definition.supported, true);
+        assert.equal(definition.transport, 'spe-binary');
+        assert.equal(definition.protocol, 'serial');
+        // 只读阶段：动作表为空。
+        assert.deepEqual(definition.controls, []);
+        assert.equal(ampModels.transportOf({brand: 'spe', model: id}), 'spe-binary');
+        const hasLower = definition.status.some(item => item.key === 'temp_lower');
+        assert.equal(hasLower, extraTemps);
+    }
+});
+
+test('SPE Expert：19 字段状态串解析、校验与流式拼帧', () => {
+    const parsed = ampLink.parseSpeStatus(
+        '13K,O,T,A,1,05,2a,0r,H,1204, 1.10, 1.25, 48.0, 32.5, 45,  0,  0,N,N');
+    assert.ok(parsed);
+    assert.equal(parsed.operating, 1);
+    assert.equal(parsed.transmitting, 1);
+    assert.equal(parsed.band, '20m');
+    assert.equal(parsed.out_fwd_power, 1204);
+    assert.equal(parsed.swr_atu, 1.1);
+    assert.equal(parsed.out_swr, 1.25);
+    assert.equal(parsed.current_voltage, 48);
+    assert.equal(parsed.current_current, 32.5);
+    assert.equal(parsed.current_temperature, 45);
+    assert.equal(parsed.temp_lower, 0);
+    assert.equal(parsed.temp_combiner, 0);
+    assert.equal(parsed.alarm_active, false);
+    assert.equal(parsed.fault_code, '');
+
+    // 2K 的下层/合成器温度；波段 10 = 6m。
+    const twoK = ampLink.parseSpeStatus(
+        '20K,O,T,x,1,10,3a,0r,H,1500, 1.20, 1.30, 49.0, 35.0, 50, 38, 41,N,N');
+    assert.equal(twoK.band, '6m');
+    assert.equal(twoK.temp_lower, 38);
+    assert.equal(twoK.temp_combiner, 41);
+
+    // 报警与告警都要标出来。
+    const faulted = ampLink.parseSpeStatus(
+        '13K,O,T,A,1,05,2a,0r,H,1204, 1.10, 1.25, 48.0, 32.5, 45,  0,  0,S,A');
+    assert.equal(faulted.alarm_active, true);
+    assert.equal(faulted.fault_code, 'WS AA');
+
+    // 兼容最前面多一个逗号的固件；字段不足则拒绝。
+    const leading = ampLink.parseSpeStatus(
+        ',13K,S,R,A,1,00,1a,0r,L,0000, 0.00, 0.00, 0.0, 0.0, 33,  0,  0,N,N');
+    assert.equal(leading.operating, 0);
+    assert.equal(leading.out_fwd_power, 0);
+    assert.equal(ampLink.parseSpeStatus('13K,S,R'), null);
+
+    // 流式解析：垃圾前缀 + 分两次到达；坏校验整帧丢弃。
+    const state = {buffer: Buffer.alloc(0), amp: {out_fwd_power: null}};
+    const frame = speFrame('13K,O,T,A,1,05,2a,0r,H,1204, 1.10, 1.25, 48.0, 32.5, 45,  0,  0,N,N');
+    const broken = Buffer.from(frame);
+    broken[broken.length - 4] = (broken[broken.length - 4] + 1) & 0xff;
+    assert.equal(ampLink.feedSpe(state, Buffer.concat([Buffer.from([0x00, 0xaa]), broken])), false);
+    assert.equal(state.amp.out_fwd_power, null);
+    assert.equal(ampLink.feedSpe(state, frame.slice(0, 30)), false);
+    assert.equal(ampLink.feedSpe(state, frame.slice(30)), true);
+    assert.equal(state.amp.out_fwd_power, 1204);
+    assert.equal(state.amp.out_swr, 1.25);
+});
+
+test('SPE Expert：串口只读轮询与动作拒绝', async () => {
+    ampLink.resetForTests();
+    let socket = null;
+    ampLink.setSocketFactory(() => { socket = new AcomSocket(); return socket; });
+    const globalCtx = makeContext();
+    const spe = storage.devices.toDevice(deviceRow({
+        id: 'spe-1', name: 'Expert 1.3K-FA', type: 'amp', bands: '',
+        config_json: JSON.stringify({
+            brand: 'spe', model: 'expert-13k', protocol: 'serial', host: '10.0.0.8', port: 4004
+        })
+    }));
+    ampLink.pollAmps(globalCtx, [spe], new Date(), {devices: [spe], links: []});
+    assert.ok(socket, 'SPE 型号必须建立串口链路');
+    socket.emit('connect');
+    assert.equal(socket.writes.length, 1);
+    assert.deepEqual([...socket.writes[0]], ampLink.SPE_STATUS_REQUEST);
+
+    // 状态串到达后上卡；SPE 是请求/应答，不额外写 ACK。
+    socket.emit('data', speFrame(
+        '13K,O,T,A,1,05,2a,0r,H,1204, 1.10, 1.25, 48.0, 32.5, 45,  0,  0,N,N'));
+    const entry = runtime.stateOf(globalCtx, 'spe-1');
+    assert.equal(entry.amp_connected, true);
+    assert.equal(entry.amp.operating, 1);
+    assert.equal(entry.amp.transmitting, 1);
+    assert.equal(entry.amp.out_fwd_power, 1204);
+    assert.equal(entry.amp.out_swr, 1.25);
+    assert.equal(entry.amp.current_temperature, 45);
+    assert.equal(entry.amp.band, '20m');
+    assert.equal(socket.writes.length, 1);
+
+    // 只读阶段：动作与 MQTT 字段都拒绝。
+    const denied = await ampLink.publish(spe, {action: 'operate'}, new Date(), globalCtx);
+    assert.equal(denied.ok, false);
+    assert.equal(denied.status, 400);
+    fakeTransports();
+    const row = deviceRow({
+        id: 'spe-1', name: 'Expert 1.3K-FA', type: 'amp', bands: '',
+        config_json: JSON.stringify({brand: 'spe', model: 'expert-13k', protocol: 'serial'})
+    });
+    const result = await service.handleCommand(globalCtx, [row], 'spe-1',
+        {command: 'amp_set', args: {action: 'operate'}}, {'X-DX-Seat': 'OP-A'}, new Date());
+    assert.equal(result.status, 400);
+    ampLink.resetForTests();
+});
+
+test('RF-Kit RF2K-S：只读 /info 身份与版本', async () => {
+    const definition = ampModels.resolve('rfkit', 'rf2k-s');
+    assert.ok(definition, 'RF2K-S definition must exist');
+    assert.equal(definition.supported, true);
+    assert.equal(definition.protocol, 'http');
+    assert.equal(definition.transport, 'rfkit-http');
+    assert.deepEqual(definition.controls, []);
+    assert.equal(definition.fields.find(field => field.key === 'port').default, 8080);
+    assert.ok(definition.status.some(item => item.key === 'device_name'));
+    assert.equal(ampModels.transportOf({brand: 'rfkit', model: 'rf2k-s'}), 'rfkit-http');
+
+    const parsed = ampLink.parseRfkitInfo({
+        device: 'RF2K-S',
+        custom_device_name: 'Shack PA',
+        software_version: {GUI: '1.2.3', controller: '4.5.6'}
+    });
+    assert.deepEqual(parsed, {
+        device_name: 'Shack PA', device_model: 'RF2K-S', software_version: '1.2.3 / 4.5.6'
+    });
+    assert.equal(ampLink.parseRfkitInfo({device: 'RF2K-S'}).device_name, 'RF2K-S');
+    assert.equal(ampLink.parseRfkitInfo(null), null);
+
+    // 真实 HTTP 轮询：/info 返回身份，错误时标记通信失败。
+    let mode = 'ok';
+    const server = require('node:http').createServer((request, response) => {
+        if (mode === 'ok' && request.url === '/info') {
+            response.setHeader('content-type', 'application/json');
+            response.end(JSON.stringify({
+                device: 'RF2K-S',
+                custom_device_name: 'Shack PA',
+                software_version: {GUI: '1.2.3', controller: '4.5.6'}
+            }));
+            return;
+        }
+        response.statusCode = 500;
+        response.end('{}');
+    });
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    const port = server.address().port;
+    try {
+        const globalCtx = makeContext();
+        const rfkit = storage.devices.toDevice(deviceRow({
+            id: 'rfkit-1', name: 'RF2K-S', type: 'amp', bands: '',
+            config_json: JSON.stringify({
+                brand: 'rfkit', model: 'rf2k-s', protocol: 'http', host: '127.0.0.1', port
+            })
+        }));
+        const waitFor = async predicate => {
+            for (let i = 0; i < 40; i += 1) {
+                if (predicate()) return true;
+                await new Promise(resolve => setTimeout(resolve, 50));
+            }
+            return false;
+        };
+        ampLink.pollAmps(globalCtx, [rfkit], new Date(), {devices: [rfkit], links: []});
+        assert.ok(await waitFor(() => {
+            const current = runtime.stateOf(globalCtx, 'rfkit-1');
+            return !!current && current.amp_connected === true;
+        }), 'RF2K-S /info must mark the amp online');
+        const entry = runtime.stateOf(globalCtx, 'rfkit-1');
+        assert.equal(entry.amp.device_name, 'Shack PA');
+        assert.equal(entry.amp.device_model, 'RF2K-S');
+        assert.equal(entry.amp.software_version, '1.2.3 / 4.5.6');
+
+        mode = 'error';
+        ampLink.pollAmps(globalCtx, [rfkit], new Date(), {devices: [rfkit], links: []});
+        assert.ok(await waitFor(() => {
+            const current = runtime.stateOf(globalCtx, 'rfkit-1');
+            return !!current && current.amp_connected === false;
+        }), 'RF2K-S HTTP error must mark the amp offline');
+        assert.equal(runtime.stateOf(globalCtx, 'rfkit-1').comm_error, 'transport-connect');
+
+        // 只读：不暴露动作。
+        const denied = await ampLink.publish(rfkit, {action: 'operate'}, new Date(), globalCtx);
+        assert.equal(denied.ok, false);
+        assert.equal(denied.status, 400);
+    } finally {
+        await new Promise(resolve => server.close(resolve));
+    }
 });
 
 test('AMP1000 配置：MQTT 字段白名单与口令隐藏', () => {
