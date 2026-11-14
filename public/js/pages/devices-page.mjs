@@ -883,6 +883,13 @@ export function createDevicesPage(ctx) {
         return '—';
     }
 
+    /** 计算机名下拉的占位：报文里只有型号、没有 ComputerName 时要说清楚。 */
+    function computerPlaceholder() {
+        if (candidateEmpty()) return t('dev.radio.candidates.empty');
+        if (!candidateComputers().length) return t('dev.radio.candidates.noComputer');
+        return '—';
+    }
+
     function candidateNoteText() {
         const status = n1mmCandidate.status;
         if (status === 'error') return t('dev.radio.candidates.error');
@@ -890,6 +897,9 @@ export function createDevicesPage(ctx) {
         if (candidateEmpty()) return t('dev.radio.candidates.empty');
         const stamp = n1mmCandidate.data && n1mmCandidate.data.updatedAt
             ? clock(n1mmCandidate.data.updatedAt) : '—';
+        if (!candidateComputers().length) {
+            return t('dev.radio.candidates.partial', {count: candidateRadios().length, time: stamp});
+        }
         return t('dev.radio.candidates.ready', {count: candidateComputers().length, time: stamp});
     }
 
@@ -946,7 +956,7 @@ export function createDevicesPage(ctx) {
         if (!computerSelect || !modelSelect) return;
         const computer = computerSelect.value;
         const model = modelSelect.value;
-        fillCandidateSelect(computerSelect, candidateComputers(), computer, t('dev.radio.candidates.empty'));
+        fillCandidateSelect(computerSelect, candidateComputers(), computer, computerPlaceholder());
         fillCandidateSelect(modelSelect, candidateRadiosFor(computer), model, candidatePlaceholder(computer));
         const note = $('#devCandidateNote');
         if (note) note.textContent = candidateNoteText();
@@ -990,7 +1000,7 @@ export function createDevicesPage(ctx) {
             // 当前配置即使不在候选集里也保留，并在下方提示是否为已知组合。
             const computer = String(config.computer || '');
             const model = String(config.model || '');
-            return `<label>${t('dev.form.computer')}<select name="cfg_computer">${candidateOptions(candidateComputers(), computer, t('dev.radio.candidates.empty'))}</select></label>
+            return `<label>${t('dev.form.computer')}<select name="cfg_computer">${candidateOptions(candidateComputers(), computer, computerPlaceholder())}</select></label>
                 <label>${t('dev.form.model')}<select name="cfg_model">${candidateOptions(candidateRadiosFor(computer), model, candidatePlaceholder(computer))}</select></label>
                 <div class="dev-candidate-row">
                     <span class="dev-note" id="devCandidateNote">${esc(candidateNoteText())}</span>
