@@ -184,8 +184,12 @@ export function createDevicesPage(ctx) {
         return value.error ? t('dev.status.withError', {status: label, reason: errorText(value.error)}) : label;
     }
 
-    function radioLiveText(status) {
-        const radio = status && status.radio;
+    /** 数值读数格式化：缺失时给 —，避免卡片出现 NaN。 */
+    function metric(value, digits = 1) {
+        return Number.isFinite(value) ? Number(value).toFixed(digits) : '—';
+    }
+
+    function radioLiveText(status) {        const radio = status && status.radio;
         if (!radio || !Number.isFinite(radio.freq_khz)) return '';
         return t('dev.radio.live', {
             freq: (radio.freq_khz / 1000).toFixed(3),
@@ -481,6 +485,19 @@ export function createDevicesPage(ctx) {
         if (device.type === 'tower' && snapshot) {
             const tower = snapshot.towers[device.id];
             parts.push(t(TOWER_KEYS[tower && tower.state] || TOWER_KEYS.unknown));
+        }
+        if (device.type === 'amp' && snapshot) {
+            const amp = (deviceStatus(device.id) || {}).amp;
+            if (amp) {
+                if (amp.pa_switch === 1) parts.push(t('dev.amp.paOn'));
+                else if (amp.pa_switch === 0) parts.push(t('dev.amp.paOff'));
+                if (Number.isFinite(amp.work_freq)) parts.push((amp.work_freq / 1e6).toFixed(3) + ' MHz');
+                parts.push(t('dev.amp.readingPower', {w: metric(amp.out_fwd_power)}));
+                parts.push(t('dev.amp.readingSwr', {v: metric(amp.out_swr, 2)}));
+                parts.push(t('dev.amp.readingTemp', {v: metric(amp.current_temperature)}));
+                if (amp.ptt_status === 1) parts.push(t('dev.amp.transmitting'));
+                if (amp.alarm_active) parts.push(t('dev.amp.alarm'));
+            }
         }
         return parts.join(' · ');
     }
@@ -1039,7 +1056,18 @@ export function createDevicesPage(ctx) {
                 </div>
                 <p class="dev-note dev-candidate-hint hidden" id="devCandidateHint"></p>`;
         }
-        if (value.type === 'swr' || value.type === 'amp') {
+        if (value.type === 'amp') {
+            const protocol = String(config.protocol || 'mqtt');
+            return `<label>${t('dev.config.protocol')}<select name="cfg_protocol">
+                    <option value="mqtt"${protocol === 'mqtt' ? ' selected' : ''}>MQTT</option></select></label>
+                <label>${t('dev.config.brokerHost')}<input name="cfg_host" maxlength="100" value="${esc(config.host || '')}"></label>
+                <label>${t('dev.config.port')}<input name="cfg_port" type="number" min="1" max="65535" step="1" value="${esc(config.port || '')}"></label>
+                <label>${t('dev.config.deviceId')}<input name="cfg_device_id" maxlength="100" value="${esc(config.device_id || '')}"></label>
+                <label>${t('dev.config.topicPrefix')}<input name="cfg_topic_prefix" maxlength="200" placeholder="amplifier/device" value="${esc(config.topic_prefix || '')}"></label>
+                <label>${t('dev.config.username')}<input name="cfg_username" maxlength="100" autocomplete="off" value="${esc(config.username || '')}"></label>
+                <label>${t('dev.config.password')}<input name="cfg_password" type="password" autocomplete="off" placeholder="${esc(t('dev.config.keepPassword'))}"></label>`;
+        }
+        if (value.type === 'swr') {
             return `<label>${t('dev.form.reportHost')}<input name="cfg_host" maxlength="100" value="${esc(config.host || '')}"></label>
                 <label>${t('dev.config.port')}<input name="cfg_port" type="number" min="1" max="65535" step="1" value="${esc(config.port || '')}"></label>`;
         }
@@ -1211,7 +1239,7 @@ export function createDevicesPage(ctx) {
     }
 
     function controlHtml(device) {
-        if (!device || !['rotator', 'matrix', 'switch', 'tower'].includes(device.type)) return '';
+        if (!device || !['rotator', 'matrix', 'switch', 'tower', 'amp'].includes(device.type)) return '';
         const status = '<p class="dev-ctrl-status" id="devCtrlStatus"></p>';
         const error = '<p class="dev-form-error hidden" id="devCtrlError"></p>';
         const seat = `<label>${t('dev.control.seat')}<select id="devCtrlSeat">${seatOptions()}</select></label>`;
@@ -1235,6 +1263,18 @@ export function createDevicesPage(ctx) {
                 <div class="dev-ctrl-row">${seat}</div>
                 <p class="dev-note">${esc(portHint)}</p>${error}`;
         }
+        if (device.type === 'amp') {
+            return `<h3>${t('dev.control.title')}</h3>${status}
+                <div class="dev-ctrl-row">
+                    <button class="dev-btn primary" type="button" data-cmd="amp_set" data-amp="pa_on">${t('dev.amp.paOn')}</button>
+                    <button class="dev-btn" type="button" data-cmd="amp_set" data-amp="pa_off">${t('dev.amp.paOff')}</button>
+                    <button class="dev-btn" type="button" data-cmd="amp_set" data-amp="tune_on">${t('dev.amp.tuneOn')}</button>
+                    <button class="dev-btn" type="button" data-cmd="amp_set" data-amp="tune_off">${t('dev.amp.tuneOff')}</button>
+                    <button class="dev-btn" type="button" data-cmd="amp_set" data-amp="clear_alarm">${t('dev.amp.clearAlarm')}</button>
+                </div>
+                <div class="dev-ctrl-row">${seat}</div>
+                <p class="dev-note">${esc(t('dev.amp.controlHint'))}</p>${error}`;
+        }
         return `<h3>${t('dev.control.title')}</h3>${status}
             <div class="dev-ctrl-row">
                 <button class="dev-btn" type="button" data-tower="up">${t('dev.control.up')}</button>
@@ -1256,6 +1296,23 @@ export function createDevicesPage(ctx) {
             parts.push(t('dev.rotator.target', {deg: rotator.target_azimuth === null || rotator.target_azimuth === undefined ? '—' : rotator.target_azimuth}));
             parts.push(t(MOTION_KEYS[rotator.motion_state] || MOTION_KEYS.unknown));
             parts.push(t('dev.control.lastCommander', {name: rotator.last_commander || '—'}));
+        }
+        if (device.type === 'amp') {
+            const amp = (status && status.amp) || {};
+            if (Number.isFinite(amp.work_freq)) parts.push((amp.work_freq / 1e6).toFixed(3) + ' MHz');
+            if (amp.band) parts.push(amp.band);
+            if (amp.pa_switch === 1) parts.push(t('dev.amp.paOn'));
+            if (amp.pa_switch === 0) parts.push(t('dev.amp.paOff'));
+            if (amp.tune_mode === 1) parts.push(t('dev.amp.tuneOn'));
+            if (amp.ptt_status === 1) parts.push(t('dev.amp.transmitting'));
+            parts.push(t('dev.amp.readingPower', {w: metric(amp.out_fwd_power)}));
+            parts.push(t('dev.amp.readingSwr', {v: metric(amp.out_swr, 2)}));
+            parts.push(t('dev.amp.readingTemp', {v: metric(amp.current_temperature)}));
+            parts.push(t('dev.amp.readingVoltage', {v: metric(amp.current_voltage)}));
+            parts.push(t('dev.amp.readingCurrent', {v: metric(amp.current_current)}));
+            if (amp.alarm_active) {
+                parts.push(t('dev.amp.alarm') + ' 0x' + Number(amp.alarm_word || 0).toString(16).toUpperCase());
+            }
         }
         const control = snapshot.controls && snapshot.controls[device.id];
         if (control && control.lease) parts.push(t('dev.control.lease', {seat: control.lease.seat}));
@@ -1469,17 +1526,27 @@ export function createDevicesPage(ctx) {
         if (BAND_TYPES.includes(type)) device.bands = checkedBands(form);
         if (type === 'antenna') device.install_offset_deg = String(data.get('install_offset_deg') || '0');
         if (TRAVEL_TYPES.includes(type)) device.travel_timeout_sec = String(data.get('travel_timeout_sec') || '120');
-        device.config = formConfig(data, type);
+        device.config = formConfig(data, type, (value && value.config) || {});
         return device;
     }
 
     /** Protocol settings live under `config`; empty inputs clear the stored key. */
-    function formConfig(data, type) {
+    function formConfig(data, type, existingConfig) {
         const config = {};
         if (type === 'radio') {
             config.computer = String(data.get('cfg_computer') || '');
             config.model = String(data.get('cfg_model') || '');
-        } else if (type === 'swr' || type === 'amp' || type === 'rotator') {
+        } else if (type === 'amp') {
+            config.protocol = 'mqtt';
+            config.host = String(data.get('cfg_host') || '');
+            config.port = String(data.get('cfg_port') || '');
+            config.device_id = String(data.get('cfg_device_id') || '');
+            config.topic_prefix = String(data.get('cfg_topic_prefix') || '');
+            config.username = String(data.get('cfg_username') || '');
+            const password = String(data.get('cfg_password') || '');
+            if (password) config.password = password;
+            else if (existingConfig && existingConfig.password) config.password = existingConfig.password;
+        } else if (type === 'swr' || type === 'rotator') {
             config.host = String(data.get('cfg_host') || '');
             config.port = String(data.get('cfg_port') || '');
             if (type === 'rotator') config.protocol = config.host ? 'rotctld' : '';
@@ -2295,6 +2362,15 @@ export function createDevicesPage(ctx) {
                     port: port ? port.value : '',
                     outlet: outlet ? outlet.value : ''
                 });
+            } else if (cmd === 'amp_set') {
+                const action = button.dataset.amp || '';
+                const delta = action === 'pa_on' ? {pa_switch: 1}
+                    : action === 'pa_off' ? {pa_switch: 0}
+                    : action === 'tune_on' ? {tune_mode: 1}
+                    : action === 'tune_off' ? {tune_mode: 0}
+                    : action === 'clear_alarm' ? {clear_alarm: true}
+                    : null;
+                if (delta) void sendCommand(device, {command: 'amp_set', args: delta});
             }
         });
         $('#devControl').addEventListener('change', event => {

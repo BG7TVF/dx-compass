@@ -14,6 +14,7 @@ const tower = require('../lib/devices/tower.js');
 const tx = require('../lib/devices/tx.js');
 const commands = require('../lib/devices/commands.js');
 const rotatorLink = require('../lib/devices/rotator-link.js');
+const ampLink = require('../lib/devices/amp-link.js');
 const service = require('../lib/devices/service.js');
 
 function fakeTransports() {
@@ -23,7 +24,8 @@ function fakeTransports() {
         stop: async () => ({ok: true}),
         select: async () => ({ok: true}),
         towerHold: async () => ({ok: true}),
-        towerRelease: async () => ({ok: true})
+        towerRelease: async () => ({ok: true}),
+        ampSet: async () => ({ok: true, dispatched: true})
     });
 }
 const storage = require('../lib/storage');
@@ -591,9 +593,10 @@ test('flow registers device routes and startup schema migration', () => {
     const settings = fs.readFileSync(path.join(__dirname, '..', 'settings.js'), 'utf8');
     assert.match(settings, /httpAdminRoot:\s*false/);
 
-    const poll = byName('Run rotator poll');
-    assert.ok(poll, 'rotator poll node exists');
+    const poll = byName('Run device polls');
+    assert.ok(poll, 'device poll node exists');
     assert.match(poll.func, /dx\.devices\.pollRotators/);
+    assert.match(poll.func, /dx\.devices\.pollAmps/);
 
     assert.match(byName('Run tower watchdog').func, /dx\.devices\.towerWatchdog/);
     assert.match(byName('Run tower release on start').func, /dx\.devices\.towerReleaseAll/);
@@ -2105,4 +2108,165 @@ test('seat binding matches StationName when packets carry no ComputerName', () =
         config_json: JSON.stringify({computer: 'PC-NOT-SEEN', model: ''})
     });
     assert.equal(ownership.seatForRadio(unbound, views), '');
+});
+
+const EventEmitter = require('node:events');
+
+class FakeMqttClient extends EventEmitter {
+    constructor() {
+        super();
+        this.published = [];
+        this.subscribed = [];
+        this.ended = false;
+        this.connected = false;
+    }
+    subscribe(topic, options, callback) {
+        this.subscribed.push(topic);
+        if (callback) callback(null);
+    }
+    publish(topic, payload, options, callback) {
+        this.published.push({topic, message: JSON.parse(payload)});
+        if (callback) callback(null);
+    }
+    end() { this.ended = true; }
+}
+
+function ampRow(overrides) {
+    return deviceRow(Object.assign({
+        id: 'amp-1', name: 'AMP1000', type: 'amp', bands: '',
+        config_json: JSON.stringify({
+            host: '127.0.0.1', port: 1883, protocol: 'mqtt', device_id: 'AMP1000-A'
+        })
+    }, overrides || {}));
+}
+
+test('AMP1000 心跳驱动设备状态：连接、读数、告警与通信中断', async () => {
+    ampLink.resetForTests();
+    const now = new Date('2026-03-01T12:00:00.000Z');
+    const globalCtx = makeContext();
+    const rows = [ampRow()];
+    const client = new FakeMqttClient();
+    ampLink.setClientFactory(() => client);
+
+    const polled = service.pollAmps(globalCtx, rows, now);
+    assert.equal(polled.connected, 0);
+    assert.equal(polled.errors[0].error, 'transport-connect');
+    // 尚未连上、也没收到错误事件 → 等待上报，而不是 unknown。
+    assert.equal(service.snapshot(globalCtx, rows, now).status['amp-1'].state, 'awaiting');
+
+    client.emit('connect');
+    assert.deepEqual(client.subscribed, ['amplifier/device/AMP1000-A/heartbeat']);
+    let view = service.snapshot(globalCtx, rows, now);
+    assert.equal(view.status['amp-1'].state, 'online');
+    assert.equal(view.status['amp-1'].amp, null);
+
+    client.emit('message', 'amplifier/device/AMP1000-A/heartbeat', Buffer.from(JSON.stringify({
+        msg_id: 'hb-1', cmd: 'remote_control', timestamp: 1772366400,
+        data: {
+            device_id: 'AMP1000-A', pa_switch: 1, ptt_status: 1, work_freq: 14025000,
+            tune_mode: 1, trigger_mode: 1, attenuator_sel: 3, attenuator_list: [0, 3, 6, 9],
+            filter_sel: '5', in_antenna_sel: 1, out_antenna_sel: 2, freq_band_select: 1,
+            out_fwd_power: 95.4, out_rev_power: 2.5, out_swr: 1.8,
+            in_fwd_power: 1.2, current_voltage: 48.2, current_current: 1.25,
+            current_temperature: 42.5, alarm_word: 0,
+            serial_connection: true, mqtt_connection: true,
+            firmware_version: '1.5.3', software_version: '1.0.0'
+        }
+    })));
+    view = service.snapshot(globalCtx, rows, now);
+    const status = view.status['amp-1'];
+    assert.equal(status.state, 'online');
+    assert.equal(status.amp.pa_switch, 1);
+    assert.equal(status.amp.ptt_status, 1);
+    assert.equal(status.amp.band, '20m');
+    assert.equal(status.amp.out_fwd_power, 95.4);
+    assert.equal(status.amp.out_swr, 1.8);
+    assert.equal(status.amp.current_voltage, 48.2);
+    assert.equal(status.amp.current_temperature, 42.5);
+    assert.equal(status.amp.alarm_active, false);
+    assert.equal(status.amp.pdc, 60.25);
+    assert.equal(status.amp.attenuator_list.length, 4);
+
+    // 只认主题对应的设备；串台的载荷丢弃。
+    const foreign = client.emit('message', 'amplifier/device/AMP1000-A/heartbeat',
+        Buffer.from(JSON.stringify({cmd: 'remote_control', data: {device_id: 'OTHER', pa_switch: 0}})));
+    assert.equal(foreign, true);
+    assert.equal(service.snapshot(globalCtx, rows, now).status['amp-1'].amp.pa_switch, 1);
+
+    client.emit('close');
+    view = service.snapshot(globalCtx, rows, new Date(now.getTime() + 1000));
+    assert.equal(view.status['amp-1'].state, 'offline');
+    assert.equal(view.status['amp-1'].error, 'transport-connect');
+    // 断线后仍保留最后一次读数，界面可以提示最后状态。
+    assert.equal(view.status['amp-1'].amp.out_fwd_power, 95.4);
+
+    // 重连后下发只包含调用方给的 delta，并带上设备 ID。
+    client.emit('connect');
+    const sent = await ampLink.publish(storage.devices.toDevice(rows[0]), {pa_switch: 0});
+    assert.equal(sent.ok, true);
+    const published = client.published[client.published.length - 1];
+    assert.equal(published.topic, 'amplifier/device/AMP1000-A/json_command');
+    assert.equal(published.message.cmd, 'remote_control');
+    assert.equal(published.message.data.pa_switch, 0);
+    assert.equal(published.message.data.device_id, 'AMP1000-A');
+
+    ampLink.resetForTests();
+});
+
+test('AMP1000 下发命令只走白名单，校准/工程参数一律拒绝', async () => {
+    fakeTransports();
+    const now = new Date('2026-03-01T12:00:00.000Z');
+    const globalCtx = makeContext();
+    const rows = [ampRow()];
+    const headers = {'X-DX-Seat': 'OP-A'};
+
+    let result = await service.handleCommand(globalCtx, rows, 'amp-1',
+        {command: 'amp_set', args: {pa_switch: 0, tune_mode: 1}}, headers, now);
+    assert.equal(result.status, 202);
+    assert.equal(result.payload.ok, true);
+    assert.deepEqual(result.payload.delta, {pa_switch: 0, tune_mode: 1});
+
+    result = await service.handleCommand(globalCtx, rows, 'amp-1',
+        {command: 'amp_set', args: {eng_params: {}}}, headers, now);
+    assert.equal(result.status, 400);
+    assert.equal(result.payload.error, 'invalid-arg');
+
+    result = await service.handleCommand(globalCtx, rows, 'amp-1',
+        {command: 'amp_set', args: {calibration_gain: 12}}, headers, now);
+    assert.equal(result.status, 400);
+    assert.equal(result.payload.error, 'invalid-arg');
+
+    result = await service.handleCommand(globalCtx, rows, 'amp-1',
+        {command: 'amp_set', args: {tune_mode: 2}}, headers, now);
+    assert.equal(result.status, 400);
+
+    result = await service.handleCommand(globalCtx, rows, 'amp-1',
+        {command: 'amp_set', args: {}}, headers, now);
+    assert.equal(result.status, 400);
+    assert.equal(result.payload.error, 'empty-command');
+
+    result = await service.handleCommand(globalCtx, rows, 'amp-1',
+        {command: 'amp_calibrate'}, headers, now);
+    assert.equal(result.status, 400);
+    assert.equal(result.payload.error, 'unknown-command');
+});
+
+test('AMP1000 配置：MQTT 字段白名单与口令隐藏', () => {
+    const saved = model.normalizeDevice({
+        type: 'amp', name: 'AMP1000',
+        config: {
+            host: '192.168.1.50', port: 1883, protocol: 'mqtt', device_id: 'AMP1000-1',
+            topic_prefix: 'amplifier/device', username: 'dx', password: 'secret'
+        }
+    }, {devices: []});
+    assert.equal(saved.ok, true);
+    assert.equal(saved.device.config.protocol, 'mqtt');
+    assert.equal(saved.device.config.device_id, 'AMP1000-1');
+    const pub = model.publicDevice(saved.device);
+    assert.equal(pub.config.password, undefined);
+    assert.equal(pub.has_password, true);
+
+    const bad = model.normalizeDevice({type: 'amp', name: 'X', config: {protocol: 'rotctld'}}, {devices: []});
+    assert.equal(bad.ok, false);
+    assert.equal(bad.error, 'invalid-config-protocol');
 });

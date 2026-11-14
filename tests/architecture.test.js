@@ -346,7 +346,7 @@ test('cold-start entry points wait for the readiness gate', () => {
         'Prepare rotator poll',
         'Prepare tower release',
         'Prepare tower watchdog',
-        'Run rotator poll',
+        'Run device polls',
         'Run tower release on start',
         'Run tower watchdog'
     ];
