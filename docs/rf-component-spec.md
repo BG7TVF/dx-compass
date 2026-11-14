@@ -102,6 +102,12 @@
   `ComputerName` + `RadioName` 对应；席位键仍由现有 `seat-identity` 规则解析
   （ComputerName + RadioName + RadioNr，回退 SourceIP + RadioNr），不另造一套。
 - 快照时把 `radioStates` 的席位键回填到匹配的电台节点，`seat` 只读展示，不手填。
+- `config.computer` / `config.model` 在表单里是下拉，候选由服务端从**实收 N1MM 报文**汇聚：
+  `GET /api/seats` 的 `candidates` 返回 `computers` / `radios` / `pairs`（均带 `lastSeen`）。
+  取数同时覆盖 HTTP relay（`resolveSeat`）与直收 UDP（`saveRadio` / `parseContact` 补记）。
+- 型号下拉按所选 ComputerName 过滤；不存在的组合只提示、不阻止保存。
+- 已有配置即使暂不在候选集里也保留在下拉首项（标“当前配置”）；候选为空时下拉与说明
+  都给出「尚未收到 N1MM UDP 报文」，并提供「重新获取」。
 - `devices.seat` 列删除；否则会留下两套归属来源。
 
 ### 5.2 多席位共用设备怎么表达

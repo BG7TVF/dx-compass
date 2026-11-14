@@ -151,3 +151,42 @@ test('同一 ComputerName 与 RadioNr 但 RadioName 不同时仍分开', () => {
     assert.equal(seatIdentity.summary(ctx).seats.length, 2);
     assert.notEqual(second.event.seat, 'PC-TWIN:1');
 });
+
+test('候选集汇聚 ComputerName 与 RadioName，并保留最近出现时间', () => {
+    const ctx = new Context();
+    feed(ctx, 'PC-ALPHA', 'ICOM', '1', {ip: '10.0.0.90', port: '50001'}, '{A}');
+    feed(ctx, 'PC-ALPHA', 'YAESU', '2', {ip: '10.0.0.90', port: '50002'}, '{B}');
+    const later = new Date('2026-11-12T08:05:00.000Z');
+    ingestApi.ingest(ctx, radio('ICOM', '1'), later, {ip: '10.0.0.90', port: '50001'});
+
+    const view = seatIdentity.candidates(ctx);
+    assert.deepEqual(view.computers.map(item => item.name), ['PC-ALPHA']);
+    assert.deepEqual(view.radios.map(item => item.name).sort(), ['ICOM', 'YAESU']);
+    const icom = view.pairs.find(item => item.radioName === 'ICOM');
+    assert.equal(icom.computerName, 'PC-ALPHA');
+    assert.equal(icom.lastSeen, later.toISOString());
+    assert.equal(view.updatedAt, later.toISOString());
+    assert.equal(seatIdentity.list(ctx).candidates.computers.length, 1);
+});
+
+test('候选集只收到 ComputerName 时保留计算机名，型号为空', () => {
+    const ctx = new Context();
+    ingestApi.ingest(ctx, contact('PC-ONLY', '1', '{C}'), NOW, {ip: '10.0.0.91', port: '50001'});
+    const view = seatIdentity.candidates(ctx);
+    assert.deepEqual(view.computers.map(item => item.name), ['PC-ONLY']);
+    assert.deepEqual(view.radios, []);
+    assert.equal(view.pairs.length, 1);
+    assert.equal(view.pairs[0].radioName, '');
+});
+
+test('候选集按大小写不敏感去重，并采用最近一次的写法', () => {
+    const ctx = new Context();
+    ingestApi.ingest(ctx, contact('PC-Case', '1', '{D}'), NOW, {ip: '10.0.0.92', port: '50001'});
+    const later = new Date('2026-11-12T08:06:00.000Z');
+    ingestApi.ingest(ctx, contact('pc-case', '1', '{E}'), later, {ip: '10.0.0.92', port: '50001'});
+    const view = seatIdentity.candidates(ctx);
+    assert.equal(view.computers.length, 1);
+    assert.equal(view.computers[0].name, 'pc-case');
+    assert.equal(view.updatedAt, later.toISOString());
+});
+

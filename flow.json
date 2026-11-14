@@ -1641,7 +1641,7 @@
         "type": "function",
         "z": "dxc0000000000090",
         "name": "Parse QSO",
-        "func": "await global.get('dx').ready.whenReady();\nconst dx = global.get('dx');\nconst qso = dx.qso.parseContact(msg.payload, new Date(), {ip: msg.ip});\nif (!qso) return null;\nmsg.qso = qso;\nmsg.topic = dx.storage.qso.upsert(qso);\nreturn msg;",
+        "func": "await global.get('dx').ready.whenReady();\nconst dx = global.get('dx');\nconst qso = dx.qso.parseContact(global, msg.payload, new Date(), {ip: msg.ip});\nif (!qso) return null;\nmsg.qso = qso;\nmsg.topic = dx.storage.qso.upsert(qso);\nreturn msg;",
         "outputs": 1,
         "timeout": "",
         "noerr": 0,

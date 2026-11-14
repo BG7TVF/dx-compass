@@ -27,6 +27,7 @@ import {
     saveDraftBatch,
     sendDeviceCommand
 } from '../../shared/data/devices.mjs';
+import {getSeatIdentities} from '../../shared/data/station.mjs';
 
 const POLL_MS = 2000;
 const NODE_W = 210;
@@ -150,6 +151,8 @@ export function createDevicesPage(ctx) {
     let draftCtlLinks = [];
     let draftAddresses = {};
     let draftPreviewSeq = 0;
+    // 电台属性下拉的 N1MM 候选：由服务端从已收报文汇聚，失败时保留旧值展示。
+    let n1mmCandidate = {status: 'idle', data: null, loadedAt: 0, seq: 0};
 
     function t(key, params) {
         const value = ctx.t(key, params);
@@ -831,11 +834,169 @@ export function createDevicesPage(ctx) {
         </fieldset>`;
     }
 
+    /* ---- 电台 ComputerName / 型号下拉：候选来自 N1MM 报文 ---------------- */
+
+    const CANDIDATE_TTL_MS = 15000;
+
+    function candidateKey(value) {
+        return String(value || '').trim().toLowerCase();
+    }
+
+    function candidatePairs() {
+        const data = n1mmCandidate.data;
+        return data && Array.isArray(data.pairs) ? data.pairs : [];
+    }
+
+    function candidateComputers() {
+        const data = n1mmCandidate.data;
+        return data && Array.isArray(data.computers) ? data.computers : [];
+    }
+
+    function candidateRadios() {
+        const data = n1mmCandidate.data;
+        return data && Array.isArray(data.radios) ? data.radios : [];
+    }
+
+    /** 型号候选按所选 ComputerName 过滤；该机器只有 ContactInfo 时回退到全量型号。 */
+    function candidateRadiosFor(computerName) {
+        const key = candidateKey(computerName);
+        if (!key) return candidateRadios();
+        const names = new Map();
+        for (const pair of candidatePairs()) {
+            if (!pair.radioName || candidateKey(pair.computerName) !== key) continue;
+            const radioKey = candidateKey(pair.radioName);
+            const previous = names.get(radioKey);
+            if (!previous || String(pair.lastSeen || '') > String(previous.lastSeen || '')) {
+                names.set(radioKey, {name: pair.radioName, lastSeen: pair.lastSeen || null});
+            }
+        }
+        return names.size ? [...names.values()] : candidateRadios();
+    }
+
+    function candidateEmpty() {
+        return !candidateComputers().length && !candidateRadios().length;
+    }
+
+    function candidatePlaceholder(computerName) {
+        if (candidateEmpty()) return t('dev.radio.candidates.empty');
+        if (computerName && !candidateRadiosFor(computerName).length) return t('dev.radio.candidates.noModel');
+        return '—';
+    }
+
+    function candidateNoteText() {
+        const status = n1mmCandidate.status;
+        if (status === 'error') return t('dev.radio.candidates.error');
+        if (status === 'idle' || status === 'loading') return t('dev.radio.candidates.loading');
+        if (candidateEmpty()) return t('dev.radio.candidates.empty');
+        const stamp = n1mmCandidate.data && n1mmCandidate.data.updatedAt
+            ? clock(n1mmCandidate.data.updatedAt) : '—';
+        return t('dev.radio.candidates.ready', {count: candidateComputers().length, time: stamp});
+    }
+
+    /**
+     * 生成下拉选项：候选值 + 当前值。当前值即使已不在候选集里也必须保留，
+     * 否则刷新候选会把已有配置清掉；没有候选时把提示放进下拉，避免空列表。
+     */
+    function candidateOptions(entries, current, placeholder) {
+        const list = [];
+        const seen = new Set();
+        const push = (name, label) => {
+            const key = candidateKey(name);
+            if (!name || seen.has(key)) return;
+            seen.add(key);
+            list.push({name, label: label || name});
+        };
+        const currentInList = entries.some(entry => candidateKey(entry.name) === candidateKey(current));
+        if (current) push(current, currentInList ? current : `${current} ${t('dev.radio.candidates.keep')}`);
+        for (const entry of entries) push(entry.name, entry.name);
+        if (!list.length) {
+            return `<option value="" selected disabled>${esc(placeholder || '—')}</option>`;
+        }
+        const options = list.map(item =>
+            `<option value="${esc(item.name)}"${item.name === current ? ' selected' : ''}>${esc(item.label)}</option>`);
+        if (!entries.length && placeholder) {
+            // 候选为空时仍把“尚未收到报文”明确写在下拉里。
+            const selected = current ? '' : ' selected';
+            options.push(`<option value="" disabled${selected}>${esc(placeholder)}</option>`);
+        }
+        return options.join('');
+    }
+
+    function fillCandidateSelect(select, entries, current, placeholder) {
+        if (!select) return;
+        select.innerHTML = candidateOptions(entries, current, placeholder);
+        if (current) select.value = current;
+    }
+
+    function candidateMismatch(computerName, radioName) {
+        if (!computerName || !radioName || candidateEmpty()) return false;
+        const cn = candidateKey(computerName);
+        const rn = candidateKey(radioName);
+        if (!candidateComputers().some(item => candidateKey(item.name) === cn)) return true;
+        return !candidatePairs().some(pair =>
+            candidateKey(pair.computerName) === cn && candidateKey(pair.radioName) === rn);
+    }
+
+    /** 只重绘两个下拉与提示，不整表重渲染，避免冲掉其他未保存的输入。 */
+    function refreshCandidateControls() {
+        const form = $('#devFormEl');
+        if (!form) return;
+        const computerSelect = form.querySelector('select[name="cfg_computer"]');
+        const modelSelect = form.querySelector('select[name="cfg_model"]');
+        if (!computerSelect || !modelSelect) return;
+        const computer = computerSelect.value;
+        const model = modelSelect.value;
+        fillCandidateSelect(computerSelect, candidateComputers(), computer, t('dev.radio.candidates.empty'));
+        fillCandidateSelect(modelSelect, candidateRadiosFor(computer), model, candidatePlaceholder(computer));
+        const note = $('#devCandidateNote');
+        if (note) note.textContent = candidateNoteText();
+        const hint = $('#devCandidateHint');
+        if (hint) {
+            const mismatch = candidateMismatch(computer, model);
+            hint.textContent = mismatch ? t('dev.radio.candidates.mismatch') : '';
+            hint.classList.toggle('hidden', !mismatch);
+        }
+    }
+
+    async function loadCandidates(force) {
+        const now = Date.now();
+        if (!force) {
+            if (n1mmCandidate.status === 'loading') return;
+            if (n1mmCandidate.status !== 'idle' && now - n1mmCandidate.loadedAt < CANDIDATE_TTL_MS) return;
+        }
+        n1mmCandidate.seq += 1;
+        const seq = n1mmCandidate.seq;
+        n1mmCandidate.status = 'loading';
+        refreshCandidateControls();
+        try {
+            const data = await getSeatIdentities();
+            if (seq !== n1mmCandidate.seq) return;
+            const candidates = data && data.candidates ? data.candidates : null;
+            const empty = !candidates ||
+                (!(candidates.computers || []).length && !(candidates.radios || []).length);
+            n1mmCandidate = {status: empty ? 'empty' : 'ready', data: candidates, loadedAt: Date.now(), seq};
+        } catch (error) {
+            if (seq !== n1mmCandidate.seq) return;
+            // 读取失败保留旧候选，已有配置与可选项不因一次失败消失。
+            n1mmCandidate = {status: 'error', data: n1mmCandidate.data, loadedAt: Date.now(), seq};
+        }
+        refreshCandidateControls();
+    }
+
     function configFields(value) {
         const config = value.config || {};
         if (value.type === 'radio') {
-            return `<label>${t('dev.form.computer')}<input name="cfg_computer" maxlength="100" value="${esc(config.computer || '')}"></label>
-                <label>${t('dev.form.model')}<input name="cfg_model" maxlength="100" value="${esc(config.model || '')}"></label>`;
+            // ComputerName 与型号都来自 N1MM 实收报文，手工输入改为下拉；
+            // 当前配置即使不在候选集里也保留，并在下方提示是否为已知组合。
+            const computer = String(config.computer || '');
+            const model = String(config.model || '');
+            return `<label>${t('dev.form.computer')}<select name="cfg_computer">${candidateOptions(candidateComputers(), computer, t('dev.radio.candidates.empty'))}</select></label>
+                <label>${t('dev.form.model')}<select name="cfg_model">${candidateOptions(candidateRadiosFor(computer), model, candidatePlaceholder(computer))}</select></label>
+                <div class="dev-candidate-row">
+                    <span class="dev-note" id="devCandidateNote">${esc(candidateNoteText())}</span>
+                    <button class="dev-btn" type="button" id="devCandidateRefresh">${esc(t('dev.radio.candidates.refresh'))}</button>
+                </div>
+                <p class="dev-note dev-candidate-hint hidden" id="devCandidateHint"></p>`;
         }
         if (value.type === 'swr' || value.type === 'amp') {
             return `<label>${t('dev.form.reportHost')}<input name="cfg_host" maxlength="100" value="${esc(config.host || '')}"></label>
@@ -1156,6 +1317,11 @@ export function createDevicesPage(ctx) {
         if (!formDirty && signature !== formSignature) {
             formBox.innerHTML = formHtml();
             formSignature = signature;
+            if (value.type === 'radio') {
+                // 先用缓存渲染，再异步刷新候选；下拉改由服务端候选集驱动。
+                refreshCandidateControls();
+                void loadCandidates(false);
+            }
         }
         renderControl();
     }
@@ -2106,6 +2272,18 @@ export function createDevicesPage(ctx) {
 
         $('#devForm').addEventListener('submit', submitForm);
         $('#devForm').addEventListener('input', () => { formDirty = true; });
+        $('#devForm').addEventListener('change', event => {
+            if (!event.target ||
+                !event.target.matches('select[name="cfg_computer"], select[name="cfg_model"]')) return;
+            // 切换计算机名时按新机器过滤型号；换型号时同步更新“是否已知组合”的提示。
+            refreshCandidateControls();
+        });
+        $('#devForm').addEventListener('click', event => {
+            if (event.target && event.target.id === 'devCandidateRefresh') {
+                event.preventDefault();
+                void loadCandidates(true);
+            }
+        });
         $('#devForm').addEventListener('click', event => {
             if (event.target.id === 'devDelete') void removeSelected();
         });
@@ -2122,6 +2300,8 @@ export function createDevicesPage(ctx) {
         active = true;
         applyLabels();
         void refresh();
+        // 提前拉一次 N1MM 候选，选中电台时下拉已就绪。
+        void loadCandidates(false);
         if (timer) clearInterval(timer);
         timer = setInterval(() => {
             if (active && !document.hidden) void refresh();
