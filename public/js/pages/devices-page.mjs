@@ -108,6 +108,8 @@ const ERROR_KEYS = {
     'device-transmitting': 'dev.error.device-transmitting',
     'device-countdown': 'dev.error.device-countdown',
     'invalid-state': 'dev.error.invalid-state',
+    'rotator-moving': 'dev.error.rotator-moving',
+    'rotator-settling': 'dev.error.rotator-settling',
     'rate-limited': 'dev.error.rate-limited',
     'invalid-azimuth': 'dev.error.invalid-azimuth',
     'transport-error': 'dev.error.transport-error',

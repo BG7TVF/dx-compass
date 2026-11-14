@@ -658,6 +658,9 @@ test('device lease allows one seat, renews and expires after 30s', async () => {
     let result = await service.handleCommand(globalCtx, rows, 'rotator-1',
         {command: 'rotate', azimuth: 45}, {'X-DX-Seat': 'OP-A'}, now);
     assert.equal(result.status, 202);
+    // 模拟位置上报到位，解除运动锁。
+    service.handle(globalCtx, rows,
+        {action: 'report', device_id: 'rotator-1', azimuth: 45}, new Date(now.getTime() + 3000));
 
     result = await service.handleCommand(globalCtx, rows, 'rotator-1',
         {command: 'rotate', azimuth: 90}, {'X-DX-Seat': 'OP-B'}, now);
@@ -665,11 +668,13 @@ test('device lease allows one seat, renews and expires after 30s', async () => {
     assert.equal(result.payload.error, 'device-locked');
     assert.equal(result.payload.owner, 'OP-A');
 
-    // 同席位继续操作会续租。
+    // 同席位继续操作会续租（先上报到位，避免被运动锁拦住）。
     const later = new Date(now.getTime() + 20000);
     result = await service.handleCommand(globalCtx, rows, 'rotator-1',
         {command: 'rotate', azimuth: 90}, {'X-DX-Seat': 'OP-A'}, later);
     assert.equal(result.status, 202);
+    service.handle(globalCtx, rows,
+        {action: 'report', device_id: 'rotator-1', azimuth: 90}, new Date(later.getTime() + 15000));
 
     // 续租后 30 秒内仍归 OP-A，超过 30 秒自动释放。
     const stillHeld = new Date(later.getTime() + 29000);
@@ -701,18 +706,48 @@ test('angle idempotency returns the first result and treats 360 as 0', async () 
     assert.equal(duplicate.payload.duplicate, true);
     assert.equal(duplicate.payload.command_id, first.payload.command_id);
 
+    // 转向中拒绝新方向：必须先 stop。
     const different = await service.handleCommand(globalCtx, rows, 'rotator-1',
         {command: 'rotate', azimuth: 90}, headers, now);
-    assert.equal(different.status, 202);
-    assert.notEqual(different.payload.command_id, first.payload.command_id);
+    assert.equal(different.status, 409);
+    assert.equal(different.payload.error, 'rotator-moving');
 
-    // stop 清空目标，之后同角度会重新下发。
+    // stop 清空目标，但 2 秒静默期内仍不放行新方向。
     const stopped = await service.handleCommand(globalCtx, rows, 'rotator-1',
         {command: 'stop'}, {'X-DX-Seat': 'OP-B'}, now);
     assert.equal(stopped.status, 202);
-    const again = await service.handleCommand(globalCtx, rows, 'rotator-1',
+    const settling = await service.handleCommand(globalCtx, rows, 'rotator-1',
         {command: 'rotate', azimuth: 90}, headers, now);
+    assert.equal(settling.status, 409);
+    assert.equal(settling.payload.error, 'rotator-settling');
+    const afterSettle = new Date(now.getTime() + 2500);
+    const again = await service.handleCommand(globalCtx, rows, 'rotator-1',
+        {command: 'rotate', azimuth: 90}, headers, afterSettle);
     assert.equal(again.status, 202);
+});
+
+test('rotator delays new directions after arrival', async () => {
+    fakeTransports();
+    const now = new Date('2026-03-01T12:00:00.000Z');
+    const globalCtx = makeContext();
+    const rows = [deviceRow({id: 'rotator-1', type: 'rotator', bands: '', travel_timeout_sec: 60})];
+    const headers = {'X-DX-Seat': 'OP-A'};
+
+    let result = await service.handleCommand(globalCtx, rows, 'rotator-1',
+        {command: 'rotate', azimuth: 90}, headers, now);
+    assert.equal(result.status, 202);
+
+    const arrived = new Date(now.getTime() + 3000);
+    service.handle(globalCtx, rows,
+        {action: 'report', device_id: 'rotator-1', azimuth: 90}, arrived);
+    const stillSettling = await service.handleCommand(globalCtx, rows, 'rotator-1',
+        {command: 'rotate', azimuth: 270}, headers, new Date(arrived.getTime() + 1000));
+    assert.equal(stillSettling.status, 409);
+    assert.equal(stillSettling.payload.error, 'rotator-settling');
+
+    result = await service.handleCommand(globalCtx, rows, 'rotator-1',
+        {command: 'rotate', azimuth: 270}, headers, new Date(arrived.getTime() + 3000));
+    assert.equal(result.status, 202);
 });
 
 test('select is blocked with 423 when a TX source reports active', async () => {
