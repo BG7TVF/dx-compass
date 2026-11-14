@@ -112,6 +112,8 @@ const ERROR_KEYS = {
     'transport-not-configured': 'dev.error.transport-not-configured',
     'tx-active': 'dev.error.tx-active',
     'invalid-config': 'dev.error.invalid-config',
+    'invalid-amp-brand': 'dev.error.invalid-amp-brand',
+    'invalid-amp-model': 'dev.error.invalid-amp-model',
     'invalid-config-channels': 'dev.error.invalid-config-channels',
     'invalid-device-type': 'dev.error.invalid-device-type',
     'invalid-port': 'dev.error.invalid-port',
@@ -187,6 +189,128 @@ export function createDevicesPage(ctx) {
     /** 数值读数格式化：缺失时给 —，避免卡片出现 NaN。 */
     function metric(value, digits = 1) {
         return Number.isFinite(value) ? Number(value).toFixed(digits) : '—';
+    }
+
+    // ---- 功放品牌/型号描述表（服务端 amp-models.js 是唯一数据源） ----
+    function ampCatalog() {
+        return (snapshot && snapshot.amp_models) || {brands: [], generic: null};
+    }
+
+    function ampBrands() {
+        return ampCatalog().brands || [];
+    }
+
+    /** 解析设备配置对应的型号定义；未选或「其他」时用通用定义。 */
+    function ampDefinitionFor(config) {
+        const source = config || {};
+        const brandId = String(source.brand || '');
+        const modelId = String(source.model || '');
+        const catalog = ampCatalog();
+        // 明确选「其他品牌」时按手工填写处理，不再拿型号去猜协议。
+        if (modelId && modelId !== 'other' && brandId !== 'other') {
+            const brands = ampBrands().filter(item => !brandId || item.id === brandId);
+            for (const brand of brands) {
+                const found = (brand.models || []).find(item => item.id === modelId);
+                if (found) return found;
+            }
+        }
+        return catalog.generic || null;
+    }
+
+    function ampStatusItems(config, cardOnly) {
+        const definition = ampDefinitionFor(config);
+        const items = (definition && definition.status) || [];
+        return cardOnly ? items.filter(item => item.card) : items;
+    }
+
+    /** 一项状态按描述表里的 kind 读出可展示文本；没有读数时留空。 */
+    function ampItemText(item, amp) {
+        if (!item || !amp) return '';
+        const value = amp[item.key];
+        if (item.kind === 'freq') {
+            return Number.isFinite(value) ? (value / 1e6).toFixed(3) + ' MHz' : '';
+        }
+        if (item.kind === 'band') return amp.band || '';
+        if (item.kind === 'state') {
+            if (value === 1) return t(item.on);
+            if (value === 0) return t(item.off);
+            return '';
+        }
+        if (item.kind === 'flag') return value === item.when ? t(item.label) : '';
+        if (item.kind === 'metric') {
+            const digits = Number.isInteger(item.digits) ? item.digits : 1;
+            const text = metric(value, digits);
+            return `${t(item.label)} ${text}${item.unit ? ' ' + item.unit : ''}`;
+        }
+        if (item.kind === 'alarm') {
+            return value ? `${t(item.label)} 0x${Number(amp.alarm_word || 0).toString(16).toUpperCase()}` : '';
+        }
+        return '';
+    }
+
+    function ampFieldHtml(field, values) {
+        const raw = values[field.key];
+        const value = raw === undefined || raw === null || raw === '' ? field.default : raw;
+        const shown = value === undefined || value === null ? '' : value;
+        if (field.type === 'number') {
+            return `<label>${esc(t(field.label))}<input name="cfg_${esc(field.key)}" type="number"
+                min="${esc(field.min)}" max="${esc(field.max)}" step="${esc(field.step || 1)}"
+                value="${esc(shown)}"></label>`;
+        }
+        if (field.type === 'select') {
+            const options = (field.options || []).map(item =>
+                `<option value="${esc(item.value)}"${String(item.value) === String(shown) ? ' selected' : ''}>${esc(t(item.label))}</option>`).join('');
+            return `<label>${esc(t(field.label))}<select name="cfg_${esc(field.key)}">${options}</select></label>`;
+        }
+        const type = field.type === 'password' ? 'password' : 'text';
+        const extra = field.type === 'password'
+            ? ` autocomplete="off" placeholder="${esc(t(field.placeholder || 'dev.config.keepPassword'))}" value="${esc(shown)}"`
+            : ` maxlength="${esc(field.maxlength || 100)}" value="${esc(shown)}"`;
+        return `<label>${esc(t(field.label))}<input name="cfg_${esc(field.key)}" type="${type}"${extra}></label>`;
+    }
+
+    /** 型号决定字段集合；values 是当前表单里已填的内容（切换型号时原样带入）。 */
+    function ampConfigFields(config, values) {
+        const merged = Object.assign({}, config || {}, values || {});
+        const brandId = String(merged.brand || '');
+        const modelId = String(merged.model || '');
+        const brandOptions = [`<option value="">${esc(t('dev.config.brandNone'))}</option>`]
+            .concat(ampBrands().map(brand =>
+                `<option value="${esc(brand.id)}"${brandId === brand.id ? ' selected' : ''}>${esc(brand.name)}</option>`))
+            .concat([`<option value="other"${brandId === 'other' ? ' selected' : ''}>${esc(t('dev.config.brandOther'))}</option>`]);
+        const brand = ampBrands().find(item => item.id === brandId);
+        const models = brand ? (brand.models || []) : [];
+        // 品牌换了以后，旧型号不再属于当前品牌，按「未指定」处理。
+        const modelValue = modelId === 'other' || models.some(item => item.id === modelId) ? modelId : '';
+        const modelOptions = [`<option value="">${esc(t('dev.config.modelNone'))}</option>`]
+            .concat(models.map(model =>
+                `<option value="${esc(model.id)}"${modelValue === model.id ? ' selected' : ''}>${esc(model.name)}</option>`))
+            .concat([`<option value="other"${modelValue === 'other' ? ' selected' : ''}>${esc(t('dev.config.modelOther'))}</option>`]);
+        const definition = ampDefinitionFor(Object.assign({}, merged, {model: modelValue}));
+        const protocol = definition ? String(definition.protocol || 'mqtt') : 'mqtt';
+        const fields = definition ? (definition.fields || []) : [];
+        return `<div class="dev-config-fields" id="devConfigFields">
+            <label>${t('dev.config.brand')}<select name="cfg_brand">${brandOptions.join('')}</select></label>
+            <label>${t('dev.config.ampModel')}<select name="cfg_amp_model">${modelOptions.join('')}</select></label>
+            <p class="dev-note">${t('dev.config.resolvedProtocol', {protocol: protocol.toUpperCase()})}</p>
+            ${fields.map(field => ampFieldHtml(field, merged)).join('')}
+        </div>`;
+    }
+
+    /** 只重绘功放配置字段：切型号不重置已填写的地址与凭据。 */
+    function refreshAmpConfigFields() {
+        const box = document.getElementById('devConfigFields');
+        if (!box) return;
+        const values = {};
+        for (const input of box.querySelectorAll('input[name^="cfg_"]')) {
+            values[input.name.slice(4)] = input.value;
+        }
+        const brandSelect = box.querySelector('select[name="cfg_brand"]');
+        const modelSelect = box.querySelector('select[name="cfg_amp_model"]');
+        values.brand = brandSelect ? brandSelect.value : '';
+        values.model = modelSelect ? modelSelect.value : '';
+        box.outerHTML = ampConfigFields(values, values);
+        formDirty = true;
     }
 
     function radioLiveText(status) {        const radio = status && status.radio;
@@ -489,14 +613,10 @@ export function createDevicesPage(ctx) {
         if (device.type === 'amp' && snapshot) {
             const amp = (deviceStatus(device.id) || {}).amp;
             if (amp) {
-                if (amp.pa_switch === 1) parts.push(t('dev.amp.paOn'));
-                else if (amp.pa_switch === 0) parts.push(t('dev.amp.paOff'));
-                if (Number.isFinite(amp.work_freq)) parts.push((amp.work_freq / 1e6).toFixed(3) + ' MHz');
-                parts.push(t('dev.amp.readingPower', {w: metric(amp.out_fwd_power)}));
-                parts.push(t('dev.amp.readingSwr', {v: metric(amp.out_swr, 2)}));
-                parts.push(t('dev.amp.readingTemp', {v: metric(amp.current_temperature)}));
-                if (amp.ptt_status === 1) parts.push(t('dev.amp.transmitting'));
-                if (amp.alarm_active) parts.push(t('dev.amp.alarm'));
+                for (const item of ampStatusItems(device.config, true)) {
+                    const text = ampItemText(item, amp);
+                    if (text) parts.push(text);
+                }
             }
         }
         return parts.join(' · ');
@@ -1057,15 +1177,7 @@ export function createDevicesPage(ctx) {
                 <p class="dev-note dev-candidate-hint hidden" id="devCandidateHint"></p>`;
         }
         if (value.type === 'amp') {
-            const protocol = String(config.protocol || 'mqtt');
-            return `<label>${t('dev.config.protocol')}<select name="cfg_protocol">
-                    <option value="mqtt"${protocol === 'mqtt' ? ' selected' : ''}>MQTT</option></select></label>
-                <label>${t('dev.config.brokerHost')}<input name="cfg_host" maxlength="100" value="${esc(config.host || '')}"></label>
-                <label>${t('dev.config.port')}<input name="cfg_port" type="number" min="1" max="65535" step="1" value="${esc(config.port || '')}"></label>
-                <label>${t('dev.config.deviceId')}<input name="cfg_device_id" maxlength="100" value="${esc(config.device_id || '')}"></label>
-                <label>${t('dev.config.topicPrefix')}<input name="cfg_topic_prefix" maxlength="200" placeholder="amplifier/device" value="${esc(config.topic_prefix || '')}"></label>
-                <label>${t('dev.config.username')}<input name="cfg_username" maxlength="100" autocomplete="off" value="${esc(config.username || '')}"></label>
-                <label>${t('dev.config.password')}<input name="cfg_password" type="password" autocomplete="off" placeholder="${esc(t('dev.config.keepPassword'))}"></label>`;
+            return ampConfigFields(config);
         }
         if (value.type === 'swr') {
             return `<label>${t('dev.form.reportHost')}<input name="cfg_host" maxlength="100" value="${esc(config.host || '')}"></label>
@@ -1264,14 +1376,13 @@ export function createDevicesPage(ctx) {
                 <p class="dev-note">${esc(portHint)}</p>${error}`;
         }
         if (device.type === 'amp') {
+            const definition = ampDefinitionFor(device.config);
+            // 可控制项由型号描述表给出；未选型号时用通用定义（常规操作，不含校准）。
+            const buttons = ((definition && definition.controls) || []).map(control =>
+                `<button class="dev-btn${control.primary ? ' primary' : ''}" type="button" data-cmd="amp_set"
+                    data-amp="${esc(control.action)}" data-amp-delta="${esc(JSON.stringify(control.delta || {}))}">${esc(t(control.label))}</button>`).join('');
             return `<h3>${t('dev.control.title')}</h3>${status}
-                <div class="dev-ctrl-row">
-                    <button class="dev-btn primary" type="button" data-cmd="amp_set" data-amp="pa_on">${t('dev.amp.paOn')}</button>
-                    <button class="dev-btn" type="button" data-cmd="amp_set" data-amp="pa_off">${t('dev.amp.paOff')}</button>
-                    <button class="dev-btn" type="button" data-cmd="amp_set" data-amp="tune_on">${t('dev.amp.tuneOn')}</button>
-                    <button class="dev-btn" type="button" data-cmd="amp_set" data-amp="tune_off">${t('dev.amp.tuneOff')}</button>
-                    <button class="dev-btn" type="button" data-cmd="amp_set" data-amp="clear_alarm">${t('dev.amp.clearAlarm')}</button>
-                </div>
+                <div class="dev-ctrl-row">${buttons}</div>
                 <div class="dev-ctrl-row">${seat}</div>
                 <p class="dev-note">${esc(t('dev.amp.controlHint'))}</p>${error}`;
         }
@@ -1299,19 +1410,9 @@ export function createDevicesPage(ctx) {
         }
         if (device.type === 'amp') {
             const amp = (status && status.amp) || {};
-            if (Number.isFinite(amp.work_freq)) parts.push((amp.work_freq / 1e6).toFixed(3) + ' MHz');
-            if (amp.band) parts.push(amp.band);
-            if (amp.pa_switch === 1) parts.push(t('dev.amp.paOn'));
-            if (amp.pa_switch === 0) parts.push(t('dev.amp.paOff'));
-            if (amp.tune_mode === 1) parts.push(t('dev.amp.tuneOn'));
-            if (amp.ptt_status === 1) parts.push(t('dev.amp.transmitting'));
-            parts.push(t('dev.amp.readingPower', {w: metric(amp.out_fwd_power)}));
-            parts.push(t('dev.amp.readingSwr', {v: metric(amp.out_swr, 2)}));
-            parts.push(t('dev.amp.readingTemp', {v: metric(amp.current_temperature)}));
-            parts.push(t('dev.amp.readingVoltage', {v: metric(amp.current_voltage)}));
-            parts.push(t('dev.amp.readingCurrent', {v: metric(amp.current_current)}));
-            if (amp.alarm_active) {
-                parts.push(t('dev.amp.alarm') + ' 0x' + Number(amp.alarm_word || 0).toString(16).toUpperCase());
+            for (const item of ampStatusItems(device.config, false)) {
+                const text = ampItemText(item, amp);
+                if (text) parts.push(text);
             }
         }
         const control = snapshot.controls && snapshot.controls[device.id];
@@ -1332,7 +1433,8 @@ export function createDevicesPage(ctx) {
             ctrlSignature = null;
             return;
         }
-        const signature = [value.id, value.type].join('|');
+        const signature = [value.id, value.type,
+            (value.config && value.config.brand) || '', (value.config && value.config.model) || ''].join('|');
         if (signature !== ctrlSignature) {
             container.innerHTML = controlHtml(value);
             ctrlSignature = signature;
@@ -1526,26 +1628,33 @@ export function createDevicesPage(ctx) {
         if (BAND_TYPES.includes(type)) device.bands = checkedBands(form);
         if (type === 'antenna') device.install_offset_deg = String(data.get('install_offset_deg') || '0');
         if (TRAVEL_TYPES.includes(type)) device.travel_timeout_sec = String(data.get('travel_timeout_sec') || '120');
-        device.config = formConfig(data, type, (value && value.config) || {});
+        device.config = formConfig(data, type);
         return device;
     }
 
     /** Protocol settings live under `config`; empty inputs clear the stored key. */
-    function formConfig(data, type, existingConfig) {
+    function formConfig(data, type) {
         const config = {};
         if (type === 'radio') {
             config.computer = String(data.get('cfg_computer') || '');
             config.model = String(data.get('cfg_model') || '');
         } else if (type === 'amp') {
-            config.protocol = 'mqtt';
-            config.host = String(data.get('cfg_host') || '');
-            config.port = String(data.get('cfg_port') || '');
-            config.device_id = String(data.get('cfg_device_id') || '');
-            config.topic_prefix = String(data.get('cfg_topic_prefix') || '');
-            config.username = String(data.get('cfg_username') || '');
-            const password = String(data.get('cfg_password') || '');
-            if (password) config.password = password;
-            else if (existingConfig && existingConfig.password) config.password = existingConfig.password;
+            config.brand = String(data.get('cfg_brand') || '');
+            config.model = String(data.get('cfg_amp_model') || '');
+            const definition = ampDefinitionFor(config);
+            config.protocol = (definition && definition.protocol) || 'mqtt';
+            // 只提交该型号真正显示的字段；没显示的键不出现在 config 里，
+            // 服务端按“未提供则沿用旧值”处理，切型号不会清掉地址和凭据。
+            for (const field of (definition && definition.fields) || []) {
+                const raw = data.get('cfg_' + field.key);
+                if (raw === null) continue;
+                const value = String(raw);
+                if (field.type === 'password') {
+                    if (value) config[field.key] = value;
+                    continue;
+                }
+                config[field.key] = value;
+            }
         } else if (type === 'swr' || type === 'rotator') {
             config.host = String(data.get('cfg_host') || '');
             config.port = String(data.get('cfg_port') || '');
@@ -2363,14 +2472,16 @@ export function createDevicesPage(ctx) {
                     outlet: outlet ? outlet.value : ''
                 });
             } else if (cmd === 'amp_set') {
-                const action = button.dataset.amp || '';
-                const delta = action === 'pa_on' ? {pa_switch: 1}
-                    : action === 'pa_off' ? {pa_switch: 0}
-                    : action === 'tune_on' ? {tune_mode: 1}
-                    : action === 'tune_off' ? {tune_mode: 0}
-                    : action === 'clear_alarm' ? {clear_alarm: true}
-                    : null;
-                if (delta) void sendCommand(device, {command: 'amp_set', args: delta});
+                // 下发内容由型号描述表给出，页面不再自带一份命令映射。
+                let delta = null;
+                try {
+                    delta = JSON.parse(button.dataset.ampDelta || '');
+                } catch (error) {
+                    delta = null;
+                }
+                if (delta && typeof delta === 'object' && Object.keys(delta).length) {
+                    void sendCommand(device, {command: 'amp_set', args: delta});
+                }
             }
         });
         $('#devControl').addEventListener('change', event => {
@@ -2390,8 +2501,13 @@ export function createDevicesPage(ctx) {
         $('#devForm').addEventListener('submit', submitForm);
         $('#devForm').addEventListener('input', () => { formDirty = true; });
         $('#devForm').addEventListener('change', event => {
-            if (!event.target ||
-                !event.target.matches('select[name="cfg_computer"], select[name="cfg_model"]')) return;
+            if (!event.target) return;
+            // 功放品牌/型号决定字段集合；切换时保留已填写的地址与凭据。
+            if (event.target.matches('select[name="cfg_brand"], select[name="cfg_amp_model"]')) {
+                refreshAmpConfigFields();
+                return;
+            }
+            if (!event.target.matches('select[name="cfg_computer"], select[name="cfg_model"]')) return;
             // 切换计算机名时按新机器过滤型号；换型号时同步更新“是否已知组合”的提示。
             refreshCandidateControls();
         });

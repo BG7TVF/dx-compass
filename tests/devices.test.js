@@ -15,6 +15,7 @@ const tx = require('../lib/devices/tx.js');
 const commands = require('../lib/devices/commands.js');
 const rotatorLink = require('../lib/devices/rotator-link.js');
 const ampLink = require('../lib/devices/amp-link.js');
+const ampModels = require('../lib/devices/amp-models.js');
 const service = require('../lib/devices/service.js');
 
 function fakeTransports() {
@@ -2269,4 +2270,64 @@ test('AMP1000 配置：MQTT 字段白名单与口令隐藏', () => {
     const bad = model.normalizeDevice({type: 'amp', name: 'X', config: {protocol: 'rotctld'}}, {devices: []});
     assert.equal(bad.ok, false);
     assert.equal(bad.error, 'invalid-config-protocol');
+});
+
+test('功放型号描述表：品牌/型号解析与协议派生', () => {
+    const catalog = ampModels.catalog();
+    assert.equal(catalog.brands.length, 1);
+    assert.equal(catalog.brands[0].id, 'guohe');
+    const definition = ampModels.resolve('guohe', 'amp1000');
+    assert.ok(definition, 'AMP1000 definition must exist');
+    assert.equal(definition.protocol, 'mqtt');
+    assert.ok(definition.fields.some(field => field.key === 'device_id'));
+    assert.ok(definition.controls.some(control => control.delta && control.delta.pa_switch === 1));
+    assert.ok(definition.status.some(item => item.key === 'out_fwd_power' && item.unit === 'W'));
+    // 未选型号/其他：退回通用定义，不报错。
+    assert.equal(ampModels.resolve('guohe', 'other'), null);
+    assert.equal(catalog.generic.controls.length, definition.controls.length);
+
+    const saved = model.normalizeDevice({
+        type: 'amp', name: 'PA', config: {brand: 'guohe', model: 'amp1000', host: '10.0.0.9'}
+    }, {devices: []});
+    assert.equal(saved.ok, true);
+    assert.equal(saved.device.config.protocol, 'mqtt');
+
+    const unknownBrand = model.normalizeDevice({
+        type: 'amp', name: 'PA', config: {brand: 'nope'}
+    }, {devices: []});
+    assert.equal(unknownBrand.ok, false);
+    assert.equal(unknownBrand.error, 'invalid-amp-brand');
+
+    const unknownModel = model.normalizeDevice({
+        type: 'amp', name: 'PA', config: {brand: 'guohe', model: 'amp9999'}
+    }, {devices: []});
+    assert.equal(unknownModel.ok, false);
+    assert.equal(unknownModel.error, 'invalid-amp-model');
+});
+
+test('功放切换型号保留已配置的地址与凭据', () => {
+    const existing = device({
+        id: 'amp-1', name: 'PA', type: 'amp',
+        config_json: JSON.stringify({
+            protocol: 'mqtt', host: '192.168.1.50', port: 1883, device_id: 'AMP1000-1',
+            topic_prefix: 'amplifier/device', username: 'dx', password: 'secret'
+        })
+    });
+    // 页面切型号时只提交 brand/model 与该型号显示的字段，其余键不出现。
+    const switched = model.normalizeDevice({
+        id: 'amp-1', config: {brand: 'guohe', model: 'amp1000', host: '192.168.1.50'}
+    }, {devices: [existing]});
+    assert.equal(switched.ok, true);
+    assert.equal(switched.device.config.device_id, 'AMP1000-1');
+    assert.equal(switched.device.config.username, 'dx');
+    assert.equal(switched.device.config.password, 'secret');
+    assert.equal(switched.device.config.topic_prefix, 'amplifier/device');
+    assert.equal(switched.device.config.protocol, 'mqtt');
+
+    // 设备快照把描述表一并下发，页面不需要自己维护一份型号数据。
+    const view = service.snapshot(makeContext(), [deviceRow({
+        id: 'amp-1', name: 'PA', type: 'amp', bands: '',
+        config_json: JSON.stringify(switched.device.config)
+    })], new Date());
+    assert.equal(view.amp_models.brands[0].models[0].id, 'amp1000');
 });

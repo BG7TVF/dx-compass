@@ -210,6 +210,10 @@
     gap: 10px;
 }
 
+/* 型号字段容器用 display:contents 保持原有栅格；说明行独占整行。 */
+.dev-config-fields { display: contents; }
+.dev-config-fields > .dev-note { grid-column: 1 / -1; margin: 0; }
+
 .dev-form label,
 .dev-seat-label {
     display: flex;
