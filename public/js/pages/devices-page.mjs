@@ -104,6 +104,11 @@ const ERROR_KEYS = {
     'invalid-band': 'dev.error.invalid-band',
     'device-locked': 'dev.error.device-locked',
     'device-disabled': 'dev.error.device-disabled',
+    'device-busy': 'dev.error.device-busy',
+    'device-transmitting': 'dev.error.device-transmitting',
+    'device-countdown': 'dev.error.device-countdown',
+    'invalid-state': 'dev.error.invalid-state',
+    'rate-limited': 'dev.error.rate-limited',
     'invalid-azimuth': 'dev.error.invalid-azimuth',
     'transport-error': 'dev.error.transport-error',
     'transport-timeout': 'dev.error.transport-timeout',
@@ -252,7 +257,10 @@ export function createDevicesPage(ctx) {
         if (item.kind === 'fault') {
             return value ? `${t(item.label)} ${amp.fault_code || amp.alarm_word}` : '';
         }
-        if (item.kind === 'text') return value ? String(value) : '';
+        if (item.kind === 'text') {
+            if (!value) return '';
+            return item.label ? `${t(item.label)} ${value}` : String(value);
+        }
         return '';
     }
 
