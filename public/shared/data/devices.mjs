@@ -37,6 +37,19 @@ export function deleteRfLink(link, {transport = defaultTransport, ...options} = 
     return transport.postJson('/api/devices', Object.assign({action: 'rf-unlink'}, payload), options);
 }
 
+/**
+ * Attach one control link (serial-server serialN ↔ a device control port).
+ * Control links never touch the RF graph or the TX interlock.
+ */
+export function saveControlLink(link, {transport = defaultTransport, ...options} = {}) {
+    return transport.postJson('/api/devices', {action: 'ctl-link', link}, options);
+}
+
+export function deleteControlLink(link, {transport = defaultTransport, ...options} = {}) {
+    const id = typeof link === 'string' ? link : (link && link.link_id);
+    return transport.postJson('/api/devices', {action: 'ctl-unlink', link_id: id}, options);
+}
+
 /** Create or update one TX status source. */
 export function saveTxSource(source, {transport = defaultTransport, ...options} = {}) {
     return transport.postJson('/api/devices', {action: 'tx-source', source}, options);
@@ -48,19 +61,17 @@ export function deleteTxSource(id, {transport = defaultTransport, ...options} = 
 
 /**
  * Send one device command through the single write channel.
- * Every command carries the seat identity; the device password is optional
- * and only sent when the device has one configured.
+ * Every command carries the seat identity; control addressing is resolved
+ * server-side from the device or its upstream serial server.
  */
 export function sendDeviceCommand(deviceId, command, {
     seat,
-    deviceToken,
     operator,
     transport = defaultTransport,
     ...options
 } = {}) {
     const headers = Object.assign({}, options.headers, {'X-DX-Seat': String(seat || '')});
     if (operator) headers['X-DX-Operator'] = String(operator);
-    if (deviceToken) headers['X-DX-Device-Token'] = String(deviceToken);
     return transport.postJson(
         `/api/devices/${encodeURIComponent(deviceId)}/command`,
         command,

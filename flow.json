@@ -4951,7 +4951,7 @@
         "type": "function",
         "z": "dxdev0000000000",
         "name": "Build device migrations",
-        "func": "const dx = global.get('dx');\nconst topics = dx.storage.devices.addMissingColumns(msg.payload);\nif (!topics.length) {\n    node.log('DB migration: device columns already complete');\n    return null;\n}\nreturn [topics.map(topic => ({topic}))];",
+        "func": "const dx = global.get('dx');\nconst topics = dx.storage.devices.addMissingColumns(msg.payload)\n    .concat(dx.storage.devices.legacyMigrations(msg.payload));\nif (!topics.length) {\n    node.log('DB migration: device schema already current');\n    return null;\n}\nreturn [topics.map(topic => ({topic}))];",
         "outputs": 1,
         "noerr": 0,
         "initialize": "",

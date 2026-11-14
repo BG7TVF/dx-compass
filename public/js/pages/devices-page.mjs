@@ -1,10 +1,17 @@
-﻿/**
- * Devices view: a Node-RED style canvas editor.
+/**
+ * Devices view: a global Node-RED style canvas.
  *
- * Left palette drags out new device drafts, wires on the canvas express the
- * single-parent tree, and the inspector edits one device at a time. Positions
- * are layout-only data stored in SQLite; every device state still comes from
- * GET /api/devices, and a failed refresh clears the view to `unknown`.
+ * The canvas is a single global topology: devices and RF links are not
+ * partitioned by seat. A radio owns the seat it belongs to (derived from
+ * ComputerName + radio model reported by N1MM), not the other way round.
+ *
+ * Port semantics are fixed:
+ *   - square  = RF port, connectable; `in` sits on the bottom edge
+ *     and `out` on the top edge so wiring follows signal direction;
+ *   - circle  = control / status port, never connectable to an RF wire.
+ *
+ * Palette drags out drafts; several drafts may coexist and saving is an
+ * explicit action. Positions are layout-only data in SQLite.
  */
 import {$, escapeHtml as esc, showToast, showConfirm} from '../ui.mjs';
 import {
@@ -14,23 +21,30 @@ import {
     saveDeviceLayouts,
     saveRfLink,
     deleteRfLink,
+    saveControlLink,
+    deleteControlLink,
     sendDeviceCommand
 } from '../../shared/data/devices.mjs';
 
 const POLL_MS = 2000;
 const NODE_W = 210;
-const NODE_H = 76;
+const NODE_H = 84;
 const CANVAS_MIN_W = 1600;
 const CANVAS_MIN_H = 1000;
 // 面板提供这十种可拖出的设备；前五种是射频链路组成部分，后五种是机械与射频路由支撑。
-// 切换器（1×n）与矩阵切换器（n×n）是两种不同类型，占用判定也不同。
-const PALETTE_TYPES = ['radio', 'swr', 'bpf', 'amp', 'antenna', 'tower', 'rotator', 'switch', 'matrix', 'combiner'];
-// 旧版本已有的兜底类型仍可编辑与显示，但不从面板新建。
-const TYPE_OPTIONS = PALETTE_TYPES.concat(['other']);
+const PALETTE_TYPES = ['radio', 'swr', 'bpf', 'amp', 'antenna', 'tower', 'rotator', 'switch', 'matrix', 'combiner', 'serial'];
 const TYPE_BADGE = {
     radio: 'RX', swr: 'SW', bpf: 'BP', amp: 'PA', antenna: 'AN', tower: 'TW', rotator: 'RT',
-    switch: 'CX', matrix: 'MX', divider: 'DV', combiner: 'CB', other: 'OT'
+    switch: 'CX', matrix: 'MX', divider: 'DV', combiner: 'CB', serial: 'SS', other: 'OT'
 };
+// 控制口之间的连线表达“串口设备 → 串口服务器”的从属关系；与 RF 链路无关。
+const CONTROL_TYPES = ['rotator', 'tower', 'switch', 'matrix', 'amp', 'swr', 'serial'];
+const SERIAL_BAUD = ['1200', '2400', '4800', '9600', '19200', '38400', '57600', '115200', '230400', '460800', '921600'];
+// 唯一波段来源与 lib/radio/bands.js 保持一致；一律勾选，不允许手输。
+const BAND_OPTIONS = ['160m', '80m', '60m', '40m', '30m', '20m', '17m', '15m', '12m', '10m', '6m', '2m', '70cm'];
+const BAND_TYPES = ['amp', 'bpf', 'antenna', 'combiner'];
+const TRAVEL_TYPES = ['tower', 'rotator'];
+const RELAY_TYPES = ['switch', 'matrix', 'tower'];
 const STATUS_KEYS = {online: 'dev.status.online', offline: 'dev.status.offline', unknown: 'dev.status.unknown'};
 const TOWER_KEYS = {
     erected: 'dev.tower.erected',
@@ -59,16 +73,22 @@ const ERROR_KEYS = {
     'unknown-parent': 'dev.error.unknown-parent',
     'combiner-band-required': 'dev.error.combiner-band-required',
     'bpf-band-required': 'dev.error.bpf-band-required',
-    'invalid-seat': 'dev.error.invalid-seat',
     'invalid-config-ports': 'dev.error.invalid-config-ports',
     'invalid-config-port-key': 'dev.error.invalid-config-port-key',
     'invalid-config-port-dir': 'dev.error.invalid-config-port-dir',
     'invalid-config-port-band': 'dev.error.invalid-config-port-band',
     'invalid-config-out_count': 'dev.error.invalid-config-out_count',
     'invalid-config-in_count': 'dev.error.invalid-config-in_count',
+    'invalid-config-baud': 'dev.error.invalid-config-baud',
+    'invalid-config-databits': 'dev.error.invalid-config-databits',
+    'invalid-config-stopbits': 'dev.error.invalid-config-stopbits',
+    'invalid-config-parity': 'dev.error.invalid-config-parity',
+    'unknown-control-port': 'dev.error.unknown-control-port',
+    'invalid-control-port': 'dev.error.invalid-control-port',
+    'serial-server-required': 'dev.error.serial-server-required',
+    'control-port-busy': 'dev.error.control-port-busy',
+    'too-many-links': 'dev.error.too-many-links',
     'invalid-band': 'dev.error.invalid-band',
-    'seat-required': 'dev.error.seat-required',
-    'invalid-device-token': 'dev.error.invalid-device-token',
     'device-locked': 'dev.error.device-locked',
     'device-disabled': 'dev.error.device-disabled',
     'invalid-azimuth': 'dev.error.invalid-azimuth',
@@ -89,16 +109,18 @@ const ERROR_KEYS = {
     'direction-switch-too-fast': 'dev.error.direction-switch-too-fast',
     'invalid-layout': 'dev.error.invalid-layout',
     'invalid-layouts': 'dev.error.invalid-layouts',
-    'too-many-layouts': 'dev.error.too-many-layouts'
+    'too-many-layouts': 'dev.error.too-many-layouts',
+    'seat-required': 'dev.error.seat-required',
+    'mixed-ports': 'dev.error.mixed-ports'
 };
 
 export function createDevicesPage(ctx) {
     let active = false;
     let busy = false;
     let snapshot = null;
-    let selectedId = null;
-    let seatKey = null;
-    let draft = null;
+    let drafts = [];
+    let selectedKeys = new Set();
+    let commandSeat = null;
     let draftSeq = 0;
     let formDirty = false;
     let formSignature = null;
@@ -108,8 +130,10 @@ export function createDevicesPage(ctx) {
     let towerHoldDevice = null;
     let towerDirection = null;
     let dragging = null;
+    let marquee = null;
     let wiring = null;
     let rfWiring = null;
+    let ctlWiring = null;
     let localLayout = null;
 
     function t(key, params) {
@@ -148,32 +172,30 @@ export function createDevicesPage(ctx) {
         return snapshot.devices.find(device => device.id === id) || null;
     }
 
-    function selectedDevice() {
-        if (!selectedId) return null;
-        return deviceById(selectedId);
-    }
-
-    function selectedDraft() {
-        return draft && selectedId === draft.key ? draft : null;
-    }
-
-    function selectedValue() {
-        const draftItem = selectedDraft();
-        if (draftItem) return Object.assign({}, draftItem.device, {layout: draftItem.layout});
-        return selectedDevice();
+    function draftByKey(key) {
+        return drafts.find(item => item.key === key) || null;
     }
 
     function isDraftKey(key) {
-        return !!(draft && key === draft.key);
+        return !!draftByKey(key);
+    }
+
+    function selectedValue() {
+        if (selectedKeys.size !== 1) return null;
+        const key = [...selectedKeys][0];
+        const draft = draftByKey(key);
+        if (draft) return Object.assign({}, draft.device, {layout: draft.layout});
+        return deviceById(key);
     }
 
     function positionOf(device) {
+        if (!device) return {x: 80, y: 80};
         if (localLayout && localLayout[device.id]) return localLayout[device.id];
         return device.layout || {x: 80, y: 80};
     }
 
     function rfView() {
-        return snapshot && snapshot.rf ? snapshot.rf : {links: [], ports: {}, warnings: []};
+        return snapshot && snapshot.rf ? snapshot.rf : {links: [], ports: {}, control: {}, warnings: []};
     }
 
     function rfPorts(deviceId) {
@@ -181,22 +203,56 @@ export function createDevicesPage(ctx) {
         return Array.isArray(ports[deviceId]) ? ports[deviceId] : [];
     }
 
+    function controlPorts(deviceId) {
+        const ports = rfView().control || {};
+        return Array.isArray(ports[deviceId]) ? ports[deviceId] : [];
+    }
+
+    function controlLinks() {
+        return Array.isArray(snapshot && snapshot.control_links) ? snapshot.control_links : [];
+    }
+
+    function controlAddress(deviceId) {
+        const map = (snapshot && snapshot.control_addresses) || {};
+        return map[deviceId] || null;
+    }
+
+    /** 控制口坐标：卡片左缘竖排；圆形只连控制口，不参与 RF。 */
+    function controlPortPoint(deviceId, portKey) {
+        const device = deviceById(deviceId);
+        if (!device) return null;
+        const ports = controlPorts(deviceId);
+        const index = ports.findIndex(port => port.key === portKey);
+        if (index < 0) return null;
+        const pos = positionOf(device);
+        return {
+            x: pos.x,
+            y: pos.y + ((index + 1) / (ports.length + 1)) * NODE_H
+        };
+    }
+
+    /** RF 端口坐标：in 在下边、out 在上边，同向端口均分。 */
     function rfPortPoint(deviceId, portKey) {
         const device = deviceById(deviceId);
         if (!device) return null;
         const ports = rfPorts(deviceId);
-        const index = ports.findIndex(port => port.key === portKey);
-        if (index < 0 || !ports.length) return null;
+        const port = ports.find(item => item.key === portKey);
+        if (!port) return null;
+        const same = ports.filter(item => item.dir === port.dir);
+        const index = same.indexOf(port);
         const pos = positionOf(device);
         return {
-            x: pos.x + ((index + 1) / (ports.length + 1)) * NODE_W,
-            y: pos.y + NODE_H
+            x: pos.x + ((index + 1) / (same.length + 1)) * NODE_W,
+            y: port.dir === 'out' ? pos.y : pos.y + NODE_H,
+            dir: port.dir
         };
     }
 
     function rfWirePath(from, to) {
-        const dy = Math.max(36, Math.abs(to.y - from.y) / 2);
-        return `M${from.x},${from.y} C${from.x},${from.y + dy} ${to.x},${to.y + dy} ${to.x},${to.y}`;
+        const bend = 46;
+        const c1 = from.y + (from.dir === 'out' ? -bend : bend);
+        const c2 = to.y + (to.dir === 'in' ? bend : -bend);
+        return `M${from.x},${from.y} C${from.x},${c1} ${to.x},${c2} ${to.x},${to.y}`;
     }
 
     function rfWarningText(warning) {
@@ -222,13 +278,13 @@ export function createDevicesPage(ctx) {
         return snapshot ? snapshot.ownership : {seats: [], by_seat: {}, antennas: []};
     }
 
-    function seatView() {
-        if (!snapshot || !seatKey) return null;
-        return snapshot.ownership.by_seat[seatKey] || null;
+    function seatColors() {
+        if (!snapshot || !commandSeat) return null;
+        return snapshot.ownership.by_seat[commandSeat] || null;
     }
 
     function antennaColor(antennaId) {
-        const view = seatView();
+        const view = seatColors();
         return view && view.colors[antennaId] ? view.colors[antennaId] : 'green';
     }
 
@@ -239,9 +295,8 @@ export function createDevicesPage(ctx) {
     function nodeMeta(device) {
         const parts = [];
         if (device.type === 'radio' && device.seat) parts.push(t('dev.node.seat', {seat: device.seat}));
-        if (device.bands && device.bands.length) {
-            parts.push(t('dev.bands', {bands: device.bands.join(' ')}));
-        }
+        if (device.type === 'radio' && !device.seat) parts.push(t('dev.radio.unbound'));
+        if (device.bands && device.bands.length) parts.push(t('dev.bands', {bands: device.bands.join(' ')}));
         if (device.type === 'antenna' && snapshot) {
             const antenna = snapshot.ownership.antennas.find(item => item.id === device.id);
             if (antenna && antenna.actual_azimuth !== null && antenna.actual_azimuth !== undefined) {
@@ -264,26 +319,51 @@ export function createDevicesPage(ctx) {
         return parts.join(' · ');
     }
 
+    function antennaChip(device) {
+        if (device.type !== 'antenna' || !snapshot) return '';
+        const antenna = snapshot.ownership.antennas.find(item => item.id === device.id);
+        const owners = antenna && Array.isArray(antenna.owners) ? antenna.owners.length : 0;
+        if (!owners) return `<span class="dev-chip dev-color-green">${t('dev.color.green')}</span>`;
+        const color = commandSeat && antenna.color_by_seat[commandSeat] ? antenna.color_by_seat[commandSeat] : 'yellow';
+        return `<span class="dev-chip dev-color-${color}">${t('dev.antenna.owners', {n: owners})}</span>`;
+    }
+
+    function rfPortsHtml(device) {
+        const ports = rfPorts(device.id);
+        if (!ports.length) return '';
+        const html = ports.filter(port => port.dir !== 'bidir').map(port => {
+            const same = ports.filter(item => item.dir === port.dir);
+            const index = same.indexOf(port);
+            const title = port.band ? `${port.key} · ${port.band}` : port.key;
+            return `<span class="dev-rf-port dev-rf-${port.dir}" style="left:${((index + 1) / (same.length + 1)) * 100}%"
+                data-rf-device="${esc(device.id)}" data-rf-port="${esc(port.key)}" title="${esc(title)}"></span>`;
+        }).join('');
+        return html ? `<div class="dev-rf-ports">${html}</div>` : '';
+    }
+
+    function controlPortsHtml(device) {
+        const ports = controlPorts(device.id);
+        if (!ports.length) return '';
+        return `<div class="dev-ctl-ports">${ports.map((port, index) => {
+            const label = port.kind === 'control' ? t('dev.port.control') : t('dev.port.status');
+            const connectable = port.kind === 'control';
+            return `<span class="dev-ctl-port dev-ctl-${esc(port.kind)}" style="top:${((index + 1) / (ports.length + 1)) * 100}%"
+                ${connectable ? `data-ctl-device="${esc(device.id)}" data-ctl-port="${esc(port.key)}"` : ''}
+                title="${esc(port.key)} · ${esc(label)}"></span>`;
+        }).join('')}</div>`;
+    }
+
     function nodeHtml(node) {
         const device = node.device;
         const status = node.draft ? {state: 'unknown', last_report: null} : deviceStatus(device.id);
         const classes = ['dev-canvas-node'];
-        if (node.key === selectedId) classes.push('active');
+        if (selectedKeys.has(node.key)) classes.push('active');
         if (node.draft) classes.push('draft');
-        const color = device.type === 'antenna'
-            ? `<span class="dev-chip dev-color-${antennaColor(device.id)}">${t(COLOR_KEYS[antennaColor(device.id)])}</span>`
-            : '';
-        const ports = node.draft ? '' : '<span class="dev-port dev-port-in" title="in"></span>' +
-            '<span class="dev-port dev-port-out" title="out"></span>';
-        const rfPortsHtml = node.draft ? '' : rfPorts(device.id).map((port, index, list) => {
-            const title = port.band ? `${port.key} · ${port.band}` : port.key;
-            return `<span class="dev-rf-port dev-rf-${esc(port.dir)}" style="left:${((index + 1) / (list.length + 1)) * 100}%"
-                data-rf-device="${esc(device.id)}" data-rf-port="${esc(port.key)}" title="${esc(title)}"></span>`;
-        }).join('');
         return `<div class="${classes.join(' ')}" role="button" tabindex="0" data-node-key="${esc(node.key)}"${node.draft ? '' : ` data-real-id="${esc(device.id)}"`}
                 style="left:${node.layout.x}px;top:${node.layout.y}px;width:${NODE_W}px;height:${NODE_H}px">
-            ${ports}
-            ${rfPortsHtml ? `<div class="dev-rf-ports">${rfPortsHtml}</div>` : ''}
+            <span class="dev-mount-handle" title="${esc(t('dev.mount.handle'))}" aria-hidden="true"></span>
+            ${node.draft ? '' : controlPortsHtml(device)}
+            ${node.draft ? '' : rfPortsHtml(device)}
             <div class="dev-node-head">
                 <span class="dev-node-badge">${esc(TYPE_BADGE[device.type] || 'O')}</span>
                 <span class="dev-node-name">${esc(device.name)}</span>
@@ -293,22 +373,27 @@ export function createDevicesPage(ctx) {
                 <span class="dev-dot dev-dot-${status.state}"></span>
                 <span>${node.draft ? t('dev.draft.chip') : t(STATUS_KEYS[status.state] || STATUS_KEYS.unknown)}</span>
                 ${node.draft ? '' : `<span class="dev-node-report">${esc(lastReportText(status.last_report))}</span>`}
-                ${color}
+                ${node.draft ? '' : antennaChip(device)}
             </div>
         </div>`;
+    }
+
+    function canvasNodes() {
+        const nodes = [];
+        for (const device of realDevices()) {
+            nodes.push({key: device.id, device, layout: positionOf(device), draft: false});
+        }
+        for (const draft of drafts) {
+            nodes.push({key: draft.key, device: Object.assign({}, draft.device), layout: draft.layout, draft: true});
+        }
+        return nodes;
     }
 
     function renderCanvas() {
         const nodesBox = $('#devNodes');
         const canvas = $('#devCanvas');
         if (!nodesBox || !canvas) return;
-        const nodes = [];
-        for (const device of realDevices()) {
-            nodes.push({key: device.id, device, layout: positionOf(device), draft: false});
-        }
-        if (draft) {
-            nodes.push({key: draft.key, device: Object.assign({}, draft.device), layout: draft.layout, draft: true});
-        }
+        const nodes = canvasNodes();
         let maxX = CANVAS_MIN_W;
         let maxY = CANVAS_MIN_H;
         for (const node of nodes) {
@@ -362,11 +447,25 @@ export function createDevicesPage(ctx) {
             parts.push(`<path class="dev-rf-wire" d="${d}"></path>`);
             parts.push(`<path class="dev-rf-wire-hit" d="${d}" data-rf-link="${esc(link.link_id)}"><title>${esc(t('dev.rf.remove'))}</title></path>`);
         }
+        for (const link of controlLinks()) {
+            if (!byId.has(link.a_device) || !byId.has(link.b_device)) continue;
+            const from = controlPortPoint(link.a_device, link.a_port);
+            const to = controlPortPoint(link.b_device, link.b_port);
+            if (!from || !to) continue;
+            const d = controlWirePath(from, to);
+            parts.push(`<path class="dev-ctl-wire" d="${d}"></path>`);
+            parts.push(`<path class="dev-ctl-wire-hit" d="${d}" data-ctl-link="${esc(link.link_id)}"><title>${esc(t('dev.ctl.remove'))}</title></path>`);
+        }
         if (wiring) {
             parts.push(`<path class="dev-wire dev-wire-draft" d="${draftWirePath(wiring.x1, wiring.y1, wiring.x2, wiring.y2)}"></path>`);
         }
+        if (ctlWiring) {
+            parts.push(`<path class="dev-ctl-wire dev-ctl-wire-draft" d="${draftWirePath(ctlWiring.x1, ctlWiring.y1, ctlWiring.x2, ctlWiring.y2)}"></path>`);
+        }
         if (rfWiring) {
-            parts.push(`<path class="dev-rf-wire dev-rf-wire-draft" d="${rfWirePath({x: rfWiring.x1, y: rfWiring.y1}, {x: rfWiring.x2, y: rfWiring.y2})}"></path>`);
+            const from = {x: rfWiring.x1, y: rfWiring.y1, dir: rfWiring.dir};
+            const to = {x: rfWiring.x2, y: rfWiring.y2, dir: rfWiring.dir === 'out' ? 'in' : 'out'};
+            parts.push(`<path class="dev-rf-wire dev-rf-wire-draft" d="${rfWirePath(from, to)}"></path>`);
         }
         svg.innerHTML = parts.join('');
     }
@@ -376,18 +475,19 @@ export function createDevicesPage(ctx) {
         return `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`;
     }
 
-    function canvasNodes() {
-        const nodes = [];
-        for (const device of realDevices()) {
-            nodes.push({key: device.id, device, layout: positionOf(device), draft: false});
-        }
-        if (draft) nodes.push({key: draft.key, device: Object.assign({}, draft.device), layout: draft.layout, draft: true});
-        return nodes;
+    function controlWirePath(from, to) {
+        // 控制线绕到卡片左侧，避免与射频线（上/下缘）混在一起。
+        const offset = 60;
+        const x1 = from.x - 4;
+        const x2 = to.x - 4;
+        const c1 = x1 - offset;
+        const c2 = x2 - offset;
+        return `M${x1},${from.y} C${c1},${from.y} ${c2},${to.y} ${x2},${to.y}`;
     }
 
     function defaultSlot() {
-        const count = realDevices().length + (draft ? 1 : 0);
-        return {x: 80 + (count % 4) * 250, y: 80 + Math.floor(count / 4) * 140};
+        const count = realDevices().length + drafts.length;
+        return {x: 80 + (count % 4) * 250, y: 80 + Math.floor(count / 4) * 150};
     }
 
     function defaultDraftName(type) {
@@ -397,16 +497,12 @@ export function createDevicesPage(ctx) {
     }
 
     function createDraft(type, x, y) {
-        if (draft) {
-            showToast(t('dev.draft.single'));
-            return;
-        }
         const slot = defaultSlot();
         const pos = {
             x: Math.max(0, Math.round(Number.isFinite(x) ? x : slot.x)),
             y: Math.max(0, Math.round(Number.isFinite(y) ? y : slot.y))
         };
-        draft = {
+        const draft = {
             key: 'draft-' + (++draftSeq),
             layout: pos,
             device: {
@@ -414,28 +510,26 @@ export function createDevicesPage(ctx) {
                 name: defaultDraftName(type),
                 type,
                 parent_id: null,
-                seat: '',
                 bands: [],
                 install_offset_deg: 0,
-                exclusive: false,
-                port_label: '',
                 enabled: true,
-                travel_timeout_sec: 120,
+                travel_timeout_sec: TRAVEL_TYPES.includes(type) ? 120 : 0,
                 notes: '',
                 config: {},
-                has_password: false,
                 has_relay_token: false
             }
         };
-        selectNode(draft.key);
+        drafts.push(draft);
+        selectedKeys = new Set([draft.key]);
+        formDirty = false;
+        formSignature = null;
+        ctrlSignature = null;
+        render();
     }
 
-    function discardDraft() {
-        if (!draft) return;
-        const wasSelected = selectedId === draft.key;
-        draft = null;
-        if (wasSelected) {
-            selectedId = null;
+    function discardDraft(key) {
+        drafts = drafts.filter(item => item.key !== key);
+        if (selectedKeys.delete(key)) {
             formDirty = false;
             formSignature = null;
             ctrlSignature = null;
@@ -443,20 +537,14 @@ export function createDevicesPage(ctx) {
         render();
     }
 
-    async function confirmDiscard() {
-        if (!formDirty) return true;
-        return showConfirm(ctx, t('dev.draft.discard'), {danger: true});
-    }
-
-    async function selectNode(key) {
-        if (key === selectedId) return;
-        if (draft && selectedId === draft.key && formDirty && key !== draft.key) {
-            const ok = await confirmDiscard();
-            if (!ok) return;
-            draft = null;
+    function selectNode(key, additive) {
+        if (additive) {
+            if (selectedKeys.has(key)) selectedKeys.delete(key);
+            else selectedKeys.add(key);
+        } else {
+            selectedKeys = new Set([key]);
         }
         stopTower();
-        selectedId = key;
         formDirty = false;
         formSignature = null;
         ctrlSignature = null;
@@ -469,57 +557,112 @@ export function createDevicesPage(ctx) {
         return parent ? parent.name : device.parent_id;
     }
 
+    function radioSeatLabel(value) {
+        if (!value || value.type !== 'radio') return '';
+        return value.seat || t('dev.radio.unbound');
+    }
+
+    function bandPicker(value) {
+        const chosen = new Set((value.bands || []).map(band => String(band).toLowerCase()));
+        return `<fieldset class="dev-bands"><legend>${t('dev.form.bands')}</legend>
+            ${BAND_OPTIONS.map(band => `<label class="dev-band">
+                <input type="checkbox" name="bands" value="${band}"${chosen.has(band) ? ' checked' : ''}> ${band}
+            </label>`).join('')}
+        </fieldset>`;
+    }
+
     function configFields(value) {
         const config = value.config || {};
+        if (value.type === 'radio') {
+            return `<label>${t('dev.form.computer')}<input name="cfg_computer" maxlength="100" value="${esc(config.computer || '')}"></label>
+                <label>${t('dev.form.model')}<input name="cfg_model" maxlength="100" value="${esc(config.model || '')}"></label>`;
+        }
+        if (value.type === 'swr' || value.type === 'amp') {
+            return `<label>${t('dev.form.reportHost')}<input name="cfg_host" maxlength="100" value="${esc(config.host || '')}"></label>
+                <label>${t('dev.config.port')}<input name="cfg_port" type="number" min="1" max="65535" step="1" value="${esc(config.port || '')}"></label>`;
+        }
         if (value.type === 'rotator') {
             return `<label>${t('dev.config.host')}<input name="cfg_host" maxlength="100" value="${esc(config.host || '')}"></label>
                 <label>${t('dev.config.port')}<input name="cfg_port" type="number" min="1" max="65535" step="1" value="${esc(config.port || '')}"></label>`;
         }
-        if (value.type === 'matrix' || value.type === 'switch') {
+        if (value.type === 'serial') {
+            const baud = String(config.baud || 9600);
+            const option = (list, current) => list.map(item =>
+                `<option value="${item}"${String(item) === current ? ' selected' : ''}>${item}</option>`).join('');
+            return `<label>${t('dev.config.host')}<input name="cfg_host" maxlength="100" value="${esc(config.host || '')}"></label>
+                <label>${t('dev.config.listenPort')}<input name="cfg_port" type="number" min="1" max="65535" step="1" value="${esc(config.port || '')}"></label>
+                <label>${t('dev.config.serialPorts')}<input name="cfg_port_count" type="number" min="1" max="16" step="1" value="${esc(config.port_count === undefined ? 4 : config.port_count)}"></label>
+                <label>${t('dev.config.baud')}<select name="cfg_baud">${option(SERIAL_BAUD, baud)}</select></label>
+                <label>${t('dev.config.dataBits')}<select name="cfg_data_bits">${option(['5', '6', '7', '8'], String(config.data_bits || 8))}</select></label>
+                <label>${t('dev.config.stopBits')}<select name="cfg_stop_bits">${option(['1', '2'], String(config.stop_bits || 1))}</select></label>
+                <label>${t('dev.config.parity')}<select name="cfg_parity">${option(['none', 'even', 'odd'], String(config.parity || 'none'))}</select></label>`;
+        }
+        if (RELAY_TYPES.includes(value.type)) {
             const counts = value.type === 'switch'
                 ? `<label>${t('dev.config.outCount')}<input name="cfg_out_count" type="number" min="1" max="16" step="1" value="${esc(config.out_count === undefined ? '' : config.out_count)}"></label>`
-                : `<label>${t('dev.config.inCount')}<input name="cfg_in_count" type="number" min="1" max="16" step="1" value="${esc(config.in_count === undefined ? '' : config.in_count)}"></label>
-                   <label>${t('dev.config.outCount')}<input name="cfg_out_count" type="number" min="1" max="16" step="1" value="${esc(config.out_count === undefined ? '' : config.out_count)}"></label>`;
+                : (value.type === 'matrix'
+                    ? `<label>${t('dev.config.inCount')}<input name="cfg_in_count" type="number" min="1" max="16" step="1" value="${esc(config.in_count === undefined ? '' : config.in_count)}"></label>
+                       <label>${t('dev.config.outCount')}<input name="cfg_out_count" type="number" min="1" max="16" step="1" value="${esc(config.out_count === undefined ? '' : config.out_count)}"></label>`
+                    : '');
+            const channels = value.type === 'tower'
+                ? `<label>${t('dev.config.upChannel')}<input name="cfg_up_channel" type="number" min="0" max="255" step="1" value="${esc(config.up_channel === undefined ? '' : config.up_channel)}"></label>
+                   <label>${t('dev.config.downChannel')}<input name="cfg_down_channel" type="number" min="0" max="255" step="1" value="${esc(config.down_channel === undefined ? '' : config.down_channel)}"></label>`
+                : `<label>${t('dev.config.channels')}<textarea name="cfg_channels" rows="3" spellcheck="false">${esc(JSON.stringify(config.channels || {}))}</textarea></label>`;
             return `<label>${t('dev.config.relayUrl')}<input name="cfg_relay_url" maxlength="300" value="${esc(config.relay_url || '')}"></label>
                 <label>${t('dev.config.relayToken')}<input name="cfg_relay_token" type="password" autocomplete="off" placeholder="${esc(t('dev.config.keepToken'))}"></label>
-                <label>${t('dev.config.channels')}<textarea name="cfg_channels" rows="3" spellcheck="false">${esc(JSON.stringify(config.channels || {}))}</textarea></label>
                 <label>${t('dev.config.pulse')}<input name="cfg_pulse_ms" type="number" min="50" max="5000" step="1" value="${esc(config.pulse_ms || '')}"></label>
-                ${counts}`;
-        }
-        if (value.type === 'combiner') {
-            return `<p class="dev-note">${t('dev.config.combinerHint')}</p>`;
-        }
-        if (value.type === 'tower') {
-            return `<label>${t('dev.config.relayUrl')}<input name="cfg_relay_url" maxlength="300" value="${esc(config.relay_url || '')}"></label>
-                <label>${t('dev.config.relayToken')}<input name="cfg_relay_token" type="password" autocomplete="off" placeholder="${esc(t('dev.config.keepToken'))}"></label>
-                <label>${t('dev.config.upChannel')}<input name="cfg_up_channel" type="number" min="0" max="255" step="1" value="${esc(config.up_channel === undefined ? '' : config.up_channel)}"></label>
-                <label>${t('dev.config.downChannel')}<input name="cfg_down_channel" type="number" min="0" max="255" step="1" value="${esc(config.down_channel === undefined ? '' : config.down_channel)}"></label>`;
+                ${counts}${channels}`;
         }
         return '';
+    }
+
+    function controlAddressLabel(value) {
+        if (!value || !value.id || !CONTROL_TYPES.includes(value.type)) return '';
+        const address = controlAddress(value.id);
+        if (!address || address.mode === 'unconfigured') return t('dev.control.unconfigured');
+        if (address.mode === 'direct') {
+            if (address.url) return t('dev.control.directUrl', {url: address.url});
+            return t('dev.control.directAddress', {host: address.host, port: address.port});
+        }
+        const serial = address.serial || {};
+        return t('dev.control.serialAddress', {
+            host: address.host,
+            port: address.port,
+            serial: address.serial_port,
+            baud: serial.baud,
+            format: `${serial.data_bits || 8}${String(serial.parity || 'none').charAt(0).toUpperCase()}${serial.stop_bits || 1}`,
+            via: address.via
+        });
     }
 
     function formHtml() {
         const value = selectedValue();
         if (!value) return '';
-        const isDraft = !!selectedDraft();
+        const isDraft = !!draftByKey(selectedKeys.size === 1 ? [...selectedKeys][0] : '');
+        const bands = BAND_TYPES.includes(value.type) ? bandPicker(value) : '';
+        const offset = value.type === 'antenna'
+            ? `<label>${t('dev.form.offset')}<input name="install_offset_deg" type="number" min="0" max="359" step="1" value="${esc(value.install_offset_deg || 0)}"></label>`
+            : '';
+        const travel = TRAVEL_TYPES.includes(value.type)
+            ? `<label>${t('dev.form.travel')}<input name="travel_timeout_sec" type="number" min="5" max="3600" step="1" value="${esc(value.travel_timeout_sec || 120)}"></label>`
+            : '';
+        const seat = value.type === 'radio'
+            ? `<p class="dev-note">${t('dev.form.seat')} · ${esc(radioSeatLabel(value))}</p>`
+            : '';
         return `<form id="devFormEl" class="dev-form" data-dev-id="${esc(isDraft ? '' : value.id)}" data-draft="${isDraft ? '1' : '0'}">
             <h3>${t(isDraft ? 'dev.form.new' : 'dev.form.edit')}</h3>
+            <div class="dev-form-type"><span class="dev-node-badge">${esc(TYPE_BADGE[value.type] || 'O')}</span>${esc(typeLabel(value.type))}</div>
             <div class="dev-grid">
                 <label>${t('dev.form.name')}<input name="name" maxlength="60" required value="${esc(value.name)}"></label>
-                <label>${t('dev.form.type')}
-                    <input name="type" list="devTypeList" maxlength="32" required value="${esc(value.type)}">
-                </label>
-                ${value.type === 'radio' ? `<label>${t('dev.form.seat')}<input name="seat" maxlength="64" value="${esc(value.seat || '')}"></label>` : ''}
-                <label>${t('dev.form.bands')}<input name="bands" placeholder="20m, 15m" value="${esc((value.bands || []).join(', '))}"></label>
-                <label>${t('dev.form.offset')}<input name="install_offset_deg" type="number" min="0" max="359" step="1" value="${esc(value.install_offset_deg)}"></label>
-                <label>${t('dev.form.port')}<input name="port_label" maxlength="32" value="${esc(value.port_label)}"></label>
-                <label>${t('dev.form.password')}<input name="password" type="password" maxlength="200" autocomplete="new-password" placeholder="${esc(!isDraft && value.has_password ? t('dev.form.passwordKeep') : '')}"></label>
-                <label>${t('dev.form.travel')}<input name="travel_timeout_sec" type="number" min="5" max="3600" step="1" value="${esc(value.travel_timeout_sec)}"></label>
                 ${configFields(value)}
+                ${bands}
+                ${offset}
+                ${travel}
             </div>
+            ${seat}
+            <p class="dev-note">${t('dev.form.address')} · ${esc(controlAddressLabel(value) || '—')}</p>
             <p class="dev-note">${t('dev.form.parentFixed')} · ${esc(isDraft ? '—' : parentLabel(value))}</p>
             <p class="dev-note">${t('dev.form.rfPorts')} · ${esc(isDraft ? '—' : (rfPorts(value.id).map(port => port.band ? `${port.key} (${port.band})` : port.key).join(' · ') || '—'))}</p>
-            <label class="dev-check"><input name="exclusive" type="checkbox"${value.exclusive ? ' checked' : ''}> ${t('dev.form.exclusive')}</label>
             <label class="dev-check"><input name="enabled" type="checkbox"${value.enabled !== false ? ' checked' : ''}> ${t('dev.form.enabled')}</label>
             <label>${t('dev.form.notes')}<input name="notes" maxlength="200" value="${esc(value.notes)}"></label>
             <p class="dev-form-error hidden" id="devFormError"></p>
@@ -527,9 +670,6 @@ export function createDevicesPage(ctx) {
                 <button class="dev-btn primary" type="submit">${t('save')}</button>
                 ${isDraft ? '' : `<button class="dev-btn danger" type="button" id="devDelete">${t('danger')}</button>`}
             </div>
-            <datalist id="devTypeList">
-                ${TYPE_OPTIONS.map(type => `<option value="${type}">${esc(typeLabel(type))}</option>`).join('')}
-            </datalist>
         </form>`;
     }
 
@@ -542,8 +682,7 @@ export function createDevicesPage(ctx) {
             const chips = view.antennas.map(antenna => `<span class="dev-chip dev-color-${item.colors[antenna.id]}">${esc(antenna.name)}</span>`).join('');
             const notes = [];
             if (item.unassigned) notes.push(t('dev.seat.unassigned'));
-            if (item.ambiguous) notes.push(t('dev.seat.ambiguous'));
-            return `<tr class="${seat.seat === seatKey ? 'active' : ''}" data-dev-seat="${esc(seat.seat)}">
+            return `<tr>
                 <td>${esc(seat.seat)}</td>
                 <td>${esc(seat.band || '—')}</td>
                 <td><span class="dev-dot dev-dot-${seat.online ? 'online' : 'offline'}"></span>${seat.online ? t('dev.status.online') : t('dev.status.offline')}</td>
@@ -598,14 +737,21 @@ export function createDevicesPage(ctx) {
         return head + rows;
     }
 
+    function seatOptions() {
+        const seats = seatsView().seats;
+        if (!seats.length) return '<option value="">—</option>';
+        if (!commandSeat || !seats.some(seat => seat.seat === commandSeat)) {
+            const online = seats.find(seat => seat.online);
+            commandSeat = online ? online.seat : seats[0].seat;
+        }
+        return seats.map(seat => `<option value="${esc(seat.seat)}"${seat.seat === commandSeat ? ' selected' : ''}>${esc(seat.seat)}</option>`).join('');
+    }
+
     function controlHtml(device) {
         if (!device || !['rotator', 'matrix', 'switch', 'tower'].includes(device.type)) return '';
         const status = '<p class="dev-ctrl-status" id="devCtrlStatus"></p>';
         const error = '<p class="dev-form-error hidden" id="devCtrlError"></p>';
-        const token = device.has_password
-            ? `<label>${t('dev.control.deviceToken')}<input id="devCtrlToken" type="password" autocomplete="off"></label>`
-            : '';
-        const seatNote = `<p class="dev-note">${t('dev.control.seatNote', {seat: seatKey || '—'})}</p>`;
+        const seat = `<label>${t('dev.control.seat')}<select id="devCtrlSeat">${seatOptions()}</select></label>`;
         if (device.type === 'rotator') {
             return `<h3>${t('dev.control.title')}</h3>${status}
                 <div class="dev-ctrl-row">
@@ -613,27 +759,26 @@ export function createDevicesPage(ctx) {
                     <button class="dev-btn primary" type="button" data-cmd="rotate">${t('dev.control.rotate')}</button>
                     <button class="dev-btn" type="button" data-cmd="stop">${t('dev.control.stop')}</button>
                 </div>
-                ${token}${error}${seatNote}`;
+                <div class="dev-ctrl-row">${seat}</div>${error}`;
         }
         if (device.type === 'matrix' || device.type === 'switch') {
+            const portHint = device.type === 'switch' ? t('dev.control.switchHint') : t('dev.control.matrixHint');
             return `<h3>${t('dev.control.title')}</h3>${status}
                 <div class="dev-ctrl-row">
-                    <label>${t('dev.control.port')}<input id="devCtrlPort" maxlength="32"></label>
-                    <label>${t('dev.control.outlet')}<input id="devCtrlOutlet" maxlength="32"></label>
+                    <label>${t('dev.control.port')}<input id="devCtrlPort" maxlength="32" placeholder="in"></label>
+                    <label>${t('dev.control.outlet')}<input id="devCtrlOutlet" maxlength="32" placeholder="ant1"></label>
                     <button class="dev-btn primary" type="button" data-cmd="select">${t('dev.control.select')}</button>
                 </div>
-                ${token}${error}${seatNote}`;
+                <div class="dev-ctrl-row">${seat}</div>
+                <p class="dev-note">${esc(portHint)}</p>${error}`;
         }
-        if (device.type === 'tower') {
-            return `<h3>${t('dev.control.title')}</h3>${status}
-                <div class="dev-ctrl-row">
-                    <button class="dev-btn" type="button" data-tower="up">${t('dev.control.up')}</button>
-                    <button class="dev-btn" type="button" data-tower="down">${t('dev.control.down')}</button>
-                </div>
-                ${token}${error}${seatNote}
-                <p class="dev-note">${t('dev.control.holdHint')}</p>`;
-        }
-        return `<h3>${t('dev.control.title')}</h3>${status}${error}${seatNote}`;
+        return `<h3>${t('dev.control.title')}</h3>${status}
+            <div class="dev-ctrl-row">
+                <button class="dev-btn" type="button" data-tower="up">${t('dev.control.up')}</button>
+                <button class="dev-btn" type="button" data-tower="down">${t('dev.control.down')}</button>
+            </div>
+            <div class="dev-ctrl-row">${seat}</div>
+            <p class="dev-note">${t('dev.control.holdHint')}</p>${error}`;
     }
 
     function updateControlStatus(device) {
@@ -661,18 +806,18 @@ export function createDevicesPage(ctx) {
     function renderControl() {
         const container = $('#devControl');
         if (!container) return;
-        const device = selectedDevice();
-        if (!device) {
-            container.innerHTML = selectedDraft() ? `<p class="dev-empty">${t('dev.control.draft')}</p>` : '';
+        const value = selectedValue();
+        if (!value || isDraftKey([...selectedKeys][0] || '')) {
+            container.innerHTML = selectedKeys.size === 1 ? `<p class="dev-empty">${t('dev.control.draft')}</p>` : '';
             ctrlSignature = null;
             return;
         }
-        const signature = [device.id, device.type, device.has_password ? 1 : 0].join('|');
+        const signature = [value.id, value.type].join('|');
         if (signature !== ctrlSignature) {
-            container.innerHTML = controlHtml(device);
+            container.innerHTML = controlHtml(value);
             ctrlSignature = signature;
         }
-        updateControlStatus(device);
+        updateControlStatus(value);
     }
 
     function showCtrlError(text) {
@@ -688,16 +833,12 @@ export function createDevicesPage(ctx) {
             box.textContent = '';
             box.classList.add('hidden');
         }
-        if (!seatKey) {
+        if (!commandSeat) {
             showCtrlError(t('dev.error.seat-required'));
             return;
         }
-        const token = $('#devCtrlToken');
         try {
-            const result = await sendDeviceCommand(device.id, command, {
-                seat: seatKey,
-                deviceToken: token ? token.value : ''
-            });
+            const result = await sendDeviceCommand(device.id, command, {seat: commandSeat});
             if (!result || !result.ok) {
                 showCtrlError(errorText(result && result.error ? result.error : 'generic'));
                 return;
@@ -736,12 +877,6 @@ export function createDevicesPage(ctx) {
         if (device) void sendCommand(device, {command: 'tower_release'});
     }
 
-    function seatOptions() {
-        const seats = seatsView().seats;
-        if (!seats.length) return `<option value="">—</option>`;
-        return seats.map(seat => `<option value="${esc(seat.seat)}"${seat.seat === seatKey ? ' selected' : ''}>${esc(seat.seat)}${seat.band ? ' · ' + esc(seat.band) : ''}</option>`).join('');
-    }
-
     function renderInspector() {
         const value = selectedValue();
         const title = $('#devInspectorTitle');
@@ -749,12 +884,14 @@ export function createDevicesPage(ctx) {
         const formBox = $('#devForm');
         if (!formBox) return;
         if (!value) {
-            formBox.innerHTML = `<p class="dev-empty">${t('dev.inspector.none')}</p>`;
+            formBox.innerHTML = selectedKeys.size > 1
+                ? `<p class="dev-empty">${t('dev.inspector.multi', {n: selectedKeys.size})}</p>`
+                : `<p class="dev-empty">${t('dev.inspector.none')}</p>`;
             formSignature = null;
             renderControl();
             return;
         }
-        const signature = [selectedId, value.type, value.has_password ? 1 : 0].join('|');
+        const signature = [value.id || 'draft', value.type].join('|');
         if (!formDirty && signature !== formSignature) {
             formBox.innerHTML = formHtml();
             formSignature = signature;
@@ -769,6 +906,8 @@ export function createDevicesPage(ctx) {
     }
 
     function render() {
+        const saveAll = $('#devSaveAll');
+        if (saveAll) saveAll.hidden = !drafts.length;
         if (!snapshot) {
             $('#devSummary').textContent = '';
             $('#devNodes').innerHTML = '';
@@ -792,9 +931,6 @@ export function createDevicesPage(ctx) {
         }) + ' · ' + t('dev.hint.canvas');
         const warnings = (rfView().warnings || []).map(rfWarningText).filter(Boolean);
         $('#devHint').textContent = warnings.length ? warnings.join(' · ') : t('dev.hint.server');
-        if (document.activeElement !== $('#devSeat')) {
-            $('#devSeat').innerHTML = seatOptions();
-        }
         renderPalette();
         renderCanvas();
         renderInspector();
@@ -823,7 +959,7 @@ export function createDevicesPage(ctx) {
     }
 
     async function refresh() {
-        if (busy || dragging || wiring) return;
+        if (busy || dragging || wiring || rfWiring || ctlWiring || marquee) return;
         busy = true;
         try {
             const data = await getDevicesSnapshot();
@@ -832,15 +968,9 @@ export function createDevicesPage(ctx) {
             snapshot = next;
             applyLayouts(snapshot);
             const seats = snapshot.ownership.seats;
-            if (!seatKey || !seats.some(seat => seat.seat === seatKey)) {
-                const online = seats.find(seat => seat.online);
-                seatKey = online ? online.seat : (seats.length ? seats[0].seat : null);
-            }
-            if (selectedId && !isDraftKey(selectedId) && !deviceById(selectedId)) {
-                selectedId = null;
-                formDirty = false;
-                formSignature = null;
-                ctrlSignature = null;
+            if (commandSeat && !seats.some(seat => seat.seat === commandSeat)) commandSeat = null;
+            for (const key of [...selectedKeys]) {
+                if (!isDraftKey(key) && !deviceById(key)) selectedKeys.delete(key);
             }
             render();
         } catch (error) {
@@ -852,60 +982,68 @@ export function createDevicesPage(ctx) {
         }
     }
 
+    function checkedBands(form) {
+        return [...form.querySelectorAll('input[name="bands"]:checked')].map(input => input.value);
+    }
+
     function formValues(form) {
         const data = new FormData(form);
+        const value = selectedValue();
+        const type = value ? value.type : '';
         const device = {
+            type,
             name: String(data.get('name') || ''),
-            type: String(data.get('type') || ''),
-            bands: String(data.get('bands') || ''),
-            install_offset_deg: String(data.get('install_offset_deg') || '0'),
-            port_label: String(data.get('port_label') || ''),
-            exclusive: data.get('exclusive') === 'on',
             enabled: data.get('enabled') === 'on',
-            travel_timeout_sec: String(data.get('travel_timeout_sec') || '120'),
             notes: String(data.get('notes') || '')
         };
         if (form.dataset.devId) device.id = form.dataset.devId;
-        const seat = data.get('seat');
-        if (seat !== null) device.seat = String(seat);
-        const password = String(data.get('password') || '');
-        if (password) device.password = password;
-        device.config = formConfig(data, device.type);
+        if (BAND_TYPES.includes(type)) device.bands = checkedBands(form);
+        if (type === 'antenna') device.install_offset_deg = String(data.get('install_offset_deg') || '0');
+        if (TRAVEL_TYPES.includes(type)) device.travel_timeout_sec = String(data.get('travel_timeout_sec') || '120');
+        device.config = formConfig(data, type);
         return device;
     }
 
     /** Protocol settings live under `config`; empty inputs clear the stored key. */
     function formConfig(data, type) {
         const config = {};
-        if (type === 'rotator') {
+        if (type === 'radio') {
+            config.computer = String(data.get('cfg_computer') || '');
+            config.model = String(data.get('cfg_model') || '');
+        } else if (type === 'swr' || type === 'amp' || type === 'rotator') {
             config.host = String(data.get('cfg_host') || '');
             config.port = String(data.get('cfg_port') || '');
-            config.protocol = config.host ? 'rotctld' : '';
-        } else if (type === 'matrix' || type === 'switch') {
+            if (type === 'rotator') config.protocol = config.host ? 'rotctld' : '';
+        } else if (type === 'serial') {
+            config.host = String(data.get('cfg_host') || '');
+            config.port = String(data.get('cfg_port') || '');
+            config.port_count = String(data.get('cfg_port_count') || '');
+            config.baud = String(data.get('cfg_baud') || '');
+            config.data_bits = String(data.get('cfg_data_bits') || '');
+            config.stop_bits = String(data.get('cfg_stop_bits') || '');
+            config.parity = String(data.get('cfg_parity') || '');
+        } else if (RELAY_TYPES.includes(type)) {
             config.relay_url = String(data.get('cfg_relay_url') || '');
             const relayToken = String(data.get('cfg_relay_token') || '');
             if (relayToken) config.relay_token = relayToken;
             config.pulse_ms = String(data.get('cfg_pulse_ms') || '');
             if (type === 'switch') {
                 config.out_count = String(data.get('cfg_out_count') || '');
-            } else {
+            } else if (type === 'matrix') {
                 config.in_count = String(data.get('cfg_in_count') || '');
                 config.out_count = String(data.get('cfg_out_count') || '');
+            } else {
+                config.up_channel = String(data.get('cfg_up_channel') || '');
+                config.down_channel = String(data.get('cfg_down_channel') || '');
             }
             const channelsText = String(data.get('cfg_channels') || '').trim();
-            if (channelsText) {
+            if (type !== 'tower' && channelsText) {
                 try {
                     config.channels = JSON.parse(channelsText);
                 } catch (error) {
                     throw new Error('invalid-config-channels');
                 }
             }
-        } else if (type === 'tower') {
-            config.relay_url = String(data.get('cfg_relay_url') || '');
-            const relayToken = String(data.get('cfg_relay_token') || '');
-            if (relayToken) config.relay_token = relayToken;
-            config.up_channel = String(data.get('cfg_up_channel') || '');
-            config.down_channel = String(data.get('cfg_down_channel') || '');
         }
         return config;
     }
@@ -915,11 +1053,9 @@ export function createDevicesPage(ctx) {
         return errorText(body && body.error ? body.error : 'generic');
     }
 
-    async function persistDraftLayout(id) {
-        if (!draft) return;
-        const pos = draft.layout;
+    async function persistDraftLayout(id, layout) {
         try {
-            await saveDeviceLayouts([{id, x: pos.x, y: pos.y}]);
+            await saveDeviceLayouts([{id, x: layout.x, y: layout.y}]);
         } catch (error) {
             // 位置写失败不影响设备本身，下一次刷新会用自动布局补位。
         }
@@ -933,6 +1069,8 @@ export function createDevicesPage(ctx) {
             errorBox.textContent = '';
             errorBox.classList.add('hidden');
         }
+        const key = selectedKeys.size === 1 ? [...selectedKeys][0] : '';
+        const draft = draftByKey(key);
         try {
             const values = formValues(form);
             const result = await saveDevice(values);
@@ -943,13 +1081,10 @@ export function createDevicesPage(ctx) {
                 }
                 return;
             }
-            const created = !form.dataset.devId;
-            const id = result.device && result.device.id ? result.device.id : selectedId;
-            if (created) {
-                await persistDraftLayout(id);
-                draft = null;
-            }
-            selectedId = id;
+            const id = result.device && result.device.id ? result.device.id : values.id;
+            if (draft) await persistDraftLayout(id, draft.layout);
+            drafts = drafts.filter(item => item.key !== key);
+            selectedKeys = new Set([id]);
             formDirty = false;
             formSignature = null;
             ctrlSignature = null;
@@ -962,29 +1097,80 @@ export function createDevicesPage(ctx) {
         }
     }
 
-    async function removeSelected() {
-        const device = selectedDevice();
-        if (!device) return;
-        const confirmed = await showConfirm(ctx, t('dev.confirmDelete'), {danger: true});
-        if (!confirmed) return;
-        try {
-            const result = await deleteDevice(device.id);
-            if (!result || !result.ok) {
-                const errorBox = $('#devFormError');
-                if (errorBox) {
-                    errorBox.textContent = errorText(result && result.error);
-                    errorBox.classList.remove('hidden');
-                }
+    /**
+     * 一次保存全部草稿：先吸收当前表单编辑，再逐台落库。
+     * 中途失败时保留失败及其后的草稿，已成功的移出草稿区。
+     */
+    async function saveAllDrafts() {
+        if (!drafts.length) return;
+        const key = selectedKeys.size === 1 ? [...selectedKeys][0] : '';
+        const current = draftByKey(key);
+        const form = $('#devFormEl');
+        if (form && current) {
+            try {
+                Object.assign(current.device, formValues(form));
+            } catch (error) {
+                showToast(error && ERROR_KEYS[error.message] ? errorText(error.message) : apiError(error));
                 return;
             }
-            selectedId = null;
-            formDirty = false;
-            formSignature = null;
-            ctrlSignature = null;
-            await refresh();
-        } catch (error) {
-            showToast(apiError(error));
         }
+        let savedId = '';
+        for (const item of [...drafts]) {
+            try {
+                const result = await saveDevice(item.device);
+                if (!result || !result.ok) {
+                    selectedKeys = new Set([item.key]);
+                    formDirty = false;
+                    formSignature = null;
+                    showToast(errorText(result && result.error));
+                    await refresh();
+                    return;
+                }
+                const id = result.device && result.device.id ? result.device.id : item.device.id;
+                if (id) {
+                    await persistDraftLayout(id, item.layout);
+                    if (!savedId) savedId = id;
+                }
+                drafts = drafts.filter(draft => draft.key !== item.key);
+            } catch (error) {
+                selectedKeys = new Set([item.key]);
+                showToast(apiError(error));
+                await refresh();
+                return;
+            }
+        }
+        selectedKeys = savedId ? new Set([savedId]) : new Set();
+        formDirty = false;
+        formSignature = null;
+        ctrlSignature = null;
+        await refresh();
+    }
+
+    async function removeSelected() {        const realIds = [...selectedKeys].filter(key => !isDraftKey(key));
+        const draftKeys = [...selectedKeys].filter(key => isDraftKey(key));
+        if (!realIds.length && !draftKeys.length) return;
+        const confirmed = await showConfirm(ctx, realIds.length + draftKeys.length > 1
+            ? t('dev.confirmDeleteMany', {n: realIds.length + draftKeys.length})
+            : t('dev.confirmDelete'), {danger: true});
+        if (!confirmed) return;
+        drafts = drafts.filter(item => !draftKeys.includes(item.key));
+        for (const id of realIds) {
+            try {
+                const result = await deleteDevice(id);
+                if (!result || !result.ok) {
+                    showToast(errorText(result && result.error));
+                    return;
+                }
+            } catch (error) {
+                showToast(apiError(error));
+                return;
+            }
+        }
+        selectedKeys.clear();
+        formDirty = false;
+        formSignature = null;
+        ctrlSignature = null;
+        await refresh();
     }
 
     function wouldCycleClient(childId, parentId) {
@@ -1056,8 +1242,23 @@ export function createDevicesPage(ctx) {
         }
     }
 
-    async function removeWire(childId) {
-        const node = deviceById(childId);
+    async function removeControlLinkById(linkId) {
+        if (!linkId) return;
+        const confirmed = await showConfirm(ctx, t('dev.ctl.remove'), {danger: true});
+        if (!confirmed) return;
+        try {
+            const result = await deleteControlLink(linkId);
+            if (!result || !result.ok) {
+                showToast(errorText(result && result.error));
+                return;
+            }
+            await refresh();
+        } catch (error) {
+            showToast(apiError(error));
+        }
+    }
+
+    async function removeWire(childId) {        const node = deviceById(childId);
         if (!node) return;
         const confirmed = await showConfirm(ctx, t('dev.wire.remove'), {danger: true});
         if (!confirmed) return;
@@ -1073,11 +1274,6 @@ export function createDevicesPage(ctx) {
         }
     }
 
-    function keyFromEvent(event) {
-        const node = event.target.closest('[data-node-key]');
-        return node ? node.dataset.nodeKey : null;
-    }
-
     function nodeElement(key) {
         const nodes = document.querySelectorAll('#devNodes [data-node-key]');
         for (const node of nodes) {
@@ -1087,7 +1283,8 @@ export function createDevicesPage(ctx) {
     }
 
     function beginDrag(key, event) {
-        const base = isDraftKey(key) && draft ? draft.layout : positionOf(deviceById(key));
+        const draft = draftByKey(key);
+        const base = draft ? draft.layout : positionOf(deviceById(key));
         dragging = {
             key,
             pointerId: event.pointerId,
@@ -1120,9 +1317,8 @@ export function createDevicesPage(ctx) {
             node.style.left = dragging.x + 'px';
             node.style.top = dragging.y + 'px';
         }
-        if (isDraftKey(dragging.key) && draft) {
-            draft.layout = {x: dragging.x, y: dragging.y};
-        }
+        const draft = draftByKey(dragging.key);
+        if (draft) draft.layout = {x: dragging.x, y: dragging.y};
         renderWires(canvasNodes());
     }
 
@@ -1131,8 +1327,9 @@ export function createDevicesPage(ctx) {
         const drag = dragging;
         dragging = null;
         if (!drag.moved) return;
-        if (isDraftKey(drag.key)) {
-            if (draft) draft.layout = {x: drag.x, y: drag.y};
+        const draft = draftByKey(drag.key);
+        if (draft) {
+            draft.layout = {x: drag.x, y: drag.y};
             renderCanvas();
             return;
         }
@@ -1166,13 +1363,13 @@ export function createDevicesPage(ctx) {
         renderWires(canvasNodes());
     }
 
-    function beginRfWire(portEl, event) {
-        const deviceId = portEl.dataset.rfDevice;
-        const port = portEl.dataset.rfPort;
-        const point = rfPortPoint(deviceId, port);
+    function beginCtlWire(portEl, event) {
+        const deviceId = portEl.dataset.ctlDevice;
+        const port = portEl.dataset.ctlPort;
+        const point = controlPortPoint(deviceId, port);
         if (!deviceId || !port || !point) return;
         const rect = $('#devCanvas').getBoundingClientRect();
-        rfWiring = {
+        ctlWiring = {
             fromDevice: deviceId,
             fromPort: port,
             x1: point.x,
@@ -1185,13 +1382,64 @@ export function createDevicesPage(ctx) {
         renderWires(canvasNodes());
     }
 
+    async function endCtlWire(event) {
+        if (!ctlWiring) return;
+        const from = {device: ctlWiring.fromDevice, port: ctlWiring.fromPort};
+        ctlWiring = null;
+        const x = event ? event.clientX : 0;
+        const y = event ? event.clientY : 0;
+        const targetEl = document.elementFromPoint(x, y);
+        const portEl = targetEl ? targetEl.closest('[data-ctl-device]') : null;
+        renderWires(canvasNodes());
+        if (!portEl) {
+            // 圆形控制口只能连圆形控制口：拖到射频口要明确拒绝，而不是静默丢弃。
+            if (targetEl && targetEl.closest('.dev-rf-port')) showToast(errorText('mixed-ports'));
+            return;
+        }
+        const to = {device: portEl.dataset.ctlDevice, port: portEl.dataset.ctlPort};
+        if (!to.device || !to.port) return;
+        if (to.device === from.device && to.port === from.port) return;
+        try {
+            const result = await saveControlLink({a: from, b: to});
+            if (!result || !result.ok) {
+                showToast(errorText(result && result.error));
+                return;
+            }
+            await refresh();
+        } catch (error) {
+            showToast(apiError(error));
+        }
+    }
+
+    function beginRfWire(portEl, event) {        const deviceId = portEl.dataset.rfDevice;
+        const port = portEl.dataset.rfPort;
+        const point = rfPortPoint(deviceId, port);
+        if (!deviceId || !port || !point) return;
+        const rect = $('#devCanvas').getBoundingClientRect();
+        rfWiring = {
+            fromDevice: deviceId,
+            fromPort: port,
+            dir: point.dir,
+            x1: point.x,
+            y1: point.y,
+            x2: event.clientX - rect.left,
+            y2: event.clientY - rect.top
+        };
+        event.preventDefault();
+        event.stopPropagation();
+        renderWires(canvasNodes());
+    }
+
     function moveWire(event) {
-        if (!wiring && !rfWiring) return;
+        if (!wiring && !rfWiring && !ctlWiring) return;
         const rect = $('#devCanvas').getBoundingClientRect();
         if (rfWiring) {
             rfWiring.x2 = event.clientX - rect.left;
             rfWiring.y2 = event.clientY - rect.top;
-        } else {
+        } else if (ctlWiring) {
+            ctlWiring.x2 = event.clientX - rect.left;
+            ctlWiring.y2 = event.clientY - rect.top;
+        } else if (wiring) {
             wiring.x2 = event.clientX - rect.left;
             wiring.y2 = event.clientY - rect.top;
         }
@@ -1207,7 +1455,13 @@ export function createDevicesPage(ctx) {
         const targetEl = document.elementFromPoint(x, y);
         const portEl = targetEl ? targetEl.closest('.dev-rf-port') : null;
         renderWires(canvasNodes());
-        if (!portEl) return;
+        if (!portEl) {
+            // 方形射频口只能连方形射频口。
+            if (targetEl && targetEl.closest('[data-ctl-device], .dev-ctl-port')) {
+                showToast(errorText('mixed-ports'));
+            }
+            return;
+        }
         const to = {deviceId: portEl.dataset.rfDevice, port: portEl.dataset.rfPort};
         if (!to.deviceId || !to.port) return;
         if (to.deviceId === from.deviceId && to.port === from.port) return;
@@ -1215,6 +1469,10 @@ export function createDevicesPage(ctx) {
     }
 
     async function endWire(event) {
+        if (ctlWiring) {
+            await endCtlWire(event);
+            return;
+        }
         if (rfWiring) {
             await endRfWire(event);
             return;
@@ -1230,19 +1488,85 @@ export function createDevicesPage(ctx) {
         if (!targetNode) return;
         const childKey = targetNode.dataset.nodeKey;
         if (childKey === fromKey) return;
-        if (isDraftKey(childKey)) {
+        if (isDraftKey(childKey) || isDraftKey(fromKey)) {
             showToast(t('dev.wire.firstSave'));
             return;
         }
         await connectNodes(fromKey, childKey);
     }
 
+    /* ---- Marquee selection --------------------------------------------- */
+
+    function canvasPoint(event) {
+        const rect = $('#devCanvas').getBoundingClientRect();
+        return {x: event.clientX - rect.left, y: event.clientY - rect.top};
+    }
+
+    function startMarquee(event) {
+        const point = canvasPoint(event);
+        marquee = {x: point.x, y: point.y, startX: point.x, startY: point.y, moved: false};
+        const box = document.createElement('div');
+        box.className = 'dev-marquee';
+        box.id = 'devMarquee';
+        $('#devCanvas').appendChild(box);
+        event.preventDefault();
+    }
+
+    function moveMarquee(event) {
+        if (!marquee) return;
+        const point = canvasPoint(event);
+        marquee.x = point.x;
+        marquee.y = point.y;
+        if (Math.abs(point.x - marquee.startX) + Math.abs(point.y - marquee.startY) > 4) marquee.moved = true;
+        const box = $('#devMarquee');
+        if (!box) return;
+        const left = Math.min(marquee.startX, marquee.x);
+        const top = Math.min(marquee.startY, marquee.y);
+        box.style.left = left + 'px';
+        box.style.top = top + 'px';
+        box.style.width = Math.abs(marquee.x - marquee.startX) + 'px';
+        box.style.height = Math.abs(marquee.y - marquee.startY) + 'px';
+        highlightMarquee(left, top, box.style.width, box.style.height);
+    }
+
+    function highlightMarquee(left, top, width, height) {
+        const right = left + parseFloat(width || '0');
+        const bottom = top + parseFloat(height || '0');
+        const keys = new Set();
+        for (const node of canvasNodes()) {
+            const x2 = node.layout.x + NODE_W;
+            const y2 = node.layout.y + NODE_H;
+            if (node.layout.x < right && x2 > left && node.layout.y < bottom && y2 > top) keys.add(node.key);
+        }
+        selectedKeys = keys;
+        for (const el of document.querySelectorAll('#devNodes [data-node-key]')) {
+            el.classList.toggle('active', keys.has(el.dataset.nodeKey));
+        }
+    }
+
+    function endMarquee() {
+        if (!marquee) return;
+        const moved = marquee.moved;
+        marquee = null;
+        $('#devMarquee')?.remove();
+        if (moved) {
+            formDirty = false;
+            formSignature = null;
+            ctrlSignature = null;
+            renderInspector();
+            return;
+        }
+        // 单击空白：清空选择。
+        selectedKeys.clear();
+        render();
+    }
+
     function applyLabels() {
         $('#devTitle').textContent = t('dev.title');
         $('#devSubtitle').textContent = t('dev.subtitle');
-        $('#devSeatLabel').textContent = t('dev.seat.current');
         $('#devRefresh').textContent = t('refresh');
         $('#devNew').textContent = t('dev.add');
+        $('#devSaveAll').textContent = t('dev.saveAll');
         $('#devHint').textContent = t('dev.hint.server');
         $('#devPaletteTitle').textContent = t('dev.palette.title');
         $('#devPaletteHint').textContent = t('dev.palette.hint');
@@ -1256,25 +1580,17 @@ export function createDevicesPage(ctx) {
         applyLabels();
         $('#devRefresh').addEventListener('click', () => { void refresh(); });
         $('#devNew').addEventListener('click', () => createDraft('antenna'));
+        $('#devSaveAll').addEventListener('click', () => { void saveAllDrafts(); });
         $('#devInspectorClose').addEventListener('click', () => {
-            if (draft && selectedId === draft.key) {
-                void confirmDiscard().then(ok => { if (ok) discardDraft(); });
+            const key = selectedKeys.size === 1 ? [...selectedKeys][0] : '';
+            if (isDraftKey(key)) {
+                discardDraft(key);
                 return;
             }
-            selectedId = null;
+            selectedKeys.clear();
             formDirty = false;
             formSignature = null;
             ctrlSignature = null;
-            render();
-        });
-        $('#devSeat').addEventListener('change', event => {
-            seatKey = event.target.value || null;
-            render();
-        });
-        $('#devSeats').addEventListener('click', event => {
-            const row = event.target.closest('[data-dev-seat]');
-            if (!row) return;
-            seatKey = row.dataset.devSeat;
             render();
         });
 
@@ -1308,49 +1624,50 @@ export function createDevicesPage(ctx) {
             const rect = canvas.getBoundingClientRect();
             createDraft(type, event.clientX - rect.left - NODE_W / 2, event.clientY - rect.top - NODE_H / 2);
         });
-        canvas.addEventListener('click', event => {
-            if (event.target.closest('[data-node-key]')) return;
-            if (event.target.closest('[data-wire-child]')) return;
-            if (event.target.closest('[data-rf-link]')) return;
-            if (draft && selectedId === draft.key) {
-                void confirmDiscard().then(ok => { if (ok) discardDraft(); });
-                return;
-            }
-            selectedId = null;
-            formSignature = null;
-            ctrlSignature = null;
-            render();
+        canvas.addEventListener('pointerdown', event => {
+            if (event.button !== undefined && event.button !== 0) return;
+            const target = event.target;
+            if (target.closest('[data-node-key]') || target.closest('[data-wire-child]') ||
+                target.closest('[data-rf-link]')) return;
+            startMarquee(event);
         });
 
         $('#devNodes').addEventListener('pointerdown', event => {
+            const ctlPort = event.target.closest('[data-ctl-device]');
+            if (ctlPort) {
+                beginCtlWire(ctlPort, event);
+                return;
+            }
             const rfPort = event.target.closest('.dev-rf-port');
             if (rfPort) {
                 beginRfWire(rfPort, event);
                 return;
             }
-            const port = event.target.closest('.dev-port-out');
+            const mount = event.target.closest('.dev-mount-handle');
             const node = event.target.closest('[data-node-key]');
             if (!node) return;
-            if (port) {
+            if (mount) {
                 beginWire(node, event);
                 return;
             }
             if (event.button !== undefined && event.button !== 0) return;
             const key = node.dataset.nodeKey;
-            void (async () => {
-                await selectNode(key);
-                // 用户可能在「放弃草稿」确认里取消，此时不启动拖动。
-                if (selectedId === key) beginDrag(key, event);
-            })();
+            selectNode(key, event.shiftKey);
+            if (selectedKeys.has(key) && selectedKeys.size === 1) beginDrag(key, event);
         });
         $('#devNodes').addEventListener('keydown', event => {
             if (event.key !== 'Enter' && event.key !== ' ') return;
-            const key = keyFromEvent(event);
-            if (!key) return;
+            const node = event.target.closest('[data-node-key]');
+            if (!node) return;
             event.preventDefault();
-            void selectNode(key);
+            selectNode(node.dataset.nodeKey, event.shiftKey);
         });
         $('#devWires').addEventListener('click', event => {
+            const ctlHit = event.target.closest('[data-ctl-link]');
+            if (ctlHit) {
+                void removeControlLinkById(ctlHit.dataset.ctlLink);
+                return;
+            }
             const rfHit = event.target.closest('[data-rf-link]');
             if (rfHit) {
                 void removeRfLinkById(rfHit.dataset.rfLink);
@@ -1363,16 +1680,18 @@ export function createDevicesPage(ctx) {
         window.addEventListener('pointermove', event => {
             moveDrag(event);
             moveWire(event);
+            moveMarquee(event);
         });
         window.addEventListener('pointerup', event => {
             void endDrag();
             void endWire(event);
+            endMarquee();
         });
 
         $('#devControl').addEventListener('click', event => {
             const button = event.target.closest('[data-cmd]');
-            const device = selectedDevice();
-            if (!button || !device) return;
+            const device = selectedValue();
+            if (!button || !device || !device.id) return;
             const cmd = button.dataset.cmd;
             if (cmd === 'rotate') {
                 const input = $('#devCtrlAzimuth');
@@ -1389,10 +1708,14 @@ export function createDevicesPage(ctx) {
                 });
             }
         });
+        $('#devControl').addEventListener('change', event => {
+            if (event.target.id !== 'devCtrlSeat') return;
+            commandSeat = event.target.value || null;
+        });
         $('#devControl').addEventListener('pointerdown', event => {
             const button = event.target.closest('[data-tower]');
-            const device = selectedDevice();
-            if (!button || !device) return;
+            const device = selectedValue();
+            if (!button || !device || !device.id) return;
             event.preventDefault();
             startTower(device, button.dataset.tower);
         });
@@ -1404,11 +1727,12 @@ export function createDevicesPage(ctx) {
         $('#devForm').addEventListener('click', event => {
             if (event.target.id === 'devDelete') void removeSelected();
         });
-        $('#devView').addEventListener('keydown', event => {
+        document.addEventListener('keydown', event => {
+            if (!active) return;
             if (event.key !== 'Delete') return;
             const tag = document.activeElement ? document.activeElement.tagName : '';
             if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)) return;
-            if (selectedDevice()) void removeSelected();
+            if (selectedKeys.size) void removeSelected();
         });
     }
 
@@ -1428,6 +1752,9 @@ export function createDevicesPage(ctx) {
         dragging = null;
         wiring = null;
         rfWiring = null;
+        ctlWiring = null;
+        marquee = null;
+        $('#devMarquee')?.remove();
         if (timer) {
             clearInterval(timer);
             timer = null;

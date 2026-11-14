@@ -7,6 +7,7 @@ const path = require('node:path');
 
 const model = require('../lib/devices/model.js');
 const rf = require('../lib/devices/rf.js');
+const control = require('../lib/devices/control.js');
 const ownership = require('../lib/devices/ownership.js');
 const runtime = require('../lib/devices/runtime.js');
 const tower = require('../lib/devices/tower.js');
@@ -45,9 +46,6 @@ function deviceRow(overrides) {
         parent_id: null,
         bands: '20m',
         install_offset_deg: 0,
-        exclusive: 0,
-        port_label: '',
-        password: '',
         enabled: 1,
         travel_timeout_sec: 120,
         notes: '',
@@ -68,7 +66,7 @@ function sourceRow(overrides) {
         name: 'Source A',
         priority: 10,
         timeout_ms: 2000,
-        password: '',
+        token: '',
         enabled: 1,
         created_ts: '2026-01-01T00:00:00.000Z',
         updated_ts: '2026-01-01T00:00:00.000Z'
@@ -421,7 +419,7 @@ test('TX ingest validates payload, token and source id', () => {
     assert.equal(tx.ingest(globalCtx, sources, {source_id: 'src-a', tx_active: 'yes'}, {}, now).status, 400);
     assert.equal(tx.ingest(globalCtx, sources, {source_id: 'src-a', tx_active: true, seq: 'x'}, {}, now).status, 400);
 
-    const secured = [storage.devices.toTxSource(sourceRow({id: 'src-s', timeout_ms: 2000, password: 's3cret'}))];
+    const secured = [storage.devices.toTxSource(sourceRow({id: 'src-s', timeout_ms: 2000, token: 's3cret'}))];
     assert.equal(tx.ingest(globalCtx, secured, {source_id: 'src-s', tx_active: true}, {}, now).status, 403);
     assert.equal(tx.ingest(globalCtx, secured, {source_id: 'src-s', tx_active: true}, {'X-DX-TX-Token': 's3cret'}, now).status, 200);
 
@@ -461,23 +459,29 @@ test('device reports validate type-specific fields and are stored server-side on
     assert.equal(service.snapshot(globalCtx, rows, now).status['ant-20'].state, 'unknown');
 });
 
-test('device config writes never expose passwords in the public DTO', () => {
+test('device writes keep only type-owned fields and never expose relay tokens', () => {
     const now = new Date('2026-03-01T12:00:00.000Z');
     const globalCtx = makeContext();
     const rows = [];
 
     const created = service.handle(globalCtx, rows, {
         action: 'save',
-        device: {name: 'Antenna', type: 'antenna', bands: '20m', password: 'plain-secret'}
+        device: {
+            name: 'Antenna', type: 'antenna', bands: '20m',
+            // 旧字段即使被提交也不再落库。
+            password: 'plain-secret', exclusive: true, port_label: 'P1', seat: 'OP-A'
+        }
     }, now);
     assert.equal(created.status, 201);
-    assert.equal(created.payload.device.has_password, true);
-    assert.equal(Object.prototype.hasOwnProperty.call(created.payload.device, 'password'), false);
-    assert.match(created.sql[0], /plain-secret/);
-    assert.doesNotMatch(created.sql[0], /log/i);
+    const pub = created.payload.device;
+    for (const key of ['password', 'has_password', 'exclusive', 'port_label', 'seat']) {
+        assert.equal(Object.prototype.hasOwnProperty.call(pub, key), false, key + ' must be gone');
+    }
+    assert.doesNotMatch(created.sql[0], /plain-secret/);
+    assert.doesNotMatch(created.sql[0], /exclusive/);
 
-    const deviceId = created.payload.device.id;
-    const updated = service.handle(globalCtx, [device({id: deviceId, type: 'antenna', bands: '20m', password: 'plain-secret'})], {
+    const deviceId = pub.id;
+    const updated = service.handle(globalCtx, [device({id: deviceId, type: 'antenna', bands: '20m'})], {
         action: 'save', device: {id: deviceId, name: 'Renamed'}
     }, now);
     assert.equal(updated.status, 200);
@@ -520,18 +524,21 @@ test('TX source configuration keeps the token private and validates ranges', () 
     assert.equal(updated.payload.source.priority, 7);
 });
 
-test('storage creates both tables and migrates missing columns idempotently', () => {
+test('storage creates every table and migrates missing columns idempotently', () => {
     const schema = storage.devices.createSchema();
-    assert.equal(schema.length, 6);
+    assert.equal(schema.length, 8);
     assert.match(schema[0], /CREATE TABLE IF NOT EXISTS devices/);
     assert.match(schema[1], /CREATE TABLE IF NOT EXISTS tx_sources/);
     assert.match(schema[2], /CREATE TABLE IF NOT EXISTS device_commands/);
     assert.match(schema[3], /CREATE TABLE IF NOT EXISTS device_layout/);
     assert.match(schema[4], /CREATE TABLE IF NOT EXISTS rf_links/);
     assert.match(schema[5], /CREATE UNIQUE INDEX IF NOT EXISTS rf_links_pair/);
+    assert.match(schema[6], /CREATE TABLE IF NOT EXISTS control_links/);
+    assert.match(schema[7], /CREATE UNIQUE INDEX IF NOT EXISTS control_links_pair/);
     assert.match(storage.devices.snapshotQuery(), /UNION ALL/);
     assert.match(storage.devices.snapshotQuery(), /LEFT JOIN device_layout/);
     assert.match(storage.devices.snapshotQuery(), /FROM rf_links/);
+    assert.match(storage.devices.snapshotQuery(), /FROM control_links/);
     assert.match(storage.devices.columnsQuery(), /pragma_table_info\('devices'\)/);
 
     assert.deepEqual(storage.devices.addMissingColumns([]), []);
@@ -612,11 +619,11 @@ test('two new settings ship with the agreed defaults and no gating', () => {
     assert.equal(pulseField.default, 400);
 });
 
-test('command channel requires seat identity and the device password', async () => {
+test('command channel requires seat identity and rejects malformed requests', async () => {
     fakeTransports();
     const now = new Date('2026-03-01T12:00:00.000Z');
     const globalCtx = makeContext();
-    const rows = [deviceRow({id: 'rotator-1', name: 'Rotator', type: 'rotator', bands: '', password: 'pw'})];
+    const rows = [deviceRow({id: 'rotator-1', name: 'Rotator', type: 'rotator', bands: ''})];
 
     let result = await service.handleCommand(globalCtx, rows, 'rotator-1',
         {command: 'rotate', azimuth: 45}, {}, now);
@@ -626,13 +633,8 @@ test('command channel requires seat identity and the device password', async () 
     assert.match(result.sql[0], /INSERT INTO device_commands/);
 
     result = await service.handleCommand(globalCtx, rows, 'rotator-1',
-        {command: 'rotate', azimuth: 45}, {'X-DX-Seat': 'OP-A', 'X-DX-Device-Token': 'bad'}, now);
-    assert.equal(result.status, 403);
-    assert.equal(result.payload.error, 'invalid-device-token');
-
-    result = await service.handleCommand(globalCtx, rows, 'rotator-1',
         {command: 'rotate', azimuth: 45},
-        {'X-DX-Seat': 'OP-A', 'X-DX-Device-Token': 'pw', 'X-DX-Operator': 'Alice'}, now);
+        {'X-DX-Seat': 'OP-A', 'X-DX-Operator': 'Alice'}, now);
     assert.equal(result.status, 202);
     assert.equal(result.payload.ok, true);
     assert.match(result.sql[0], /OP-A/);
@@ -712,7 +714,7 @@ test('select is blocked with 423 when a TX source reports active', async () => {
     const globalCtx = makeContext();
     const matrix = deviceRow({
         id: 'matrix-1', name: 'Matrix', type: 'matrix', bands: '',
-        config_json: JSON.stringify({relay_url: 'http://relay.local/out', channels: {'IN1:1': 3}})
+        config_json: JSON.stringify({relay_url: 'http://relay.local/out', channels: {'in1:out1': 3}})
     });
     const source = sourceRow({id: 'src-a', name: 'A', priority: 10, timeout_ms: 2000});
     const rows = [matrix, source];
@@ -720,7 +722,7 @@ test('select is blocked with 423 when a TX source reports active', async () => {
 
     // 未接入任何源：互锁不启用，正常放行。
     let result = await service.handleCommand(globalCtx, rows, 'matrix-1',
-        {command: 'select', port: 'IN1', outlet: '1'}, headers, now);
+        {command: 'select', port: 'in1', outlet: 'out1'}, headers, now);
     assert.equal(result.status, 202);
     assert.equal(result.payload.interlock, 'not-enabled');
 
@@ -728,7 +730,7 @@ test('select is blocked with 423 when a TX source reports active', async () => {
     service.ingestTx(globalCtx, [storage.devices.toTxSource(source)],
         {source_id: 'src-a', tx_active: true}, {}, now);
     result = await service.handleCommand(globalCtx, rows, 'matrix-1',
-        {command: 'select', port: 'IN1', outlet: '1'}, headers, now);
+        {command: 'select', port: 'in1', outlet: 'out1'}, headers, now);
     assert.equal(result.status, 423);
     assert.equal(result.payload.error, 'tx-active');
     assert.equal(result.payload.interlock, 'tx-active');
@@ -737,22 +739,25 @@ test('select is blocked with 423 when a TX source reports active', async () => {
     service.ingestTx(globalCtx, [storage.devices.toTxSource(source)],
         {source_id: 'src-a', tx_active: false, seq: 2}, {}, now);
     result = await service.handleCommand(globalCtx, rows, 'matrix-1',
-        {command: 'select', port: 'IN1', outlet: '1'}, headers, now);
+        {command: 'select', port: 'in1', outlet: 'out1'}, headers, now);
     assert.equal(result.status, 202);
     assert.equal(result.payload.interlock, 'enabled');
 
     // 源超时 → 互锁不启用，正常放行。
     const stale = new Date(now.getTime() + 7000);
     result = await service.handleCommand(globalCtx, rows, 'matrix-1',
-        {command: 'select', port: 'IN1', outlet: '1'}, headers, stale);
+        {command: 'select', port: 'in1', outlet: 'out1'}, headers, stale);
     assert.equal(result.status, 202);
     assert.equal(result.payload.interlock, 'not-enabled');
 
-    // 未知通道 / 缺参数。
+    // 未知通道 / 端口不存在 / 缺参数。
     result = await service.handleCommand(globalCtx, rows, 'matrix-1',
-        {command: 'select', port: 'IN1', outlet: '9'}, headers, now);
+        {command: 'select', port: 'in1', outlet: 'out2'}, headers, now);
     assert.equal(result.status, 400);
     assert.equal(result.payload.error, 'unknown-channel');
+    result = await service.handleCommand(globalCtx, rows, 'matrix-1',
+        {command: 'select', port: 'IN1', outlet: 'out1'}, headers, now);
+    assert.equal(result.payload.error, 'unknown-port');
     result = await service.handleCommand(globalCtx, rows, 'matrix-1',
         {command: 'select'}, headers, now);
     assert.equal(result.payload.error, 'invalid-port');
@@ -813,7 +818,7 @@ test('device protocol config is validated and secrets stay out of the DTO', () =
         name: 'R', type: 'rotator', config: {protocol: 'modbus'}
     }, {devices: []}).status, 400);
     assert.equal(model.normalizeDevice({
-        name: 'R', type: 'rotator', config: {relay_url: 'ftp://x'}
+        name: 'M', type: 'matrix', config: {relay_url: 'ftp://x'}
     }, {devices: []}).error, 'invalid-config-relay-url');
     assert.equal(model.normalizeDevice({
         name: 'R', type: 'rotator', config: {port: 70000}
@@ -890,23 +895,23 @@ test('select drives the relay with the mapped channel and records the port', asy
         config_json: JSON.stringify({
             relay_url: 'http://relay.local/out',
             pulse_ms: 300,
-            channels: {'IN1:1': 4, '1': 5}
+            channels: {'in1:out1': 4, 'out1': 5}
         })
     })];
     const headers = {'X-DX-Seat': 'OP-A'};
 
     const result = await service.handleCommand(globalCtx, rows, 'matrix-1',
-        {command: 'select', port: 'IN1', outlet: '1'}, headers, now);
+        {command: 'select', port: 'in1', outlet: 'out1'}, headers, now);
     assert.equal(result.status, 202);
     assert.equal(result.payload.channel, 4);
     assert.deepEqual(calls, [{channel: 4, action: 'pulse', pulse_ms: 300}]);
-    assert.equal(runtime.stateOf(globalCtx, 'matrix-1').ports.IN1, '1');
+    assert.equal(runtime.stateOf(globalCtx, 'matrix-1').ports.in1, 'out1');
 
     // 未配置端口映射时只按出口号回退。
-    const fallback = commands.channelFor(storage.devices.toDevice(rows[0]), 'IN2', '1');
+    const fallback = commands.channelFor(storage.devices.toDevice(rows[0]), 'in2', 'out1');
     assert.equal(fallback, 5);
     // 完全没有映射的出口被拒绝。
-    assert.equal(commands.channelFor(storage.devices.toDevice(rows[0]), 'IN2', '9'), null);
+    assert.equal(commands.channelFor(storage.devices.toDevice(rows[0]), 'in2', 'out9'), null);
     relay.reset();
 });
 
@@ -1167,9 +1172,10 @@ test('layout action writes separate rows and delete cleans them up', () => {
 
     const removed = service.handle(globalCtx, rows, {action: 'delete', id: 'tower-1'}, now);
     assert.equal(removed.status, 200);
-    assert.equal(removed.sql.length, 3);
+    assert.equal(removed.sql.length, 4);
     assert.match(removed.sql[1], /DELETE FROM device_layout WHERE device_id = 'tower-1'/);
     assert.match(removed.sql[2], /DELETE FROM rf_links/);
+    assert.match(removed.sql[3], /DELETE FROM control_links/);
 });
 
 test('snapshot prefers saved layout and falls back to auto layout', () => {
@@ -1328,7 +1334,7 @@ function rfRow(aDevice, aPort, bDevice, bPort) {
 
 test('RF ports are derived from type, counts and combiner bands', () => {
     assert.deepEqual(rf.portsFor(device({id: 'radio-1', type: 'radio', bands: ''})),
-        [{key: 'ant', dir: 'bidir', role: 'bidir'}]);
+        [{key: 'out', dir: 'out', role: 'out'}]);
     assert.deepEqual(rf.portsFor(device({id: 'swr-1', type: 'swr', bands: ''})).map(port => port.key),
         ['in', 'out']);
     const swr = rf.portsFor(device({id: 'swr-1', type: 'swr', bands: ''}));
@@ -1337,7 +1343,7 @@ test('RF ports are derived from type, counts and combiner bands', () => {
     const switchPorts = rf.portsFor(device({
         id: 'switch-1', type: 'switch', bands: '', config_json: '{"out_count":4}'
     })).map(port => port.key);
-    assert.deepEqual(switchPorts, ['common', 'out1', 'out2', 'out3', 'out4']);
+    assert.deepEqual(switchPorts, ['in', 'ant1', 'ant2', 'ant3', 'ant4']);
 
     const matrixPorts = rf.portsFor(device({
         id: 'matrix-1', type: 'matrix', bands: '', config_json: '{"in_count":3,"out_count":5}'
@@ -1353,11 +1359,17 @@ test('RF ports are derived from type, counts and combiner bands', () => {
     assert.deepEqual(rf.portsFor(device({id: 'tower-1', type: 'tower', bands: ''})), []);
     assert.deepEqual(rf.portsFor(device({id: 'rotator-1', type: 'rotator', bands: ''})), []);
 
+    // 自定义端口覆盖已废弃：未知类型没有射频口。
     const custom = device({
         id: 'other-1', type: 'other', bands: '',
         config_json: JSON.stringify({ports: [{key: 'a', dir: 'bidir'}, {key: 'b', dir: 'out'}]})
     });
-    assert.deepEqual(rf.portsFor(custom).map(port => port.key), ['a', 'b']);
+    assert.deepEqual(rf.portsFor(custom), []);
+
+    // 控制 / 状态口是圆形、不可连射频；串口服务器没有射频口。
+    const serial = device({id: 'serial-1', type: 'serial', bands: '', config_json: '{"port_count":2}'});
+    assert.deepEqual(rf.portsFor(serial), []);
+    assert.deepEqual(rf.controlPorts(serial).map(port => port.key), ['net', 'serial1', 'serial2']);
 });
 
 test('RF links are undirected, canonical and reject unknown ports', () => {
@@ -1367,7 +1379,7 @@ test('RF links are undirected, canonical and reject unknown ports', () => {
         device({id: 'other-1', type: 'other', bands: ''})
     ];
     const first = rf.normalizeLink({
-        a_device: 'radio-1', a_port: 'ant', b_device: 'bpf-1', b_port: 'in'
+        a_device: 'radio-1', a_port: 'out', b_device: 'bpf-1', b_port: 'in'
     }, {devices, links: []});
     assert.equal(first.ok, true);
     assert.equal(first.existing, false);
@@ -1375,7 +1387,7 @@ test('RF links are undirected, canonical and reject unknown ports', () => {
 
     // 反向插入视为同一条，不产生第二条记录。
     const reverse = rf.normalizeLink({
-        a: {device: 'bpf-1', port: 'in'}, b: {device: 'radio-1', port: 'ant'}
+        a: {device: 'bpf-1', port: 'in'}, b: {device: 'radio-1', port: 'out'}
     }, {devices, links: [link]});
     assert.equal(reverse.ok, true);
     assert.equal(reverse.existing, true);
@@ -1385,10 +1397,10 @@ test('RF links are undirected, canonical and reject unknown ports', () => {
         a_device: 'radio-1', a_port: 'nope', b_device: 'bpf-1', b_port: 'in'
     }, {devices, links: []}).error, 'unknown-port');
     assert.equal(rf.normalizeLink({
-        a_device: 'radio-1', a_port: 'ant', b_device: 'missing', b_port: 'in'
+        a_device: 'radio-1', a_port: 'out', b_device: 'missing', b_port: 'in'
     }, {devices, links: []}).status, 404);
     assert.equal(rf.normalizeLink({
-        a_device: 'radio-1', a_port: 'ant', b_device: 'radio-1', b_port: 'ant'
+        a_device: 'radio-1', a_port: 'out', b_device: 'radio-1', b_port: 'out'
     }, {devices, links: []}).error, 'invalid-link');
 });
 
@@ -1402,11 +1414,11 @@ test('TX reachability follows port direction and prunes bands per device', () =>
         device({id: 'ant-15', type: 'antenna', bands: '15m'})
     ];
     const links = [
-        rfRow('radio-1', 'ant', 'amp-1', 'in'),
+        rfRow('radio-1', 'out', 'amp-1', 'in'),
         rfRow('amp-1', 'out', 'bpf-20', 'in'),
-        rfRow('bpf-20', 'out', 'switch-1', 'common'),
-        rfRow('switch-1', 'out1', 'ant-20', 'feed'),
-        rfRow('switch-1', 'out2', 'ant-15', 'feed')
+        rfRow('bpf-20', 'out', 'switch-1', 'in'),
+        rfRow('switch-1', 'ant1', 'ant-20', 'in'),
+        rfRow('switch-1', 'ant2', 'ant-15', 'in')
     ];
     const reach = (band, selection) => rf.reachableAntennas({
         devices,
@@ -1416,18 +1428,18 @@ test('TX reachability follows port direction and prunes bands per device', () =>
         selections: selection ? {'switch-1': selection} : {}
     }).map(hit => hit.device.id);
 
-    assert.deepEqual(reach('20m', {common: 'out1'}), ['ant-20']);
+    assert.deepEqual(reach('20m', {in: 'ant1'}), ['ant-20']);
     // 波段不匹配 BPF：20m BPF 会剪掉 15m 的整条路径。
-    assert.deepEqual(reach('15m', {common: 'out2'}), []);
-    assert.deepEqual(reach('15m', {common: 'out1'}), []);
+    assert.deepEqual(reach('15m', {in: 'ant2'}), []);
+    assert.deepEqual(reach('15m', {in: 'ant1'}), []);
 
     // 去掉 BPF 后，波段剪枝仍然发生在天线自身。
     const noBpf = devices.filter(item => item.id !== 'bpf-20');
     const noBpfLinks = [
-        rfRow('radio-1', 'ant', 'amp-1', 'in'),
-        rfRow('amp-1', 'out', 'switch-1', 'common'),
-        rfRow('switch-1', 'out1', 'ant-20', 'feed'),
-        rfRow('switch-1', 'out2', 'ant-15', 'feed')
+        rfRow('radio-1', 'out', 'amp-1', 'in'),
+        rfRow('amp-1', 'out', 'switch-1', 'in'),
+        rfRow('switch-1', 'ant1', 'ant-20', 'in'),
+        rfRow('switch-1', 'ant2', 'ant-15', 'in')
     ];
     const reachNoBpf = (band, selection) => rf.reachableAntennas({
         devices: noBpf,
@@ -1436,8 +1448,8 @@ test('TX reachability follows port direction and prunes bands per device', () =>
         startDeviceId: 'radio-1',
         selections: {'switch-1': selection}
     }).map(hit => hit.device.id);
-    assert.deepEqual(reachNoBpf('15m', {common: 'out2'}), ['ant-15']);
-    assert.deepEqual(reachNoBpf('15m', {common: 'out1'}), []);
+    assert.deepEqual(reachNoBpf('15m', {in: 'ant2'}), ['ant-15']);
+    assert.deepEqual(reachNoBpf('15m', {in: 'ant1'}), []);
     // 切换器没有选定输出时不假装导通。
     assert.deepEqual(reach('20m', null), []);
     // 只有一个输出时选择唯一，不依赖运行态。
@@ -1454,7 +1466,7 @@ test('TX reachability follows port direction and prunes bands per device', () =>
     // 端口方向：从电台直接接到功放的输出端，TX 不应倒灌。
     const wrong = rf.reachableAntennas({
         devices: [devices[0], devices[1]],
-        links: [rfRow('radio-1', 'ant', 'amp-1', 'out')],
+        links: [rfRow('radio-1', 'out', 'amp-1', 'out')],
         band: '20m',
         startDeviceId: 'radio-1'
     });
@@ -1469,9 +1481,9 @@ test('combiner matches the band at its in port and still lands on one antenna', 
         device({id: 'ant-multi', type: 'antenna', bands: '20m,15m'})
     ];
     const links = [
-        rfRow('radio-20', 'ant', 'combiner-1', 'in:20m'),
-        rfRow('radio-15', 'ant', 'combiner-1', 'in:15m'),
-        rfRow('combiner-1', 'out', 'ant-multi', 'feed')
+        rfRow('radio-20', 'out', 'combiner-1', 'in:20m'),
+        rfRow('radio-15', 'out', 'combiner-1', 'in:15m'),
+        rfRow('combiner-1', 'out', 'ant-multi', 'in')
     ];
     const reach = (start, band) => rf.reachableAntennas({
         devices, links, band, startDeviceId: start
@@ -1485,7 +1497,7 @@ test('combiner matches the band at its in port and still lands on one antenna', 
     // 方向接反（电台接到 out 口）不导通。
     const reversed = rf.reachableAntennas({
         devices,
-        links: [rfRow('radio-20', 'ant', 'combiner-1', 'out'), rfRow('combiner-1', 'out', 'ant-multi', 'feed')],
+        links: [rfRow('radio-20', 'out', 'combiner-1', 'out'), rfRow('combiner-1', 'out', 'ant-multi', 'in')],
         band: '20m',
         startDeviceId: 'radio-20'
     });
@@ -1501,14 +1513,14 @@ test('RF warnings flag multi-upstream antennas, combiner coverage and orphan lin
         device({id: 'ant-multi', type: 'antenna', bands: '20m'})
     ];
     const links = [
-        rfRow('radio-1', 'ant', 'switch-1', 'common'),
-        rfRow('switch-1', 'out1', 'ant-20', 'feed'),
+        rfRow('radio-1', 'out', 'switch-1', 'in'),
+        rfRow('switch-1', 'ant1', 'ant-20', 'in'),
         // 同一副天线再接第二个上游：配置错误，只提示不仲裁。
-        rfRow('radio-1', 'ant', 'ant-20', 'feed'),
-        rfRow('combiner-1', 'out', 'ant-multi', 'feed'),
+        rfRow('radio-1', 'out', 'ant-20', 'in'),
+        rfRow('combiner-1', 'out', 'ant-multi', 'in'),
         // 端口已不存在：孤立连线。
-        {kind: 'rf', link_id: 'rf:switch-1:out2~ant-20:feed', a_device: 'switch-1',
-            a_port: 'out2', b_device: 'ant-20', b_port: 'feed', created_ts: '2026-01-01T00:00:00.000Z'}
+        {kind: 'rf', link_id: 'rf:switch-1:ant2~ant-20:in', a_device: 'switch-1',
+            a_port: 'ant2', b_device: 'ant-20', b_port: 'in', created_ts: '2026-01-01T00:00:00.000Z'}
     ];
     const codes = rf.warnings(devices, links).map(item => item.code);
     assert.ok(codes.includes('antenna-multi-upstream'));
@@ -1519,16 +1531,24 @@ test('RF warnings flag multi-upstream antennas, combiner coverage and orphan lin
 test('ownership follows RF reachability and falls back to band matching', () => {
     const now = new Date('2026-03-01T12:00:00.000Z');
     const devices = [
-        device({id: 'radio-1', type: 'radio', bands: '', seat: 'OP-A'}),
+        device({
+            id: 'radio-1', type: 'radio', bands: '',
+            config_json: JSON.stringify({computer: 'PC-A', model: 'IC-7610'})
+        }),
         device({id: 'amp-1', type: 'amp', bands: ''}),
         device({id: 'ant-20', type: 'antenna', bands: '20m'}),
         device({id: 'ant-other', type: 'antenna', bands: '20m'})
     ];
     const links = [
-        rfRow('radio-1', 'ant', 'amp-1', 'in'),
-        rfRow('amp-1', 'out', 'ant-20', 'feed')
+        rfRow('radio-1', 'out', 'amp-1', 'in'),
+        rfRow('amp-1', 'out', 'ant-20', 'in')
     ];
-    const radioStates = {'OP-A': {ts: now.toISOString(), freqKhz: 14020}};
+    const radioStates = {
+        'OP-A': {
+            ts: now.toISOString(), freqKhz: 14020,
+            computerName: 'pc-a', radioName: 'IC-7610'
+        }
+    };
 
     const linked = ownership.project({devices, links, radioStates, now});
     assert.equal(linked.by_seat['OP-A'].source, 'rf');
@@ -1555,7 +1575,7 @@ test('ownership follows RF reachability and falls back to band matching', () => 
     assert.equal(switched.by_seat['OP-A'].colors['ant-20'], 'green');
 });
 
-test('combiner and BPF require bands; radio seat binding is validated', () => {
+test('combiner and BPF require bands; radio stores only its addressing identity', () => {
     const combiner = model.normalizeDevice({type: 'combiner', name: 'Combiner'}, {devices: []});
     assert.equal(combiner.status, 400);
     assert.equal(combiner.error, 'combiner-band-required');
@@ -1564,14 +1584,23 @@ test('combiner and BPF require bands; radio seat binding is validated', () => {
     assert.equal(bpf.error, 'bpf-band-required');
 
     const radio = model.normalizeDevice({
-        type: 'radio', name: 'Radio', seat: 'OP-A'
+        type: 'radio', name: 'Radio', seat: 'OP-A',
+        config: {computer: 'PC-A', model: 'IC-7610'}
     }, {devices: []});
     assert.equal(radio.ok, true);
-    assert.equal(radio.device.seat, 'OP-A');
+    assert.equal(radio.device.seat, undefined);
+    assert.equal(radio.device.config.computer, 'PC-A');
+    assert.equal(radio.device.config.model, 'IC-7610');
 
-    assert.equal(model.normalizeDevice({
-        type: 'radio', name: 'Radio', seat: 'bad seat'
-    }, {devices: []}).error, 'invalid-seat');
+    // 不属于电台的字段即使提交也不落库。
+    const stray = model.normalizeDevice({
+        type: 'radio', name: 'Radio', bands: '20m', install_offset_deg: 90,
+        travel_timeout_sec: 300, config: {host: 'x'}
+    }, {devices: []});
+    assert.deepEqual(stray.device.bands, []);
+    assert.equal(stray.device.install_offset_deg, 0);
+    assert.equal(stray.device.travel_timeout_sec, 0);
+    assert.deepEqual(stray.device.config, {});
 
     const saved = model.normalizeDevice({
         type: 'combiner', name: 'Combiner', bands: '20m,15m'
@@ -1591,14 +1620,14 @@ test('RF link actions attach, dedupe and remove links; port edits clean stale li
     ];
 
     const created = service.handle(globalCtx, devices, {
-        action: 'rf-link', link: {a_device: 'radio-1', a_port: 'ant', b_device: 'amp-1', b_port: 'in'}
+        action: 'rf-link', link: {a_device: 'radio-1', a_port: 'out', b_device: 'amp-1', b_port: 'in'}
     }, now);
     assert.equal(created.status, 201);
     assert.match(created.sql[0], /INSERT OR REPLACE INTO rf_links/);
     const link = created.payload.link;
 
     const duplicate = service.handle(globalCtx, devices.concat([Object.assign({kind: 'rf'}, link)]), {
-        action: 'rf-link', link: {a_device: 'amp-1', a_port: 'in', b_device: 'radio-1', b_port: 'ant'}
+        action: 'rf-link', link: {a_device: 'amp-1', a_port: 'in', b_device: 'radio-1', b_port: 'out'}
     }, now);
     assert.equal(duplicate.status, 200);
     assert.equal(duplicate.payload.duplicate, true);
@@ -1612,8 +1641,8 @@ test('RF link actions attach, dedupe and remove links; port edits clean stale li
 
     // 合路器波段从 20m,15m 改为 20m：in:15m 的连线随保存清理。
     const linkRows = [
-        rfRow('combiner-1', 'in:15m', 'ant-multi', 'feed'),
-        rfRow('combiner-1', 'out', 'ant-multi', 'feed')
+        rfRow('combiner-1', 'in:15m', 'ant-multi', 'in'),
+        rfRow('combiner-1', 'out', 'ant-multi', 'in')
     ];
     const saved = service.handle(globalCtx, devices.concat(linkRows), {
         action: 'save', device: {id: 'combiner-1', bands: '20m'}
@@ -1623,28 +1652,191 @@ test('RF link actions attach, dedupe and remove links; port edits clean stale li
     assert.ok(saved.sql.some(sql => /DELETE FROM rf_links/.test(sql)));
 });
 
+test('control addressing resolves direct network devices and serial-server proxies', () => {
+    const devices = [
+        device({
+            id: 'serial-1', type: 'serial', bands: '',
+            config_json: JSON.stringify({
+                host: '192.168.1.50', port: 4001, port_count: 2,
+                baud: 9600, data_bits: 8, stop_bits: 1, parity: 'none'
+            })
+        }),
+        device({id: 'rotator-1', type: 'rotator', bands: ''}),
+        device({
+            id: 'rotator-2', type: 'rotator', bands: '',
+            config_json: JSON.stringify({host: '192.168.1.60', port: 4533})
+        }),
+        device({
+            id: 'matrix-1', type: 'matrix', bands: '',
+            config_json: JSON.stringify({relay_url: 'http://relay.local/out'})
+        }),
+        device({id: 'amp-1', type: 'amp', bands: ''})
+    ];
+    const links = [
+        control.normalizeLink({a: {device: 'rotator-1', port: 'rotctld'},
+            b: {device: 'serial-1', port: 'serial2'}}, {devices, links: []}).link
+    ];
+
+    assert.deepEqual(control.resolveFor(devices[1], {devices, links}), {
+        mode: 'serial',
+        host: '192.168.1.50',
+        port: 4001,
+        serial_port: 2,
+        serial: {baud: 9600, data_bits: 8, stop_bits: 1, parity: 'none'},
+        via: 'serial-1'
+    });
+    assert.deepEqual(control.resolveFor(devices[2], {devices, links}),
+        {mode: 'direct', host: '192.168.1.60', port: 4533});
+    assert.deepEqual(control.resolveFor(devices[3], {devices, links}),
+        {mode: 'direct', url: 'http://relay.local/out'});
+    assert.deepEqual(control.resolveFor(devices[4], {devices, links}), {mode: 'unconfigured'});
+
+    const map = control.addressMap(devices, links);
+    assert.equal(map['serial-1'].mode, 'direct');
+    assert.equal(map['rotator-1'].mode, 'serial');
+    assert.equal(map['amp-1'].mode, 'unconfigured');
+    // 天线/电台没有控制口，不进入寻址表。
+    assert.equal(map['radio-1'], undefined);
+
+    const codes = control.warnings(devices, links).map(item => item.code);
+    assert.ok(codes.includes('control-address-unconfigured'));
+});
+
+test('control links only join serial-server ports to device control ports', () => {
+    const devices = [
+        device({id: 'serial-1', type: 'serial', bands: '', config_json: '{"port_count":2}'}),
+        device({id: 'serial-2', type: 'serial', bands: ''}),
+        device({id: 'rotator-1', type: 'rotator', bands: ''}),
+        device({id: 'rotator-2', type: 'rotator', bands: ''})
+    ];
+    const first = control.normalizeLink(
+        {a: {device: 'rotator-1', port: 'rotctld'}, b: {device: 'serial-1', port: 'serial1'}},
+        {devices, links: []}
+    );
+    assert.equal(first.ok, true);
+    assert.equal(first.link.link_id, 'ctl:rotator-1:rotctld~serial-1:serial1');
+    const links = [first.link];
+
+    const duplicate = control.normalizeLink(
+        {a: {device: 'serial-1', port: 'serial1'}, b: {device: 'rotator-1', port: 'rotctld'}},
+        {devices, links}
+    );
+    assert.equal(duplicate.existing, true);
+
+    assert.equal(control.normalizeLink(
+        {a: {device: 'rotator-1', port: 'rotctld'}, b: {device: 'rotator-2', port: 'rotctld'}},
+        {devices, links}
+    ).error, 'serial-server-required');
+    assert.equal(control.normalizeLink(
+        {a: {device: 'serial-1', port: 'serial2'}, b: {device: 'serial-2', port: 'serial1'}},
+        {devices, links}
+    ).error, 'invalid-link');
+    assert.equal(control.normalizeLink(
+        {a: {device: 'serial-1', port: 'net'}, b: {device: 'rotator-1', port: 'rotctld'}},
+        {devices, links}
+    ).error, 'invalid-control-port');
+    assert.equal(control.normalizeLink(
+        {a: {device: 'rotator-2', port: 'rotctld'}, b: {device: 'serial-1', port: 'serial1'}},
+        {devices, links}
+    ).error, 'control-port-busy');
+    assert.equal(control.normalizeLink(
+        {a: {device: 'rotator-1', port: 'nope'}, b: {device: 'serial-1', port: 'serial2'}},
+        {devices, links}
+    ).error, 'unknown-control-port');
+
+    // 控制线不进入射频图。
+    assert.deepEqual(rf.reachableAntennas({
+        devices, links, band: '20m', startDeviceId: 'rotator-1'
+    }), []);
+});
+
+test('control link actions persist, dedupe and remove independently of RF links', () => {
+    const now = new Date('2026-03-01T12:00:00.000Z');
+    const globalCtx = makeContext();
+    const devices = [
+        deviceRow({
+            id: 'serial-1', type: 'serial', bands: '',
+            config_json: JSON.stringify({host: '192.168.1.50', port: 4001, port_count: 2})
+        }),
+        deviceRow({id: 'rotator-1', type: 'rotator', bands: ''})
+    ];
+    const created = service.handle(globalCtx, devices, {
+        action: 'ctl-link',
+        link: {a: {device: 'rotator-1', port: 'rotctld'}, b: {device: 'serial-1', port: 'serial1'}}
+    }, now);
+    assert.equal(created.status, 201);
+    assert.match(created.sql[0], /INSERT OR REPLACE INTO control_links/);
+    const link = created.payload.link;
+
+    const duplicate = service.handle(globalCtx, devices.concat([Object.assign({kind: 'ctl'}, link)]), {
+        action: 'ctl-link',
+        link: {a: {device: 'serial-1', port: 'serial1'}, b: {device: 'rotator-1', port: 'rotctld'}}
+    }, now);
+    assert.equal(duplicate.status, 200);
+    assert.equal(duplicate.payload.duplicate, true);
+    assert.deepEqual(duplicate.sql, []);
+
+    const view = service.snapshot(globalCtx, devices.concat([Object.assign({kind: 'ctl'}, link)]), now);
+    assert.equal(view.control_links.length, 1);
+    assert.equal(view.control_addresses['rotator-1'].mode, 'serial');
+    assert.equal(view.control_addresses['rotator-1'].serial_port, 1);
+
+    const removed = service.handle(globalCtx,
+        devices.concat([Object.assign({kind: 'ctl'}, link)]),
+        {action: 'ctl-unlink', link_id: link.link_id}, now);
+    assert.equal(removed.status, 200);
+    assert.match(removed.sql[0], /DELETE FROM control_links/);
+});
+
+test('serial server form fields reject free-form serial parameters', () => {
+    const ok = model.normalizeDevice({
+        type: 'serial', name: 'Serial',
+        config: {
+            host: '192.168.1.50', port: 4001, port_count: 4,
+            baud: 115200, data_bits: 8, stop_bits: 1, parity: 'even'
+        }
+    }, {devices: []});
+    assert.equal(ok.ok, true);
+    assert.equal(ok.device.config.baud, 115200);
+    assert.equal(ok.device.config.parity, 'even');
+    assert.deepEqual(rf.portsFor(ok.device), []);
+
+    assert.equal(model.normalizeDevice({
+        type: 'serial', name: 'S', config: {baud: 12345}
+    }, {devices: []}).error, 'invalid-config-baud');
+    assert.equal(model.normalizeDevice({
+        type: 'serial', name: 'S', config: {data_bits: 9}
+    }, {devices: []}).error, 'invalid-config-databits');
+    assert.equal(model.normalizeDevice({
+        type: 'serial', name: 'S', config: {stop_bits: 3}
+    }, {devices: []}).error, 'invalid-config-stopbits');
+    assert.equal(model.normalizeDevice({
+        type: 'serial', name: 'S', config: {parity: 'weird'}
+    }, {devices: []}).error, 'invalid-config-parity');
+});
+
 test('TX interlock only locks the switches on the transmitting path', async () => {
     fakeTransports();
     const now = new Date('2026-03-01T12:00:00.000Z');
     const globalCtx = makeContext();
     const rows = [
-        deviceRow({id: 'radio-a', name: 'Radio A', type: 'radio', bands: '', seat: 'OP-A'}),
+        deviceRow({id: 'radio-a', name: 'Radio A', type: 'radio', bands: ''}),
         deviceRow({id: 'amp-a', name: 'Amp A', type: 'amp', bands: ''}),
         deviceRow({id: 'switch-a', name: 'Switch A', type: 'switch', bands: '',
-            config_json: JSON.stringify({out_count: 1, channels: {'common:out1': 1}})}),
+            config_json: JSON.stringify({out_count: 1, channels: {'in:ant1': 1}})}),
         deviceRow({id: 'ant-a', name: 'Ant A', type: 'antenna', bands: '20m'}),
-        deviceRow({id: 'radio-b', name: 'Radio B', type: 'radio', bands: '', seat: 'OP-B'}),
+        deviceRow({id: 'radio-b', name: 'Radio B', type: 'radio', bands: ''}),
         deviceRow({id: 'amp-b', name: 'Amp B', type: 'amp', bands: ''}),
         deviceRow({id: 'switch-b', name: 'Switch B', type: 'switch', bands: '',
-            config_json: JSON.stringify({out_count: 1, channels: {'common:out1': 2}})}),
+            config_json: JSON.stringify({out_count: 1, channels: {'in:ant1': 2}})}),
         deviceRow({id: 'ant-b', name: 'Ant B', type: 'antenna', bands: '20m'}),
         sourceRow({id: 'src-a', name: 'Amp A TX', priority: 1, timeout_ms: 2000, device_id: 'amp-a'}),
-        rfRow('radio-a', 'ant', 'amp-a', 'in'),
-        rfRow('amp-a', 'out', 'switch-a', 'common'),
-        rfRow('switch-a', 'out1', 'ant-a', 'feed'),
-        rfRow('radio-b', 'ant', 'amp-b', 'in'),
-        rfRow('amp-b', 'out', 'switch-b', 'common'),
-        rfRow('switch-b', 'out1', 'ant-b', 'feed')
+        rfRow('radio-a', 'out', 'amp-a', 'in'),
+        rfRow('amp-a', 'out', 'switch-a', 'in'),
+        rfRow('switch-a', 'ant1', 'ant-a', 'in'),
+        rfRow('radio-b', 'out', 'amp-b', 'in'),
+        rfRow('amp-b', 'out', 'switch-b', 'in'),
+        rfRow('switch-b', 'ant1', 'ant-b', 'in')
     ];
     const headers = {'X-DX-Seat': 'OP-A'};
     service.ingestTx(globalCtx, [storage.devices.toTxSource(sourceRow({
@@ -1653,11 +1845,11 @@ test('TX interlock only locks the switches on the transmitting path', async () =
 
     // 同一台设备、不同链路：不在 TX 路径上的切换器照常放行。
     let result = await service.handleCommand(globalCtx, rows, 'switch-b',
-        {command: 'select', port: 'common', outlet: 'out1'}, headers, now);
+        {command: 'select', port: 'in', outlet: 'ant1'}, headers, now);
     assert.equal(result.status, 202);
 
     result = await service.handleCommand(globalCtx, rows, 'switch-a',
-        {command: 'select', port: 'common', outlet: 'out1'}, headers, now);
+        {command: 'select', port: 'in', outlet: 'ant1'}, headers, now);
     assert.equal(result.status, 423);
     assert.equal(result.payload.scope, 'path');
 });
@@ -1667,17 +1859,17 @@ test('TX interlock follows the selected matrix input instead of the whole matrix
     const now = new Date('2026-03-01T12:00:00.000Z');
     const globalCtx = makeContext();
     const rows = [
-        deviceRow({id: 'radio-a', name: 'Radio A', type: 'radio', bands: '', seat: 'OP-A'}),
-        deviceRow({id: 'radio-b', name: 'Radio B', type: 'radio', bands: '', seat: 'OP-B'}),
+        deviceRow({id: 'radio-a', name: 'Radio A', type: 'radio', bands: ''}),
+        deviceRow({id: 'radio-b', name: 'Radio B', type: 'radio', bands: ''}),
         deviceRow({id: 'matrix-1', name: 'Matrix', type: 'matrix', bands: '',
             config_json: JSON.stringify({in_count: 2, out_count: 2, channels: {'in1:out1': 1, 'in2:out2': 2}})}),
         deviceRow({id: 'ant-a', name: 'Ant A', type: 'antenna', bands: '20m'}),
         deviceRow({id: 'ant-b', name: 'Ant B', type: 'antenna', bands: '20m'}),
         sourceRow({id: 'src-a', name: 'Radio A TX', priority: 1, timeout_ms: 2000, device_id: 'radio-a'}),
-        rfRow('radio-a', 'ant', 'matrix-1', 'in1'),
-        rfRow('radio-b', 'ant', 'matrix-1', 'in2'),
-        rfRow('matrix-1', 'out1', 'ant-a', 'feed'),
-        rfRow('matrix-1', 'out2', 'ant-b', 'feed')
+        rfRow('radio-a', 'out', 'matrix-1', 'in1'),
+        rfRow('radio-b', 'out', 'matrix-1', 'in2'),
+        rfRow('matrix-1', 'out1', 'ant-a', 'in'),
+        rfRow('matrix-1', 'out2', 'ant-b', 'in')
     ];
     runtime.updateEntry(globalCtx, 'matrix-1', {ports: {in1: 'out1', in2: 'out2'}}, now);
     service.ingestTx(globalCtx, [storage.devices.toTxSource(sourceRow({

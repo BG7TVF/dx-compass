@@ -38,13 +38,13 @@ test('missing reports absent tables, indexes, triggers and columns', () => {
         .filter(row => !(row.kind === 'table' && row.value === 'rf_links'))
         .filter(row => !(row.kind === 'index' && row.value === 'rf_links_pair'))
         .filter(row => !(row.kind === 'trigger' && row.value === 'trg_spots_band_activity'))
-        .filter(row => !(row.kind === 'column' && row.value === 'devices.seat'));
+        .filter(row => !(row.kind === 'column' && row.value === 'devices.travel_timeout_sec'));
     const result = ready.missing(rows);
     assert.deepEqual(result, [
         'table rf_links',
         'index rf_links_pair',
         'trigger trg_spots_band_activity',
-        'column devices.seat'
+        'column devices.travel_timeout_sec'
     ]);
 });
 
