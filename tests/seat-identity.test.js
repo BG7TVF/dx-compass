@@ -190,3 +190,64 @@ test('候选集按大小写不敏感去重，并采用最近一次的写法', ()
     assert.equal(view.updatedAt, later.toISOString());
 });
 
+
+function contactStation(stationName, radioNr, id, computerName) {
+    const payload = {
+        ID: [id || '{S1}'], call: 'K1ABC', band: '20', mode: 'CW', rxfreq: '14025000',
+        timestamp: '2026-11-12 07:59:00', mycall: 'N0CALL', points: '1', radionr: [radioNr],
+        StationName: [stationName]
+    };
+    if (computerName) payload.ComputerName = [computerName];
+    return {contactinfo: payload};
+}
+
+function radioStation(radioName, radioNr, stationName, computerName) {
+    const payload = {
+        RadioNr: [radioNr], RadioName: [radioName], Freq: ['14025000'], Mode: ['CW'],
+        IsRunning: ['True'], OpCall: ['OP1'], StationName: [stationName]
+    };
+    if (computerName) payload.ComputerName = [computerName];
+    return {RadioInfo: payload};
+}
+
+test('验收：StationName 就是计算机标识，席位按 BG7TVF-2 匹配', () => {
+    const ctx = new Context();
+    const source = {ip: '10.0.0.80', port: '50001'};
+    const first = ingestApi.ingest(ctx, contactStation('BG7TVF-2', '1', '{S1}'), NOW, source);
+    assert.equal(first.event.seatRule, 'computer');
+    assert.equal(first.event.computerName, '');
+    const second = ingestApi.ingest(ctx, radioStation('FT-817', '1', 'BG7TVF-2'), NOW, source);
+    assert.equal(second.event.seat, 'BG7TVF-2:1');
+    assert.equal(second.event.seatRule, 'computer');
+    assert.equal(second.event.radioName, 'FT-817');
+    assert.deepEqual(seats(ctx), ['BG7TVF-2:1']);
+    const record = seatIdentity.summary(ctx).seats[0];
+    assert.equal(record.stationName, 'BG7TVF-2');
+    assert.equal(record.computerName, '');
+    assert.equal(record.seatKey, 'BG7TVF-2:1');
+});
+
+test('ComputerName 与 StationName 并存：优先 ComputerName，候选两者都在', () => {
+    const ctx = new Context();
+    const source = {ip: '10.0.0.81', port: '50001'};
+    ingestApi.ingest(ctx, contactStation('BG7TVF-2', '1', '{S2}', 'PC-SHACK'), NOW, source);
+    const radio = ingestApi.ingest(ctx, radioStation('FT-817', '1', 'BG7TVF-2', 'PC-SHACK'), NOW, source);
+    assert.equal(radio.event.seat, 'PC-SHACK:1');
+    const view = seatIdentity.candidates(ctx);
+    assert.deepEqual(view.computers.map(item => item.name).sort(), ['BG7TVF-2', 'PC-SHACK']);
+    assert.equal(view.pairs.length, 2);
+});
+
+test('候选集把 StationName 当作计算机名，大小写不敏感去重', () => {
+    const ctx = new Context();
+    ingestApi.ingest(ctx, contactStation('BG7TVF-2', '1', '{S3}'), NOW, {ip: '10.0.0.82', port: '50001'});
+    ingestApi.ingest(ctx, radioStation('FT-817', '1', 'BG7TVF-2'), NOW, {ip: '10.0.0.82', port: '50001'});
+    const later = new Date('2026-11-12T08:07:00.000Z');
+    ingestApi.ingest(ctx, radioStation('FT-817', '2', 'bg7tvf-2'), later, {ip: '10.0.0.82', port: '50002'});
+    const view = seatIdentity.candidates(ctx);
+    assert.deepEqual(view.computers.map(item => item.name), ['bg7tvf-2']);
+    assert.deepEqual(view.radios.map(item => item.name), ['FT-817']);
+    assert.equal(view.pairs.length, 1);
+    assert.equal(view.pairs[0].lastSeen, later.toISOString());
+});
+

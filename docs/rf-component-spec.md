@@ -37,7 +37,7 @@
 
 | 类型 | 射频位置 | 射频端口（方形） | 控制/状态（圆形） | 应保留属性 | 本期 |
 |---|---|---|---|---|---|
-| 电台 `radio` | 射频源 | `out` ×1 | 无 | 名称、ComputerName、电台型号、备注 | 改 |
+| 电台 `radio` | 射频源 | `out` ×1 | 无 | 名称、计算机标识（StationName / ComputerName）、电台型号、备注 | 改 |
 | 功放 `amp` | 串联 | `in` / `out` | keying、状态 | 名称、工作波段（多选）、备注 | 保留 |
 | 驻波表 `swr` | 串联测量 | `in` / `out` | SWR/功率上报 | 名称、上报 IP、上报端口、备注 | 改 |
 | BPF `bpf` | 串联滤波 | `in` / `out` | 无 | 名称、通过波段（多选）、备注 | 改 |
@@ -71,7 +71,7 @@
 
 | 类型 | 专属字段 | 明确移除 |
 |---|---|---|
-| `radio` | `config.computer`（N1MM ComputerName）、`config.model`（RadioName/电台型号）、派生 `seat` | 波段、安装偏移、端口、口令、运行超时、独占通路 |
+| `radio` | `config.computer`（计算机标识：StationName 或 ComputerName）、`config.model`（RadioName/电台型号）、派生 `seat` | 波段、安装偏移、端口、口令、运行超时、独占通路 |
 | `swr` | `config.host`（上报 IP/主机）、`config.port` | 类型、波段、安装偏移、端口、口令、运行超时、独占通路 |
 | `bpf` | `bands`（通过波段多选） | 类型、安装偏移、端口、口令、运行超时、独占通路 |
 | `amp` | `bands`（工作波段多选）、`config.host`、`config.port` | 类型、安装偏移、端口、口令、运行超时、独占通路 |
@@ -99,13 +99,16 @@
 
 - 席位不再是设备的分类维度，也不再是画布分区。
 - 电台节点保存 `config.computer` + `config.model`，与 N1MM 上行报文里的
-  `ComputerName` + `RadioName` 对应；席位键仍由现有 `seat-identity` 规则解析
-  （ComputerName + RadioName + RadioNr，回退 SourceIP + RadioNr），不另造一套。
+  计算机标识（`ComputerName`，缺省时取 `StationName`，如 `BG7TVF-2`）和
+  `RadioName` 对应；席位键仍由现有 `seat-identity` 规则解析
+  （计算机标识 + RadioName + RadioNr，回退 SourceIP + RadioNr），不另造一套。
 - 快照时把 `radioStates` 的席位键回填到匹配的电台节点，`seat` 只读展示，不手填。
 - `config.computer` / `config.model` 在表单里是下拉，候选由服务端从**实收 N1MM 报文**汇聚：
   `GET /api/seats` 的 `candidates` 返回 `computers` / `radios` / `pairs`（均带 `lastSeen`）。
+  `computers` 同时收录 `ComputerName` 与 `StationName`（去重、大小写不敏感），
+  因为多数单机 N1MM 部署只发 `StationName`。
   取数同时覆盖 HTTP relay（`resolveSeat`）与直收 UDP（`saveRadio` / `parseContact` 补记）。
-- 型号下拉按所选 ComputerName 过滤；不存在的组合只提示、不阻止保存。
+- 型号下拉按所选计算机标识过滤；不存在的组合只提示、不阻止保存。
 - 已有配置即使暂不在候选集里也保留在下拉首项（标“当前配置”）；候选为空时下拉与说明
   都给出「尚未收到 N1MM UDP 报文」，并提供「重新获取」。
 - `devices.seat` 列删除；否则会留下两套归属来源。
@@ -199,10 +202,10 @@
 | # | 结论 |
 |---|---|
 | 1 | 删除设备页席位选择器与分区；画布全局唯一数据 |
-| 2 | `seat` 只存在于电台节点，由 ComputerName + RadioName 派生 |
+| 2 | `seat` 只存在于电台节点，由计算机标识（StationName / ComputerName） + RadioName 派生 |
 | 3 | 草稿可多个并存，保存是显式动作 |
 | 4 | 单设备删除（含 RF 连线），父节点仍有子节点时拒绝 |
-| 5 | 电台表单只剩名称 / ComputerName / 型号 / 备注 |
+| 5 | 电台表单只剩名称 / 计算机标识 / 型号 / 备注 |
 | 6 | 电台端口只保留 `out` |
 | 7 | 驻波表 `in`/`out` 各一，上报地址进属性 |
 | 8 | 驻波表表单按白名单收敛 |

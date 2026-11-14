@@ -2038,3 +2038,25 @@ test('save-batch carries draft control links onto the assigned device ids', () =
     assert.equal(result.sql.filter(sql => /INSERT OR REPLACE INTO control_links/.test(sql)).length, 1);
 });
 
+
+test('seat binding matches StationName when packets carry no ComputerName', () => {
+    const now = new Date('2026-03-01T12:00:00.000Z');
+    const radio = device({
+        id: 'radio-station', name: 'FT-817 seat', type: 'radio', bands: '',
+        config_json: JSON.stringify({computer: 'bg7tvf-2', model: 'FT-817'})
+    });
+    const radioStates = {
+        'BG7TVF-2:1': {
+            seat: 'BG7TVF-2:1', ts: now.toISOString(), freqKhz: 14020, radioNr: '1',
+            stationName: 'BG7TVF-2', computerName: '', radioName: 'FT-817'
+        }
+    };
+    const views = ownership.seatViews(radioStates, now.getTime(), 60000);
+    assert.equal(ownership.seatForRadio(radio, views), 'BG7TVF-2:1');
+
+    const unbound = device({
+        id: 'radio-unbound', name: 'Unbound', type: 'radio', bands: '',
+        config_json: JSON.stringify({computer: 'PC-NOT-SEEN', model: ''})
+    });
+    assert.equal(ownership.seatForRadio(unbound, views), '');
+});

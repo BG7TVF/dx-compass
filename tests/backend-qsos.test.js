@@ -53,13 +53,15 @@ test('RadioInfo and Score update current and per-radio station state', () => {
         set(k, v) { this.values[k] = v; }
     }
     const ctx = new Context();
+    // 真实 N1MM 的 RadioInfo 带 StationName，席位按它识别（无 ComputerName 时亦然）。
     const radio = qsoApi.saveRadio(ctx, {RadioInfo: {RadioNr: ['2'], Freq: ['1407400'],
-        TXFreq: ['14.074'], Mode: ['CW'], IsRunning: ['True'], ActiveRadioNr: ['1']}}, NOW);
+        TXFreq: ['14.074'], Mode: ['CW'], IsRunning: ['True'], ActiveRadioNr: ['1'],
+        StationName: ['Remote']}}, NOW);
     assert.equal(radio.freqKhz, 14074);
     assert.equal(radio.txFreqKhz, 14074);
     assert.equal(radio.isRunning, true);
-    assert.equal(radio.seat, 'LOCAL:2');
-    assert.equal(ctx.get('radioStates')['LOCAL:2'], radio);
+    assert.equal(radio.seat, 'REMOTE:2');
+    assert.equal(ctx.get('radioStates')['REMOTE:2'], radio);
     const score = qsoApi.saveScore(ctx, {dynamicresults: {contest: ['CQWW'], score: ['123.5'],
         breakdown: [{$: {}, qso: [{$: {band: 'total', mode: 'ALL'}, _: '10'}],
             mult: [{$: {band: 'total', mode: 'ALL'}, _: '4'}],
