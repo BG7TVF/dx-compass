@@ -922,8 +922,11 @@ export function createDevicesPage(ctx) {
         if (!list.length) {
             return `<option value="" selected disabled>${esc(placeholder || '—')}</option>`;
         }
-        const options = list.map(item =>
-            `<option value="${esc(item.name)}"${item.name === current ? ' selected' : ''}>${esc(item.label)}</option>`);
+        const options = [];
+        // 没有当前值时留一个空选项：候选只作建议，不替用户默认选中。
+        if (!current) options.push('<option value="" selected>—</option>');
+        options.push(...list.map(item =>
+            `<option value="${esc(item.name)}"${item.name === current ? ' selected' : ''}>${esc(item.label)}</option>`));
         if (!entries.length && placeholder) {
             // 候选为空时仍把“尚未收到报文”明确写在下拉里。
             const selected = current ? '' : ' selected';
