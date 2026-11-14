@@ -1477,7 +1477,7 @@
         "type": "function",
         "z": "dxc0000000000090",
         "name": "UTF8",
-        "func": "msg.payload = msg.payload.toString('utf8');\nreturn msg;",
+        "func": "const dx = global.get('dx');\nif (dx && dx.qso && dx.qso.logRawN1mm) {\n    dx.qso.logRawN1mm(global, {raw: msg.payload, ip: msg.ip, port: msg.port});\n}\nmsg.payload = msg.payload.toString('utf8');\nreturn msg;",
         "outputs": 1,
         "timeout": "",
         "noerr": 0,
@@ -1580,7 +1580,7 @@
         "type": "function",
         "z": "dxc0000000000090",
         "name": "UTF8",
-        "func": "msg.payload = msg.payload.toString('utf8');\nreturn msg;",
+        "func": "const dx = global.get('dx');\nif (dx && dx.qso && dx.qso.logRawN1mm) {\n    dx.qso.logRawN1mm(global, {raw: msg.payload, ip: msg.ip, port: msg.port});\n}\nmsg.payload = msg.payload.toString('utf8');\nreturn msg;",
         "outputs": 1,
         "timeout": "",
         "noerr": 0,
@@ -1778,7 +1778,7 @@
         "type": "function",
         "z": "dxc0000000000090",
         "name": "UTF8",
-        "func": "msg.payload = msg.payload.toString('utf8');\nreturn msg;",
+        "func": "const dx = global.get('dx');\nif (dx && dx.qso && dx.qso.logRawN1mm) {\n    dx.qso.logRawN1mm(global, {raw: msg.payload, ip: msg.ip, port: msg.port});\n}\nmsg.payload = msg.payload.toString('utf8');\nreturn msg;",
         "outputs": 1,
         "timeout": "",
         "noerr": 0,
@@ -5729,6 +5729,43 @@
         "y": 1060,
         "wires": [
             []
+        ]
+    },
+    {
+        "id": "dxn1mm00000000c1",
+        "type": "http in",
+        "z": "dxc0000000000090",
+        "name": "GET /api/n1mm/packets",
+        "url": "/api/n1mm/packets",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 140,
+        "y": 1340,
+        "wires": [
+            [
+                "dxn1mm00000000c2"
+            ]
+        ]
+    },
+    {
+        "id": "dxn1mm00000000c2",
+        "type": "function",
+        "z": "dxc0000000000090",
+        "name": "List N1MM packets",
+        "func": "const dx = global.get('dx');\nconst view = dx.qso.n1mmPackets();\nmsg.statusCode = 200;\nmsg.headers = {'content-type': 'application/json; charset=utf-8'};\nmsg.payload = Object.assign({ok: true}, view);\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 400,
+        "y": 1340,
+        "wires": [
+            [
+                "dxseat000000003"
+            ]
         ]
     }
 ]
