@@ -668,6 +668,10 @@
 
 .dev-rf-wire-draft { stroke-dasharray: 5 4; }
 
+/* 草稿连线：还没落库，用虚线区分；保存后变成实线。 */
+.dev-rf-wire-pending { stroke-dasharray: 7 5; opacity: .8; }
+.dev-ctl-wire-pending { stroke-dasharray: 3 5; opacity: .8; }
+
 .dev-rf-wire-hit {
     fill: none;
     stroke: transparent;

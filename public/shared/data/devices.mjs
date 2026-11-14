@@ -50,6 +50,22 @@ export function deleteControlLink(link, {transport = defaultTransport, ...option
     return transport.postJson('/api/devices', {action: 'ctl-unlink', link_id: id}, options);
 }
 
+/**
+ * 草稿拓扑预览：带上草稿设备与页面内的草稿连线，服务端按落库同一套规则
+ * 返回草稿端口、规范化后的草稿连线与控制寻址，不写库。
+ */
+export function previewDrafts(payload, {transport = defaultTransport, ...options} = {}) {
+    return transport.postJson('/api/devices', Object.assign({action: 'preview'}, payload), options);
+}
+
+/**
+ * 草稿一次性落库：设备、布局与草稿连线在同一事务里写入，
+ * 任何一条不合法则整批拒绝。
+ */
+export function saveDraftBatch(payload, {transport = defaultTransport, ...options} = {}) {
+    return transport.postJson('/api/devices', Object.assign({action: 'save-batch'}, payload), options);
+}
+
 /** Create or update one TX status source. */
 export function saveTxSource(source, {transport = defaultTransport, ...options} = {}) {
     return transport.postJson('/api/devices', {action: 'tx-source', source}, options);

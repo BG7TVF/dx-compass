@@ -1887,3 +1887,154 @@ test('TX interlock follows the selected matrix input instead of the whole matrix
         {command: 'select', port: 'in1', outlet: 'out1'}, headers, now);
     assert.equal(result.status, 423);
 });
+
+test('RF port occupancy rejects a second link on the same connector', () => {
+    const devices = [
+        device({id: 'radio-1', type: 'radio', bands: ''}),
+        device({id: 'amp-1', type: 'amp', bands: ''}),
+        device({id: 'amp-2', type: 'amp', bands: ''})
+    ];
+    const links = [rfRow('radio-1', 'out', 'amp-1', 'in')];
+
+    const second = rf.normalizeLink(
+        {a_device: 'radio-1', a_port: 'out', b_device: 'amp-2', b_port: 'in'}, {devices, links});
+    assert.equal(second.ok, false);
+    assert.equal(second.error, 'rf-port-busy');
+
+    // 另一端换到功放的 out 口就与已有连线无关，可以建立。
+    const other = rf.normalizeLink(
+        {a_device: 'amp-1', a_port: 'out', b_device: 'amp-2', b_port: 'in'}, {devices, links});
+    assert.equal(other.ok, true);
+});
+
+test('draft preview exposes draft ports and validates draft links', () => {
+    const globalCtx = makeContext();
+    const devices = [device({id: 'antenna-1', type: 'antenna', bands: '20m'})];
+    const drafts = [
+        {id: 'draft-1', name: 'PA 1', type: 'amp'},
+        {id: 'draft-2', name: 'PA 2', type: 'amp'}
+    ];
+
+    const ok = service.handle(globalCtx, devices, {
+        action: 'preview',
+        devices: drafts,
+        rf_links: [{a_device: 'draft-1', a_port: 'out', b_device: 'antenna-1', b_port: 'in'}],
+        control_links: []
+    }, new Date('2026-03-01T12:00:00.000Z'));
+    assert.equal(ok.status, 200);
+    assert.deepEqual(ok.payload.ports['draft-1'].map(port => port.key), ['in', 'out']);
+    assert.equal(ok.payload.rf_links.length, 1);
+    assert.deepEqual(ok.sql, []);
+
+    // 同一副天线的 in 口再连第二台：草稿阶段就要拒绝。
+    const busy = service.handle(globalCtx, devices, {
+        action: 'preview',
+        devices: drafts,
+        rf_links: [
+            {a_device: 'draft-1', a_port: 'out', b_device: 'antenna-1', b_port: 'in'},
+            {a_device: 'draft-2', a_port: 'out', b_device: 'antenna-1', b_port: 'in'}
+        ],
+        control_links: []
+    }, new Date('2026-03-01T12:00:00.000Z'));
+    assert.equal(busy.status, 409);
+    assert.equal(busy.payload.error, 'rf-port-busy');
+});
+
+test('draft preview resolves serial addressing before anything is saved', () => {
+    const globalCtx = makeContext();
+    const devices = [device({id: 'tower-1', type: 'tower', bands: ''})];
+    const drafts = [
+        {id: 'draft-1', name: 'Serial Server', type: 'serial', config: {
+            host: '192.168.1.50', port: 4001, port_count: 2,
+            baud: 9600, data_bits: 8, stop_bits: 1, parity: 'none'
+        }},
+        {id: 'draft-2', name: 'Rotator', type: 'rotator'}
+    ];
+    const result = service.handle(globalCtx, devices, {
+        action: 'preview',
+        devices: drafts,
+        rf_links: [],
+        control_links: [{a_device: 'draft-2', a_port: 'rotctld', b_device: 'draft-1', b_port: 'serial2'}]
+    }, new Date('2026-03-01T12:00:00.000Z'));
+
+    assert.equal(result.status, 200);
+    assert.deepEqual(result.payload.control_links.map(link => link.link_id),
+        ['ctl:draft-1:serial2~draft-2:rotctld']);
+    assert.equal(result.payload.addresses['draft-2'].mode, 'serial');
+    assert.equal(result.payload.addresses['draft-2'].serial_port, 2);
+    assert.equal(result.payload.addresses['draft-2'].host, '192.168.1.50');
+});
+
+test('save-batch assigns ids and writes devices, layouts and draft links together', () => {
+    const globalCtx = makeContext();
+    const devices = [device({id: 'antenna-1', type: 'antenna', bands: '20m'})];
+    const result = service.handle(globalCtx, devices, {
+        action: 'save-batch',
+        devices: [
+            {id: 'draft-1', name: 'PA 1', type: 'amp'},
+            {id: 'draft-2', name: 'Ant Switch', type: 'switch', config: {out_count: 2}}
+        ],
+        layouts: [{id: 'draft-1', x: 120, y: 80}, {id: 'draft-2', x: 360, y: 80}],
+        rf_links: [
+            {a_device: 'draft-1', a_port: 'out', b_device: 'draft-2', b_port: 'in'},
+            {a_device: 'draft-2', a_port: 'ant1', b_device: 'antenna-1', b_port: 'in'}
+        ],
+        control_links: []
+    }, new Date('2026-03-01T12:00:00.000Z'));
+
+    assert.equal(result.status, 201);
+    assert.deepEqual(result.payload.id_map, {'draft-1': 'amp-1', 'draft-2': 'switch-1'});
+    assert.equal(result.sql[0], 'BEGIN IMMEDIATE;');
+    assert.equal(result.sql[result.sql.length - 1], 'COMMIT;');
+    assert.equal(result.sql.filter(sql => /INSERT INTO devices/.test(sql)).length, 2);
+    assert.equal(result.sql.filter(sql => /INSERT OR REPLACE INTO device_layout/.test(sql)).length, 2);
+    assert.equal(result.sql.filter(sql => /INSERT OR REPLACE INTO rf_links/.test(sql)).length, 2);
+    assert.ok(result.payload.rf_links.some(link =>
+        link.a_device === 'amp-1' && link.b_device === 'switch-1'));
+    assert.ok(result.sql.some(sql => /'amp-1'/.test(sql) && /device_layout/.test(sql)));
+});
+
+test('save-batch rejects the whole batch when a draft link conflicts', () => {
+    const globalCtx = makeContext();
+    const devices = [device({id: 'antenna-1', type: 'antenna', bands: '20m'})];
+    const result = service.handle(globalCtx, devices, {
+        action: 'save-batch',
+        devices: [
+            {id: 'draft-1', name: 'PA 1', type: 'amp'},
+            {id: 'draft-2', name: 'PA 2', type: 'amp'}
+        ],
+        layouts: [],
+        rf_links: [
+            {a_device: 'draft-1', a_port: 'out', b_device: 'antenna-1', b_port: 'in'},
+            {a_device: 'draft-2', a_port: 'out', b_device: 'antenna-1', b_port: 'in'}
+        ],
+        control_links: []
+    }, new Date('2026-03-01T12:00:00.000Z'));
+
+    assert.equal(result.status, 409);
+    assert.equal(result.payload.error, 'rf-port-busy');
+    assert.deepEqual(result.sql, []);
+});
+
+test('save-batch carries draft control links onto the assigned device ids', () => {
+    const globalCtx = makeContext();
+    const result = service.handle(globalCtx, [], {
+        action: 'save-batch',
+        devices: [
+            {id: 'draft-1', name: 'Serial Server', type: 'serial', config: {
+                host: '192.168.1.50', port: 4001, port_count: 4,
+                baud: 19200, data_bits: 8, stop_bits: 1, parity: 'even'
+            }},
+            {id: 'draft-2', name: 'Rotator', type: 'rotator'}
+        ],
+        layouts: [],
+        rf_links: [],
+        control_links: [{a_device: 'draft-2', a_port: 'rotctld', b_device: 'draft-1', b_port: 'serial3'}]
+    }, new Date('2026-03-01T12:00:00.000Z'));
+
+    assert.equal(result.status, 201);
+    assert.equal(result.payload.control_links.length, 1);
+    assert.equal(result.payload.control_links[0].link_id, 'ctl:rotator-1:rotctld~serial-1:serial3');
+    assert.equal(result.sql.filter(sql => /INSERT OR REPLACE INTO control_links/.test(sql)).length, 1);
+});
+

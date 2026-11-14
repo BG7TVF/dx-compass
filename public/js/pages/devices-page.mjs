@@ -23,6 +23,8 @@ import {
     deleteRfLink,
     saveControlLink,
     deleteControlLink,
+    previewDrafts,
+    saveDraftBatch,
     sendDeviceCommand
 } from '../../shared/data/devices.mjs';
 
@@ -87,6 +89,7 @@ const ERROR_KEYS = {
     'invalid-control-port': 'dev.error.invalid-control-port',
     'serial-server-required': 'dev.error.serial-server-required',
     'control-port-busy': 'dev.error.control-port-busy',
+    'rf-port-busy': 'dev.error.rf-port-busy',
     'too-many-links': 'dev.error.too-many-links',
     'invalid-band': 'dev.error.invalid-band',
     'device-locked': 'dev.error.device-locked',
@@ -135,6 +138,12 @@ export function createDevicesPage(ctx) {
     let rfWiring = null;
     let ctlWiring = null;
     let localLayout = null;
+    // 草稿阶段的端口与连线：只活在页面内存里，保存全部时随设备一起落库。
+    let draftPorts = {rf: {}, ctl: {}};
+    let draftRfLinks = [];
+    let draftCtlLinks = [];
+    let draftAddresses = {};
+    let draftPreviewSeq = 0;
 
     function t(key, params) {
         const value = ctx.t(key, params);
@@ -200,31 +209,60 @@ export function createDevicesPage(ctx) {
 
     function rfPorts(deviceId) {
         const ports = rfView().ports || {};
-        return Array.isArray(ports[deviceId]) ? ports[deviceId] : [];
+        if (Array.isArray(ports[deviceId])) return ports[deviceId];
+        return Array.isArray(draftPorts.rf[deviceId]) ? draftPorts.rf[deviceId] : [];
     }
 
     function controlPorts(deviceId) {
         const ports = rfView().control || {};
-        return Array.isArray(ports[deviceId]) ? ports[deviceId] : [];
+        if (Array.isArray(ports[deviceId])) return ports[deviceId];
+        return Array.isArray(draftPorts.ctl[deviceId]) ? draftPorts.ctl[deviceId] : [];
+    }
+
+    /** 已保存设备与草稿共用一套端口/连线渲染，草稿用页面内的临时 key 当 id。 */
+    function nodeById(id) {
+        const device = deviceById(id);
+        if (device) return device;
+        const draft = draftByKey(id);
+        return draft ? Object.assign({}, draft.device, {id: draft.key}) : null;
+    }
+
+    function nodePosition(id) {
+        const draft = draftByKey(id);
+        if (draft) return draft.layout;
+        const device = deviceById(id);
+        return device ? positionOf(device) : {x: 0, y: 0};
     }
 
     function controlLinks() {
         return Array.isArray(snapshot && snapshot.control_links) ? snapshot.control_links : [];
     }
 
+    /** 已保存连线 + 页面内存里的草稿连线，统一给渲染层用。 */
+    function rfLinksForRender() {
+        return (rfView().links || []).map(link => Object.assign({}, link, {pending: false}))
+            .concat(draftRfLinks.map(link => Object.assign({}, link, {pending: true})));
+    }
+
+    function controlLinksForRender() {
+        return controlLinks().map(link => Object.assign({}, link, {pending: false}))
+            .concat(draftCtlLinks.map(link => Object.assign({}, link, {pending: true})));
+    }
+
     function controlAddress(deviceId) {
         const map = (snapshot && snapshot.control_addresses) || {};
-        return map[deviceId] || null;
+        if (map[deviceId]) return map[deviceId];
+        return draftAddresses[deviceId] || null;
     }
 
     /** 控制口坐标：卡片左缘竖排；圆形只连控制口，不参与 RF。 */
     function controlPortPoint(deviceId, portKey) {
-        const device = deviceById(deviceId);
+        const device = nodeById(deviceId);
         if (!device) return null;
         const ports = controlPorts(deviceId);
         const index = ports.findIndex(port => port.key === portKey);
         if (index < 0) return null;
-        const pos = positionOf(device);
+        const pos = nodePosition(deviceId);
         return {
             x: pos.x,
             y: pos.y + ((index + 1) / (ports.length + 1)) * NODE_H
@@ -233,14 +271,14 @@ export function createDevicesPage(ctx) {
 
     /** RF 端口坐标：in 在下边、out 在上边，同向端口均分。 */
     function rfPortPoint(deviceId, portKey) {
-        const device = deviceById(deviceId);
+        const device = nodeById(deviceId);
         if (!device) return null;
         const ports = rfPorts(deviceId);
         const port = ports.find(item => item.key === portKey);
         if (!port) return null;
         const same = ports.filter(item => item.dir === port.dir);
         const index = same.indexOf(port);
-        const pos = positionOf(device);
+        const pos = nodePosition(deviceId);
         return {
             x: pos.x + ((index + 1) / (same.length + 1)) * NODE_W,
             y: port.dir === 'out' ? pos.y : pos.y + NODE_H,
@@ -362,8 +400,8 @@ export function createDevicesPage(ctx) {
         return `<div class="${classes.join(' ')}" role="button" tabindex="0" data-node-key="${esc(node.key)}"${node.draft ? '' : ` data-real-id="${esc(device.id)}"`}
                 style="left:${node.layout.x}px;top:${node.layout.y}px;width:${NODE_W}px;height:${NODE_H}px">
             <span class="dev-mount-handle" title="${esc(t('dev.mount.handle'))}" aria-hidden="true"></span>
-            ${node.draft ? '' : controlPortsHtml(device)}
-            ${node.draft ? '' : rfPortsHtml(device)}
+            ${controlPortsHtml(device)}
+            ${rfPortsHtml(device)}
             <div class="dev-node-head">
                 <span class="dev-node-badge">${esc(TYPE_BADGE[device.type] || 'O')}</span>
                 <span class="dev-node-name">${esc(device.name)}</span>
@@ -384,7 +422,12 @@ export function createDevicesPage(ctx) {
             nodes.push({key: device.id, device, layout: positionOf(device), draft: false});
         }
         for (const draft of drafts) {
-            nodes.push({key: draft.key, device: Object.assign({}, draft.device), layout: draft.layout, draft: true});
+            nodes.push({
+                key: draft.key,
+                device: Object.assign({}, draft.device, {id: draft.key}),
+                layout: draft.layout,
+                draft: true
+            });
         }
         return nodes;
     }
@@ -438,23 +481,23 @@ export function createDevicesPage(ctx) {
             parts.push(`<path class="dev-wire" d="${d}"></path>`);
             parts.push(`<path class="dev-wire-hit" d="${d}" data-wire-child="${esc(node.device.id)}"><title>${esc(t('dev.wire.remove'))}</title></path>`);
         }
-        for (const link of rfView().links || []) {
+        for (const link of rfLinksForRender()) {
             if (!byId.has(link.a_device) || !byId.has(link.b_device)) continue;
             const from = rfPortPoint(link.a_device, link.a_port);
             const to = rfPortPoint(link.b_device, link.b_port);
             if (!from || !to) continue;
             const d = rfWirePath(from, to);
-            parts.push(`<path class="dev-rf-wire" d="${d}"></path>`);
-            parts.push(`<path class="dev-rf-wire-hit" d="${d}" data-rf-link="${esc(link.link_id)}"><title>${esc(t('dev.rf.remove'))}</title></path>`);
+            parts.push(`<path class="dev-rf-wire${link.pending ? ' dev-rf-wire-pending' : ''}" d="${d}"></path>`);
+            parts.push(`<path class="dev-rf-wire-hit" d="${d}" data-rf-link="${esc(link.link_id)}"${link.pending ? ' data-rf-pending="1"' : ''}><title>${esc(t('dev.rf.remove'))}</title></path>`);
         }
-        for (const link of controlLinks()) {
+        for (const link of controlLinksForRender()) {
             if (!byId.has(link.a_device) || !byId.has(link.b_device)) continue;
             const from = controlPortPoint(link.a_device, link.a_port);
             const to = controlPortPoint(link.b_device, link.b_port);
             if (!from || !to) continue;
             const d = controlWirePath(from, to);
-            parts.push(`<path class="dev-ctl-wire" d="${d}"></path>`);
-            parts.push(`<path class="dev-ctl-wire-hit" d="${d}" data-ctl-link="${esc(link.link_id)}"><title>${esc(t('dev.ctl.remove'))}</title></path>`);
+            parts.push(`<path class="dev-ctl-wire${link.pending ? ' dev-ctl-wire-pending' : ''}" d="${d}"></path>`);
+            parts.push(`<path class="dev-ctl-wire-hit" d="${d}" data-ctl-link="${esc(link.link_id)}"${link.pending ? ' data-ctl-pending="1"' : ''}><title>${esc(t('dev.ctl.remove'))}</title></path>`);
         }
         if (wiring) {
             parts.push(`<path class="dev-wire dev-wire-draft" d="${draftWirePath(wiring.x1, wiring.y1, wiring.x2, wiring.y2)}"></path>`);
@@ -525,14 +568,118 @@ export function createDevicesPage(ctx) {
         formSignature = null;
         ctrlSignature = null;
         render();
+        void refreshDraftPreview();
     }
 
     function discardDraft(key) {
         drafts = drafts.filter(item => item.key !== key);
+        dropDraftLinksFor(key);
         if (selectedKeys.delete(key)) {
             formDirty = false;
             formSignature = null;
             ctrlSignature = null;
+        }
+        render();
+        void refreshDraftPreview();
+    }
+
+    /* ---- 草稿连线：只存在于页面内存，服务端只做校验与最终落库 ---- */
+
+    function draftPayload() {
+        return drafts.map(item => Object.assign({}, item.device, {id: item.key}));
+    }
+
+    function dropDraftLinksFor(id) {
+        draftRfLinks = draftRfLinks.filter(link => link.a_device !== id && link.b_device !== id);
+        draftCtlLinks = draftCtlLinks.filter(link => link.a_device !== id && link.b_device !== id);
+    }
+
+    /** 单台草稿保存时只带走两端都已存在的连线，另一端还是草稿的先留在内存。 */
+    function draftLinksSaveable(key, list) {
+        return list.filter(link => {
+            if (link.a_device !== key && link.b_device !== key) return false;
+            const other = link.a_device === key ? link.b_device : link.a_device;
+            return !isDraftKey(other);
+        });
+    }
+
+    function remapDraftLinks(fromKey, toId) {
+        const swap = link => Object.assign({}, link, {
+            a_device: link.a_device === fromKey ? toId : link.a_device,
+            b_device: link.b_device === fromKey ? toId : link.b_device
+        });
+        draftRfLinks = draftRfLinks.map(swap);
+        draftCtlLinks = draftCtlLinks.map(swap);
+    }
+
+    /** 只保留两端都还在画布上的草稿连线，避免删设备后留下悬空线。 */
+    function pruneDraftLinks() {
+        const alive = new Set(realDevices().map(device => device.id).concat(drafts.map(item => item.key)));
+        draftRfLinks = draftRfLinks.filter(link => alive.has(link.a_device) && alive.has(link.b_device));
+        draftCtlLinks = draftCtlLinks.filter(link => alive.has(link.a_device) && alive.has(link.b_device));
+    }
+
+    function previewError(result) {
+        return errorText((result && result.error) || 'generic');
+    }
+
+    /** 非 2xx 时 transport 会抛 HttpError，真正的业务错误码在 error.body 里。 */
+    function apiFailure(error) {
+        const body = error && error.body && typeof error.body === 'object' ? error.body : null;
+        if (body && body.error) return body;
+        return {ok: false, error: 'generic', message: apiError(error)};
+    }
+
+    async function requestBatch(payload) {
+        try {
+            const result = await saveDraftBatch(payload);
+            return result || {ok: false, error: 'generic'};
+        } catch (error) {
+            return apiFailure(error);
+        }
+    }
+
+    /**
+     * 用服务端的同一套规则校验草稿拓扑，成功后草稿端口/连线/寻址整体换新。
+     * 传入 extra 可以临时叠加一条候选连线，用于拖拽当下给出接受或拒绝。
+     */
+    async function previewState(extra) {
+        const seq = ++draftPreviewSeq;
+        try {
+            const result = await previewDrafts(Object.assign({
+                devices: draftPayload(),
+                rf_links: draftRfLinks,
+                control_links: draftCtlLinks
+            }, extra || {}));
+            if (seq !== draftPreviewSeq) return null;
+            if (!result || !result.ok) return result || {ok: false, error: 'generic'};
+            draftPorts = {rf: result.ports || {}, ctl: result.control || {}};
+            draftRfLinks = Array.isArray(result.rf_links) ? result.rf_links : [];
+            draftCtlLinks = Array.isArray(result.control_links) ? result.control_links : [];
+            draftAddresses = result.addresses || {};
+            return result;
+        } catch (error) {
+            if (seq !== draftPreviewSeq) return null;
+            return apiFailure(error);
+        }
+    }
+
+    async function refreshDraftPreview() {
+        if (!drafts.length) {
+            draftPorts = {rf: {}, ctl: {}};
+            draftRfLinks = [];
+            draftCtlLinks = [];
+            draftAddresses = {};
+            render();
+            return;
+        }
+        pruneDraftLinks();
+        const result = await previewState();
+        if (result && !result.ok) {
+            // 已有草稿连线在当前拓扑下不再成立：清掉并给出提示，避免保存时才发现。
+            draftRfLinks = [];
+            draftCtlLinks = [];
+            showToast(previewError(result));
         }
         render();
     }
@@ -616,9 +763,9 @@ export function createDevicesPage(ctx) {
         return '';
     }
 
-    function controlAddressLabel(value) {
-        if (!value || !value.id || !CONTROL_TYPES.includes(value.type)) return '';
-        const address = controlAddress(value.id);
+    function controlAddressLabel(value, id) {
+        if (!value || !CONTROL_TYPES.includes(value.type)) return '';
+        const address = controlAddress(id || value.id);
         if (!address || address.mode === 'unconfigured') return t('dev.control.unconfigured');
         if (address.mode === 'direct') {
             if (address.url) return t('dev.control.directUrl', {url: address.url});
@@ -638,7 +785,8 @@ export function createDevicesPage(ctx) {
     function formHtml() {
         const value = selectedValue();
         if (!value) return '';
-        const isDraft = !!draftByKey(selectedKeys.size === 1 ? [...selectedKeys][0] : '');
+        const key = selectedKeys.size === 1 ? [...selectedKeys][0] : '';
+        const isDraft = !!draftByKey(key);
         const bands = BAND_TYPES.includes(value.type) ? bandPicker(value) : '';
         const offset = value.type === 'antenna'
             ? `<label>${t('dev.form.offset')}<input name="install_offset_deg" type="number" min="0" max="359" step="1" value="${esc(value.install_offset_deg || 0)}"></label>`
@@ -660,7 +808,7 @@ export function createDevicesPage(ctx) {
                 ${travel}
             </div>
             ${seat}
-            <p class="dev-note">${t('dev.form.address')} · ${esc(controlAddressLabel(value) || '—')}</p>
+            <p class="dev-note">${t('dev.form.address')} · ${esc(controlAddressLabel(value, isDraft ? key : value.id) || '—')}</p>
             <p class="dev-note">${t('dev.form.parentFixed')} · ${esc(isDraft ? '—' : parentLabel(value))}</p>
             <p class="dev-note">${t('dev.form.rfPorts')} · ${esc(isDraft ? '—' : (rfPorts(value.id).map(port => port.band ? `${port.key} (${port.band})` : port.key).join(' · ') || '—'))}</p>
             <label class="dev-check"><input name="enabled" type="checkbox"${value.enabled !== false ? ' checked' : ''}> ${t('dev.form.enabled')}</label>
@@ -972,6 +1120,7 @@ export function createDevicesPage(ctx) {
             for (const key of [...selectedKeys]) {
                 if (!isDraftKey(key) && !deviceById(key)) selectedKeys.delete(key);
             }
+            pruneDraftLinks();
             render();
         } catch (error) {
             // 读取失败不沿用旧值：整页回落到 unknown。
@@ -1073,6 +1222,33 @@ export function createDevicesPage(ctx) {
         const draft = draftByKey(key);
         try {
             const values = formValues(form);
+            // 草稿保存要把挂在它身上的草稿连线一起原子落库，不能只写设备。
+            if (draft) {
+                const batch = await requestBatch({
+                    devices: [Object.assign({}, values, {id: draft.key})],
+                    layouts: [{id: draft.key, x: draft.layout.x, y: draft.layout.y}],
+                    rf_links: draftLinksSaveable(draft.key, draftRfLinks),
+                    control_links: draftLinksSaveable(draft.key, draftCtlLinks)
+                });
+                if (!batch || !batch.ok) {
+                    if (errorBox) {
+                        errorBox.textContent = errorText(batch && batch.error);
+                        errorBox.classList.remove('hidden');
+                    }
+                    return;
+                }
+                const savedId = (batch.id_map && batch.id_map[draft.key]) || '';
+                drafts = drafts.filter(item => item.key !== draft.key);
+                if (savedId) remapDraftLinks(draft.key, savedId);
+                selectedKeys = savedId ? new Set([savedId]) : new Set();
+                formDirty = false;
+                formSignature = null;
+                ctrlSignature = null;
+                render();
+                await refresh();
+                await refreshDraftPreview();
+                return;
+            }
             const result = await saveDevice(values);
             if (!result || !result.ok) {
                 if (errorBox) {
@@ -1082,8 +1258,6 @@ export function createDevicesPage(ctx) {
                 return;
             }
             const id = result.device && result.device.id ? result.device.id : values.id;
-            if (draft) await persistDraftLayout(id, draft.layout);
-            drafts = drafts.filter(item => item.key !== key);
             selectedKeys = new Set([id]);
             formDirty = false;
             formSignature = null;
@@ -1098,8 +1272,8 @@ export function createDevicesPage(ctx) {
     }
 
     /**
-     * 一次保存全部草稿：先吸收当前表单编辑，再逐台落库。
-     * 中途失败时保留失败及其后的草稿，已成功的移出草稿区。
+     * 一次保存全部草稿：先吸收当前表单编辑，再把设备、布局与草稿连线
+     * 作为一个批次提交；服务端整批校验通过后才在同一事务里写库。
      */
     async function saveAllDrafts() {
         if (!drafts.length) return;
@@ -1114,36 +1288,32 @@ export function createDevicesPage(ctx) {
                 return;
             }
         }
-        let savedId = '';
-        for (const item of [...drafts]) {
-            try {
-                const result = await saveDevice(item.device);
-                if (!result || !result.ok) {
-                    selectedKeys = new Set([item.key]);
-                    formDirty = false;
-                    formSignature = null;
-                    showToast(errorText(result && result.error));
-                    await refresh();
-                    return;
-                }
-                const id = result.device && result.device.id ? result.device.id : item.device.id;
-                if (id) {
-                    await persistDraftLayout(id, item.layout);
-                    if (!savedId) savedId = id;
-                }
-                drafts = drafts.filter(draft => draft.key !== item.key);
-            } catch (error) {
-                selectedKeys = new Set([item.key]);
-                showToast(apiError(error));
-                await refresh();
+        try {
+            const result = await requestBatch({
+                devices: drafts.map(item => Object.assign({}, item.device, {id: item.key})),
+                layouts: drafts.map(item => ({id: item.key, x: item.layout.x, y: item.layout.y})),
+                rf_links: draftRfLinks,
+                control_links: draftCtlLinks
+            });
+            if (!result || !result.ok) {
+                showToast(errorText(result && result.error));
                 return;
             }
+            const savedIds = Object.values(result.id_map || {});
+            drafts = [];
+            draftRfLinks = [];
+            draftCtlLinks = [];
+            draftPorts = {rf: {}, ctl: {}};
+            draftAddresses = {};
+            selectedKeys = savedIds.length ? new Set([savedIds[0]]) : new Set();
+            formDirty = false;
+            formSignature = null;
+            ctrlSignature = null;
+            render();
+            await refresh();
+        } catch (error) {
+            showToast(apiError(error));
         }
-        selectedKeys = savedId ? new Set([savedId]) : new Set();
-        formDirty = false;
-        formSignature = null;
-        ctrlSignature = null;
-        await refresh();
     }
 
     async function removeSelected() {        const realIds = [...selectedKeys].filter(key => !isDraftKey(key));
@@ -1154,6 +1324,7 @@ export function createDevicesPage(ctx) {
             : t('dev.confirmDelete'), {danger: true});
         if (!confirmed) return;
         drafts = drafts.filter(item => !draftKeys.includes(item.key));
+        for (const id of draftKeys.concat(realIds)) dropDraftLinksFor(id);
         for (const id of realIds) {
             try {
                 const result = await deleteDevice(id);
@@ -1171,6 +1342,7 @@ export function createDevicesPage(ctx) {
         formSignature = null;
         ctrlSignature = null;
         await refresh();
+        await refreshDraftPreview();
     }
 
     function wouldCycleClient(childId, parentId) {
@@ -1209,7 +1381,23 @@ export function createDevicesPage(ctx) {
     async function connectRfPorts(from, to) {
         if (!from || !to || !from.deviceId || !to.deviceId) return;
         if (from.deviceId === to.deviceId && from.port === to.port) return;
+        const draftInvolved = isDraftKey(from.deviceId) || isDraftKey(to.deviceId);
         try {
+            if (draftInvolved) {
+                // 草稿连线先走服务端校验，命中规则才留在页面内存里。
+                const candidate = {
+                    a_device: from.deviceId, a_port: from.port,
+                    b_device: to.deviceId, b_port: to.port
+                };
+                const result = await previewState({rf_links: draftRfLinks.concat(candidate)});
+                if (!result) return;
+                if (!result.ok) {
+                    showToast(previewError(result));
+                    return;
+                }
+                render();
+                return;
+            }
             const result = await saveRfLink({
                 a_device: from.deviceId,
                 a_port: from.port,
@@ -1256,6 +1444,15 @@ export function createDevicesPage(ctx) {
         } catch (error) {
             showToast(apiError(error));
         }
+    }
+
+    /** 草稿连线只存在于内存，点线即撤，无需服务端往返与确认弹窗。 */
+    async function removeDraftLink(kind, linkId) {
+        if (!linkId) return;
+        if (kind === 'ctl') draftCtlLinks = draftCtlLinks.filter(link => link.link_id !== linkId);
+        else draftRfLinks = draftRfLinks.filter(link => link.link_id !== linkId);
+        render();
+        await refreshDraftPreview();
     }
 
     async function removeWire(childId) {        const node = deviceById(childId);
@@ -1399,7 +1596,22 @@ export function createDevicesPage(ctx) {
         const to = {device: portEl.dataset.ctlDevice, port: portEl.dataset.ctlPort};
         if (!to.device || !to.port) return;
         if (to.device === from.device && to.port === from.port) return;
+        const draftInvolved = isDraftKey(from.device) || isDraftKey(to.device);
         try {
+            if (draftInvolved) {
+                const candidate = {
+                    a_device: from.device, a_port: from.port,
+                    b_device: to.device, b_port: to.port
+                };
+                const preview = await previewState({control_links: draftCtlLinks.concat(candidate)});
+                if (!preview) return;
+                if (!preview.ok) {
+                    showToast(previewError(preview));
+                    return;
+                }
+                render();
+                return;
+            }
             const result = await saveControlLink({a: from, b: to});
             if (!result || !result.ok) {
                 showToast(errorText(result && result.error));
@@ -1665,12 +1877,14 @@ export function createDevicesPage(ctx) {
         $('#devWires').addEventListener('click', event => {
             const ctlHit = event.target.closest('[data-ctl-link]');
             if (ctlHit) {
-                void removeControlLinkById(ctlHit.dataset.ctlLink);
+                if (ctlHit.dataset.ctlPending) void removeDraftLink('ctl', ctlHit.dataset.ctlLink);
+                else void removeControlLinkById(ctlHit.dataset.ctlLink);
                 return;
             }
             const rfHit = event.target.closest('[data-rf-link]');
             if (rfHit) {
-                void removeRfLinkById(rfHit.dataset.rfLink);
+                if (rfHit.dataset.rfPending) void removeDraftLink('rf', rfHit.dataset.rfLink);
+                else void removeRfLinkById(rfHit.dataset.rfLink);
                 return;
             }
             const hit = event.target.closest('[data-wire-child]');
