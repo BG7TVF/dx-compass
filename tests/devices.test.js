@@ -2393,6 +2393,203 @@ test('KPA500 命令入口：只接受型号描述表里的动作', async () => {
     assert.equal(unsupported.error, 'invalid-amp-model');
 });
 
+/** 构造一条合法的 ACOM 遥测帧：固定 72 字节，末字节补足和校验。 */
+function acomFrame(fields) {
+    const frame = new Array(72).fill(0);
+    frame[0] = 0x55;
+    frame[1] = 0x2f;
+    frame[2] = 0x45;
+    for (const pair of fields || []) frame[pair[0]] = pair[1];
+    let sum = 0;
+    for (let i = 0; i < 71; i += 1) sum += frame[i];
+    frame[71] = (-sum) & 0xff;
+    return frame;
+}
+
+class AcomSocket extends require('node:events') {
+    constructor() {
+        super();
+        this.writes = [];
+    }
+    write(chunk, callback) {
+        this.writes.push(Buffer.isBuffer(chunk) ? Buffer.from(chunk) : Buffer.from(String(chunk)));
+        if (typeof callback === 'function') callback();
+        return true;
+    }
+    removeAllListeners() { super.removeAllListeners(); return this; }
+    destroy() { return this; }
+}
+
+test('ACOM：五个型号共用二进制帧，温度偏移与动作表按型号', () => {
+    const models = [['500s', 282], ['600s', 273], ['700s', 282], ['1200s', 281], ['2020s', 282]];
+    for (const [id, offset] of models) {
+        const definition = ampModels.resolve('acom', id);
+        assert.ok(definition, `ACOM ${id} definition must exist`);
+        assert.equal(definition.supported, true);
+        assert.equal(definition.transport, 'acom-binary');
+        assert.equal(definition.protocol, 'serial');
+        assert.equal(definition.parser.temperature_offset, offset);
+        // 只有 Operate / Standby / Off：仓库没有串口开机命令。
+        assert.deepEqual(definition.controls.map(item => item.delta.action),
+            ['operate', 'standby', 'power_off']);
+        assert.equal(ampModels.transportOf({brand: 'acom', model: id}), 'acom-binary');
+    }
+    // 帧结构与解析共用一套，型号之间只差温度换算偏移。
+    assert.deepEqual(ampModels.resolve('acom', '500s').status,
+        ampModels.resolve('acom', '2020s').status);
+});
+
+test('ACOM：72 字节和校验、状态/读数解析与温度偏移', () => {
+    const frame = acomFrame([
+        [3, 0x60],                 // status 高半字节 6 = RECEIVE
+        [8, 10], [9, 2],           // 直流功率 10*0.1 + 2*25.6 = 52.2 W
+        [16, 0x47], [17, 0x01],    // 温度原值 327
+        [20, 0xdc], [21, 0x05],    // 推动 1500 → 150.0 W
+        [22, 0xf4], [23, 0x01],    // 正向 500 W
+        [24, 20], [25, 0],         // 反射 20 W
+        [26, 125], [27, 0],        // SWR 1.25
+        [66, 0xff],                // 0xFF = 无错误
+        [69, 0x25]                 // 风扇 2，波段索引 5 = 20m
+    ]);
+    assert.equal(frame.length, 72);
+    let sum = 0;
+    for (const byte of frame) sum = (sum + byte) & 0xff;
+    assert.equal(sum, 0);
+
+    const state = {amp: {}};
+    assert.equal(ampLink.applyAcomFrame(state, frame, 282), true);
+    assert.equal(state.amp.status_code, 6);
+    assert.equal(state.amp.power_on, 1);
+    assert.equal(state.amp.operating, 1);
+    assert.equal(state.amp.transmitting, 0);
+    assert.equal(state.amp.current_temperature, 45);
+    assert.equal(state.amp.drive_power, 150);
+    assert.equal(state.amp.out_fwd_power, 500);
+    assert.equal(state.amp.out_rev_power, 20);
+    assert.equal(state.amp.out_swr, 1.25);
+    assert.ok(Math.abs(state.amp.dc_power - 52.2) < 1e-9);
+    assert.equal(state.amp.fan_state, 2);
+    assert.equal(state.amp.band, '20m');
+    assert.equal(state.amp.alarm_active, false);
+    assert.equal(state.amp.fault_code, '');
+
+    // 同一帧，不同型号只有温度不同。
+    for (const [offset, temperature] of [[273, 54], [281, 46]]) {
+        const other = {amp: {}};
+        assert.equal(ampLink.applyAcomFrame(other, frame, offset), true);
+        assert.equal(other.amp.current_temperature, temperature);
+    }
+
+    // 发射与关机状态。
+    const txState = {amp: {}};
+    assert.equal(ampLink.applyAcomFrame(txState, acomFrame([[3, 0x70]]), 282), true);
+    assert.equal(txState.amp.transmitting, 1);
+    assert.equal(txState.amp.operating, 1);
+    const offState = {amp: {}};
+    assert.equal(ampLink.applyAcomFrame(offState, acomFrame([[3, 0xa0], [66, 0x08]]), 282), true);
+    assert.equal(offState.amp.status_code, 10);
+    assert.equal(offState.amp.power_on, 0);
+    assert.equal(offState.amp.operating, 0);
+    assert.equal(offState.amp.alarm_active, true);
+    assert.equal(offState.amp.fault_code, '0x08');
+
+    // 和校验不为零的帧整帧丢弃，不能污染已有读数。
+    const broken = frame.slice();
+    broken[40] = 1;
+    const untouched = {amp: {status_code: 99}};
+    assert.equal(ampLink.applyAcomFrame(untouched, broken, 282), false);
+    assert.equal(untouched.amp.status_code, 99);
+
+    // 流式解析：假起始字节被丢弃，跨多次 data 事件也能拼回整帧。
+    const stream = {frame: [], parsing: false, amp: {}};
+    const payload = Buffer.from([0x00, 0x55, 0x00].concat(frame));
+    assert.equal(ampLink.feedAcom(stream, payload.slice(0, 20), 282), false);
+    assert.equal(ampLink.feedAcom(stream, payload.slice(20, 45), 282), false);
+    assert.equal(ampLink.feedAcom(stream, payload.slice(45), 282), true);
+    assert.equal(stream.parsing, false);
+    assert.equal(stream.amp.out_fwd_power, 500);
+});
+
+test('ACOM：遥测启停、状态上卡与三个动作下发', async () => {
+    ampLink.resetForTests();
+    let socket = null;
+    ampLink.setSocketFactory(() => { socket = new AcomSocket(); return socket; });
+    const globalCtx = makeContext();
+    const acom = storage.devices.toDevice(deviceRow({
+        id: 'acom-1', name: 'ACOM 1200S', type: 'amp', bands: '',
+        config_json: JSON.stringify({
+            brand: 'acom', model: '1200s', protocol: 'serial', host: '10.0.0.7', port: 4002
+        })
+    }));
+    ampLink.pollAmps(globalCtx, [acom], new Date(), {devices: [acom], links: []});
+    assert.ok(socket, 'ACOM 型号必须建立串口链路');
+
+    // 连接成功立刻发 Start Telemetry。
+    socket.emit('connect');
+    assert.equal(socket.writes.length, 1);
+    assert.deepEqual([...socket.writes[0]], ampLink.ACOM_ENABLE_TELEMETRY);
+
+    // 收到遥测后状态上卡；仓库不实现 0x86 ACK，因此不能多写任何字节。
+    socket.emit('data', Buffer.from(acomFrame([
+        [3, 0x70], [16, 0x47], [17, 0x01], [22, 0xf4], [23, 0x01],
+        [26, 125], [27, 0], [66, 0xff], [69, 0x25]
+    ])));
+    const entry = runtime.stateOf(globalCtx, 'acom-1');
+    assert.equal(entry.amp_connected, true);
+    assert.equal(entry.amp.out_fwd_power, 500);
+    assert.equal(entry.amp.out_swr, 1.25);
+    assert.equal(entry.amp.current_temperature, 46);
+    assert.equal(entry.amp.band, '20m');
+    assert.equal(entry.amp.transmitting, 1);
+    assert.equal(socket.writes.length, 1);
+    assert.equal(socket.writes.some(buf => buf.includes(0x86)), false);
+
+    // 三个动作按仓库字节下发；不乐观改状态，等下一帧遥测。
+    const sent = await ampLink.publish(acom, {action: 'operate'}, new Date(), globalCtx);
+    assert.equal(sent.ok, true);
+    assert.deepEqual([...socket.writes[1]], ampLink.acomCommand('operate'));
+    assert.equal(runtime.stateOf(globalCtx, 'acom-1').amp.status_code, 7);
+
+    const off = await ampLink.publish(acom, {action: 'power_off'}, new Date(), globalCtx);
+    assert.equal(off.ok, true);
+    assert.deepEqual([...socket.writes[2]], ampLink.acomCommand('power_off'));
+
+    const denied = await ampLink.publish(acom, {action: 'calibrate'}, new Date(), globalCtx);
+    assert.equal(denied.ok, false);
+    assert.equal(denied.status, 400);
+    assert.equal(socket.writes.length, 3);
+
+    // 断开前发 Stop Telemetry，避免设备继续推送。
+    ampLink.resetForTests();
+    assert.equal(socket.writes.length, 4);
+    assert.deepEqual([...socket.writes[3]], ampLink.ACOM_DISABLE_TELEMETRY);
+});
+
+test('ACOM 命令入口：只接受三个动作，拒绝校准与 MQTT 字段', async () => {
+    fakeTransports();
+    const now = new Date('2026-03-01T12:00:00.000Z');
+    const globalCtx = makeContext();
+    const row = deviceRow({
+        id: 'acom-1', name: 'ACOM 700S', type: 'amp', bands: '',
+        config_json: JSON.stringify({brand: 'acom', model: '700s', protocol: 'serial'})
+    });
+    const headers = {'X-DX-Seat': 'OP-A'};
+    for (const action of ['operate', 'standby', 'power_off']) {
+        const result = await service.handleCommand(globalCtx, [row], 'acom-1',
+            {command: 'amp_set', args: {action}}, headers, now);
+        assert.equal(result.status, 202);
+        assert.deepEqual(result.payload.delta, {action});
+    }
+    for (const action of ['power_on', 'calibrate', 'clear_fault']) {
+        const result = await service.handleCommand(globalCtx, [row], 'acom-1',
+            {command: 'amp_set', args: {action}}, headers, now);
+        assert.equal(result.status, 400);
+    }
+    const mqttDelta = await service.handleCommand(globalCtx, [row], 'acom-1',
+        {command: 'amp_set', args: {pa_switch: 0}}, headers, now);
+    assert.equal(mqttDelta.status, 400);
+});
+
 test('AMP1000 配置：MQTT 字段白名单与口令隐藏', () => {
     const saved = model.normalizeDevice({
         type: 'amp', name: 'AMP1000',

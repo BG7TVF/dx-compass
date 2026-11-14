@@ -237,6 +237,10 @@ export function createDevicesPage(ctx) {
             return '';
         }
         if (item.kind === 'flag') return value === item.when ? t(item.label) : '';
+        if (item.kind === 'enum') {
+            const key = item.values && item.values[value];
+            return key ? t(key) : '';
+        }
         if (item.kind === 'metric') {
             const digits = Number.isInteger(item.digits) ? item.digits : 1;
             const text = metric(value, digits);
