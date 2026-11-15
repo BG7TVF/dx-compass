@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dx-compass.local/schema/heartbeat-matrix.schema.json",
+  "title": "DX-Compass 矩阵切换器 heartbeat（设备 → 服务端）",
+  "description": "主题 matrix/device/{device_id}/heartbeat。ports 按键增量合并。规范见 §7.2。",
+  "allOf": [
+    { "$ref": "https://dx-compass.local/schema/common.schema.json#/$defs/heartbeat_envelope" }
+  ],
+  "properties": {
+    "data": { "$ref": "#/$defs/data" }
+  },
+  "$defs": {
+    "data": {
+      "allOf": [
+        { "$ref": "https://dx-compass.local/schema/common.schema.json#/$defs/data_common" }
+      ],
+      "required": [
+        "device_class",
+        "in_count",
+        "out_count",
+        "ports",
+        "switching",
+        "rf_detected",
+        "tx_active"
+      ],
+      "properties": {
+        "device_class": { "const": "matrix" },
+        "in_count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16
+        },
+        "out_count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16
+        },
+        "ports": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": false,
+          "patternProperties": {
+            "^in([1-9]|1[0-6])$": {
+              "anyOf": [
+                { "$ref": "https://dx-compass.local/schema/common.schema.json#/$defs/outlet_name" },
+                { "type": "null" }
+              ]
+            }
+          },
+          "description": "按键增量：可只报变化的输入；null 表示该输入未知/未接"
+        },
+        "switching": { "type": "boolean" },
+        "relay_state": {
+          "type": "array",
+          "maxItems": 256,
+          "items": { "type": "boolean" }
+        },
+        "rf_detected": { "type": "boolean" },
+        "tx_active": { "type": "boolean" },
+        "antennas": {
+          "$ref": "https://dx-compass.local/schema/common.schema.json#/$defs/antennas"
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}

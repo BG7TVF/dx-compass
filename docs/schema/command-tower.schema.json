@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dx-compass.local/schema/command-tower.schema.json",
+  "title": "DX-Compass 铁塔升降控制器 json_command（服务端 → 设备）",
+  "description": "按住语义：hold 需续期，设备 1500 ms 无新 hold 必须断开两路；direction 必填于 hold；hold_ms 上限 1500。规范见 §8.3。",
+  "allOf": [
+    { "$ref": "https://dx-compass.local/schema/common.schema.json#/$defs/command_envelope" }
+  ],
+  "properties": {
+    "data": { "$ref": "#/$defs/data" }
+  },
+  "$defs": {
+    "data": {
+      "type": "object",
+      "required": ["device_id", "action"],
+      "properties": {
+        "device_id": { "$ref": "https://dx-compass.local/schema/common.schema.json#/$defs/device_id" },
+        "action": {
+          "type": "string",
+          "enum": ["hold", "release", "stop"]
+        },
+        "direction": {
+          "type": "string",
+          "enum": ["up", "down"]
+        },
+        "hold_ms": {
+          "type": "integer",
+          "minimum": 500,
+          "maximum": 1500
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "action": { "const": "hold" } },
+            "required": ["action"]
+          },
+          "then": { "required": ["direction"] }
+        }
+      ],
+      "additionalProperties": true
+    }
+  }
+}

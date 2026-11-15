@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dx-compass.local/schema/command-switch.schema.json",
+  "title": "DX-Compass 天线切换器 json_command（服务端 → 设备）",
+  "description": "主题 switch/device/{device_id}/json_command。增量语义：未提供字段保持原值。ports.in 禁止为 null（禁止远程全断）。规范见 §6.3。",
+  "allOf": [
+    { "$ref": "https://dx-compass.local/schema/common.schema.json#/$defs/command_envelope" }
+  ],
+  "properties": {
+    "data": { "$ref": "#/$defs/data" }
+  },
+  "$defs": {
+    "data": {
+      "type": "object",
+      "required": ["device_id", "ports"],
+      "properties": {
+        "device_id": { "$ref": "https://dx-compass.local/schema/common.schema.json#/$defs/device_id" },
+        "action": {
+          "type": "string",
+          "enum": ["select"]
+        },
+        "ports": {
+          "type": "object",
+          "required": ["in"],
+          "additionalProperties": false,
+          "properties": {
+            "in": {
+              "$ref": "https://dx-compass.local/schema/common.schema.json#/$defs/antenna_name"
+            }
+          }
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}

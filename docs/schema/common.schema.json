@@ -1,0 +1,202 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dx-compass.local/schema/common.schema.json",
+  "title": "DX-Compass 官方设备协议 · 公共定义",
+  "description": "适用于 5 类官方新设备（switch/matrix/tower/bpf/swr）。JSON 语法遵循 RFC 8259；时间遵循 ISO 8601 UTC；字段命名 snake_case。规范正文见 docs/dx-compass-official-device-json-protocol.md。",
+  "$defs": {
+    "msg_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[A-Za-z0-9._:-]+$"
+    },
+    "device_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100,
+      "pattern": "^[^/+#\\s]+$",
+      "description": "必须与 MQTT 主题中的 device_id 逐字一致（单段，不含 / + # 与空白）"
+    },
+    "iso_ts": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$",
+      "description": "ISO 8601 / RFC 3339 UTC，毫秒三位，Z 结尾；禁止时区偏移与本地时间"
+    },
+    "unix_ts": {
+      "type": "integer",
+      "minimum": 1000000000,
+      "maximum": 9999999999,
+      "description": "Unix 秒（10 位）。AMP1000 既成事实，新设备必须同时携带"
+    },
+    "proto": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+$",
+      "description": "协议版本 <major>.<minor>；接收方 major 不同即拒绝处理"
+    },
+    "seq": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 4294967295,
+      "description": "单调 +1，uint32 不回绕；无法持久化时重启首帧起省略该字段"
+    },
+    "fault_word": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4294967295,
+      "description": "位图，位定义见规范 §11.4"
+    },
+    "state": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 32,
+      "pattern": "^[a-z][a-z0-9_-]*$",
+      "description": "开放枚举：init/idle/switching/moving/fault/unknown；未知值接收方按 unknown 处理"
+    },
+    "error_code": {
+      "type": "string",
+      "maxLength": 64,
+      "pattern": "^[a-z0-9-]*$",
+      "description": "开放枚举，含义见规范 §11.1；空串表示无错误"
+    },
+    "error_detail": {
+      "type": "string",
+      "maxLength": 200,
+      "description": "人读补充信息，不参与控制决策"
+    },
+    "version_string": {
+      "type": "string",
+      "maxLength": 32
+    },
+    "band": {
+      "type": "string",
+      "pattern": "^\\d{1,3}m$",
+      "description": "波段，如 160m / 20m"
+    },
+    "bands": {
+      "type": "array",
+      "maxItems": 16,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^\\d{1,3}m$"
+      }
+    },
+    "antennas": {
+      "type": "array",
+      "maxItems": 16,
+      "items": {
+        "type": "object",
+        "required": ["index", "name", "bands"],
+        "additionalProperties": false,
+        "properties": {
+          "index": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 16
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 60
+          },
+          "bands": {
+            "type": "array",
+            "maxItems": 16,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^\\d{1,3}m$"
+            }
+          }
+        }
+      }
+    },
+    "outlet_name": {
+      "type": "string",
+      "pattern": "^(out([1-9]|1[0-6]))$"
+    },
+    "antenna_name": {
+      "type": "string",
+      "pattern": "^(ant([1-9]|1[0-6]))$"
+    },
+    "data_common": {
+      "type": "object",
+      "required": [
+        "device_id",
+        "device_class",
+        "model",
+        "firmware_version",
+        "boot_id",
+        "uptime_ms",
+        "seq",
+        "state"
+      ],
+      "properties": {
+        "device_id": { "$ref": "#/$defs/device_id" },
+        "device_class": {
+          "type": "string",
+          "enum": ["switch", "matrix", "tower", "bpf", "swr"]
+        },
+        "model": { "type": "string", "maxLength": 100 },
+        "serial": { "type": "string", "maxLength": 64 },
+        "firmware_version": { "$ref": "#/$defs/version_string" },
+        "software_version": { "$ref": "#/$defs/version_string" },
+        "hardware_version": { "$ref": "#/$defs/version_string" },
+        "boot_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32,
+          "description": "每次上电/复位必须变化"
+        },
+        "uptime_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "seq": { "$ref": "#/$defs/seq" },
+        "state": { "$ref": "#/$defs/state" },
+        "result": {
+          "type": "string",
+          "enum": ["ok", "error"]
+        },
+        "ack_msg_id": { "$ref": "#/$defs/msg_id" },
+        "error": { "$ref": "#/$defs/error_code" },
+        "error_detail": { "$ref": "#/$defs/error_detail" },
+        "fault_word": { "$ref": "#/$defs/fault_word" },
+        "temperature_c": {
+          "anyOf": [
+            { "type": "number", "minimum": -40, "maximum": 125 },
+            { "type": "null" }
+          ],
+          "description": "摄氏度，有符号"
+        }
+      },
+      "additionalProperties": true
+    },
+    "heartbeat_envelope": {
+      "type": "object",
+      "required": ["msg_id", "cmd", "timestamp", "ts", "data"],
+      "properties": {
+        "msg_id": { "$ref": "#/$defs/msg_id" },
+        "cmd": { "const": "remote_control" },
+        "timestamp": { "$ref": "#/$defs/unix_ts" },
+        "ts": { "$ref": "#/$defs/iso_ts" },
+        "proto": { "$ref": "#/$defs/proto" },
+        "data": { "type": "object" }
+      },
+      "additionalProperties": true
+    },
+    "command_envelope": {
+      "type": "object",
+      "required": ["msg_id", "cmd", "timestamp", "data"],
+      "properties": {
+        "msg_id": { "$ref": "#/$defs/msg_id" },
+        "cmd": { "const": "remote_control" },
+        "timestamp": { "$ref": "#/$defs/unix_ts" },
+        "ts": { "$ref": "#/$defs/iso_ts" },
+        "proto": { "$ref": "#/$defs/proto" },
+        "data": { "type": "object" }
+      },
+      "additionalProperties": true
+    }
+  }
+}

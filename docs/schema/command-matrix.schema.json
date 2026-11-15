@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dx-compass.local/schema/command-matrix.schema.json",
+  "title": "DX-Compass 矩阵切换器 json_command（服务端 → 设备）",
+  "description": "一次只改一个输入；值不得为 null；同一输出不得被多个输入占用。规范见 §7.3。",
+  "allOf": [
+    { "$ref": "https://dx-compass.local/schema/common.schema.json#/$defs/command_envelope" }
+  ],
+  "properties": {
+    "data": { "$ref": "#/$defs/data" }
+  },
+  "$defs": {
+    "data": {
+      "type": "object",
+      "required": ["device_id", "ports"],
+      "properties": {
+        "device_id": { "$ref": "https://dx-compass.local/schema/common.schema.json#/$defs/device_id" },
+        "ports": {
+          "type": "object",
+          "minProperties": 1,
+          "maxProperties": 1,
+          "additionalProperties": false,
+          "patternProperties": {
+            "^in([1-9]|1[0-6])$": {
+              "$ref": "https://dx-compass.local/schema/common.schema.json#/$defs/outlet_name"
+            }
+          }
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}

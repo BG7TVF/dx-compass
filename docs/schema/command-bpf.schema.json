@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dx-compass.local/schema/command-bpf.schema.json",
+  "title": "DX-Compass 多波段 BPF 组 json_command（服务端 → 设备）",
+  "description": "band / bypass / mode 至少给一个；发射中设备必须拒绝。规范见 §9.3。",
+  "allOf": [
+    { "$ref": "https://dx-compass.local/schema/common.schema.json#/$defs/command_envelope" }
+  ],
+  "properties": {
+    "data": { "$ref": "#/$defs/data" }
+  },
+  "$defs": {
+    "data": {
+      "type": "object",
+      "required": ["device_id"],
+      "properties": {
+        "device_id": { "$ref": "https://dx-compass.local/schema/common.schema.json#/$defs/device_id" },
+        "band": {
+          "type": "string",
+          "pattern": "^\\d{1,3}m$"
+        },
+        "bypass": { "type": "boolean" },
+        "mode": {
+          "type": "string",
+          "enum": ["manual", "auto"]
+        }
+      },
+      "anyOf": [
+        { "required": ["band"] },
+        { "required": ["bypass"] },
+        { "required": ["mode"] }
+      ],
+      "additionalProperties": true
+    }
+  }
+}

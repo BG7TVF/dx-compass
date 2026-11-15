@@ -254,6 +254,23 @@ B 档按 RFC 9110 描述：
 
 > 为什么设备还要按 `msg_id` 去重：QoS 0 不会重复，但现场可能存在桥接、抓包重放或上层重试。设备侧去重是最后一道保险。
 
+### 2.7 寻址方式
+
+| 形态 | 地址来源 | 适用 |
+|---|---|---|
+| **官方设备（推荐）** | `config.host` + `config.port` = **broker 地址**；`config.device_id` = 主题键 | A 档 |
+| 老设备直连 | `config.host` + `config.port` = 设备自身 IP:端口 | 各品牌 TCP 驱动（帧格式未证实，见 §13.5） |
+| 经串口服务器 | 控制连线连到串口服务器 `serialN`，地址与串口参数继承服务器配置 | RS-232/485 老设备（`control.js:164-214`） |
+
+对官方设备的要求：
+
+- **必须支持直连 broker**；不要求固定 IP、不要求端口映射。
+- **不要求**实现串口/串口服务器转发。官方形态是网络设备，现场不要为它加串口服务器。
+- **不需要**在设备侧保存站内拓扑、席位、租约等任何站点信息。
+- 一台设备只允许一个控制入口（broker），不允许多个上位机直连设备私有端口。
+
+> 【实现】现实约束：切换器/矩阵只要选了具体品牌型号，服务端就走该型号的 TCP 地址解析（`switch-link.js:432-438`），`host/port` 会被当成设备 IP；选"其他"则退回 `relay`，只认 `relay_url`。所以 A 档官方切换器必须在型号描述表里新增独立条目（§13.2 G1），否则 `host/port` 语义与 broker 冲突。
+
 ---
 
 ## 3. 报文格式与数值规范
@@ -310,11 +327,11 @@ B 档按 RFC 9110 描述：
 
 ```json
 {"msg_id":"sw-a-0101","cmd":"remote_control",
- "timestamp":1794384000,"ts":"2026-11-15T06:40:00.000Z",
+ "timestamp":1794724800,"ts":"2026-11-15T06:40:00.000Z",
  "data":{"device_id":"SW-A"}}
 ```
 
-> `1794384000` 与 `2026-11-15T06:40:00.000Z` 对应同一秒，仅作示例；实际报文两者必须一致。
+> `1794724800` 与 `2026-11-15T06:40:00.000Z` 对应同一秒，仅作示例；实际报文两者必须一致。
 
 ### 3.4 单位
 
@@ -441,7 +458,7 @@ P(dBm) = 10·log10(P(W) / 1mW) = 10·log10(P(W)) + 30
 | `msg_id` | string | 必填 | 1–64，`[A-Za-z0-9._:-]` | 服务端下发格式 `dxc-<36进制毫秒>-<8位随机>`（`amp-link.js:963-968`）；设备自定，建议全局唯一 |
 | `cmd` | string | 必填 | 固定 `remote_control` | 【实现】服务端允许省略，省略按 `remote_control`（`amp-link.js:620`） |
 | `timestamp` | number | 必填 | Unix **秒**，10 位整数 | 【沿用 AMP1000】原样存 `amp_ts`（`amp-link.js:632`） |
-| `ts` | string | 【新设备】必填 | ISO 8601 UTC，`Z` 结尾，毫秒三位 | 缺失时服务端回退用 `timestamp`，新 driver 必须优先用 `ts` |
+| `ts` | string | 设备上行必填 | ISO 8601 UTC，`Z` 结尾，毫秒三位 | 缺失时服务端回退用 `timestamp`；新 driver 必须优先用 `ts` |
 | `proto` | string | 可选 | `<major>.<minor>` | 缺失等同 `"1.0"` |
 | `data` | object | 必填 | 非空、非数组 | 数组或缺失 → 整帧丢弃（`amp-link.js:619-622`） |
 
@@ -451,12 +468,14 @@ P(dBm) = 10·log10(P(W) / 1mW) = 10·log10(P(W)) + 30
 {
   "msg_id": "dxc-m7k2p1-a1b2c3d4",
   "cmd": "remote_control",
-  "timestamp": 1794384000,
+  "timestamp": 1794724800,
   "ts": "2026-11-15T06:40:00.000Z",
   "proto": "1.0",
   "data": { "device_id": "SW-A", "ports": { "in": "ant3" } }
 }
 ```
+
+> **当前实现的下行报文**只有 `msg_id` / `cmd` / `timestamp` / `data` 四个字段（`amp-link.js:958-961`），**不带 `ts` 与 `proto`**。上面的 `ts`/`proto` 是 G10 完成后补齐的目标形态。设备解析必须同时接受"有 `ts`"与"无 `ts`"两种下发，不得把缺失当非法；缺失时用帧到达时间兜底。
 
 ### 5.2 上报是完整快照
 
@@ -559,7 +578,7 @@ P(dBm) = 10·log10(P(W) / 1mW) = 10·log10(P(W)) + 30
 
 ```json
 {"msg_id":"sw-a-ack-0007","cmd":"remote_control",
- "timestamp":1794384001,"ts":"2026-11-15T06:40:01.000Z","proto":"1.0",
+ "timestamp":1794724801,"ts":"2026-11-15T06:40:01.000Z","proto":"1.0",
  "data":{"device_id":"SW-A","device_class":"switch","result":"ok",
          "ack_msg_id":"dxc-m7k2p1-a1b2c3d4","seq":42}}
 ```
@@ -568,7 +587,7 @@ P(dBm) = 10·log10(P(W) / 1mW) = 10·log10(P(W)) + 30
 
 ```json
 {"msg_id":"sw-a-ack-0008","cmd":"remote_control",
- "timestamp":1794384001,"ts":"2026-11-15T06:40:01.000Z","proto":"1.0",
+ "timestamp":1794724801,"ts":"2026-11-15T06:40:01.000Z","proto":"1.0",
  "data":{"device_id":"SW-A","device_class":"switch","result":"error",
          "ack_msg_id":"dxc-m7k2p1-a1b2c3d4","error":"tx-active",
          "error_detail":"fwd_power=620W","seq":43}}
@@ -622,7 +641,7 @@ P(dBm) = 10·log10(P(W) / 1mW) = 10·log10(P(W)) + 30
 
 ```json
 {"msg_id":"sw-a-0101","cmd":"remote_control",
- "timestamp":1794384000,"ts":"2026-11-15T06:40:00.000Z","proto":"1.0",
+ "timestamp":1794724800,"ts":"2026-11-15T06:40:00.000Z","proto":"1.0",
  "data":{"device_id":"SW-A","device_class":"switch","model":"DXC-SW-6",
   "serial":"SWA2026001","firmware_version":"1.0.3","boot_id":"b7f3c1",
   "uptime_ms":128400,"seq":42,"state":"idle","out_count":6,
@@ -705,7 +724,7 @@ X-Relay-Token: <token>
 
 ```json
 {"msg_id":"sw-a-0001","cmd":"remote_control",
- "timestamp":1794384000,"ts":"2026-11-15T06:40:00.000Z","proto":"1.0",
+ "timestamp":1794724800,"ts":"2026-11-15T06:40:00.000Z","proto":"1.0",
  "data":{"device_id":"SW-A","device_class":"switch","state":"init",
   "position":null,"ports":{"in":null},"target":null,"switching":false,
   "out_count":6,"seq":1,"boot_id":"b7f3c1","uptime_ms":820}}
@@ -717,7 +736,7 @@ X-Relay-Token: <token>
 
 ```json
 {"msg_id":"dxc-m7k2p1-a1b2c3d4","cmd":"remote_control",
- "timestamp":1794384010,"ts":"2026-11-15T06:40:10.000Z","proto":"1.0",
+ "timestamp":1794724810,"ts":"2026-11-15T06:40:10.000Z","proto":"1.0",
  "data":{"device_id":"SW-A","ports":{"in":"ant3"}}}
 ```
 
@@ -725,7 +744,7 @@ X-Relay-Token: <token>
 
 ```json
 {"msg_id":"sw-a-0102","cmd":"remote_control",
- "timestamp":1794384010,"ts":"2026-11-15T06:40:10.000Z","proto":"1.0",
+ "timestamp":1794724810,"ts":"2026-11-15T06:40:10.000Z","proto":"1.0",
  "data":{"device_id":"SW-A","device_class":"switch","result":"ok",
   "ack_msg_id":"dxc-m7k2p1-a1b2c3d4","seq":43}}
 ```
@@ -734,7 +753,7 @@ X-Relay-Token: <token>
 
 ```json
 {"msg_id":"sw-a-0103","cmd":"remote_control",
- "timestamp":1794384011,"ts":"2026-11-15T06:40:11.000Z","proto":"1.0",
+ "timestamp":1794724811,"ts":"2026-11-15T06:40:11.000Z","proto":"1.0",
  "data":{"device_id":"SW-A","device_class":"switch","state":"idle",
   "position":3,"ports":{"in":"ant3"},"target":"ant3","switching":false,
   "rf_detected":false,"relay_state":[false,false,true,false,false,false],
@@ -747,7 +766,7 @@ X-Relay-Token: <token>
 
 ```json
 {"msg_id":"sw-a-0104","cmd":"remote_control",
- "timestamp":1794384020,"ts":"2026-11-15T06:40:20.000Z","proto":"1.0",
+ "timestamp":1794724820,"ts":"2026-11-15T06:40:20.000Z","proto":"1.0",
  "data":{"device_id":"SW-A","device_class":"switch","result":"error",
   "ack_msg_id":"dxc-m7k2p9-77aa01bb","error":"tx-active",
   "error_detail":"fwd_power=620W","seq":45}}
@@ -819,7 +838,7 @@ X-Relay-Token: <token>
 
 ```json
 {"msg_id":"mx-a-0001","cmd":"remote_control",
- "timestamp":1794384100,"ts":"2026-11-15T06:41:40.000Z","proto":"1.0",
+ "timestamp":1794724900,"ts":"2026-11-15T06:41:40.000Z","proto":"1.0",
  "data":{"device_id":"MX-A","device_class":"matrix","model":"DXC-MX-2X4",
   "serial":"MXA2026001","firmware_version":"1.0.0","boot_id":"c19a2e",
   "uptime_ms":56300,"seq":18,"state":"idle","in_count":2,"out_count":4,
@@ -856,7 +875,7 @@ B 档等价：`{"channel": <channels["in1:out2"]>, "action": "pulse", "pulse_ms"
 
 ```json
 {"msg_id":"dxc-m7k2pa-00112233","cmd":"remote_control",
- "timestamp":1794384200,"ts":"2026-11-15T06:43:20.000Z","proto":"1.0",
+ "timestamp":1794725000,"ts":"2026-11-15T06:43:20.000Z","proto":"1.0",
  "data":{"device_id":"MX-A","ports":{"in2":"out1"}}}
 ```
 
@@ -864,7 +883,7 @@ B 档等价：`{"channel": <channels["in1:out2"]>, "action": "pulse", "pulse_ms"
 
 ```json
 {"msg_id":"mx-a-0201","cmd":"remote_control",
- "timestamp":1794384200,"ts":"2026-11-15T06:43:20.000Z","proto":"1.0",
+ "timestamp":1794725000,"ts":"2026-11-15T06:43:20.000Z","proto":"1.0",
  "data":{"device_id":"MX-A","device_class":"matrix","result":"ok",
   "ack_msg_id":"dxc-m7k2pa-00112233","seq":19}}
 ```
@@ -873,7 +892,7 @@ B 档等价：`{"channel": <channels["in1:out2"]>, "action": "pulse", "pulse_ms"
 
 ```json
 {"msg_id":"mx-a-0202","cmd":"remote_control",
- "timestamp":1794384201,"ts":"2026-11-15T06:43:21.000Z","proto":"1.0",
+ "timestamp":1794725001,"ts":"2026-11-15T06:43:21.000Z","proto":"1.0",
  "data":{"device_id":"MX-A","device_class":"matrix","state":"idle",
   "ports":{"in2":"out1"},"switching":false,"seq":20}}
 ```
@@ -882,7 +901,7 @@ B 档等价：`{"channel": <channels["in1:out2"]>, "action": "pulse", "pulse_ms"
 
 ```json
 {"msg_id":"mx-a-0203","cmd":"remote_control",
- "timestamp":1794384210,"ts":"2026-11-15T06:43:30.000Z","proto":"1.0",
+ "timestamp":1794725010,"ts":"2026-11-15T06:43:30.000Z","proto":"1.0",
  "data":{"device_id":"MX-A","device_class":"matrix","result":"error",
   "ack_msg_id":"dxc-m7k2pb-44556677","error":"output-busy",
   "error_detail":"out1 used by in1","seq":21}}
@@ -906,4 +925,1062 @@ B 档等价：`{"channel": <channels["in1:out2"]>, "action": "pulse", "pulse_ms"
 | 回读缺失 | `ports` 里不出现该键（服务端保留上次值，不会被清空） |
 | 多个输入指向同一输出 | 本地拒绝后到的那个，`output-busy` |
 
-<!-- DXC-APPEND -->
+## 8. 铁塔升降控制器
+
+### 8.1 连接与主题
+
+| 项 | 值 |
+|---|---|
+| 设备类 | `tower` |
+| 射频端口 | 无（塔不接射频，`rf.js:135-137`） |
+| 控制 / 状态口 | `relay` / `limit` |
+| 上行 / 下行 | `tower/device/{device_id}/heartbeat` / `json_command` |
+| LWT | `tower/device/{device_id}/status` |
+| 服务端配置 | `up_channel` / `down_channel`（0–255）、`pulse_ms`、`travel_timeout_sec`（5–3600，缺省 120） |
+| 上层设置 | 限位开关类型 `NO` / `NC`，**全局一项，缺省 NO**（`service.js:333-343`、`tower.js:14`） |
+| 单帧上限 | 8192 字节 |
+| Schema | `docs/schema/heartbeat-tower.schema.json`、`command-tower.schema.json` |
+
+> 限位类型不是每台塔各自的配置，而是站点级设置。设备上报**原始电平**，取反由上位机做。设备若自行取反，NO/NC 设置就完全失效。
+
+### 8.2 状态上报字段（专属）
+
+| 字段 | 类型 | 必填 | 单位 | 范围 | 符号 | 缺省行为 |
+|---|---|---|---|---|---|---|
+| `limit_top` | boolean | 必填 | — | 接点原始电平 | — | **true = 接点闭合**；不得省略 |
+| `limit_bottom` | boolean | 必填 | — | 接点原始电平 | — | 同上 |
+| `moving` | boolean | 必填 | — | true/false | — | 缺省 `false` |
+| `direction` | string | 可选 | — | `up`/`down`/`null` | — | `null` |
+| `motor_on` | boolean | 必填 | — | true/false | — | 输出继电器实际吸合状态 |
+| `hold_active` | boolean | 必填 | — | true/false | — | 本次 hold 是否仍在续期窗口内 |
+| `hardware_interlock` | boolean | 必填 | — | true/false | — | 本地硬互锁有效；`false` = 旁路/故障 |
+| `limit_wiring` | string | 可选 | — | `NO`/`NC`/`null` | — | 设备实际接线，供上位机核对；服务端暂不消费 |
+| `travel_ms` | number | 可选 | ms | 0–3600000 | 无符号 | 本次运动已用时长 |
+| `motor_current_a` | number | 可选 | A | 0–50，3 位小数 | 无符号 | 过流诊断 |
+| `fault` | string | 可选 | — | 见 §11.1 | — | 空串 = 无故障 |
+
+`limit_top` / `limit_bottom` 语义必须精确：
+
+- 上报限位开关**接点电平**，不是"逻辑到位"。
+- `NO` 接法：接点闭合（true）= 到位；`NC` 接法：接点断开（false）= 到位。
+- 服务端按全局配置解释：`logicalLevel(raw, "NC") = !raw`（`tower.js:22-25`）。
+- 两限位同时逻辑到位 → `fault` + `alert="limit-conflict"`（`tower.js:42-44`）；任一侧读不到 → `unknown` + `reason="no-limit-feedback"`。
+
+完整快照示例（已收回，下限位有效）：
+
+```json
+{"msg_id":"tw-a-0001","cmd":"remote_control",
+ "timestamp":1794725100,"ts":"2026-11-15T06:45:00.000Z","proto":"1.0",
+ "data":{"device_id":"TW-A","device_class":"tower","model":"DXC-TW-1",
+  "serial":"TWA2026001","firmware_version":"1.0.2","boot_id":"d00d42",
+  "uptime_ms":204500,"seq":306,"state":"idle",
+  "limit_top":false,"limit_bottom":true,"limit_wiring":"NO",
+  "moving":false,"direction":null,"motor_on":false,"hold_active":false,
+  "hardware_interlock":true,"travel_ms":0,"motor_current_a":0.0,
+  "temperature_c":18.5,"fault":"","error":"","fault_word":0,"result":"ok"}}
+```
+
+### 8.3 控制指令字段
+
+| 字段 | 类型 | 必填 | 范围 | 缺省行为 | 说明 |
+|---|---|---|---|---|---|
+| `device_id` | string | 必填 | ≤100 | — | — |
+| `action` | string | 必填 | `hold` / `release` / `stop` | — | `hold` 续期即"继续按住" |
+| `direction` | string | `hold` 时必填 | `up` / `down` | — | 其余动作忽略 |
+| `hold_ms` | number | 可选 | 500–1500 | 1500 | 本次 hold 有效期；**上限 1500** |
+
+语义（与 `tower-hold.js` 完全一致）：
+
+1. **按住运行（点动）**：上位机每 500 ms 发一条 `action="hold"`，方向不变即续期，**不得重复吸合**（`tower-hold.js:74-87`）。
+2. **看门狗**：设备 **1500 ms** 未收到新的 `hold`，必须断开两路输出（`tower-hold.js:9-10,134-155`）。
+3. **两路不同时闭合**：换向时先断另一路，再吸合目标路（`tower-hold.js:87-101`）。
+4. **换向最小间隔 1000 ms**：服务端会以 `409 direction-switch-too-fast` 拒绝（`tower-hold.js:65-72`）；设备端也必须独立执行同样的 1000 ms 间隔。
+5. **释放**：`release` / `stop` 立即断开当前通道（`tower-hold.js:117-132`）。
+6. **启动/重载**：服务端启动时对所有塔执行一次 `off`（`tower-hold.js:175-198`）；设备重启后也必须是两路断开。
+
+B 档等价（干接点）：
+
+```
+POST <relay_url>  {"channel": <up_channel>,   "action": "on"}    // hold up
+POST <relay_url>  {"channel": <up_channel>,   "action": "off"}   // release
+POST <relay_url>  {"channel": <down_channel>, "action": "on"}    // hold down
+```
+
+服务端每次 hold 都真的写一次 `on`（`relay.js:107-121`）；换向时先写另一路 `off`。
+
+### 8.4 状态机与边界
+
+服务端二态模型（`tower.js:27-60`），设备侧必须能一一对应：
+
+| 服务端状态 | 条件 | 设备侧应满足 |
+|---|---|---|
+| `erected` | 上限位逻辑到位 | `limit_top` 有效 |
+| `retracted` | 下限位逻辑到位 | `limit_bottom` 有效 |
+| `moving` | 两限位都未到位、`moving=true`、未超 `travel_timeout_sec` | 电机已通电 |
+| `fault` | 两限位同时逻辑到位 | `fault="limit-conflict"` |
+| `unknown` | 限位读不到 / 无上报 / 运动超时 | `error` 说明原因 |
+| `offline` | >10 s 无上报 | broker 断线或设备停机 |
+
+设备侧状态机：
+
+```
+       上电
+        │
+        ▼
+   init（两路断开；读限位）
+        │
+        ├─ 两限位都无效 ──► idle/unknown（中间位置，等指令）
+        ├─ 上限位有效 ────► erected
+        └─ 下限位有效 ────► retracted
+                │ hold up / down
+                ▼
+            moving ── 目标限位到位 ──► erected / retracted
+                │
+                ├─ 1500 ms 无续期 ──► 断两路，回 idle
+                ├─ 超 travel_timeout_sec ──► fault（断两路）
+                └─ 两限位同时有效 ──► fault（断两路）
+```
+
+| 边界 | 规则 |
+|---|---|
+| 上限位到达 | 硬件自行切断上升输出，**不等上位机**；即使收到 `hold up` 也保持断开 |
+| 下限位到达 | 同上 |
+| 两限位冲突 | 两路立即断开，`fault="limit-conflict"`，拒绝任何 `hold` 直到断电复位 |
+| 换向间隔 | 1000 ms；设备端从"上一路断开"开始计时 |
+| 运动超时 | 设备自行断电并报 `fault="travel-timeout"`；服务端 `travel_timeout_sec` 只用于显示判定，不能替代硬件切断 |
+| 通信中断 | 1500 ms 看门狗断开两路（fail-safe） |
+| 断电 | 两路失电，塔由机械自锁保持；上电必须先读限位，不得自动继续断电前的动作 |
+| 塔在中间位置 | 允许上报（真实存在）；不得谎报为 `erected`/`retracted` |
+
+### 8.5 示例
+
+**(1) 按住上升**
+
+```json
+{"msg_id":"dxc-m7k2pc-99887766","cmd":"remote_control",
+ "timestamp":1794725200,"ts":"2026-11-15T06:46:40.000Z","proto":"1.0",
+ "data":{"device_id":"TW-A","action":"hold","direction":"up","hold_ms":1500}}
+```
+
+**(2) ack**
+
+```json
+{"msg_id":"tw-a-0501","cmd":"remote_control",
+ "timestamp":1794725200,"ts":"2026-11-15T06:46:40.000Z","proto":"1.0",
+ "data":{"device_id":"TW-A","device_class":"tower","result":"ok",
+  "ack_msg_id":"dxc-m7k2pc-99887766","seq":307}}
+```
+
+**(3) 续期（500 ms 后同方向再来一条；设备不得重复吸合）**
+
+```json
+{"msg_id":"dxc-m7k2pc-aabbccdd","cmd":"remote_control",
+ "timestamp":1794725201,"ts":"2026-11-15T06:46:41.000Z","proto":"1.0",
+ "data":{"device_id":"TW-A","action":"hold","direction":"up","hold_ms":1500}}
+```
+
+设备 ack `result="ok"`，`hold_active` 保持 true，`motor_on` 不翻转。
+
+**(4) 运动中快照**
+
+```json
+{"msg_id":"tw-a-0502","cmd":"remote_control",
+ "timestamp":1794725202,"ts":"2026-11-15T06:46:42.000Z","proto":"1.0",
+ "data":{"device_id":"TW-A","device_class":"tower","state":"moving",
+  "limit_top":false,"limit_bottom":false,"moving":true,"direction":"up",
+  "motor_on":true,"hold_active":true,"hardware_interlock":true,
+  "travel_ms":1200,"motor_current_a":3.4,"seq":308}}
+```
+
+**(5) 到位**
+
+```json
+{"msg_id":"tw-a-0503","cmd":"remote_control",
+ "timestamp":1794725242,"ts":"2026-11-15T06:47:22.000Z","proto":"1.0",
+ "data":{"device_id":"TW-A","device_class":"tower","state":"idle",
+  "limit_top":true,"limit_bottom":false,"moving":false,"direction":null,
+  "motor_on":false,"hold_active":false,"travel_ms":41200,
+  "motor_current_a":0.0,"seq":309}}
+```
+
+服务端显示 `erected`。
+
+**(6) 换向过快（服务端拒绝）**
+
+```
+POST /api/devices/TW-A/command
+X-DX-Seat: OP-A
+{"command":"tower_hold","direction":"down"}
+```
+
+```
+409 Conflict
+{"ok":false,"error":"direction-switch-too-fast"}
+```
+
+**(7) 看门狗释放（设备侧，无请求）**
+
+1.5 s 内无新 `hold` → 断开上升输出 → 下一帧：
+
+```json
+{"msg_id":"tw-a-0504","cmd":"remote_control",
+ "timestamp":1794725202,"ts":"2026-11-15T06:46:42.000Z","proto":"1.0",
+ "data":{"device_id":"TW-A","device_class":"tower","state":"idle",
+  "moving":false,"direction":null,"motor_on":false,"hold_active":false,
+  "error":"watchdog-release","seq":310}}
+```
+
+### 8.6 响应与错误码
+
+| 情形 | 设备返回 `error` | 服务端 HTTP |
+|---|---|---|
+| 正常受理 | — | 202 `accepted` |
+| 方向非法 | `invalid-direction` | 400 `invalid-direction` |
+| 已到位还同向 | `limit-reached` | — |
+| 两限位冲突 | `limit-conflict` | — |
+| 换向 <1000 ms | `direction-switch-too-fast` | 409 同名 |
+| 通道未配置 | — | 400 `unknown-channel`（`commands.js:588-589`） |
+| 继电器 HTTP 超时 | — | 504 `transport-timeout` |
+
+### 8.7 异常与超时
+
+| 情形 | 设备行为 | 服务端表现 |
+|---|---|---|
+| 硬件互锁失效 | 两路断开，`hardware_interlock=false`、`fault="interlock-open"` | 界面必须显红 |
+| 双限位同时有效 | 两路断开，`fault="limit-conflict"` | `fault` + `alert="limit-conflict"` |
+| 运动超时 | 两路断开，`fault="travel-timeout"` | `unknown` + `alert="travel-timeout"` |
+| broker 断线 | 1500 ms 后断开两路 | 10 s 后 `offline` |
+| 继电器超时 | — | 504，不重试 |
+
+---
+
+## 9. 多波段 BPF 组
+
+### 9.1 连接与主题
+
+| 项 | 值 |
+|---|---|
+| 设备类 | `bpf` |
+| 射频端口 | `in` + `out` |
+| 控制 / 状态口 | 无（`rf.js:22-47` 未定义 BPF 控制口） |
+| 上行 / 下行 | `bpf/device/{device_id}/heartbeat` / `json_command` |
+| LWT | `bpf/device/{device_id}/status` |
+| 单帧上限 | 8192 字节 |
+| Schema | `docs/schema/heartbeat-bpf.schema.json`、`command-bpf.schema.json` |
+
+波段归属规则：
+
+- `bands` 是整机允许通过的波段集合，RF 遍历用它剪枝（`rf.js:188-192,304`）。
+- 一台多波段 BPF 组在拓扑上仍是单个 `in`/`out` 串联环节，**不按波段分口**（分口是合路器的事）。
+- 整机 `bands` 应覆盖所有滤波仓的并集；单次插入的仓由 `band` 表达。
+
+### 9.2 状态上报字段（专属）
+
+| 字段 | 类型 | 必填 | 单位 | 范围 | 符号 | 缺省行为 |
+|---|---|---|---|---|---|---|
+| `band` | string | 必填 | — | `^\d{1,3}m$` 或 `""` | — | `""` = 未插入任何滤波仓 |
+| `mode` | string | 必填 | — | `manual` / `auto` | — | `manual` |
+| `bypass` | boolean | 必填 | — | true/false | — | `false`；true = 直通 |
+| `switching` | boolean | 必填 | — | true/false | — | `false` |
+| `filter_bank` | array<string> | 必填 | — | `^\d{1,3}m$`，1–16 | — | 本机安装的滤波仓列表 |
+| `rf_detected` | boolean | 必填 | — | true/false | — | 本地 RF 检测 |
+| `tx_active` | boolean | 必填 | — | true/false | — | 本地发射判定 |
+| `insertion_loss_db` | number | 可选 | dB | 0–10，3 位小数 | 无符号 | `null` |
+| `fault` | string | 可选 | — | 见 §11.1 | — | `""` |
+
+完整快照示例：
+
+```json
+{"msg_id":"bpf-a-0001","cmd":"remote_control",
+ "timestamp":1794725300,"ts":"2026-11-15T06:48:20.000Z","proto":"1.0",
+ "data":{"device_id":"BPF-A","device_class":"bpf","model":"DXC-BPF-6",
+  "serial":"BPFA2026001","firmware_version":"1.0.1","boot_id":"e5c210",
+  "uptime_ms":98200,"seq":64,"state":"idle","band":"20m","mode":"auto",
+  "bypass":false,"switching":false,
+  "filter_bank":["160m","80m","40m","20m","15m","10m"],
+  "rf_detected":false,"tx_active":false,"insertion_loss_db":0.6,
+  "fault":"","error":"","result":"ok"}}
+```
+
+### 9.3 控制指令字段
+
+| 字段 | 类型 | 必填 | 范围 | 缺省行为 | 说明 |
+|---|---|---|---|---|---|
+| `device_id` | string | 必填 | ≤100 | — | — |
+| `band` | string | 可选 | `filter_bank` 中的一项 | 不变 | 切到指定滤波仓 |
+| `bypass` | boolean | 可选 | true/false | 不变 | 直通 / 恢复插入 |
+| `mode` | string | 可选 | `manual` / `auto` | 不变 | 自动模式跟随外部波段信息 |
+
+三者至少给一个，否则回 `error="empty-command"`。
+
+约束：
+
+- `band` 必须已安装，否则 `unknown-band`，不动作。
+- **`bypass=true` 不得由上位机在发射中下发**（§12.4）；设备检测到 RF 时必须拒绝。
+- break-before-make，断开窗口 ≤50 ms，总动作 ≤200 ms。
+- `mode="auto"` 时设备可自行跟随外部波段，但**不得静默切换**：切换前后都必须发快照。
+
+服务端现状：
+
+- 【实现】BPF 属"无状态源类型"（`service.js:77-80`），`COMMAND_TYPES` 也没有 BPF 命令（`commands.js:54-62`）。
+- 【待落地】本文的 `band`/`bypass`/`mode` 需服务端新增 `bpf_set` 与 driver；在此之前 BPF 只能通过 B 档 `report` 表达"在线"。
+
+### 9.4 状态机与边界
+
+```
+   init（继电器复位 → 直通）
+     │
+     ├─ 已读出仓位置 ──► idle（band=实际仓）
+     └─ 读不出 ────────► unknown（band=""）
+              │ band 指令
+              ▼
+           switching ── 到位 ──► idle
+              │
+              ├─ RF 存在 ──► 拒绝，保持原位
+              └─ 继电器未到位 ──► fault
+```
+
+| 边界 | 规则 |
+|---|---|
+| 上电/断电 | **默认直通**（`bypass=true`、`band=""`），不得自动插入断电前的仓 |
+| 发射中 | 拒绝任何插入/直通切换，回 `tx-active` 或 `rf-detected` |
+| 未知仓 | `band=""`、`bypass` 按实测；不得用最后一条命令填充 |
+| 多波段并存 | 机械上一次只能插入一个仓；不得同时插入两个波段 |
+| 断线 | 保持当前机械位置（不自动回直通，避免发射中断路） |
+
+### 9.5 示例
+
+**(1) 切到 15m**
+
+```json
+{"msg_id":"dxc-m7k2pd-1234abcd","cmd":"remote_control",
+ "timestamp":1794725310,"ts":"2026-11-15T06:48:30.000Z","proto":"1.0",
+ "data":{"device_id":"BPF-A","band":"15m"}}
+```
+
+**(2) ack**
+
+```json
+{"msg_id":"bpf-a-0101","cmd":"remote_control",
+ "timestamp":1794725310,"ts":"2026-11-15T06:48:30.000Z","proto":"1.0",
+ "data":{"device_id":"BPF-A","device_class":"bpf","result":"ok",
+  "ack_msg_id":"dxc-m7k2pd-1234abcd","seq":65}}
+```
+
+**(3) 回读**
+
+```json
+{"msg_id":"bpf-a-0102","cmd":"remote_control",
+ "timestamp":1794725311,"ts":"2026-11-15T06:48:31.000Z","proto":"1.0",
+ "data":{"device_id":"BPF-A","device_class":"bpf","state":"idle",
+  "band":"15m","bypass":false,"switching":false,"seq":66}}
+```
+
+**(4) 发射中拒绝**
+
+```json
+{"msg_id":"bpf-a-0103","cmd":"remote_control",
+ "timestamp":1794725320,"ts":"2026-11-15T06:48:40.000Z","proto":"1.0",
+ "data":{"device_id":"BPF-A","device_class":"bpf","result":"error",
+  "ack_msg_id":"dxc-m7k2pe-5678efgh","error":"tx-active",
+  "error_detail":"fwd_power=410W","seq":67}}
+```
+
+### 9.6 响应与错误码
+
+| 情形 | 设备返回 | 说明 |
+|---|---|---|
+| 波段未安装 | `unknown-band` | 不动作 |
+| 无有效字段 | `empty-command` | 三个字段至少一个 |
+| 发射中 | `tx-active` | 不动作 |
+| 继电器反馈不符 | `fault="relay-mismatch"` + 报实际位置 | — |
+| 服务端下发 `bands` | 忽略 | 只读字段 |
+
+### 9.7 异常与超时
+
+| 情形 | 设备行为 |
+|---|---|
+| 继电器反馈与命令不一致 | `state="fault"`、`fault="relay-mismatch"`，上报实际位置 |
+| 上位机 `bands` 与 `filter_bank` 不一致 | 以 `filter_bank` 执行，`error_detail` 提示 |
+| 通信中断 | 保持位置；重连后全量快照 |
+| 仓位置读不出 | `band=""`，等指令，不猜测 |
+
+## 10. 驻波表
+
+### 10.1 连接与主题
+
+| 项 | 值 |
+|---|---|
+| 设备类 | `swr` |
+| 射频端口 | `in` + `out` |
+| 控制 / 状态口 | `report` / `status` |
+| 上行 / 下行 | `swr/device/{device_id}/heartbeat` / `json_command` |
+| LWT | `swr/device/{device_id}/status` |
+| 单帧上限 | 8192 字节 |
+| Schema | `docs/schema/heartbeat-swr.schema.json`、`command-swr.schema.json`、`http-tx.schema.json` |
+
+驻波表承担两件事：
+
+1. **功率与驻波测量**（展示、告警）；
+2. **发射状态源**：向服务端提供 `tx_active`，用于天线切换互锁（`tx.js`、`commands.js:250-287`）。
+
+### 10.2 状态上报字段（专属）
+
+| 字段 | 类型 | 必填 | 单位 | 范围 | 符号 | 缺省行为 |
+|---|---|---|---|---|---|---|
+| `fwd_power_w` | number | 必填 | W | 0 – `max_power_w`，1 位小数 | 无符号 | 无 RF 时 `0.0`；未测到 `null` |
+| `rev_power_w` | number | 必填 | W | 0 – `max_power_w` | 无符号 | 同上 |
+| `swr` | number | 必填 | — | 1.00–99.99，2 位小数 | 无符号 | 无 RF 时 `null`；**不得用 0 表示无穷大** |
+| `rl_db` | number | 可选 | dB | 0–40 | 无符号 | `null` |
+| `pep` | boolean | 必填 | — | true/false | — | `false` |
+| `peak_fwd_w` | number | 可选 | W | 0 – `max_power_w` | 无符号 | `0.0` |
+| `freq_hz` | number | 可选 | Hz | 0–1300000000 | 无符号 | `null` |
+| `band` | string | 可选 | — | `^\d{1,3}m$` 或 `""` | — | 由频率换算，算不出给 `""` |
+| `tx_active` | boolean | 必填 | — | true/false | — | 见 §10.3 |
+| `tx_threshold_w` | number | 必填 | W | 1–10000 | 无符号 | 发射判定门限 |
+| `sample_ms` | number | 可选 | ms | 1–10000 | 无符号 | 采样窗口 |
+| `max_power_w` | number | 必填 | W | 1–100000 | 无符号 | 量程上限 |
+| `cal_valid` | boolean | 必填 | — | true/false | — | 校准数据是否有效 |
+| `cal_locked` | boolean | 必填 | — | true/false | — | 校准写入是否锁定 |
+
+发射判定的时间要求（【标准】）：
+
+- 功率超过门限 → `tx_active=true`：**≤200 ms**；
+- 功率跌回门限以下 → `tx_active=false`：**≤300 ms**（允许去抖）；
+- 去抖窗口 ≤50 ms，防止单次尖峰误判。
+
+服务端互锁是**实时**读 `tx_active`（`tx.snapshot` → `commands.interlockBlock`），门限与去抖设置不当会直接导致"该锁不锁"或"频繁误锁"。
+
+### 10.3 发射状态上报（两条通路）
+
+**B 档（今天可用，必须实现）**
+
+| 项 | 值 |
+|---|---|
+| 端点 | `POST /api/devices/tx`（RFC 9110 POST，非幂等；`seq` 提供去重） |
+| 频率 | 发射起止立即发；无变化时每 1 s 一帧 |
+| 认证 | 配置 token 的源必须带 `X-DX-TX-Token`，否则 403 `invalid-token`（`tx.js:92-98`） |
+| 绑定 | 源配置的 `device_id` = 本驻波表的设备记录 id，互锁才按这条 RF 通路精确锁定（`service.js:514-520`） |
+
+请求：
+
+```json
+{"source_id":"swr-a","tx_active":true,"ts":1794725400123,"seq":1041}
+```
+
+响应：
+
+```json
+{"ok":true,"source_id":"swr-a","tx_active":true,
+ "received_ts":"2026-11-15T06:50:00.123Z","registered":false,"health":"ok"}
+```
+
+字段与约束（`tx.js:72-154`）：
+
+| 字段 | 类型 | 必填 | 范围 | 缺省行为 |
+|---|---|---|---|---|
+| `source_id` | string | 必填 | `^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$` | 缺失 400 `source-id-required` |
+| `tx_active` | boolean | 必填 | true/false（**严格布尔**） | 缺失 400 `tx-active-required` |
+| `ts` | number \| ISO 8601 string | 可选 | 毫秒或 `Z` 结尾 ISO | 缺省取服务端当前时间 |
+| `seq` | number | 可选 | 单调递增整数 | `seq <= 上次` 返回 200 `ignored:"stale-seq"` |
+| `token` | string | 可选 | ≤200 | 可放 body 或 `X-DX-TX-Token` 头 |
+
+健康度：`timeout_ms` 内 `ok`；≤3× `timeout_ms` 为 `stale`；超过为 `offline`；三者都不可用时互锁不启用、正常放行（`tx.js:41-54`、`service.js:190-198`）。
+
+**A 档（标准）**：心跳 `data.tx_active` 与 B 档同时上报，取"或"逻辑（任一通路判发射即发射）。服务端当前只消费 B 档【待落地】。
+
+另外，驻波表还需按设备在线语义上报 `POST /api/devices/report`（`device_id` + `seq`），否则设备卡片显示"等待上报"（`service.js:83,249-254`）。
+
+### 10.4 控制指令字段
+
+只读测量设备，可下发动作只有一项：
+
+| 字段 | 类型 | 必填 | 范围 | 说明 |
+|---|---|---|---|---|
+| `action` | string | 必填 | `clear_peak` | 清峰值保持 |
+
+【禁止】远程写校准系数、清零校准基准、修改保护/告警阈值、切换量程校准表。与功放 §5.9 工程参数同一原则（`amp-link.js:12-13`、`commands.js:66-84`）。
+
+设备收到被禁止字段必须回 `error="calibration-locked"` 并保持原值，**不得静默接受**。
+
+### 10.5 示例
+
+**(1) 发射起（B 档）**
+
+```json
+{"source_id":"swr-a","tx_active":true,"ts":1794725400123,"seq":1041}
+```
+
+```json
+{"ok":true,"source_id":"swr-a","tx_active":true,
+ "received_ts":"2026-11-15T06:50:00.123Z","registered":false,"health":"ok"}
+```
+
+**(2) 发射止**
+
+```json
+{"source_id":"swr-a","tx_active":false,"ts":1794725410870,"seq":1042}
+```
+
+```json
+{"ok":true,"source_id":"swr-a","tx_active":false,
+ "received_ts":"2026-11-15T06:50:10.870Z","registered":false,"health":"ok"}
+```
+
+**(3) token 错误**
+
+```json
+{"ok":false,"error":"invalid-token"}
+```
+
+HTTP 403。
+
+**(4) seq 回退**
+
+```json
+{"ok":true,"ignored":"stale-seq","source_id":"swr-a","seq":1040,"last_seq":1042}
+```
+
+HTTP 200，服务端**不更新**状态。
+
+**(5) A 档心跳快照**
+
+```json
+{"msg_id":"swr-a-0001","cmd":"remote_control",
+ "timestamp":1794725420,"ts":"2026-11-15T06:50:20.000Z","proto":"1.0",
+ "data":{"device_id":"SWR-A","device_class":"swr","model":"DXC-SWR-1",
+  "serial":"SWRA2026001","firmware_version":"1.0.4","boot_id":"f0a1b2",
+  "uptime_ms":604000,"seq":1200,"state":"idle",
+  "fwd_power_w":0.0,"rev_power_w":0.0,"swr":null,"pep":false,
+  "peak_fwd_w":820.0,"freq_hz":null,"band":"","tx_active":false,
+  "tx_threshold_w":5.0,"sample_ms":20,"max_power_w":2000,
+  "cal_valid":true,"cal_locked":true,"temperature_c":34.0,
+  "error":"","result":"ok"}}
+```
+
+### 10.6 响应与错误码
+
+| 情形 | 返回 | 说明 |
+|---|---|---|
+| 正常 | 200 `{"ok":true,...,"health":"ok"}` | — |
+| 缺 `source_id` | 400 `source-id-required` | — |
+| `tx_active` 非布尔 | 400 `tx-active-required` | 必须发 JSON 布尔 |
+| `seq` 非数字 | 400 `invalid-seq` | — |
+| token 不匹配 | 403 `invalid-token` | 停止重试并告警 |
+| `seq` 回退 | 200 `ignored:"stale-seq"` | 不更新状态 |
+| 未知源 | 200 `registered:true` | 自动登记为 priority 1000（`tx.js:128-140`） |
+
+### 10.7 异常与超时
+
+| 情形 | 设备行为 | 服务端表现 |
+|---|---|---|
+| 2 s 未上报 TX | 立即重发当前值 | `stale`，互锁仍按最后 `tx_active` 直到 `offline` |
+| 6 s 未上报 | — | `offline`，源不可用，互锁降级为"不启用" |
+| 功率为 0 | `swr=null`、`tx_active=false` | 正常显示 |
+| 校准无效 | `cal_valid=false`、`fault="not-calibrated"` | 界面提示，不阻断 |
+| 时钟未同步 | `ts` 用单调整数折算 | `latency_ms` 可能为 0，不影响判定 |
+
+### 10.8 互锁降级语义（必须与实现一致）
+
+- 有可用源且 `tx_active=true` → 切换被 **423 `tx-active`** 拒绝，并带 `scope`（`path` / `global`）与 `source_id`。
+- 源全部不可用 → 等同"未接入发射状态源"，**不阻断、不沿用旧值、不把 unknown 当发射**（`tx.js:5-9`），响应带 `interlock:"not-enabled"`。
+- 这一点对硬件的要求是：**宁可报"没发射"，也不要报"正在发射"**造成全站锁死；也不得为了"安全"把 `tx_active` 恒置 true。
+
+---
+
+## 11. 错误码与状态字
+
+### 11.1 设备 → 服务端 `error` 码
+
+出现在 `heartbeat` 的 `data.error`（ack 帧或状态帧均可）。服务端当前丢弃 `result="error"` 的整帧，因此这些码主要用于现场排障与后续 driver。
+
+| `error` | 含义 | 设备应同时做什么 |
+|---|---|---|
+| `tx-active` | 检测到发射，拒绝射频动作 | 保持原位，不改 `ports` |
+| `rf-detected` | 检测到 RF 能量（可能非本机发射） | 同上 |
+| `unknown-channel` | 端口/通道不存在 | 不动作 |
+| `unknown-band` | 波段不在 `filter_bank` | 不动作 |
+| `output-busy` | 矩阵目标输出已被占用 | 不动作、不抢占 |
+| `unknown-command` | 指令不认识 | 不动作 |
+| `invalid-arg` | 参数越界 | 不动作 |
+| `empty-command` | 没有任何有效字段 | 不动作 |
+| `invalid-direction` | 塔方向不是 `up`/`down` | 不动作 |
+| `busy` | 正在动作，拒绝新指令 | 不排队 |
+| `switch-timeout` | 机械未在时限内到位 | 保持原位、置 fault |
+| `limit-reached` | 塔目标方向已到位 | 不吸合 |
+| `limit-conflict` | 两限位同时有效 | 两路断开 |
+| `interlock-open` | 本地硬互锁无效 | 两路断开 |
+| `travel-timeout` | 运动超时 | 两路断开 |
+| `watchdog-release` | 看门狗释放输出 | 正常状态，仅记录 |
+| `direction-switch-too-fast` | 换向间隔 <1000 ms | 不动作 |
+| `relay-mismatch` | 继电器反馈与命令不符 | 置 fault、报实际位置 |
+| `calibration-locked` | 试图写校准/阈值 | 保持原值 |
+| `not-calibrated` | 校准数据无效 | 只读上报 |
+| `proto-unsupported` | `proto` 主版本不支持 | 拒绝处理该帧 |
+| `overtemp` | 过温 | 按本地策略降级 |
+| `vswr-high` | 驻波超限 | 上报，不自行切换 |
+| `hardware-fault` | 硬件故障 | 置 fault |
+
+**可扩展规则**：
+
+1. `error` 是**开放字符串枚举**，新增值只需登记到本表并把 `proto` minor +1。
+2. 接收方遇到未登记的 `error` 必须：记录原始字符串、按"未知故障"处理（不崩溃、不据此做安全动作）。
+3. 禁止用数字码（如 `-3`、`17`）表达错误；数字只用于 `fault_word` 位图。
+4. 面向人的补充信息一律放 `error_detail`（≤200 字符），不参与决策。
+
+### 11.2 服务端 → 上位机的 HTTP 错误码
+
+这些是站内 `/api/devices/:id/command`、`/api/devices/report`、`/api/devices/tx` 的真实返回（`commands.js`、`service.js`、`relay.js`），状态码语义按 RFC 9110 §15。
+
+| HTTP | `error` | 含义 | 触发 |
+|---|---|---|---|
+| 202 | — | 已受理（异步下发，不代表已执行） | 正常指令 |
+| 200 | — | 上报已处理 | `report` / `tx` |
+| 200 | `duplicate` | 幂等命中（仅旋转器按角度） | 目标角与当前目标相同 |
+| 200 | `ignored: "stale-seq"` | 序号回退，整帧丢弃 | `seq <= 上次` |
+| 400 | `invalid-arg` | 参数不在白名单/越界 | 功放 delta 校验 |
+| 400 | `empty-command` | 没有可下发字段 | 功放空 delta |
+| 400 | `unknown-command` | 命令不存在 | 未注册命令 |
+| 400 | `invalid-device-type` | 命令与设备类型不符 | 例：对塔发 `select` |
+| 400 | `invalid-port` / `invalid-outlet` | 端口参数缺失或格式错 | `select` |
+| 400 | `unknown-port` | 端口不存在 | `select` |
+| 400 | `invalid-direction` | 不是 in→out / 塔方向非法 | `select` / `tower_hold` |
+| 400 | `unknown-channel` | 干接点通道未配置 | 继电器下发 |
+| 400 | `transport-not-configured` | 未配 `relay_url` | B 档下发 |
+| 400 | `source-id-required` | TX 上报缺 `source_id` | `/api/devices/tx` |
+| 400 | `tx-active-required` | TX 上报缺布尔 `tx_active` | `/api/devices/tx` |
+| 400 | `invalid-seq` | `seq` 不是数字 | `/api/devices/tx` |
+| 400 | `invalid-tower-limit-top` 等 | 塔上报字段非布尔 | `/api/devices/report` |
+| 401 | `seat-required` | 缺 `X-DX-Seat` | 所有指令 |
+| 403 | `invalid-token` | TX 源 token 不匹配 | `/api/devices/tx` |
+| 404 | `unknown-device` | 设备不存在 | 所有写接口 |
+| 409 | `device-disabled` | 设备已停用 | 所有写接口 |
+| 409 | `device-locked` | 他席持有租约（30 s） | 指令下发 |
+| 409 | `direction-switch-too-fast` | 换向 <1000 ms | 塔 |
+| 409 | `protocol-undetermined` | 切换器协议尚未判定 | 特定型号 |
+| 423 | `tx-active` | **发射中禁止切换天线/矩阵 OUT** | `select`（带 `scope`、`source_id`） |
+| 501 | `unsupported-control` | 型号不支持控制 | 只读型号 |
+| 501 | `unsupported-switch-model` | 型号不受支持 | 例：Stack Match |
+| 502 | `transport-connect` | 连不上设备/broker | 所有传输 |
+| 502 | `transport-error` | 传输错误 | 所有传输 |
+| 504 | `transport-timeout` | 继电器 HTTP 2 s 超时 | B 档下发 |
+
+### 11.3 `state` 枚举
+
+| 值 | 含义 | 适用 |
+|---|---|---|
+| `init` | 上电自检中 | 全部 |
+| `idle` | 就绪且位置已确认 | 全部 |
+| `switching` | 射频通路切换中 | switch / matrix / bpf |
+| `moving` | 塔运动中 | tower |
+| `fault` | 故障（见 `fault` / `fault_word`） | 全部 |
+| `unknown` | 状态无法确定 | 全部 |
+
+服务端映射（`service.js:184-257`、`tower.js:27-60`）：`switching` → `pending`；`fault` → `unverified`/`fault`；`unknown` → `unknown`；设备无上报 → `awaiting`/`no-source`。
+
+### 11.4 `fault_word` 位定义
+
+未定义的位一律保留 0；新增位必须在本文登记。
+
+| 位 | 名称 | 含义 |
+|---|---|---|
+| 0 | `relay-fault` | 任一继电器反馈异常 |
+| 1 | `limit-fault` | 限位回路异常/冲突 |
+| 2 | `motor-fault` | 电机过流/堵转 |
+| 3 | `sensor-fault` | 位置/功率传感器失效 |
+| 4 | `overtemp` | 过温 |
+| 5 | `vswr-high` | 驻波超限 |
+| 6 | `comm-fault` | 内部通信总线故障 |
+| 7 | `cal-fault` | 校准数据无效 |
+| 8 | `interlock-bypassed` | 硬互锁被旁路 |
+| 9 | `power-fault` | 供电异常 |
+| 10–31 | 保留 | 必须为 0 |
+
+### 11.5 关键语义
+
+- **202 只表示"已发出"**，不代表已执行；真正确认来自回读（§6.4）。
+- **423 `tx-active`** 是互锁唯一拒绝码，带 `scope`（`path`/`global`）与 `source_id`（`commands.js:497-503`）。
+- **409 `device-locked`** 是席位租约冲突，30 s 自动过期（`runtime.js:9,146-155`）。
+- 审计只追加，`result` 取 `accepted` / `duplicate` / `rejected` / `rejected_tx`（`commands.js:189-204`）。
+
+## 12. 安全边界
+
+本节是硬件验收的**否决项**。任一条不满足，不得接入现场。
+
+### 12.1 必须保持静默的情况
+
+| 情况 | 要求 | 理由 |
+|---|---|---|
+| 上电自检未完成 | 不发布状态帧，不发 `ports` | 防止把"未知"报成"已知" |
+| 机械位置读不出 | 只发 `null`，不发猜测值 | 上报即承诺 |
+| `tx_active` 期间无新事件 | 只按保活间隔发，不刷屏 | QoS 0 下高频无意义 |
+| 内容与上一帧完全相同 | 不发（保活帧除外） | 心跳去重 |
+| 收到非法 JSON / 未知 `cmd` | 丢弃，不回报 | 不是有效指令 |
+| 收到 `device_id` 与自身不符的指令 | 丢弃 | 防串台 |
+| 未完成校准的驻波表 | 不提供 `tx_active=true`（宁可不判发射） | 假发射误锁；假不发射害射频 |
+
+> **"拒绝执行"不是静默**：凡收到有效指令但不能执行，必须回 ack 帧说明原因（§12.2）。
+
+### 12.2 必须拒绝执行的情况
+
+| 情况 | 返回 | 依据 |
+|---|---|---|
+| 发射中切换天线/矩阵 OUT | `tx-active` | `commands.js:496-503`（423） |
+| 发射中切换 BPF / 直通 | `tx-active` / `rf-detected` | §9.3 |
+| 远程把切换器置"全断" | `invalid-arg` | §6.3【禁止】 |
+| 远程把矩阵某输入置 `null` | `invalid-arg` | §7.3【禁止】 |
+| 多输入接同一输出 | `output-busy` | §7.3 |
+| 让塔两路同时闭合 | `interlock-open` | `tower-hold.js:88-101` |
+| 换向 <1000 ms | `direction-switch-too-fast` | `tower-hold.js:65-72` |
+| 塔已到位还同向运行 | `limit-reached` | 硬件限位 |
+| 双限位同时有效时任何动作 | `limit-conflict` | `tower.js:42-44` |
+| 写校准/保护阈值 | `calibration-locked` | §10.4 |
+| 参数越界 | `invalid-arg` / `unknown-*` | 各节 |
+
+### 12.3 断电或重启后必须报告的状态
+
+| 设备类 | 必须报告 | 绝不允许 |
+|---|---|---|
+| 切换器 | `state="init"`，实测 `position`（读不到则 `null`），`ports` 按实测 | 沿用断电前 `ports` |
+| 矩阵 | 每输入实测通路，读不到的那个输入报 `null` | 把全部输入报成"上次选择" |
+| 铁塔 | 两路 `motor_on=false`、`hold_active=false`，实测两限位 | 自动继续断电前方向 |
+| BPF | `bypass` 按实测（推荐上电即直通），`band` 按实测仓 | 自动插入断电前仓 |
+| 驻波表 | `tx_active=false`、`cal_valid` 按实测、`peak_fwd_w=0` | 报上一次 `tx_active=true`（会永久锁死切换） |
+
+统一要求：
+
+- `boot_id` 每次上电/复位必须变化；`uptime_ms` 从 0 起算。
+- `seq` 必须持久化；做不到时重启首帧起**省略 `seq`**（§5.6）。
+- 重启后首帧必须是**完整快照**，不能是增量。
+
+服务端事实：运行态只存内存，服务重启后全部 `unknown`，必须等设备重新上报（`runtime.js:3-9`）。所以"设备重启后自己报"不是可选行为。
+
+### 12.4 绝不允许由上位机远程触发的动作
+
+射频安全：
+
+| 动作 | 设备类 | 原因 |
+|---|---|---|
+| 发射中切换天线通路 / 矩阵输出 | switch / matrix | 带电热切换烧继电器、拉弧、损坏功放 |
+| 远程"全断"某输入或输出 | switch / matrix | 发射时开路 → 全反射 → 功放损毁 |
+| 多输入并到同一输出 | matrix | 射频合路，互调与功率叠加不可控 |
+| 发射中切换 BPF 或强制直通 | BPF | 瞬态失配与带外发射 |
+| 旁路/短接滤波器"应急" | BPF | 失去保护，干扰他台 |
+| 远程写校准、清零基准、改保护阈值 | SWR | 读数与保护失效（同功放 §5.9 原则） |
+| 强制把 `tx_active` 置 false | SWR | 直接解除全站天线互锁 |
+
+机械安全：
+
+| 动作 | 设备类 | 原因 |
+|---|---|---|
+| 解除或旁路上下限位 | tower | 越限拉断钢丝绳/损坏塔体 |
+| 两路同时闭合 | tower | 正反转同时通电，堵转烧电机 |
+| 超过 1500 ms 的持续 `hold` | tower | 失去人因确认，等同无人值守运行 |
+| 超时后继续运行 / 自动重试 | tower | 卡阻时应断电，不是加大电流 |
+| 断电保持输出（fail-active） | tower | 复电即自行动作，无人确认 |
+| 一次指令触发整段行程 | tower | 与二态模型、看门狗设计相反 |
+| 远程点动微调（短脉冲挪一点） | tower | 中间位置无机械锁定，风载下有风险 |
+
+### 12.5 失联 fail-safe
+
+| 设备类 | 断线/超时后的物理状态 | 服务端展示 |
+|---|---|---|
+| 切换器 / 矩阵 | 保持机械位置（自保持），不自动回默认位 | 功放式 driver 判 `offline`；B 档 10 s 后 `offline` |
+| 铁塔 | **1500 ms 内断开两路** | `offline`，`last_state` 保留 |
+| BPF | 保持当前位置 | `offline` |
+| 驻波表 | 继续本地测量；无法上报时互锁降级 | `stale` → `offline`；互锁 `not-enabled` |
+
+降级原则（与 `tx.js:5-9` 一致）：源不可用 = "未接入发射状态源"，**不阻断、不沿用旧值、不把 unknown 当发射**，但界面必须明确提示互锁未启用。
+
+---
+
+## 13. 接入现状与改造清单
+
+### 13.1 已实现的能力
+
+| 能力 | 位置 | 适用设备 |
+|---|---|---|
+| MQTT JSON 心跳/指令（`remote_control`） | `amp-link.js:600-700,953-979` | 功放 |
+| 干接点脉冲/吸合/释放 | `relay.js:101-121` | 切换器、矩阵、塔 |
+| 设备遥测上报（在线、限位、角度、端口） | `service.js:800-831` | 塔、驻波表、任意类型 |
+| 发射状态上报与健康度 | `tx.js:72-199` | 驻波表（作为 TX 源） |
+| 统一指令入口（租约、互锁、审计） | `commands.js:313-707` | 全部 |
+| 切换器回读状态机 | `switch-link.js:371-428` | 有回读的型号 |
+| 塔按住运行与看门狗 | `tower-hold.js` | 塔 |
+
+### 13.2 必须新增（否则 A 档接不进来）
+
+| 编号 | 事项 | 影响设备 | 说明 |
+|---|---|---|---|
+| G1 | 型号描述表新增官方品牌条目，`protocol="mqtt"`、`transport="mqtt"` | switch / matrix | 否则只能选"其他"，落回 `relay`，`host/port` 被当设备 IP |
+| G2 | `CONFIG_ALLOWED` 为 tower / bpf / swr 增加 `host`/`port`/`device_id`/`topic_prefix`/`username`/`password` | tower / bpf / swr | BPF 当前完全没有 config 白名单 |
+| G3 | MQTT driver：订阅 `heartbeat`、发布 `json_command`、把 `ports` 写入 `runtime.switch` | switch / matrix | 结构对齐 `amp-link.js` 的 `clients`/`signature`/`pollAmps` 模式 |
+| G4 | 塔 MQTT driver：`hold`/`release` 映射到 `tower-hold` 运行时 | tower | 与 `tower-hold.js` 共用计时与看门狗 |
+| G5 | 新增 `bpf_set` 命令与字段白名单（`band`/`bypass`/`mode`） | bpf | `COMMAND_TYPES` 当前无 bpf |
+| G6 | 订阅 `/status` 并消费 LWT | 全部 | 当前在线判定靠连接或 10 s 超时 |
+| G7 | 驻波表读数入库/投影（功率、SWR） | swr | `runtime.record` 只保留 tower/azimuth/port/moving/seq |
+| G8 | 消费 `result`/`error`/`ack_msg_id` | 全部 | 当前 `result="error"` 整帧丢弃 |
+| G9 | driver 对 `pending > 5 s` 标 `stale` | switch / matrix | 现在会永远停在 `pending` |
+| G10 | 解析 `ts`（ISO 8601）并与 `timestamp` 做一致性校验 | 全部新设备 | 当前只存 `amp_ts` |
+
+### 13.3 B 档映射速查
+
+| 设备类 | 控制 | 状态 | 发射状态 |
+|---|---|---|---|
+| 切换器 | `POST relay_url` `{channel,action:"pulse",pulse_ms}` | `POST /api/devices/report` `{device_id,seq,...}` | 由驻波表提供 |
+| 矩阵 | 同上（`channels["inN:outM"]` 或 `channels["outM"]`） | 同上 | 同上 |
+| 铁塔 | `POST relay_url` `{channel,action:"on"/"off"}` | `{device_id,tower:{limit_top,limit_bottom,moving},seq}` | 不适用 |
+| BPF | 无（只有 A 档） | `{device_id,seq}` 仅在线 | 由驻波表提供 |
+| 驻波表 | 无 | `{device_id,seq}` | `POST /api/devices/tx` `{source_id,tx_active,ts,seq}` |
+
+### 13.4 今天能接什么
+
+| 硬件形态 | 今天 | 说明 |
+|---|---|---|
+| B 档切换器（网络继电器板） | **可以** | 可切换，状态 `unverified`，无回读 |
+| B 档塔控器 | **可以** | 按住运行 + 限位上报，完整二态与看门狗 |
+| B 档驻波表 | **可以** | 可提供 TX 状态并参与互锁 |
+| A 档任意设备 | **不可以** | 需完成 G1–G10 |
+| B 档 BPF | **只能看在线** | 无控制 |
+| A 档 BPF | **不可以** | 需 G2/G5 |
+
+### 13.5 遗留型号：帧格式未证实，不得作为官方规范
+
+站内另有 5 类第三方/遗留设备的驱动，其报文格式是**根据参考实现与现场抓包推断**得到的，**没有厂商文档依据**：
+
+| 型号 / 驱动 | 现状 | 本文态度 |
+|---|---|---|
+| RCS-4 | 帧格式由参考实现推断 | 仅作兼容参考 |
+| Amplitec | 帧格式由参考实现推断 | 仅作兼容参考 |
+| Station Genius | 帧格式由参考实现推断 | 仅作兼容参考 |
+| Six2Two | 帧格式由参考实现推断 | 仅作兼容参考 |
+| Antenna Genius legacy（`ag-tcp` 等） | 帧格式由参考实现推断 | 仅作兼容参考 |
+
+约束：
+
+1. 上述帧格式**不是标准**，本文不收录、不背书、不派生任何字段。
+2. 官方硬件**不得**以这些帧格式为模板实现，也不得声明"兼容 XX"。将来若拿到厂商文档，另行立项核对，再决定是否进入标准。
+3. 本文 §2.7 提到的"各品牌 TCP 驱动"即指这些型号；它们只影响老设备接入的寻址方式，不影响 A 档协议。
+4. 服务端错误码 `protocol-undetermined` / `unsupported-switch-model`（§11.2）来自这些型号的不确定性，属实现现状，不是协议约定。
+
+---
+
+## 14. 字段与规则来源对照
+
+### 14.1 来自标准（非本项目自造）
+
+| 内容 | 标准 |
+|---|---|
+| JSON 语法、编码、禁止 `NaN`/`Infinity` | RFC 8259 §4, §6, §7, §8 |
+| 数字范围与浮点精度 | IEEE 754 binary64；安全整数 2^53−1 |
+| MQTT 3.1.1 报文、QoS、clean session、LWT | OASIS MQTT 3.1.1 §3.1.2.5, §4.3 |
+| HTTP 方法、202/4xx/5xx 语义、安全/幂等 | RFC 9110 §9.2, §9.3.3, §15 |
+| 时间格式 | ISO 8601-1:2019；RFC 3339 §5.6 |
+| 单位 | SI / IEC 60027-2 |
+| Schema 校验 | JSON Schema draft 2020-12 |
+
+### 14.2 从现有实现反推（必须一致）
+
+| 字段 / 规则 | 来源 |
+|---|---|
+| 主题 `{prefix}/{id}/heartbeat|json_command`、`topic_prefix` 缺省 | `amp-link.js:93-103` |
+| `msg_id` 格式 `dxc-<36进制>-<随机>` | `amp-link.js:963-968` |
+| `cmd=remote_control`、可省略 | `amp-link.js:620` |
+| `timestamp` 秒 | `amp-link.js:967` |
+| `data` delta 语义 | `amp-link.js:958-961`、`commands.js:94-113` |
+| `data.device_id` 串台校验 | `amp-link.js:624-625` |
+| `result="error"` 整帧丢弃 | `amp-link.js:626` |
+| QoS 0 / clean / 重连 5 s / 协议 3.1.1 | `amp-link.js:652-665,682,971` |
+| `ports` 按键增量合并 | `switch-link.js:395-405` |
+| `verified`/`pending`/`unverified`/`stale` | `commands.js:533-551`、`switch-link.js:407-416` |
+| 只有 `verified` 参与可达与互锁 | `service.js:352-359` |
+| `in`/`antN`/`inN`/`outM` 端口键 | `rf.js:97-116` |
+| 端口数 1–16、切换器缺省 2、矩阵 2/4 | `rf.js:17,53-59,97-116`、`model.js:237-248` |
+| `bands` 必填（BPF）与 `^\d{1,3}m$` | `model.js:18-20,561-562` |
+| `channels["in:antN"]` / `channels["antN"]` | `commands.js:206-212` |
+| 干接点 `{channel,action,pulse_ms}`、2 s、50–5000 ms | `relay.js:9-18,52-103` |
+| 租约 30 s、`X-DX-Seat` | `runtime.js:9`、`commands.js:50-52,139-142` |
+| 423 `tx-active` 与 `scope`/`source_id` | `commands.js:494-503` |
+| 塔 500/1500/1000 ms | `tower-hold.js:9-11` |
+| 两路不同时闭合、换向先断开 | `tower-hold.js:88-101` |
+| 限位原始电平 + NO/NC 取反 | `tower.js:17-25` |
+| 限位冲突 → fault | `tower.js:42-44` |
+| 运动超时 → unknown（缺省 120 s） | `tower.js:46-56`、`model.js:22,575-585` |
+| 10 s 无上报判离线 | `service.js:46,394-400` |
+| TX `source_id` 模式、严格布尔、默认 2000 ms | `tx.js:14-18,63-89` |
+| TX 健康 `ok`/`stale`/`offline`（3×） | `tx.js:46-54` |
+| `stale-seq` 丢弃 | `tx.js:102-114`、`service.js:808-816` |
+| token → 403 `invalid-token` | `tx.js:92-98` |
+| 未知 TX 源自动登记（priority 1000） | `tx.js:128-140` |
+| `config` 白名单与长度限制（`device_id` ≤100） | `model.js:35-54` |
+| 直连 / 串口服务器寻址 | `control.js:164-214` |
+| `/api/devices` 快照字段 | `service.js:345-464` |
+
+### 14.3 本文新定（需评审）
+
+| 项 | 本文取值 | 为什么需要确认 |
+|---|---|---|
+| `proto` 版本字段 | `"1.0"`，major/minor | AMP1000 无版本字段；引入方式与拒绝策略需确认 |
+| `ts`（ISO 8601） | 新设备必填，与 `timestamp` 并存 | 双时间字段是否可接受；是否只保留 `ts` 的新设备子集 |
+| 主题前缀命名 | `switch/device` 等 | 出厂后再改要升级全部固件 |
+| `device_class` | 冗余字段 | 便于抓包归属，增加一列维护成本 |
+| `boot_id` / `uptime_ms` | 必填 | 用于解决"重启后 seq 归零"与"是否真重启" |
+| ack 帧 | 复用 `heartbeat`，500 ms 内回 | 服务端当前不消费；是否强制 |
+| `/status` + retained LWT | 独立主题 | 需 G6 |
+| 心跳间隔（5 s / 1 s） | §5.7 | 无历史依据，按 10 s 与 2 s 超时反推 |
+| 单帧 8192 字节上限 | §3.6 | 需与实际天线表规模核对 |
+| 字段精度（0.1 W / 0.01 SWR / 0.1 ℃） | §3.2 | 与传感器分辨率绑定 |
+| `position`/`target`/`switching`/`relay_state` | 切换器专属 | 现有实现只有 `ports` |
+| `rf_detected` / `tx_active`（设备侧） | 本地 RF 检测 | 是否强制每台都装 RF 检测，属硬件成本 |
+| 矩阵 `output-busy` | 禁止多输入共用一个输出 | 现有代码不校验该冲突 |
+| 塔 `limit_wiring`/`hardware_interlock`/`motor_on`/`hold_active`/`travel_ms` | 诊断与验收字段 | 服务端暂不消费 |
+| 塔 `action=hold|release|stop` + `hold_ms` | MQTT 层语义 | B 档是 `on/off`；A 档是否复用通道号需确认 |
+| BPF `band`/`bypass`/`mode` 与 `bpf_set` | 新增命令 | 服务端完全没有 BPF 控制 |
+| 驻波表字段集 | 本文定义 | 当前不落库（G7） |
+| 发射判定门限与 200/300 ms 时序 | 5 W 起判、≤50 ms 去抖 | 直接影响互锁可靠性 |
+| `clear_peak` | 唯一允许的 SWR 远程动作 | 是否需要"远程清零" |
+| 断电后 BPF 默认直通 | §9.4 | 直通与保持当前仓之间是安全取舍 |
+| 切换器 200 ms / 1 s 超时 | §6.5 | 依赖具体继电器与机械结构 |
+| `fault_word` 位分配 | §11.4 | 位定义一旦发布不宜改 |
+| 设备侧 `msg_id` 去重缓存 16 条 | §2.6 | 内存与去重强度的取舍 |
+
+---
+
+## 15. 待评审确认清单
+
+按影响面排序，前 7 条不定无法冻结 v1.0：
+
+| 编号 | 待确认 | 影响 |
+|---|---|---|
+| R1 | 主题前缀最终命名（§2.4） | 出厂后再改要升级所有固件 |
+| R2 | 是否要求官方硬件同时实现 A + B 档（§1.2） | 决定首批硬件能否在现版本上线 |
+| R3 | `proto` 版本策略与 `ts` 双时间字段（§4.1、§3.3） | 影响所有新固件，且与 AMP1000 兼容边界相关 |
+| R4 | ack 帧是否强制（§5.10） | 固件复杂度与现场排障方式 |
+| R5 | G1/G2 服务端排期（型号表 + config 白名单） | A 档能否接入的前提 |
+| R6 | BPF 是否立项远程控制（G5 / §9.3） | BPF 是否只做"在线可见" |
+| R7 | 塔 A 档用 `direction` 还是沿用干接点通道号（§8.3） | 塔控器固件接口 |
+| R8 | 驻波表读数是否入库（G7） | 是否扩 `runtime` 与前端卡片 |
+| R9 | 发射判定门限/去抖（§10.2） | 互锁可靠性 |
+| R10 | 心跳间隔（§5.7）与保活裁剪 | 带宽与离线误判 |
+| R11 | 单帧 8192 字节上限（§3.6） | 与天线表规模相关 |
+| R12 | 断电后 BPF 默认直通（§9.4） | 安全取舍 |
+
+---
+
+## 附录 A · 一帧到底长什么样（端到端）
+
+以切换器为例，从操作员点击到状态确认的完整链路：
+
+```
+操作员点击 ant3
+   │
+   ▼
+POST /api/devices/SW-A/command
+X-DX-Seat: OP-A
+{"command":"select","port":"in","outlet":"ant3"}
+   │  commands.js：类型/端口/方向校验 → TX 互锁 → 租约 → dispatch
+   ▼
+MQTT PUBLISH switch/device/SW-A/json_command   (QoS 0, retain=false)
+{"msg_id":"dxc-...","cmd":"remote_control","timestamp":...,"ts":"...Z",
+ "data":{"device_id":"SW-A","ports":{"in":"ant3"}}}
+   │
+   ▼  设备：break-before-make，≤200 ms
+MQTT PUBLISH switch/device/SW-A/heartbeat
+{"data":{"device_id":"SW-A","device_class":"switch","result":"ok",
+         "ack_msg_id":"dxc-...","seq":43}}
+   │
+   ▼  到位后
+MQTT PUBLISH switch/device/SW-A/heartbeat
+{"data":{"device_id":"SW-A","device_class":"switch","state":"idle",
+         "ports":{"in":"ant3"},"switching":false,"seq":44}}
+   │
+   ▼  driver: writeVerifiedPorts → state="verified"
+GET /api/devices → switches["SW-A"].verified = true → 该通路进入 RF 可达与互锁
+```
+
+HTTP 同步返回：
+
+```json
+{
+  "ok": true,
+  "command_id": "cmd-m7k2p1-1",
+  "duplicate": false,
+  "dispatched": true,
+  "port": "in",
+  "outlet": "ant3",
+  "channel": null,
+  "verified": false,
+  "state": "pending",
+  "protocol_verified": true,
+  "interlock": "enabled"
+}
+```
+
+`state: "pending"` 是关键：**HTTP 202 只代表下发成功，验证永远靠回读。**
+
+---
+
+## 附录 B · JSON Schema（可执行部分）
+
+### B.1 文件清单
+
+所有 Schema 为 **JSON Schema draft 2020-12**，与本文同目录（`docs/schema/`）：
+
+| 文件 | 校验对象 | 根 `$id` |
+|---|---|---|
+| `common.schema.json` | 共用 `$defs`（信封、时间、数值、错误码、`device_id`） | `https://dx-compass.local/schema/common.schema.json` |
+| `heartbeat-switch.schema.json` | 切换器 heartbeat（含 ack 帧） | `.../heartbeat-switch.schema.json` |
+| `command-switch.schema.json` | 切换器 json_command | `.../command-switch.schema.json` |
+| `heartbeat-matrix.schema.json` | 矩阵 heartbeat | `.../heartbeat-matrix.schema.json` |
+| `command-matrix.schema.json` | 矩阵 json_command | `.../command-matrix.schema.json` |
+| `heartbeat-tower.schema.json` | 塔 heartbeat | `.../heartbeat-tower.schema.json` |
+| `command-tower.schema.json` | 塔 json_command | `.../command-tower.schema.json` |
+| `heartbeat-bpf.schema.json` | BPF heartbeat | `.../heartbeat-bpf.schema.json` |
+| `command-bpf.schema.json` | BPF json_command | `.../command-bpf.schema.json` |
+| `heartbeat-swr.schema.json` | 驻波表 heartbeat | `.../heartbeat-swr.schema.json` |
+| `command-swr.schema.json` | 驻波表 json_command | `.../command-swr.schema.json` |
+| `http-tx.schema.json` | `POST /api/devices/tx` 请求体 | `.../http-tx.schema.json` |
+
+### B.2 校验方式
+
+Node（AJV）：
+
+```bash
+npm i -g ajv-cli@5
+ajv validate -r docs/schema/common.schema.json \
+  -s docs/schema/heartbeat-switch.schema.json -d frame.json
+```
+
+Python：
+
+```python
+import json
+from jsonschema import Draft202012Validator
+from referencing import Registry, Resource
+
+common = json.load(open('docs/schema/common.schema.json'))
+schema = json.load(open('docs/schema/heartbeat-switch.schema.json'))
+registry = Registry().with_resource(common['$id'], Resource.from_contents(common))
+Draft202012Validator(schema, registry=registry).validate(json.load(open('frame.json')))
+```
+
+> 跨文件 `$ref` 采用相对 `$id`：校验器需先把 `common.schema.json` 注册到同一 `$id` 空间。JSON Schema 2020-12 允许未知关键字被忽略，因此 Schema 里对"未知字段"一律用 `additionalProperties: true`，与 §4.3 的"接收方忽略未知字段"保持一致。
+
+### B.3 Schema 的约束边界
+
+Schema 只做**结构、类型、范围、必填**校验，不做下列语义校验（由服务端 driver 与设备固件各自实现）：
+
+- `ports` 的键是否在 `1…out_count` / `1…in_count` 内；
+- `position` 与 `ports` 是否自洽；
+- 限位 NO/NC 逻辑；
+- 互锁与看门狗时序；
+- `tx_active` 的物理真实性。
+
+这些属于"状态机语义"，没有一份 JSON Schema 能可靠表达；不要试图用 Schema 代替固件自检。
+
+Schema 的枚举策略（与 §3.7 一致）：
+
+- **开放枚举**（`state`、`error`、`fault`）：Schema 只做 `type: string` + 长度/字符约束，**不使用 `enum`**，保证旧校验器不会拒绝新枚举值。
+- **封闭枚举**（`device_class`、`result`、`action`）：使用 `enum`；新增值属于 minor 升级，Schema 随之更新。
+- 数值一律用 `minimum`/`maximum` + `type`，不用 `multipleOf` 约束小数位（浮点在验证器间行为不一致，精度由 §3.2 的发送方规则保证）。
+

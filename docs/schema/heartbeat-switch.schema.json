@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dx-compass.local/schema/heartbeat-switch.schema.json",
+  "title": "DX-Compass 天线切换器 heartbeat（设备 → 服务端）",
+  "description": "主题 switch/device/{device_id}/heartbeat。完整快照语义：缺字段即 null/false/空。规范见 §6.2。",
+  "allOf": [
+    { "$ref": "https://dx-compass.local/schema/common.schema.json#/$defs/heartbeat_envelope" }
+  ],
+  "properties": {
+    "data": { "$ref": "#/$defs/data" }
+  },
+  "$defs": {
+    "data": {
+      "allOf": [
+        { "$ref": "https://dx-compass.local/schema/common.schema.json#/$defs/data_common" }
+      ],
+      "required": [
+        "device_class",
+        "out_count",
+        "position",
+        "ports",
+        "switching",
+        "rf_detected",
+        "tx_active"
+      ],
+      "properties": {
+        "device_class": { "const": "switch" },
+        "out_count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16
+        },
+        "position": {
+          "anyOf": [
+            { "type": "integer", "minimum": 1, "maximum": 16 },
+            { "type": "null" }
+          ],
+          "description": "1..out_count；null 表示位置未知，禁止用 0"
+        },
+        "ports": {
+          "type": "object",
+          "required": ["in"],
+          "additionalProperties": false,
+          "properties": {
+            "in": {
+              "anyOf": [
+                { "$ref": "https://dx-compass.local/schema/common.schema.json#/$defs/antenna_name" },
+                { "type": "null" }
+              ]
+            }
+          }
+        },
+        "target": {
+          "anyOf": [
+            { "$ref": "https://dx-compass.local/schema/common.schema.json#/$defs/antenna_name" },
+            { "type": "null" }
+          ]
+        },
+        "switching": { "type": "boolean" },
+        "relay_state": {
+          "type": "array",
+          "maxItems": 16,
+          "items": { "type": "boolean" }
+        },
+        "rf_detected": { "type": "boolean" },
+        "tx_active": { "type": "boolean" },
+        "antennas": {
+          "$ref": "https://dx-compass.local/schema/common.schema.json#/$defs/antennas"
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}

@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dx-compass.local/schema/heartbeat-tower.schema.json",
+  "title": "DX-Compass 铁塔升降控制器 heartbeat（设备 → 服务端）",
+  "description": "主题 tower/device/{device_id}/heartbeat。limit_top / limit_bottom 上报接点原始电平，NO/NC 由上位机全局配置解释，设备不得取反。规范见 §8.2。",
+  "allOf": [
+    { "$ref": "https://dx-compass.local/schema/common.schema.json#/$defs/heartbeat_envelope" }
+  ],
+  "properties": {
+    "data": { "$ref": "#/$defs/data" }
+  },
+  "$defs": {
+    "data": {
+      "allOf": [
+        { "$ref": "https://dx-compass.local/schema/common.schema.json#/$defs/data_common" }
+      ],
+      "required": [
+        "device_class",
+        "limit_top",
+        "limit_bottom",
+        "moving",
+        "motor_on",
+        "hold_active",
+        "hardware_interlock"
+      ],
+      "properties": {
+        "device_class": { "const": "tower" },
+        "limit_top": {
+          "type": "boolean",
+          "description": "true = 接点闭合（原始电平）"
+        },
+        "limit_bottom": {
+          "type": "boolean",
+          "description": "true = 接点闭合（原始电平）"
+        },
+        "moving": { "type": "boolean" },
+        "direction": {
+          "anyOf": [
+            { "type": "string", "enum": ["up", "down"] },
+            { "type": "null" }
+          ]
+        },
+        "motor_on": { "type": "boolean" },
+        "hold_active": { "type": "boolean" },
+        "hardware_interlock": { "type": "boolean" },
+        "limit_wiring": {
+          "anyOf": [
+            { "type": "string", "enum": ["NO", "NC"] },
+            { "type": "null" }
+          ],
+          "description": "设备实际接线，供上位机核对；服务端暂不消费"
+        },
+        "travel_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3600000
+        },
+        "motor_current_a": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 50
+        },
+        "fault": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^[a-z0-9-]*$"
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}
