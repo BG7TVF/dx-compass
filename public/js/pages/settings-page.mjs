@@ -28,6 +28,11 @@ const LEGACY_FIELD_KEYS = new Set([
     'ttl', 'bandColors'
 ]);
 
+/* Keys whose only control lives outside this page: the propagation toolbar
+ * owns projection/layer and a click on the propagation map owns the DX
+ * target. Rendering them here as well duplicated a live entry point. */
+const EXTERNAL_CONTROL_KEYS = new Set(['propProj', 'propLayer', 'propDxLat', 'propDxLon']);
+
 /* Short descriptions come from the dictionary (settings.field.<key>.desc,
  * see docs/i18n-glossary-and-gap-audit.md); the schema keeps English as a
  * fallback for callers that do not go through i18n. */
@@ -365,7 +370,8 @@ export function createSettingsPage(ctx) {
             const wrap = $(selector);
             if (!wrap) continue;
             wrap.innerHTML = SETTINGS_FIELDS
-                .filter(field => field.domain === domain && !LEGACY_FIELD_KEYS.has(field.key))
+                .filter(field => field.domain === domain &&
+                    !LEGACY_FIELD_KEYS.has(field.key) && !EXTERNAL_CONTROL_KEYS.has(field.key))
                 .map(fieldHtml).join('');
         }
         bindGeneratedFields();
@@ -926,6 +932,9 @@ export function createSettingsPage(ctx) {
         const calls = [...$$('.cfg-call')].map(input => input.value.trim().toUpperCase());
         try {
             await postJson('/api/callsigns', calls);
+            // Settle the debounced settings patch before the panel closes, so a
+            // reload straight after Save cannot drop the last change.
+            await flushAll();
             ctx.spot.applyCallsigns(calls);
             void ctx.spot.replayHistory();
             showToast(ctx.t('saved'));
