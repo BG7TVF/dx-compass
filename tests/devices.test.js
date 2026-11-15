@@ -2467,7 +2467,23 @@ test('Elecraft KPA500：ASCII 状态解析与串口动作白名单', async () =>
     const sent = await ampLink.publish(kpa, {action: 'standby'}, new Date(), globalCtx);
     assert.equal(sent.ok, true);
     assert.ok(fake.writes.includes('^OS0;'));
+    // 不乐观改状态：回读前保持原值，只标记未确认。
+    assert.equal(runtime.stateOf(globalCtx, 'kpa-1').amp.operating, 1);
+    assert.equal(runtime.stateOf(globalCtx, 'kpa-1').amp.command_pending, 'standby');
+    fake.emit('data', Buffer.from('^OS0;'));
     assert.equal(runtime.stateOf(globalCtx, 'kpa-1').amp.operating, 0);
+    assert.equal(runtime.stateOf(globalCtx, 'kpa-1').amp.command_pending, undefined);
+
+    const powered = await ampLink.publish(kpa, {action: 'power_on'}, new Date(), globalCtx);
+    assert.equal(powered.ok, true);
+    // KPA500 Programmer's Reference：开机是 BootLoader 单字符 P，无分号。
+    assert.ok(fake.writes.includes('P'));
+    fake.emit('data', Buffer.from('^ON0;'));
+    assert.equal(runtime.stateOf(globalCtx, 'kpa-1').amp.power_on, 0);
+    await ampLink.publish(kpa, {action: 'power_on'}, new Date(), globalCtx);
+    // 没有 ^ON1 回读前不能把 power_on 改成 1。
+    assert.equal(runtime.stateOf(globalCtx, 'kpa-1').amp.power_on, 0);
+    assert.equal(runtime.stateOf(globalCtx, 'kpa-1').amp.command_pending, 'power_on');
 
     const denied = await ampLink.publish(kpa, {action: 'calibrate'}, new Date(), globalCtx);
     assert.equal(denied.ok, false);

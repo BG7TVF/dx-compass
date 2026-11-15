@@ -2,6 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const {EventEmitter} = require('node:events');
 
 const switchLink = require('../lib/devices/switch-link.js');
 const switchModels = require('../lib/devices/switch-models.js');
@@ -210,6 +211,14 @@ test('switch config normalizes protocol, counts and rejects unsupported models',
         brand: '4o3a', model: 'antenna-genius', antenna_bands: {'1': ['bogus']}
     }, {}, 'matrix');
     assert.deepEqual(badBands, {ok: false, error: 'invalid-config-antenna-bands'});
+
+    // 已保存的路数不能被型号默认值静默覆盖。
+    const custom = model.normalizeConfig({
+        brand: '4o3a', model: 'antenna-genius', in_count: '1', out_count: '4'
+    }, {}, 'matrix');
+    assert.equal(custom.ok, true);
+    assert.equal(custom.config.in_count, 1);
+    assert.equal(custom.config.out_count, 4);
 });
 
 test('mapping derives port bands from the RF topology and follows changes immediately', () => {
@@ -444,4 +453,157 @@ test('rf.findPort keeps switch in/ant and matrix in/out directions', () => {
     }));
     assert.equal(rf.findPort(mx, 'in2').role, 'in');
     assert.equal(rf.findPort(mx, 'out8').role, 'out');
+});
+
+// ---- 下发链路：RCS-4 先全断、Six2Two 按输入分键、AG 主动判定协议 ----
+
+class FakeSocket extends EventEmitter {
+    constructor() {
+        super();
+        this.writes = [];
+        this.destroyed = false;
+    }
+    write(chunk, callback) {
+        this.writes.push(Buffer.isBuffer(chunk) ? chunk.toString('latin1') : String(chunk));
+        if (typeof callback === 'function') callback();
+        return true;
+    }
+    connect() { return this; }
+    destroy() {
+        this.destroyed = true;
+        return this;
+    }
+    removeAllListeners(event) {
+        super.removeAllListeners(event);
+        return this;
+    }
+}
+
+class FakeMqtt extends EventEmitter {
+    constructor() {
+        super();
+        this.published = [];
+    }
+    on(event, handler) {
+        super.on(event, handler);
+        if (event === 'connect') handler();
+        return this;
+    }
+    publish(topic, payload, options, callback) {
+        this.published.push({topic, payload});
+        if (typeof callback === 'function') callback(null);
+        return true;
+    }
+    end() { return this; }
+}
+
+test('RCS-4 select opens every port before setting the target', async () => {
+    switchLink.resetForTests();
+    let socket = null;
+    switchLink.setSocketFactory(() => { socket = new FakeSocket(); return socket; });
+    const device = storage.devices.toDevice(deviceRow({
+        id: 'rcs-1', type: 'switch',
+        config_json: JSON.stringify({
+            brand: 'arraysolutions', model: 'rcs-4',
+            host: '127.0.0.1', port: 8080, out_count: 4
+        })
+    }));
+    const at = new Date('2026-03-01T12:00:00.000Z');
+    switchLink.poll(makeContext(), [device], at, {devices: [device], links: []});
+    socket.emit('connect');
+    const result = await switchLink.select(makeContext(), device, 'in', 'ant2', at,
+        {devices: [device], links: []});
+    assert.equal(result.ok, true);
+    assert.equal(result.protocol_verified, false);
+    assert.equal(socket.writes.length, 5);
+    assert.deepEqual([...switchLink.rcs4Frame(1, false)], [...Buffer.from(socket.writes[0], 'latin1')]);
+    assert.deepEqual([...switchLink.rcs4Frame(4, false)], [...Buffer.from(socket.writes[3], 'latin1')]);
+    assert.deepEqual([...switchLink.rcs4Frame(2, true)], [...Buffer.from(socket.writes[4], 'latin1')]);
+    switchLink.resetForTests();
+});
+
+test('Six2Two remembers the previous topic per input, not per device', async () => {
+    switchLink.resetForTests();
+    const client = new FakeMqtt();
+    switchLink.setMqttFactory(() => client);
+    const device = storage.devices.toDevice(deviceRow({
+        id: 'six-1', type: 'matrix',
+        config_json: JSON.stringify({
+            brand: 'remoteqth', model: 'six2two',
+            host: '127.0.0.1', port: 1883, topic_prefix: 'remoteqth'
+        })
+    }));
+    const at = new Date('2026-03-01T12:00:00.000Z');
+    const options = {devices: [device], links: []};
+    await switchLink.select(makeContext(), device, 'in1', 'out2', at, options);
+    await switchLink.select(makeContext(), device, 'in1', 'out5', at, options);
+    assert.deepEqual(client.published.slice(-2), [
+        {topic: 'remoteqth/1_2', payload: '0'},
+        {topic: 'remoteqth/1_5', payload: '1'}
+    ]);
+    const before = client.published.length;
+    await switchLink.select(makeContext(), device, 'in2', 'out3', at, options);
+    const after = client.published.slice(before);
+    // 切 in2 只能清 in2 自己的旧 topic，不能把 in1 的 1_5 关掉。
+    assert.deepEqual(after, [{topic: 'remoteqth/2_3', payload: '1'}]);
+    switchLink.resetForTests();
+});
+
+test('AG uses an active probe and refuses to guess while mode is unknown', async () => {
+    switchLink.resetForTests();
+    let socket = null;
+    switchLink.setSocketFactory(() => { socket = new FakeSocket(); return socket; });
+    const device = storage.devices.toDevice(deviceRow({
+        id: 'ag-2', type: 'matrix',
+        config_json: JSON.stringify({
+            brand: '4o3a', model: 'antenna-genius',
+            host: '127.0.0.1', port: 9007, in_count: 2, out_count: 8
+        })
+    }));
+    const globalCtx = makeContext();
+    const at = new Date('2026-03-01T12:00:00.000Z');
+    const options = {devices: [device], links: []};
+    switchLink.poll(globalCtx, [device], at, options);
+    socket.emit('connect');
+    // 连上主动发 v4 探测，而不是干等 banner。
+    assert.ok(socket.writes.some(line => /^C\d+\|band list\r$/.test(line)));
+    const undetermined = await switchLink.select(globalCtx, device, 'in1', 'out3', at, options);
+    assert.equal(undetermined.status, 409);
+    assert.equal(undetermined.error, 'protocol-undetermined');
+
+    socket.emit('data', Buffer.from('R2|0|band 3 name=40m freq_start=6.8 freq_stop=7.4\r'));
+    assert.equal(runtime.stateOf(globalCtx, 'ag-2').switch.bands[0].name, '40m');
+    const v4 = await switchLink.select(globalCtx, device, 'in1', 'out3', at, options);
+    assert.equal(v4.ok, true);
+    assert.ok(socket.writes.some(line => /^C\d+\|port set 1 rxant=3 txant=3\r$/.test(line)));
+    switchLink.resetForTests();
+});
+
+test('AG recognises legacy frames and keeps a re-probe path', async () => {
+    switchLink.resetForTests();
+    let socket = null;
+    switchLink.setSocketFactory(() => { socket = new FakeSocket(); return socket; });
+    const device = storage.devices.toDevice(deviceRow({
+        id: 'ag-3', type: 'matrix',
+        config_json: JSON.stringify({
+            brand: '4o3a', model: 'antenna-genius',
+            host: '127.0.0.1', port: 9007, in_count: 2, out_count: 8
+        })
+    }));
+    const globalCtx = makeContext();
+    const at = new Date('2026-03-01T12:00:00.000Z');
+    const options = {devices: [device], links: []};
+    switchLink.poll(globalCtx, [device], at, options);
+    socket.emit('connect');
+    socket.emit('data', Buffer.from('!0000!0A0080!'));
+    const legacy = await switchLink.select(globalCtx, device, 'in1', 'out3', at, options);
+    assert.equal(legacy.ok, true);
+    assert.ok(socket.writes.includes('!0003!020A80!1;3'));
+
+    // 迟到的 v4 回包应把模式重判为 v4。
+    socket.emit('data', Buffer.from('R1|0|band 1 name=20m freq_start=3.5 freq_stop=4.0\r'));
+    const v4 = await switchLink.select(globalCtx, device, 'in1', 'out5', at, options);
+    assert.equal(v4.ok, true);
+    assert.ok(socket.writes.some(line => /^C\d+\|port set 1 rxant=5 txant=5\r$/.test(line)));
+    switchLink.resetForTests();
 });

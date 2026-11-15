@@ -140,6 +140,7 @@ const ERROR_KEYS = {
     'invalid-switch-model': 'dev.error.invalid-switch-model',
     'unsupported-switch-model': 'dev.error.unsupported-switch-model',
     'unsupported-control': 'dev.error.unsupported-control',
+    'protocol-undetermined': 'dev.error.protocol-undetermined',
     'invalid-config-radio': 'dev.error.invalid-config-radio',
     'invalid-config-antenna-bands': 'dev.error.invalid-config-antenna-bands',
     'invalid-config-key-map': 'dev.error.invalid-config-key-map',
@@ -1625,6 +1626,8 @@ export function createDevicesPage(ctx) {
             const controllable = !definition || definition.control !== false;
             const portHint = device.type === 'switch' ? t('dev.control.switchHint') : t('dev.control.matrixHint');
             const stateHint = readback ? t('dev.switch.readbackHint') : t('dev.switch.writeOnlyHint');
+            const protocolHint = definition && definition.protocol_verified === false
+                ? `<p class="dev-note dev-warn">${esc(t('dev.switch.protocolUnverifiedHint'))}</p>` : '';
             const label = readback ? t('dev.control.select') : t('dev.control.selectWriteOnly');
             return `<h3>${t('dev.control.title')}</h3>${status}
                 <div class="dev-ctrl-row">
@@ -1634,7 +1637,7 @@ export function createDevicesPage(ctx) {
                 </div>
                 <div class="dev-ctrl-row">${seat}</div>
                 <p class="dev-note">${esc(portHint)}</p>
-                <p class="dev-note">${esc(stateHint)}</p>${error}`;
+                <p class="dev-note">${esc(stateHint)}</p>${protocolHint}${error}`;
         }
         if (device.type === 'amp') {
             const definition = ampDefinitionFor(device.config);
@@ -1675,11 +1678,17 @@ export function createDevicesPage(ctx) {
                 const text = ampItemText(item, amp);
                 if (text) parts.push(text);
             }
+            if (amp.command_pending) {
+                parts.push(t('dev.amp.commandPending', {action: amp.command_pending}));
+            }
         }
         if (device.type === 'switch' || device.type === 'matrix') {
             const view = (snapshot.switches && snapshot.switches[device.id]) || null;
             if (view) {
                 parts.push(t('dev.switch.state') + ' ' + t(SWITCH_STATE_KEYS[view.state] || SWITCH_STATE_KEYS.unknown));
+                if (view.protocol_verified === false) {
+                    parts.push(t('dev.switch.protocolUnverified'));
+                }
                 if (view.verified && view.ports) {
                     const ports = Object.keys(view.ports).map(port => port + '→' + view.ports[port]).join(' ');
                     if (ports) parts.push(t('dev.switch.verifiedPorts') + ' ' + ports);
