@@ -5,6 +5,7 @@ import {addTrackPaths} from '../../shared/map/layers.mjs';
 import {greatCirclePaths} from '../../shared/geo/great-circle.mjs';
 import {gridToLatLon} from '../../shared/geo/maidenhead.mjs';
 import {createQsoStore, fetchQsos} from '../../shared/data/qsos.mjs';
+import {fetchSpots} from '../../shared/data/spots.mjs';
 import {applyStationMessage, getStationState} from '../../shared/data/station.mjs';
 import {bandColorOf, bandLabel, dbRowToQso} from '../settings-model.mjs';
 import {formatDuration} from '../../shared/core/clock.mjs';
@@ -107,6 +108,7 @@ export function createQsoPage(ctx) {
         state.terminator = createTerminator(state.map, terminatorOptions());
         fitWorld(state.map);
         rebuildHome();
+        void loadMySpots();
     }
 
     function rebuildHome() {
@@ -204,10 +206,15 @@ export function createQsoPage(ctx) {
         return [spot.spot_call || '?', spot.band || '', spot.freq || '', spot.timestamp || ''].join('|');
     }
 
-    function addMySpot(spot) {
+    /* bornAt lets history/backfill restore the spot's real age so a reloaded
+     * page keeps the remaining part of mySpotTtl instead of extending it. */
+    function addMySpot(spot, bornAt) {
         if (!state.map) return;
         const lat = Number(spot.lat), lon = Number(spot.lon);
         if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+        const now = Date.now(), survival = ctx.settings.mySpotTtl * 60000;
+        const born = Number.isFinite(bornAt) ? Math.min(now, bornAt) : now;
+        if (now - born >= survival) return;
         const key = mySpotKey(spot), old = state.mySpots.get(key);
         if (old) old.layers.forEach(layer => state.map.removeLayer(layer));
         const layers = [], point = home();
@@ -220,11 +227,29 @@ export function createQsoPage(ctx) {
         marker.bindTooltip([spot.spot_call, bandLabel(spot.band, Number(spot.freq)), spot.mode]
             .filter(Boolean).join(' · '), {direction: 'top'});
         layers.push(marker);
-        const now = Date.now(), survival = ctx.settings.mySpotTtl * 60000;
-        const entry = {layers, spot, _dieAt: now + survival, _bornAt: now};
+        const entry = {layers, spot, _dieAt: born + survival, _bornAt: born};
         state.mySpots.set(key, entry);
         ctx.spot.applyMarkerFade(entry, now);
         trimMySpots();
+    }
+
+    /* 本台被播报的记录不随页面刷新消失：按当前呼号补一次历史，只保留
+     * 仍在 mySpotTtl 内的行（与大屏「我的 SPOT」层同一数据源）。 */
+    async function loadMySpots() {
+        const my = String(ctx.settings.myCall || '').trim().toUpperCase();
+        if (!my) return;
+        let rows;
+        try {
+            rows = await fetchSpots({call: my, limit: 100});
+        } catch {
+            return;
+        }
+        if (!Array.isArray(rows) || !state.map) return;
+        if (String(ctx.settings.myCall || '').trim().toUpperCase() !== my) return;
+        rows.forEach(row => {
+            const born = new Date(row.timestamp).getTime();
+            if (Number.isFinite(born)) addMySpot(row, born);
+        });
     }
 
     function trimMySpots() {
@@ -700,7 +725,9 @@ export function createQsoPage(ctx) {
         const spot = mySpotLatest;
         mySpotLatest = null;
         if (!batch || !spot) return;
-        if (state.view !== 'qso' || inQuietHours() || !alertAllowed(spot)) return;
+        /* 本台被播报与视图无关：Spot / 传播 / OP 视图都要弹窗+播报，
+         * 否则停在各自主视图的操作员收不到自己被打点的提醒。 */
+        if (inQuietHours() || !alertAllowed(spot)) return;
         if (ctx.settings.mySpotPopup || ctx.settings.mySpotVoice) playAlertTone();
         if (ctx.settings.mySpotPopup) fillAlert(spot, ctx.settings.myCall, true);
         if (ctx.settings.mySpotVoice) {
