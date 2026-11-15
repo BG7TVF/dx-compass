@@ -7487,6 +7487,9 @@ const SWITCH_I18N = {
     zh: {
         'dev.config.switchId': '设备 ID',
         'dev.config.radio': '电台口',
+        'dev.config.statusPort': '状态端口',
+        'dev.status.unverified': '已连接，状态未验证',
+        'dev.switch.amplitecHint': '串口 19200 8N1，经串口服务器转 TCP；目前只实现回读，切换命令未确认。',
         'dev.switch.agHint': '优先从设备回读端口-波段-天线关系；读到后不再使用本地映射。',
         'dev.switch.readbackHint': '该型号支持状态回读；切换后需等回读确认。',
         'dev.switch.readOnlyHint': '该型号只实现了状态回读，切换命令未确认，不下发。',
@@ -7523,11 +7526,15 @@ const SWITCH_I18N = {
         'dev.error.protocol-undetermined': 'Antenna Genius 协议尚未判定，请稍后重试',
         'dev.error.invalid-config-radio': '电台口必须是 1–4',
         'dev.error.invalid-config-antenna-bands': '天线-波段映射格式无效',
-        'dev.error.invalid-config-key-map': '按键映射格式无效'
+        'dev.error.invalid-config-key-map': '按键映射格式无效',
+        'dev.error.invalid-config-status-port': '状态端口必须是 1–65535'
     },
     en: {
         'dev.config.switchId': 'Switch ID',
         'dev.config.radio': 'Radio port',
+        'dev.config.statusPort': 'Status port',
+        'dev.status.unverified': 'Connected, state unverified',
+        'dev.switch.amplitecHint': 'Serial 19200 8N1 via a serial-to-TCP server; only readback is implemented because the switch command is unconfirmed.',
         'dev.switch.agHint': 'Read the port-band-antenna map from the device first; local mapping is only a fallback.',
         'dev.switch.readbackHint': 'This model supports readback; a switch is confirmed only after the next poll.',
         'dev.switch.readOnlyHint': 'Only status readback is implemented for this model; no switch command is sent.',
@@ -7564,7 +7571,8 @@ const SWITCH_I18N = {
         'dev.error.protocol-undetermined': 'Antenna Genius protocol is not determined yet; retry shortly',
         'dev.error.invalid-config-radio': 'Radio port must be 1–4',
         'dev.error.invalid-config-antenna-bands': 'Invalid antenna-band map',
-        'dev.error.invalid-config-key-map': 'Invalid key map'
+        'dev.error.invalid-config-key-map': 'Invalid key map',
+        'dev.error.invalid-config-status-port': 'Status port must be 1–65535'
     }
 };
 

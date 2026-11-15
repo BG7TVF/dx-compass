@@ -62,6 +62,33 @@ test('dxwatch normalization preserves shadow call, DTO fields and one-hour WS ga
     assert.equal(spots.ingest('dxwatch', dxwatchFixture(), e).records.length, 0);
 });
 
+test('self-call backfill is queued, retried after failure and cleared on success', () => {
+    const e = env();
+    e.global.set('uiSettings', {myCall: 'N0CALL', grid: 'OL42ET'});
+    e.global.set('pendingMyCallBackfill', {call: 'N0CALL', attempts: 0, next_ms: 0});
+
+    const first = spots.liveRequest(e);
+    assert.equal(first.backfillCall, 'N0CALL');
+    assert.match(first.url, /cdx=N0CALL/);
+
+    // 无效响应计一次失败，并按退避推迟下一次重试。
+    spots.ingest('dxwatch', 'not json', {...e, backfillCall: 'N0CALL'});
+    const pending = e.global.get('pendingMyCallBackfill');
+    assert.equal(pending.attempts, 1);
+    assert.equal(pending.next_ms, NOW + 60000);
+    e.flow.set('lastDxwatchPoll', NOW);
+    assert.equal(spots.liveRequest(e), null);
+    assert.equal(spots.liveRequest({...e, now: NOW + 61000}).backfillCall, 'N0CALL');
+
+    // 正常响应即视为回填完成，待办清空，回到常规增量轮询。
+    spots.ingest('dxwatch', dxwatchFixture(), {...e, backfillCall: 'N0CALL'});
+    assert.equal(e.global.get('pendingMyCallBackfill'), null);
+    e.flow.set('lastDxwatchPoll', 0);
+    const next = spots.liveRequest(e);
+    assert.ok(next);
+    assert.equal(next.backfillCall, undefined);
+});
+
 test('dxwatch backfill enforces seven days and 150 records without advancing live cursor', () => {
     const e = env({backfillCall: 'K1ABC'});
     e.flow.set('lastSpotId', 99);

@@ -74,14 +74,18 @@
 | `radio` | `config.computer`（计算机标识：StationName 或 ComputerName）、`config.model`（RadioName/电台型号）、派生 `seat` | 波段、安装偏移、端口、口令、运行超时、独占通路 |
 | `swr` | `config.host`（上报 IP/主机）、`config.port` | 类型、波段、安装偏移、端口、口令、运行超时、独占通路 |
 | `bpf` | `bands`（通过波段多选） | 类型、安装偏移、端口、口令、运行超时、独占通路 |
-| `amp` | `bands`（工作波段多选）、`config.host`、`config.port` | 类型、安装偏移、端口、口令、运行超时、独占通路 |
+| `amp` | `bands`（工作波段多选）、型号驱动字段：`config.brand`、`config.model`、`config.host`、`config.port`、`config.protocol`、`config.device_id`、`config.topic_prefix`、`config.username`、`config.password` | 类型、安装偏移、端口、口令、运行超时、独占通路 |
 | `antenna` | `bands`（多选）、`install_offset_deg` | 端口、口令、运行超时、独占通路 |
 | `combiner` | `bands`（多选，决定 `in` 口） | 安装偏移、端口、口令、独占通路 |
-| `switch` | `config.out_count`、继电器配置 | 波段、安装偏移、独占通路 |
-| `matrix` | `config.in_count`、`config.out_count`、继电器配置 | 波段、安装偏移、独占通路 |
+| `switch` | `config.brand`、`config.model`、`config.protocol`、`config.host`、`config.port`、`config.status_port`、`config.switch_id`、`config.radio`、`config.antenna_bands`（手工兜底映射）、`config.key_map`、`config.topic_prefix`、`config.username`、`config.password`、`config.relay_url`、`config.relay_token`、`config.channels`、`config.pulse_ms`、`config.out_count` | 波段、安装偏移、独占通路 |
+| `matrix` | 同 `switch`，外加 `config.in_count` | 波段、安装偏移、独占通路 |
 | `tower` | 继电器配置、`config.up_channel`、`config.down_channel`、`config.pulse_ms`、`travel_timeout_sec` | 波段、安装偏移、端口、独占通路 |
-| `rotator` | `config.host`、`config.port`、`travel_timeout_sec` | 波段、安装偏移、端口、独占通路 |
+| `rotator` | `config.brand`、`config.model`、`config.host`、`config.port`、`config.protocol`（rotctld / gs232）、`travel_timeout_sec` | 波段、安装偏移、端口、独占通路 |
 | `serial` | `config.host`、`config.port`、`config.port_count`、`config.baud`、`config.data_bits`、`config.stop_bits`、`config.parity` | 波段、安装偏移、运行超时、独占通路 |
+
+型号表（`switch-models.js` / `amp-models.js` / `rotator-models.js`）负责给出每个型号的默认值、可编辑字段与能力；
+白名单只决定「允不允许存」，不再为所有型号写死同一组字段。矩阵与切换器的 `in_count` / `out_count` 只在字段缺失时填默认，
+已存的自定义路数不会被保存动作覆盖。
 
 
 移除的设备级字段：`password`、`port_label`、`exclusive`、非电台类型的 `seat`。
@@ -621,4 +625,103 @@ S;              停止
   命令表，本轮不实现。
 - 控制器内部软限位、刹车状态、转速档位：GS-232/rotctld 通用命令不暴露，不读取。
 - PST Rotator 的 UDP 接口依赖 Windows 程序，不作为服务端方案。
+
+## 16. 功放接入：Elecraft KPA500
+
+### 16.1 依据与边界
+
+依据 Elecraft *KPA500 Programmer's Reference*。与 KPA1500 共用 ASCII 传输层，但命令集和
+`^VI` 电流单位不同（KPA500 为 0.1 A，KPA1500 为 1 A），实现里按型号分开。
+
+只实现「状态回读 + 常规操作」，不实现 `^PJ` / `^AL` 等调整、阈值与校准命令。
+
+### 16.2 命令表
+
+| 动作 | 线命令 | 说明 |
+|---|---|---|
+| 开机 | `P` | BootLoader 单字符命令，**不带分号**；写成 `P;` 会被设备忽略 |
+| 关机 | `^ON0;` | 电源状态命令 |
+| 进入 OP | `^OS1;` | |
+| 进入 STBY | `^OS0;` | |
+| 清除故障 | `^FLC;` | |
+
+轮询（全部只读）：`^OS;`、`^BN;`、`^WS;`、`^TM;`、`^VI;`、`^FL;`、`^RVM;`。
+
+### 16.3 只读项与可控项
+
+- 可读：OP/STBY（`^OS`）、电源状态（`^ON`）、波段（`^BN`）、正向功率与 SWR（`^WS`，
+  SWR 为三位数、隐含小数点在第二位之后）、温度（`^TM`）、电压/电流（`^VI`）、
+  故障灯（`^FL`）、ATU 回读（`^RVM`）。
+- 可控：开机、关机、OP、STBY、清故障。
+- 下发后**不乐观置位**：只写 `command_pending`，等 `^OS` / `^ON` 回读确认；
+  读不到就保持原值并标记未确认，界面显示「命令已下发，等待回读」。
+
+### 16.4 明确拿不到的东西
+
+- 调整类参数（功率上限、ATU 调谐、保护阈值）没有公开的稳定命令，不写。
+- 电源是否真的完成 BootLoader 启动，只能靠后续 `^ON1` 判断，不能靠命令返回。
+
+## 17. 切换器 / 矩阵切换器接入
+
+实现文件：`lib/devices/switch-models.js`（能力表）与 `lib/devices/switch-link.js`（协议与传输）。
+每个型号必须声明 `protocol`、`transport`、`readback`、`control`、`verified`，未知型号不猜协议。
+
+### 17.1 型号与能力
+
+| 品牌 | 型号 | 传输 | 回读 | 可控 | 协议验证 |
+|---|---|---|---|---|---|
+| 4O3A | Antenna Genius 8×2 | `ag-tcp` 9007 | 是 | 是 | 是（双栈：v4 ASCII / 旧二进制） |
+| 4O3A | Station Genius | `station-genius-tcp` 8001 | 否 | 是 | **否**（社区逆向帧，无厂商文档） |
+| Hamation / ShackLan | ZSERVER 4×8 | `zserver-udp` 50333 命令 / 50334 状态 | 是 | 是 | 是 |
+| Green Heron | Everyware 4×8 | `greenheron-tcp` 10000 | 是 | 是 | 是 |
+| Amplitec | SW3000-6 | `amplitec-tcp` | 是 | 否 | **否**（只确认了读状态帧） |
+| wa4mcm | 1×4 ASCII | `wa4mcm-tcp` 8008 | 是 | 是 | 是 |
+| Array Solutions | RCS-4 | `rcs4-tcp` 8080 | 否 | 是 | **否**（4 字节帧无公开来源） |
+| RemoteQTH | Six2Two 2×6 | `six2two-mqtt` 1883 | 否 | 是 | **否**（topic 约定来自项目文档） |
+| Array Solutions | Stack Match | — | — | 否 | 不支持（型号表 `supported:false`） |
+
+### 17.2 帧与语义
+
+- **Antenna Genius**：v4 为 `C<seq>|port set <in> rxant=<out> txant=<out>\r`，另有 `band list`、
+  `antenna list`、`port get`；旧固件为 `!LLLL!HHHHHH!payload`。连接后主动发 `band list` 探测，
+  按回包判定协议；判定前 `select` 返回 `409 protocol-undetermined`；判成 legacy 后保留一次
+  5 秒探活重判机会。
+- **ZSERVER**：命令为 JSON `{name:"zserver", command:"set_antenna", id, radio, antenna}`；
+  状态口接收广播 JSON，按 `switch_id` / `host` 匹配，端口可在型号字段 `status_port` 配置。
+  绑定失败写入运行态并通过 `status_error` 返回，不再静默降级。
+- **Green Heron**：`SET_SWITCH<id>Radio-<n>\x1FA<m>\r\n`；`SWITCHUPDATE Radio-n Antenna m`
+  回读后转 `verified`。
+- **wa4mcm**：`A<n>\r\n` 选择、`A?\r\n` 查询；回 `A<n>` 后转 `verified`。
+- **Amplitec**：查询 `01 01 44 0D` / `01 01 52 0D`；状态帧按 `0x52 0x0D` 后的 mode/position
+  解析（**推断，无帧结构文档**），二进制按 `Buffer` 累积，不经字符串中转。
+- **RCS-4**：`[0xA0, port, state, checksum]`，校验和按 `(0xA0+port+state)&0xFF` 计算（**推断**）。
+  1×4 切换时先对 1..out_count 全发 OFF，再发目标 ON，避免旧通路与目标通路同时闭合。
+- **Six2Two**：topic `<prefix>/<in>_<out>`，发布 `1` 选通、`0` 断开；旧 topic 按
+  `deviceId + 输入号` 分键，切换 in2 不会关掉 in1 的通路。
+- **Station Genius**：64 字节帧，`0x89` 连接、`0x84` 保活、`0x80 + key` 选通；按键映射
+  可由 `key_map` 覆盖，未配置时用默认 `7 8 9 / * - 0`。
+
+### 17.3 状态语义
+
+- `verified`：收到设备回读并写入 `ports`。
+- `pending`：已下发、等待回读确认。
+- `unverified`：只写型号，已连上且命令已下发，但状态无法验证；`online:true`，不复用「等待回读」。
+- `unknown` / `stale`：通信中断或从未收到回读，保留最后一次已知值并标注原因。
+
+### 17.4 端口映射
+
+「切换器端口 → 可用波段」按三级优先级计算：设备回读（AG `0x412` / `0x082`）>
+画布拓扑派生（沿 RF 连线找到该端口所接天线，取 `bands`，并联取并集）> `antenna_bands`
+手工兜底。拓扑变化即时重算；手工值与拓扑冲突时明确提示是哪根天线、哪个端口，不静默覆盖。
+
+### 17.5 无公开依据、按未验证处理的实现
+
+- RCS-4 的 4 字节帧与校验和。
+- Amplitec 状态帧的字段位置与语义。
+- Station Genius 的 64 字节帧与按键码。
+- Six2Two 的 MQTT topic 约定。
+- Antenna Genius 旧二进制帧（来自调研 flow，未在厂商文档中核对）。
+
+以上型号在型号表标 `verified:false`，界面显著提示；对外不呈现为「已支持并已验证」。
+
 

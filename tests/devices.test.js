@@ -1420,6 +1420,50 @@ test('rotator polling turns a successful read into a real state report', async (
     rotatorLink.setSocketFactory(null);
 });
 
+test('rotator polling inherits the serial server address from a control link', async () => {
+    const now = new Date('2026-03-01T12:00:00.000Z');
+    const globalCtx = makeContext();
+    const rows = [
+        deviceRow({
+            id: 'serial-1', type: 'serial', bands: '',
+            config_json: JSON.stringify({host: '192.168.1.50', port: 4001, port_count: 4})
+        }),
+        deviceRow({
+            id: 'rotator-1', name: 'Rotator', type: 'rotator', bands: '',
+            config_json: JSON.stringify({brand: 'yaesu', model: 'g-2800dxa'})
+        }),
+        {
+            kind: 'ctl', a_device: 'rotator-1', a_port: 'rotctld',
+            b_device: 'serial-1', b_port: 'serial1'
+        }
+    ];
+
+    const seen = [];
+    rotatorLink.resetLinks();
+    rotatorLink.setSocketFactory(options => {
+        seen.push(options);
+        return fakeSocket(line => line === 'C2;' ? 'AZ=300 EL=0\r\n' : 'RPRT 0\r\n');
+    });
+
+    const address = rotatorLink.addressFor(storage.devices.toDevice(rows[1]), {
+        devices: [storage.devices.toDevice(rows[0]), storage.devices.toDevice(rows[1])],
+        links: [storage.devices.toControlLink(rows[2])]
+    });
+    assert.equal(address.host, '192.168.1.50');
+    assert.equal(address.port, 4001);
+    assert.equal(address.serial_port, 1);
+    assert.equal(address.via, 'serial-1');
+
+    const result = await service.pollRotators(globalCtx, rows, now);
+    assert.equal(result.polled, 1);
+    assert.deepEqual(result.errors, []);
+    assert.equal(seen[0].host, '192.168.1.50');
+    assert.equal(seen[0].port, 4001);
+
+    rotatorLink.resetLinks();
+    rotatorLink.setSocketFactory(null);
+});
+
 test('radio status comes from the bound seat instead of device reports', () => {
     const now = new Date('2026-03-01T12:00:00.000Z');
     const globalCtx = makeContext();

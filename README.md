@@ -375,15 +375,25 @@ node scripts/n1mm-relay.mjs --host <服务器IP> --token <同一个令牌>
 
 ## 设备接入与集中控制
 
-设备树把电台周边能力收在一处，菜单 **Devices** 只读展示状态与席位归属，写操作在 **Settings → 设备** 或 HTTP API。
+菜单 **Devices** 是画布编辑器：从左侧调色板拖出设备即可创建，点选后在右侧修改属性，在画布上拉 RF / 控制连线，卡片上直接下发指令并查看回读状态。所有写操作同样可以通过 HTTP API 完成。
 
-- **树模型**：每个设备有唯一 `id`、`name`、`type`、可选 `parent_id`。单父、禁止成环、有子节点时禁止删除；类型不设白名单，界面提供 `tower` / `rotator` / `antenna` / `matrix` / `switch` / `other` 六种常用标签，自定义类型会按原样显示。
-- **父子关系**：塔 → 旋转器 → 天线的挂载关系用于展示与归属，不改变协议寻址；删除父节点前必须先迁移或删除子节点（`409 has-children`）。
-- **能力**
-  - `rotator`：`host` / `port` 指向 rotctld；`actual = (physical + installation offset) mod 360`。未接入驱动时卡片仍显示目标方位，但只做预览，不发送指令。
-  - `matrix` / `switch`：`relay_url`、`relay_token`、`up_channel` / `down_channel`；指令按端口/出口换算成通道号，未知通道返回 `400 unknown-channel`。
-  - `tower`：`up_channel` / `down_channel`、`pulse_ms`（默认 400 ms，50–5000 ms）、限位类型 NO/NC；按住上升/下降，500 ms 心跳续约，松开或断线 1.5 秒后由服务端强制释放。
-  - `antenna`：可用波段列表与安装偏移；波段用于设备卡片与告警展示。
+- **画布与调色板**：11 种类型 `radio` / `amp` / `swr` / `bpf` / `antenna` / `tower` / `rotator` / `switch` / `matrix` / `combiner` / `serial`。支持拖动节点、滚轮缩放、平移、多选拖动；布局随设备保存，刷新后保持。
+- **链路**
+  - **RF 链路**：天线 `in` ← 切换器 `antN` / 矩阵 `outN`，用于 TX 可达、波段剪枝和端口映射。
+  - **控制链路**：串口服务器 `serialN` ↔ 设备控制口。地址解析顺序为「设备自己的 host/port」→「沿控制连线继承串口服务器地址与 serialN」；取不到时标记 `unconfigured`，不会静默假装成功。
+  - **父子关系**（塔 → 旋转器 → 天线）只用于展示与归属，不改变协议寻址；删除父节点前必须先迁移或删除子节点（`409 has-children`）。
+- **旋转器**：`rotctld`（Hamlib，默认 4533）与 Yaesu `GS-232`。品牌覆盖 Yaesu、K3NG、Green Heron、M2、Prosistel、AlfaSpid、Hy-Gain、ERC 与通用型号；`actual = (physical + installation offset) mod 360`。没有配置地址时卡片只预览目标方位，不发送指令。
+- **功放**
+  - Elecraft KPA500 / KPA1500：串口 ASCII 命令集；`^OS` 确认 OP/STBY，`^ON` 确认电源状态，下发后不乐观置位。
+  - AMP1000（国赫）：MQTT；SPE Expert 1.3K / 1.5K / 2K：官方串口状态串。
+  - ACOM 500S / 600S / 700S / 1200S / 2020S：二进制遥测；RF-Kit RF2K-S / RF2K+：HTTP（只读身份与版本）；OM Power 2501A / 3501A / 4001A：rev.4 TCP。
+- **切换器与矩阵**
+  - 4O3A Antenna Genius 8×2（v4 ASCII 与旧二进制双栈，连上主动探测判定，判定前拒绝下发）、Station Genius（只写，协议未验证）。
+  - Hamation / ShackLan ZSERVER 4×8（UDP 50333 命令、50334 状态，状态口可配置）；Green Heron Everyware 4×8；wa4mcm 1×4 ASCII；RemoteQTH Six2Two 2×6（MQTT）。
+  - Array Solutions RCS-4（只写，先全断后置位；帧无公开来源，按未验证处理）、Amplitec SW3000-6（仅支持回读，不支持下发）。
+  - 未验证型号在型号表标 `verified:false`，界面显著提示；只写型号下发成功后状态是「未验证」，不会伪装成等待回读或已确认。
+- **塔**：`up_channel` / `down_channel`、`pulse_ms`（默认 400 ms，50–5000 ms）、限位类型 NO/NC；按住上升/下降，500 ms 心跳续约，松开或断线 1.5 秒后由服务端强制释放。
+- **天线**：可用波段（多选）与安装偏移。切换器端口 → 波段的映射按「设备回读 > 拓扑派生 > 手工兜底」计算，拓扑变化立即重算，冲突时明确指出是哪根天线、哪个端口。
 - **TX 上报入口契约**：`POST /api/devices/tx`，JSON `{ "source_id": "...", "tx_active": true|false, "ts": "可选 ISO 时间" }`。`source_id` 未登记时自动登记为最低优先级（1000），已配置 token 的源必须带 `X-DX-TX-Token`。默认 2 秒超时：超时记 `stale`，3 倍超时记 `offline`；全部源不可用等同「未接入发射状态」，不沿用旧值，也不阻断操作。
 - **互锁行为**：天线切换 `select` 在任一 TX 源报告 `tx_active: true` 时返回 `423 tx-active`，并附带来源 `source_id`；设备指令有 30 秒租约，并发指令返回 `409 device-locked`；没有 transport 时返回 `accepted + dispatched:false`，不会假装已执行。
 - **`/red` 已禁用**：`settings.js` 设置 `httpAdminRoot: false`，Node-RED 编辑器不暴露；所有操作只走设置页与 HTTP API。

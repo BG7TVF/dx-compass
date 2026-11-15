@@ -26,6 +26,20 @@ test('settings save sanitizes, defaults and broadcasts the stored object', () =>
     assert.equal(settings.save(ctx, []).statusCode, 400);
 });
 
+test('changing myCall queues a self-spot backfill', () => {
+    const ctx = new Context();
+    settings.save(ctx, {myCall: 'K1ABC'});
+    assert.deepEqual(ctx.get('pendingMyCallBackfill'), {call: 'K1ABC', attempts: 0, next_ms: 0});
+
+    // 只改其它字段不重排回填。
+    ctx.set('pendingMyCallBackfill', null);
+    settings.save(ctx, {__patch: {theme: 'light'}});
+    assert.equal(ctx.get('pendingMyCallBackfill'), null);
+
+    settings.save(ctx, {__patch: {myCall: 'N0CALL'}});
+    assert.equal(ctx.get('pendingMyCallBackfill').call, 'N0CALL');
+});
+
 test('settings save rejects out-of-range values and reports them', () => {
     const ctx = new Context();
     const saved = settings.save(ctx, {qsoMax: 5, theme: 'neon', wallTitle: ''});

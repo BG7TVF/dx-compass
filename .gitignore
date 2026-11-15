@@ -25,3 +25,7 @@ flows_*.json
 # IDE artifacts
 .trae/
 .trae-html-share-packages/
+
+# Local build/debug outputs
+artifacts/
+.screenshots/

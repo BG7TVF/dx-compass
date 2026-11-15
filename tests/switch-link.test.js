@@ -185,7 +185,7 @@ test('switch model catalog resolves by type and marks Stack Match unsupported', 
     assert.deepEqual(ag.defaults, {in_count: 2, out_count: 8});
     assert.equal(switchModels.resolve('switch', '4o3a', 'antenna-genius'), null);
     assert.equal(switchModels.supported(switchModels.resolve('switch', 'arraysolutions', 'stack-match')), false);
-    assert.equal(switchModels.transportOf({brand: 'amplitec', model: 'sw3000-6'}, 'switch'), 'amplitec-serial');
+    assert.equal(switchModels.transportOf({brand: 'amplitec', model: 'sw3000-6'}, 'switch'), 'amplitec-tcp');
     assert.equal(switchModels.transportOf({}, 'switch'), 'relay');
 });
 
@@ -497,6 +497,20 @@ class FakeMqtt extends EventEmitter {
     end() { return this; }
 }
 
+class FakeUdp extends EventEmitter {
+    constructor() {
+        super();
+        this.sent = [];
+        this.bound = null;
+    }
+    bind(port) { this.bound = port; }
+    send(buffer, port, host, callback) {
+        this.sent.push({buffer: Buffer.from(buffer), port, host});
+        if (typeof callback === 'function') callback(null);
+    }
+    close() {}
+}
+
 test('RCS-4 select opens every port before setting the target', async () => {
     switchLink.resetForTests();
     let socket = null;
@@ -605,5 +619,176 @@ test('AG recognises legacy frames and keeps a re-probe path', async () => {
     const v4 = await switchLink.select(globalCtx, device, 'in1', 'out5', at, options);
     assert.equal(v4.ok, true);
     assert.ok(socket.writes.some(line => /^C\d+\|port set 1 rxant=5 txant=5\r$/.test(line)));
+    switchLink.resetForTests();
+});
+
+// ---- 真实下发路径：UDP / TCP / MQTT 与回读转 verified ----
+
+function switchDevice(id, type, brand, model, config) {
+    return storage.devices.toDevice(deviceRow({
+        id, type,
+        config_json: JSON.stringify(Object.assign({brand, model, host: '127.0.0.1'}, config || {}))
+    }));
+}
+
+test('ZSERVER select leaves over UDP and a status broadcast flips the port to verified', async () => {
+    switchLink.resetForTests();
+    let udp = null;
+    switchLink.setUdpFactory(() => { udp = new FakeUdp(); return udp; });
+    const device = switchDevice('zs-1', 'matrix', 'hamation', 'zserver', {
+        port: 50333, status_port: 50334, switch_id: 'SW1', in_count: 4, out_count: 8
+    });
+    const globalCtx = makeContext();
+    const options = {devices: [device], links: []};
+    const at = new Date('2026-03-01T12:00:00.000Z');
+
+    const result = await switchLink.select(globalCtx, device, 'in1', 'out3', at, options);
+    assert.equal(result.ok, true);
+    assert.equal(result.dispatched, true);
+    assert.equal(result.status_error, null);
+    assert.equal(udp.bound, 50334);
+    assert.equal(udp.sent.length, 1);
+    assert.equal(udp.sent[0].port, 50333);
+    assert.equal(udp.sent[0].host, '127.0.0.1');
+    assert.deepEqual(JSON.parse(udp.sent[0].buffer.toString()), {
+        name: 'zserver', command: 'set_antenna', id: 'SW1', radio: 1, antenna: 3
+    });
+
+    udp.emit('message', Buffer.from(JSON.stringify({id: 'SW1', radio: 1, antenna: 3})));
+    const state = runtime.stateOf(globalCtx, device.id).switch;
+    assert.equal(state.state, 'verified');
+    assert.equal(state.ports.in1, 'out3');
+    switchLink.resetForTests();
+});
+
+test('ZSERVER status port binding failure is reported instead of silently losing readback', async () => {
+    switchLink.resetForTests();
+    const udp = new FakeUdp();
+    udp.bind = () => { throw Object.assign(new Error('address in use'), {code: 'EADDRINUSE'}); };
+    switchLink.setUdpFactory(() => udp);
+    const device = switchDevice('zs-2', 'matrix', 'hamation', 'zserver', {
+        port: 50333, status_port: 50335, in_count: 4, out_count: 8
+    });
+    const result = await switchLink.select(makeContext(), device, 'in1', 'out2',
+        new Date('2026-03-01T12:00:00.000Z'), {devices: [device], links: []});
+    assert.equal(result.ok, true);
+    assert.equal(result.status_error, 'EADDRINUSE');
+    switchLink.resetForTests();
+});
+
+test('Green Heron select writes the SET_SWITCH frame and SWITCHUPDATE verifies the port', async () => {
+    switchLink.resetForTests();
+    let socket = null;
+    switchLink.setSocketFactory(() => { socket = new FakeSocket(); return socket; });
+    const device = switchDevice('gh-1', 'matrix', 'greenheron', 'everyware', {
+        port: 10000, switch_id: 'SW1', in_count: 4, out_count: 8
+    });
+    const globalCtx = makeContext();
+    const options = {devices: [device], links: []};
+    const at = new Date('2026-03-01T12:00:00.000Z');
+    switchLink.poll(globalCtx, [device], at, options);
+    socket.emit('connect');
+
+    const result = await switchLink.select(globalCtx, device, 'in2', 'out5', at, options);
+    assert.equal(result.ok, true);
+    assert.equal(socket.writes.at(-1), 'SET_SWITCHSW1Radio-2\u001F5\r\n');
+
+    socket.emit('data', Buffer.from('SWITCHUPDATE Radio-2 Antenna 5\r\n'));
+    const state = runtime.stateOf(globalCtx, device.id).switch;
+    assert.equal(state.state, 'verified');
+    assert.equal(state.ports.in2, 'out5');
+    switchLink.resetForTests();
+});
+
+test('wa4mcm select writes A<n> and an A<n> reply verifies the port', async () => {
+    switchLink.resetForTests();
+    let socket = null;
+    switchLink.setSocketFactory(() => { socket = new FakeSocket(); return socket; });
+    const device = switchDevice('wa-1', 'switch', 'wa4mcm', '1x4', {port: 8008, out_count: 4});
+    const globalCtx = makeContext();
+    const options = {devices: [device], links: []};
+    const at = new Date('2026-03-01T12:00:00.000Z');
+    switchLink.poll(globalCtx, [device], at, options);
+    socket.emit('connect');
+    // 连上先查询一次，选型后按天线号下发。
+    assert.equal(socket.writes[0], 'A?\r\n');
+
+    const result = await switchLink.select(globalCtx, device, 'in', 'ant3', at, options);
+    assert.equal(result.ok, true);
+    assert.equal(socket.writes.at(-1), 'A3\r\n');
+
+    socket.emit('data', Buffer.from('A3\r\n'));
+    const state = runtime.stateOf(globalCtx, device.id).switch;
+    assert.equal(state.state, 'verified');
+    assert.equal(state.ports.in, 'ant3');
+    switchLink.resetForTests();
+});
+
+test('Amplitec status frame verifies readback without ever sending a select', async () => {
+    switchLink.resetForTests();
+    let socket = null;
+    switchLink.setSocketFactory(() => { socket = new FakeSocket(); return socket; });
+    const device = switchDevice('amp-1', 'switch', 'amplitec', 'sw3000-6', {port: 5000, out_count: 6});
+    const globalCtx = makeContext();
+    const options = {devices: [device], links: []};
+    const at = new Date('2026-03-01T12:00:00.000Z');
+    const polled = switchLink.poll(globalCtx, [device], at, options);
+    assert.equal(polled.polled, 1);
+    socket.emit('connect');
+    assert.deepEqual([...socket.writes[0]].map(byte => byte.charCodeAt(0)), [0x01, 0x01, 0x44, 0x0D]);
+
+    // 状态帧：0x52 0x0D 之后是 mode=0（remote）、position=3。
+    socket.emit('data', Buffer.from([0x01, 0x01, 0x52, 0x0D, 0x00, 0x03]));
+    const state = runtime.stateOf(globalCtx, device.id).switch;
+    assert.equal(state.state, 'verified');
+    assert.equal(state.ports.in, 'ant3');
+    assert.deepEqual(state.amplitec, {mode: 'remote', position: 3});
+
+    const denied = await switchLink.select(globalCtx, device, 'in', 'ant2', at, options);
+    assert.equal(denied.ok, false);
+    assert.equal(denied.error, 'unsupported-control');
+    switchLink.resetForTests();
+});
+
+test('Station Genius connects with 0x89, keeps alive with 0x84 and selects a key frame', async () => {
+    switchLink.resetForTests();
+    let socket = null;
+    switchLink.setSocketFactory(() => { socket = new FakeSocket(); return socket; });
+    const device = switchDevice('sg-1', 'switch', '4o3a', 'station-genius', {port: 8001, out_count: 7});
+    const globalCtx = makeContext();
+    const options = {devices: [device], links: []};
+    const at = new Date('2026-03-01T12:00:00.000Z');
+    switchLink.poll(globalCtx, [device], at, options);
+    socket.emit('connect');
+    assert.equal(Buffer.from(socket.writes[0], 'latin1')[0], 0x89);
+
+    switchLink.poll(globalCtx, [device], new Date(at.getTime() + 1000), options);
+    assert.equal(Buffer.from(socket.writes.at(-1), 'latin1')[0], 0x84);
+
+    const result = await switchLink.select(globalCtx, device, 'in', 'ant3', at, options);
+    assert.equal(result.ok, true);
+    const frame = Buffer.from(socket.writes.at(-1), 'latin1');
+    assert.equal(frame.length, 64);
+    assert.equal(frame[0], 0x80);
+    assert.equal(frame[1], '9'.charCodeAt(0));
+    switchLink.resetForTests();
+});
+
+test('AG without any reply falls back to legacy and keeps polling', async () => {
+    switchLink.resetForTests();
+    let socket = null;
+    switchLink.setSocketFactory(() => { socket = new FakeSocket(); return socket; });
+    const device = switchDevice('ag-4', 'matrix', '4o3a', 'antenna-genius', {
+        port: 9007, in_count: 2, out_count: 8
+    });
+    const globalCtx = makeContext();
+    const at = new Date('2026-03-01T12:00:00.000Z');
+    switchLink.poll(globalCtx, [device], at, {devices: [device], links: []});
+    socket.emit('connect');
+    assert.equal(runtime.stateOf(globalCtx, device.id).switch.ag_mode, undefined);
+    await new Promise(resolve => setTimeout(resolve, 650));
+    const state = runtime.stateOf(globalCtx, device.id).switch;
+    assert.equal(state.ag_mode, 'legacy');
+    assert.ok(socket.writes.some(line => /^![0-9A-F]{4}![0-9A-F]{6}!$/.test(line)));
     switchLink.resetForTests();
 });

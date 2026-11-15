@@ -59,6 +59,17 @@ test('prediction formulas have one server-side home', () => {
         'prediction formula definitions must live in lib/propagation/model.js');
 });
 
+test('我的 SPOT 提醒不随当前视图变化', () => {
+    const source = read('public', 'js', 'pages', 'qso-page.mjs');
+    const start = source.indexOf('function showSpotAlert(');
+    assert.ok(start > 0, 'showSpotAlert must exist in the QSO page');
+    const end = source.indexOf('\n    }', start);
+    const body = source.slice(start, end);
+    // 操作员停在 Spot / 传播 / OP 任一视图都要收到本台被播报的提醒。
+    assert.match(body, /queueMySpot\(spot\)/);
+    assert.doesNotMatch(body, /\bstate\.view\b/);
+});
+
 test('SQL is confined to the storage module', () => {
     const files = walk(path.join(ROOT, 'lib'))
         .filter(file => !file.includes(`${path.sep}storage${path.sep}`));

@@ -56,7 +56,8 @@ const STATUS_KEYS = {
     unknown: 'dev.status.unknown',
     'no-source': 'dev.status.noSource',
     unbound: 'dev.status.unbound',
-    awaiting: 'dev.status.awaiting'
+    awaiting: 'dev.status.awaiting',
+    unverified: 'dev.status.unverified'
 };
 const SWITCH_STATE_KEYS = {
     verified: 'dev.switch.stateVerified',
@@ -144,6 +145,7 @@ const ERROR_KEYS = {
     'invalid-config-radio': 'dev.error.invalid-config-radio',
     'invalid-config-antenna-bands': 'dev.error.invalid-config-antenna-bands',
     'invalid-config-key-map': 'dev.error.invalid-config-key-map',
+    'invalid-config-status-port': 'dev.error.invalid-config-status-port',
     'invalid-device-type': 'dev.error.invalid-device-type',
     'invalid-port': 'dev.error.invalid-port',
     'invalid-outlet': 'dev.error.invalid-outlet',
@@ -1625,7 +1627,8 @@ export function createDevicesPage(ctx) {
             const readback = !!(definition && definition.readback);
             const controllable = !definition || definition.control !== false;
             const portHint = device.type === 'switch' ? t('dev.control.switchHint') : t('dev.control.matrixHint');
-            const stateHint = readback ? t('dev.switch.readbackHint') : t('dev.switch.writeOnlyHint');
+            const stateHint = !controllable ? t('dev.switch.readOnlyHint')
+                : readback ? t('dev.switch.readbackHint') : t('dev.switch.writeOnlyHint');
             const protocolHint = definition && definition.protocol_verified === false
                 ? `<p class="dev-note dev-warn">${esc(t('dev.switch.protocolUnverifiedHint'))}</p>` : '';
             const label = readback ? t('dev.control.select') : t('dev.control.selectWriteOnly');
