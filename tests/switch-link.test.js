@@ -299,6 +299,13 @@ test('manual fallback is silent when it agrees and explicit when it conflicts', 
     const onlyManual = switchModels.mappingFor(sw, {}, {devices: [sw, a1], links: []});
     assert.equal(onlyManual.ports.ant1.source, 'manual');
     assert.deepEqual(onlyManual.ports.ant1.bands, ['20m']);
+
+    // 天线接了但波段为空：拓扑没有结论，手工兜底且不算冲突。
+    const blank = Object.assign({}, a1, {bands: []});
+    const blankTopology = switchModels.mappingFor(sw, {}, {devices: [sw, blank], links});
+    assert.equal(blankTopology.ports.ant1.source, 'manual');
+    assert.deepEqual(blankTopology.ports.ant1.bands, ['20m']);
+    assert.deepEqual(blankTopology.conflicts, []);
 });
 
 test('device readback still wins over topology and manual', () => {
