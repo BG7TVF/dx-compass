@@ -922,7 +922,7 @@ test('relay request times out instead of hanging', async () => {
     relay.reset();
 });
 
-test('select drives the relay with the mapped channel and records the port', async () => {
+test('select drives the relay with the mapped channel and records the port as unverified', async () => {
     commands.resetForTests();
     commands.setTransports({select: context => relay.pulse(context.device, context.channel, context.pulseMs)});
     const calls = [];
@@ -946,8 +946,14 @@ test('select drives the relay with the mapped channel and records the port', asy
         {command: 'select', port: 'in1', outlet: 'out1'}, headers, now);
     assert.equal(result.status, 202);
     assert.equal(result.payload.channel, 4);
+    assert.equal(result.payload.state, 'unverified');
+    assert.equal(result.payload.verified, false);
     assert.deepEqual(calls, [{channel: 4, action: 'pulse', pulse_ms: 300}]);
-    assert.equal(runtime.stateOf(globalCtx, 'matrix-1').ports.in1, 'out1');
+    const entry = runtime.stateOf(globalCtx, 'matrix-1');
+    // 只写设备：命令已下发，但没有回读，绝不能显示成已切换。
+    assert.equal(entry.ports, undefined);
+    assert.equal(entry.switch.state, 'unverified');
+    assert.equal(entry.switch.commanded.in1, 'out1');
 
     // 未配置端口映射时只按出口号回退。
     const fallback = commands.channelFor(storage.devices.toDevice(rows[0]), 'in2', 'out1');

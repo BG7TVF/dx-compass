@@ -7482,6 +7482,78 @@ const OP_I18N = {
     }
 };
 
+/* Antenna switch / matrix vocabulary. Other locales inherit English. */
+const SWITCH_I18N = {
+    zh: {
+        'dev.config.switchId': '设备 ID',
+        'dev.config.radio': '电台口',
+        'dev.switch.agHint': '优先从设备回读端口-波段-天线关系；读到后不再使用本地映射。',
+        'dev.switch.readbackHint': '该型号支持状态回读；切换后需等回读确认。',
+        'dev.switch.readOnlyHint': '该型号只实现了状态回读，切换命令未确认，不下发。',
+        'dev.switch.writeOnlyHint': '该型号只能写、不能读回；状态显示为「未验证」，掉电或手动操作后不可知。',
+        'dev.switch.unsupportedHint': 'Stack Match 的多路同开与现有互斥模型相反，登记为不支持。',
+        'dev.switch.fixedPorts': '端口由型号固定：in {in} · out {out}',
+        'dev.switch.antennaBands': '本地天线-波段映射（设备读不到时使用）',
+        'dev.switch.keyMap': '按键映射（outlet → 键码）',
+        'dev.switch.state': '切换状态',
+        'dev.switch.stateVerified': '已验证',
+        'dev.switch.statePending': '待回读',
+        'dev.switch.stateUnverified': '未验证',
+        'dev.switch.stateWaiting': '等待回读',
+        'dev.switch.verifiedPorts': '已确认',
+        'dev.switch.commandedPorts': '已下发',
+        'dev.switch.lastReadback': '最后回读 {ts}',
+        'dev.switch.stale': '回读已过期',
+        'dev.switch.mappingSource': '映射来源',
+        'dev.switch.sourceDevice': '设备回读',
+        'dev.switch.sourceLocal': '本地配置',
+        'dev.switch.sourceNone': '未配置',
+        'dev.control.selectWriteOnly': '下发（未验证）',
+        'dev.error.invalid-switch-brand': '未知的切换器品牌',
+        'dev.error.invalid-switch-model': '未知的切换器型号',
+        'dev.error.unsupported-switch-model': '该型号已登记为不支持',
+        'dev.error.unsupported-control': '该型号未实现切换命令',
+        'dev.error.invalid-config-radio': '电台口必须是 1–4',
+        'dev.error.invalid-config-antenna-bands': '天线-波段映射格式无效',
+        'dev.error.invalid-config-key-map': '按键映射格式无效'
+    },
+    en: {
+        'dev.config.switchId': 'Switch ID',
+        'dev.config.radio': 'Radio port',
+        'dev.switch.agHint': 'Read the port-band-antenna map from the device first; local mapping is only a fallback.',
+        'dev.switch.readbackHint': 'This model supports readback; a switch is confirmed only after the next poll.',
+        'dev.switch.readOnlyHint': 'Only status readback is implemented for this model; no switch command is sent.',
+        'dev.switch.writeOnlyHint': 'Write-only model: state is shown as unverified and is unknown after a power cycle or panel change.',
+        'dev.switch.unsupportedHint': 'Stack Match allows multiple simultaneous paths, which conflicts with the exclusive model; registered as unsupported.',
+        'dev.switch.fixedPorts': 'Ports fixed by model: in {in} · out {out}',
+        'dev.switch.antennaBands': 'Local antenna-band map (fallback when readback is unavailable)',
+        'dev.switch.keyMap': 'Key map (outlet → key code)',
+        'dev.switch.state': 'Switch state',
+        'dev.switch.stateVerified': 'verified',
+        'dev.switch.statePending': 'awaiting readback',
+        'dev.switch.stateUnverified': 'unverified',
+        'dev.switch.stateWaiting': 'waiting for readback',
+        'dev.switch.verifiedPorts': 'Confirmed',
+        'dev.switch.commandedPorts': 'Commanded',
+        'dev.switch.lastReadback': 'Last readback {ts}',
+        'dev.switch.stale': 'readback is stale',
+        'dev.switch.mappingSource': 'Mapping source',
+        'dev.switch.sourceDevice': 'device readback',
+        'dev.switch.sourceLocal': 'local configuration',
+        'dev.switch.sourceNone': 'not configured',
+        'dev.control.selectWriteOnly': 'Send (unverified)',
+        'dev.error.invalid-switch-brand': 'Unknown switch brand',
+        'dev.error.invalid-switch-model': 'Unknown switch model',
+        'dev.error.unsupported-switch-model': 'This model is registered as unsupported',
+        'dev.error.unsupported-control': 'No switch command is implemented for this model',
+        'dev.error.invalid-config-radio': 'Radio port must be 1–4',
+        'dev.error.invalid-config-antenna-bands': 'Invalid antenna-band map',
+        'dev.error.invalid-config-key-map': 'Invalid key map'
+    }
+};
+
+for (const l of LANGS) Object.assign(I18N[l], SWITCH_I18N[l] || SWITCH_I18N.en);
+
 for (const l of LANGS) Object.assign(I18N[l], OP_I18N[l] || OP_I18N.en);
 for (const l of LANGS) Object.assign(I18N[l], MATRIX_I18N[l] || MATRIX_I18N.en);
 for (const l of LANGS) Object.assign(I18N[l], ALERT_I18N[l] || ALERT_I18N.en);

@@ -58,6 +58,19 @@ const STATUS_KEYS = {
     unbound: 'dev.status.unbound',
     awaiting: 'dev.status.awaiting'
 };
+const SWITCH_STATE_KEYS = {
+    verified: 'dev.switch.stateVerified',
+    pending: 'dev.switch.statePending',
+    unverified: 'dev.switch.stateUnverified',
+    waiting: 'dev.switch.stateWaiting',
+    'no-source': 'dev.switch.stateNoSource',
+    unknown: 'dev.switch.stateUnknown'
+};
+const SWITCH_SOURCE_KEYS = {
+    device: 'dev.switch.sourceDevice',
+    local: 'dev.switch.sourceLocal',
+    none: 'dev.switch.sourceNone'
+};
 const TOWER_KEYS = {
     erected: 'dev.tower.erected',
     retracted: 'dev.tower.retracted',
@@ -122,6 +135,13 @@ const ERROR_KEYS = {
     'invalid-amp-brand': 'dev.error.invalid-amp-brand',
     'invalid-amp-model': 'dev.error.invalid-amp-model',
     'invalid-config-channels': 'dev.error.invalid-config-channels',
+    'invalid-switch-brand': 'dev.error.invalid-switch-brand',
+    'invalid-switch-model': 'dev.error.invalid-switch-model',
+    'unsupported-switch-model': 'dev.error.unsupported-switch-model',
+    'unsupported-control': 'dev.error.unsupported-control',
+    'invalid-config-radio': 'dev.error.invalid-config-radio',
+    'invalid-config-antenna-bands': 'dev.error.invalid-config-antenna-bands',
+    'invalid-config-key-map': 'dev.error.invalid-config-key-map',
     'invalid-device-type': 'dev.error.invalid-device-type',
     'invalid-port': 'dev.error.invalid-port',
     'invalid-outlet': 'dev.error.invalid-outlet',
@@ -302,6 +322,104 @@ export function createDevicesPage(ctx) {
         if (protocolSelect) values.protocol = protocolSelect.value;
         else delete values.protocol;
         box.outerHTML = rotatorConfigFields(values);
+        formDirty = true;
+    }
+
+    // ---- 切换器/矩阵品牌型号（服务端 switch-models.js 是唯一数据源） ----
+    function switchCatalog() {
+        return (snapshot && snapshot.switch_models) || {brands: [], generic: {}};
+    }
+
+    /** 只列出真正有该类型型号的品牌，避免 switch 品牌下出现纯矩阵型号。 */
+    function switchBrands(type) {
+        return (switchCatalog().brands || []).filter(brand =>
+            (brand.models || []).some(item => item.type === type));
+    }
+
+    function switchDefinitionFor(type, config) {
+        const source = config || {};
+        const brandId = String(source.brand || '');
+        const modelId = String(source.model || '');
+        if (modelId && modelId !== 'other' && brandId !== 'other') {
+            const brand = switchBrands(type).find(item => item.id === brandId);
+            const found = brand && (brand.models || []).find(item => item.id === modelId);
+            if (found) return found;
+        }
+        const generic = switchCatalog().generic || {};
+        return generic[type] || null;
+    }
+
+    /** 切换器/矩阵配置：型号决定字段；通用继电器板保留 relay/channels。 */
+    function switchConfigFields(value) {
+        const type = value.type;
+        const config = value.config || {};
+        const brandId = String(config.brand || '');
+        const modelId = String(config.model || '');
+        const brands = switchBrands(type);
+        const brandOptions = [`<option value="">${esc(t('dev.config.brandNone'))}</option>`]
+            .concat(brands.map(brand =>
+                `<option value="${esc(brand.id)}"${brandId === brand.id ? ' selected' : ''}>${esc(brand.name)}</option>`))
+            .concat([`<option value="other"${brandId === 'other' ? ' selected' : ''}>${esc(t('dev.config.brandOther'))}</option>`]);
+        const brand = brands.find(item => item.id === brandId);
+        const models = brand ? (brand.models || []).filter(item => item.type === type) : [];
+        const modelValue = modelId === 'other' || models.some(item => item.id === modelId) ? modelId : '';
+        const modelOptions = [`<option value="">${esc(t('dev.config.modelNone'))}</option>`]
+            .concat(models.map(item =>
+                `<option value="${esc(item.id)}"${modelValue === item.id ? ' selected' : ''}>${esc(item.name)}</option>`))
+            .concat([`<option value="other"${modelValue === 'other' ? ' selected' : ''}>${esc(t('dev.config.modelOther'))}</option>`]);
+        const definition = switchDefinitionFor(type, {brand: brandId, model: modelValue});
+        const generic = !definition || definition.id === 'relay-board';
+        const fields = (definition && definition.fields) || [];
+        const counts = generic
+            ? (type === 'switch'
+                ? `<label>${t('dev.config.outCount')}<input name="cfg_out_count" type="number" min="1" max="16" step="1" value="${esc(config.out_count === undefined ? '' : config.out_count)}"></label>`
+                : `<label>${t('dev.config.inCount')}<input name="cfg_in_count" type="number" min="1" max="16" step="1" value="${esc(config.in_count === undefined ? '' : config.in_count)}"></label>
+                   <label>${t('dev.config.outCount')}<input name="cfg_out_count" type="number" min="1" max="16" step="1" value="${esc(config.out_count === undefined ? '' : config.out_count)}"></label>`)
+            : `<p class="dev-note">${t('dev.switch.fixedPorts', {
+                in: config.in_count === undefined ? '—' : config.in_count,
+                out: config.out_count === undefined ? '—' : config.out_count
+            })}</p>`;
+        const channels = generic
+            ? `<label>${t('dev.config.channels')}<textarea name="cfg_channels" rows="3" spellcheck="false">${esc(JSON.stringify(config.channels || {}))}</textarea></label>`
+            : '';
+        const mapping = !generic
+            ? `<label>${t('dev.switch.antennaBands')}<textarea name="cfg_antenna_bands" rows="3" spellcheck="false" placeholder='{"1":["20m","15m"]}'>${esc(config.antenna_bands ? JSON.stringify(config.antenna_bands) : '')}</textarea></label>`
+            : '';
+        const keyMap = definition && definition.id === 'station-genius'
+            ? `<label>${t('dev.switch.keyMap')}<textarea name="cfg_key_map" rows="2" spellcheck="false" placeholder='["7","8","9","/","*","-","0"]'>${esc(config.key_map ? JSON.stringify(config.key_map) : '')}</textarea></label>`
+            : '';
+        return `<div class="dev-config-fields" id="devSwitchConfigFields">
+            <label>${t('dev.config.brand')}<select name="cfg_switch_brand">${brandOptions.join('')}</select></label>
+            <label>${t('dev.config.ampModel')}<select name="cfg_switch_model">${modelOptions.join('')}</select></label>
+            ${definition && definition.protocol
+                ? `<p class="dev-note">${t('dev.config.resolvedProtocol', {protocol: definition.protocol.toUpperCase()})}</p>`
+                : ''}
+            ${definition && definition.hint ? `<p class="dev-note">${esc(t(definition.hint))}</p>` : ''}
+            ${fields.map(field => ampFieldHtml(field, config)).join('')}
+            ${counts}${channels}${mapping}${keyMap}
+        </div>`;
+    }
+
+    /** 切换型号时保留已填写的地址，按新型号重绘字段。 */
+    function refreshSwitchConfigFields() {
+        const box = document.getElementById('devSwitchConfigFields');
+        if (!box) return;
+        const values = {};
+        for (const input of box.querySelectorAll('input[name^="cfg_"]')) {
+            if (input.type === 'password') continue;
+            values[input.name.slice(4)] = input.value;
+        }
+        for (const area of box.querySelectorAll('textarea[name^="cfg_"]')) {
+            const value = area.value.trim();
+            if (!value) continue;
+            try { values[area.name.slice(4)] = JSON.parse(value); } catch (error) { values[area.name.slice(4)] = value; }
+        }
+        const brandSelect = box.querySelector('select[name="cfg_switch_brand"]');
+        const modelSelect = box.querySelector('select[name="cfg_switch_model"]');
+        values.brand = brandSelect ? brandSelect.value : '';
+        values.model = modelSelect ? modelSelect.value : '';
+        const selected = selectedValue();
+        box.outerHTML = switchConfigFields(Object.assign({}, selected || {}, {config: values}));
         formDirty = true;
     }
 
@@ -1332,6 +1450,9 @@ export function createDevicesPage(ctx) {
                 <label>${t('dev.config.stopBits')}<select name="cfg_stop_bits">${option(['1', '2'], String(config.stop_bits || 1))}</select></label>
                 <label>${t('dev.config.parity')}<select name="cfg_parity">${option(['none', 'even', 'odd'], String(config.parity || 'none'))}</select></label>`;
         }
+        if (value.type === 'switch' || value.type === 'matrix') {
+            return switchConfigFields(value);
+        }
         if (RELAY_TYPES.includes(value.type)) {
             const counts = value.type === 'switch'
                 ? `<label>${t('dev.config.outCount')}<input name="cfg_out_count" type="number" min="1" max="16" step="1" value="${esc(config.out_count === undefined ? '' : config.out_count)}"></label>`
@@ -1498,15 +1619,21 @@ export function createDevicesPage(ctx) {
                 <div class="dev-ctrl-row">${seat}</div>${error}`;
         }
         if (device.type === 'matrix' || device.type === 'switch') {
+            const definition = switchDefinitionFor(device.type, device.config);
+            const readback = !!(definition && definition.readback);
+            const controllable = !definition || definition.control !== false;
             const portHint = device.type === 'switch' ? t('dev.control.switchHint') : t('dev.control.matrixHint');
+            const stateHint = readback ? t('dev.switch.readbackHint') : t('dev.switch.writeOnlyHint');
+            const label = readback ? t('dev.control.select') : t('dev.control.selectWriteOnly');
             return `<h3>${t('dev.control.title')}</h3>${status}
                 <div class="dev-ctrl-row">
                     <label>${t('dev.control.port')}<input id="devCtrlPort" maxlength="32" placeholder="in"></label>
                     <label>${t('dev.control.outlet')}<input id="devCtrlOutlet" maxlength="32" placeholder="ant1"></label>
-                    <button class="dev-btn primary" type="button" data-cmd="select">${t('dev.control.select')}</button>
+                    <button class="dev-btn primary" type="button" data-cmd="select"${controllable ? '' : ' disabled'}>${esc(label)}</button>
                 </div>
                 <div class="dev-ctrl-row">${seat}</div>
-                <p class="dev-note">${esc(portHint)}</p>${error}`;
+                <p class="dev-note">${esc(portHint)}</p>
+                <p class="dev-note">${esc(stateHint)}</p>${error}`;
         }
         if (device.type === 'amp') {
             const definition = ampDefinitionFor(device.config);
@@ -1546,6 +1673,24 @@ export function createDevicesPage(ctx) {
             for (const item of ampStatusItems(device.config, false)) {
                 const text = ampItemText(item, amp);
                 if (text) parts.push(text);
+            }
+        }
+        if (device.type === 'switch' || device.type === 'matrix') {
+            const view = (snapshot.switches && snapshot.switches[device.id]) || null;
+            if (view) {
+                parts.push(t('dev.switch.state') + ' ' + t(SWITCH_STATE_KEYS[view.state] || SWITCH_STATE_KEYS.unknown));
+                if (view.verified && view.ports) {
+                    const ports = Object.keys(view.ports).map(port => port + '→' + view.ports[port]).join(' ');
+                    if (ports) parts.push(t('dev.switch.verifiedPorts') + ' ' + ports);
+                } else if (view.commanded) {
+                    const ports = Object.keys(view.commanded).map(port => port + '→' + view.commanded[port]).join(' ');
+                    if (ports) parts.push(t('dev.switch.commandedPorts') + ' ' + ports);
+                }
+                if (view.last_readback) parts.push(t('dev.switch.lastReadback', {ts: view.last_readback}));
+                if (view.stale) parts.push(t('dev.switch.stale'));
+                parts.push(t('dev.switch.mappingSource') + ' ' +
+                    t(SWITCH_SOURCE_KEYS[view.antenna_bands ? view.antenna_bands.source : 'none'] || SWITCH_SOURCE_KEYS.none));
+                if (view.error) parts.push(errorText(view.error));
             }
         }
         const control = snapshot.controls && snapshot.controls[device.id];
@@ -1811,6 +1956,51 @@ export function createDevicesPage(ctx) {
             config.data_bits = String(data.get('cfg_data_bits') || '');
             config.stop_bits = String(data.get('cfg_stop_bits') || '');
             config.parity = String(data.get('cfg_parity') || '');
+        } else if (type === 'switch' || type === 'matrix') {
+            config.brand = String(data.get('cfg_switch_brand') || '');
+            config.model = String(data.get('cfg_switch_model') || '');
+            const definition = switchDefinitionFor(type, config);
+            if (definition) config.protocol = definition.protocol;
+            for (const field of (definition && definition.fields) || []) {
+                const raw = data.get('cfg_' + field.key);
+                if (raw === null) continue;
+                const value = String(raw);
+                if (field.type === 'password') {
+                    if (value) config[field.key] = value;
+                    continue;
+                }
+                config[field.key] = value;
+            }
+            const generic = !definition || definition.id === 'relay-board';
+            if (generic) {
+                if (type === 'switch') config.out_count = String(data.get('cfg_out_count') || '');
+                else {
+                    config.in_count = String(data.get('cfg_in_count') || '');
+                    config.out_count = String(data.get('cfg_out_count') || '');
+                }
+                const channelsText = String(data.get('cfg_channels') || '').trim();
+                if (channelsText) {
+                    try { config.channels = JSON.parse(channelsText); } catch (error) {
+                        throw new Error('invalid-config-channels');
+                    }
+                }
+            }
+            const bandsText = String(data.get('cfg_antenna_bands') || '').trim();
+            if (bandsText) {
+                try { config.antenna_bands = JSON.parse(bandsText); } catch (error) {
+                    throw new Error('invalid-config-antenna-bands');
+                }
+            } else {
+                config.antenna_bands = {};
+            }
+            const keyMapText = String(data.get('cfg_key_map') || '').trim();
+            if (keyMapText) {
+                try { config.key_map = JSON.parse(keyMapText); } catch (error) {
+                    throw new Error('invalid-config-key-map');
+                }
+            } else {
+                config.key_map = [];
+            }
         } else if (RELAY_TYPES.includes(type)) {
             config.relay_url = String(data.get('cfg_relay_url') || '');
             const relayToken = String(data.get('cfg_relay_token') || '');
@@ -2754,6 +2944,10 @@ export function createDevicesPage(ctx) {
             }
             if (event.target.matches('select[name="cfg_rotator_brand"], select[name="cfg_rotator_model"], select[name="cfg_rotator_protocol"]')) {
                 refreshRotatorConfigFields();
+                return;
+            }
+            if (event.target.matches('select[name="cfg_switch_brand"], select[name="cfg_switch_model"]')) {
+                refreshSwitchConfigFields();
                 return;
             }
             if (!event.target.matches('select[name="cfg_computer"], select[name="cfg_model"]')) return;

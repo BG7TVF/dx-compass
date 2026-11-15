@@ -5565,7 +5565,7 @@
         "type": "function",
         "z": "dxdev0000000000",
         "name": "Run device polls",
-        "func": "await global.get('dx').ready.whenReady();\nconst dx = global.get('dx');\nconst at = new Date();\nconst result = await dx.devices.pollRotators(global, msg.payload, at);\nif (result.errors.length) {\n    node.warn('rotator poll: ' + result.errors.map(item => item.device_id + '=' + item.error).join(', '));\n}\nconst amps = dx.devices.pollAmps(global, msg.payload, at);\nif (amps.errors.length) {\n    node.warn('amp mqtt: ' + amps.errors.map(item => item.device_id + '=' + item.error).join(', '));\n}\nreturn null;",
+        "func": "await global.get('dx').ready.whenReady();\nconst dx = global.get('dx');\nconst at = new Date();\nconst result = await dx.devices.pollRotators(global, msg.payload, at);\nif (result.errors.length) {\n    node.warn('rotator poll: ' + result.errors.map(item => item.device_id + '=' + item.error).join(', '));\n}\nconst amps = dx.devices.pollAmps(global, msg.payload, at);\nif (amps.errors.length) {\n    node.warn('amp mqtt: ' + amps.errors.map(item => item.device_id + '=' + item.error).join(', '));\n}\nconst switches = dx.devices.pollSwitches(global, msg.payload, at);\nif (switches.errors.length) {\n    node.warn('switch poll: ' + switches.errors.map(item => item.device_id + '=' + item.error).join(', '));\n}\nreturn null;",
         "outputs": 1,
         "noerr": 0,
         "initialize": "",
