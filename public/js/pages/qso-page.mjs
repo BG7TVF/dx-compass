@@ -791,7 +791,6 @@ export function createQsoPage(ctx) {
         $('#opView').classList.toggle('hidden', !isOp);
         $('#devView').classList.toggle('hidden', !isDev);
         $('#recordsPanel').classList.toggle('hidden', isFull);
-        $('#btnSpotSettings').classList.toggle('hidden', isFull);
         $('#qsoPanel').classList.toggle('hidden', !isQso);
         $('#btnSpotView').classList.toggle('active', mode === 'spots');
         $('#btnQsoView').classList.toggle('active', isQso);
