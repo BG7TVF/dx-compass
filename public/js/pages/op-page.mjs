@@ -66,6 +66,7 @@ export function createOpPage(ctx) {
         review: loadReview(),
         adviceDismissed: new Set(),
         adviceEngine: null,
+        adviceStatus: 'idle',
         checking: null,
         multTimer: null,
         adviceTimer: null,
@@ -756,16 +757,34 @@ export function createOpPage(ctx) {
         return !!(state.adviceEngine && state.adviceEngine.ok && !state.adviceEngine.degraded);
     }
 
+    /* The advice card is never hidden: every category renders it, and when no
+     * rule fires it explains why instead of leaving an empty strip. */
+    function adviceGeneric() {
+        const book = state.adviceEngine && state.adviceEngine.contest &&
+            state.adviceEngine.contest.ruleBook;
+        return !!(book && book.structured === false);
+    }
+
+    /* Two different silences: no data yet (loading, failed request, no QSO)
+     * versus a category without structured rules feeding generic advice. */
+    function adviceNote(list) {
+        if (list.length) {
+            if (state.adviceStatus === 'failed') return t('op.advice.failed');
+            return adviceGeneric() ? t('op.advice.generic') : '';
+        }
+        if (state.adviceStatus === 'off') return t('op.advice.off');
+        if (state.adviceStatus === 'failed') return t('op.advice.failed');
+        if (state.adviceStatus === 'loading' || !state.adviceEngine) return t('op.advice.loading');
+        if (state.adviceEngine.degraded === 'no-qsos') return t('op.advice.noQsos');
+        return adviceGeneric() ? t('op.advice.generic') : t('op.advice.none');
+    }
+
     function renderAdvice() {
         const host = $('#opAdvice');
         if (!host) return;
         const list = engineAdvice().concat(multiplierAdvice())
             .concat(engineLive() ? [] : runIdleAdvice());
-        if (!list.length) {
-            host.classList.add('hidden');
-            host.innerHTML = '';
-            return;
-        }
+        const note = adviceNote(list);
         host.classList.remove('hidden');
         host.innerHTML = '<span class="op-advice-title">' + esc(t('op.advice.title')) + '</span>' +
             list.map(item => '<span class="op-advice-item ' + item.kind + '">' +
@@ -775,15 +794,19 @@ export function createOpPage(ctx) {
                     ? '<i class="op-advice-missing">⚠ ' + esc(item.missing.join(',')) + '</i>' : '') +
                 '<button type="button" class="op-advice-close" ' +
                 'data-op-advice="' + esc(item.key) + '" title="' + esc(t('op.advice.dismiss')) +
-                '">×</button></span>').join('');
+                '">×</button></span>').join('') +
+            (note ? '<span class="op-advice-note">' + esc(note) + '</span>' : '');
     }
 
     async function loadAdvice() {
         if (ctx.settings.adviceEnabled === false) {
             state.adviceEngine = null;
+            state.adviceStatus = 'off';
             renderAdvice();
             return;
         }
+        /* Keep showing the previous answer while a refresh is in flight. */
+        if (!state.adviceEngine) state.adviceStatus = 'loading';
         try {
             const seat = currentSeat();
             // 只有服务端真实席位键（DXI 复合键）才按席位请求；占位电台号
@@ -791,8 +814,10 @@ export function createOpPage(ctx) {
             state.adviceEngine = await fetchAdvice({
                 seat: seat.includes(':') ? seat : ''
             });
+            state.adviceStatus = state.adviceEngine ? 'ready' : 'failed';
         } catch (error) {
             state.adviceEngine = null;
+            state.adviceStatus = 'failed';
         }
         renderAdvice();
     }
