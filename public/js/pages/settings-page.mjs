@@ -1146,8 +1146,12 @@ export function createSettingsPage(ctx) {
     function bind() {
         $$('.layout-btn').forEach(button => button.addEventListener('click', () => ctx.spot.setLayout(button.dataset.layout)));
         $$('.panel-close').forEach(button => button.addEventListener('click', () => {
-            if (button.dataset.close === 'configPanel') closeConfig();
-            else document.getElementById(button.dataset.close).classList.add('hidden');
+            // Shared close styling only: without a data-close target the
+            // element owns its own handler (e.g. the page-settings drawer).
+            const target = button.dataset.close;
+            if (!target) return;
+            if (target === 'configPanel') closeConfig();
+            else document.getElementById(target)?.classList.add('hidden');
         }));
         $('#btnMenu').addEventListener('click', event => {
             event.stopPropagation();
