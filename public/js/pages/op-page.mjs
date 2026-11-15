@@ -29,6 +29,7 @@ import {getDevicesSnapshot, sendDeviceCommand} from '../../shared/data/devices.m
 import {changeFrequencyClaim} from '../../shared/data/station.mjs';
 
 const REVIEW_KEY = 'dxcompass-op-call-review';
+const SEAT_KEY = 'dxcompass-op-seat';
 const RADIO_THEME = {1: 'r1', 2: 'r2', 3: 'r3', 4: 'r4', 5: 'r5', 6: 'r6'};
 /* Printed ruler of the amplifier bay: the bar is a meter with a fixed scale,
  * the exact value is always the numeral beside it. */
@@ -48,7 +49,7 @@ export function createOpPage(ctx) {
     const state = {
         active: false,
         map: null,
-        selectedSeat: 'all',
+        selectedSeat: loadSeat(),
         qsos: new Map(),
         mySpots: [],
         allSpots: [],
@@ -135,6 +136,9 @@ export function createOpPage(ctx) {
         const bound = String(ctx.settings.seatRadios || '')
             .split(',').map(value => value.trim()).filter(Boolean);
         const count = Math.max(1, Math.min(12, Number(ctx.settings.seatCount) || 1));
+        /* Nothing bound and a single seat means we have no seat to show yet:
+         * the card must say so instead of inventing "Radio 1". */
+        if (!bound.length && count <= 1) return [];
         const out = [];
         for (let i = 0; i < count; i += 1) out.push(bound[i] || String(i + 1));
         return out;
@@ -163,31 +167,66 @@ export function createOpPage(ctx) {
         }));
     }
 
+    /* Seat numbers: canonical order (radio number, then seat key). The rank is
+     * recomputed from the keys themselves, never from the order N1MM instances
+     * happened to report in, so a reconnect or a page reload prints the same
+     * numbers for the same seats. A seat that briefly drops out keeps its slot
+     * because its key stays in the set. The underlying seat keys and every
+     * matching rule stay untouched. */
+    const seatNumbers = new Map();
+    const knownSeatKeys = new Set();
+
+    function ensureSeatNumbers(keys) {
+        let learned = false;
+        for (const key of keys) {
+            const value = String(key);
+            if (knownSeatKeys.has(value)) continue;
+            knownSeatKeys.add(value);
+            learned = true;
+        }
+        if (!learned && seatNumbers.size) return;
+        [...knownSeatKeys]
+            .sort((a, b) => radioNrOfKey(a) - radioNrOfKey(b) || a.localeCompare(b))
+            .forEach((key, index) => seatNumbers.set(key, index + 1));
+    }
+
+    function seatNumber(key) {
+        const value = String(key);
+        if (!seatNumbers.has(value)) ensureSeatNumbers([value]);
+        return seatNumbers.get(value) || 1;
+    }
+
+    /* Display order always follows the seat number, never the order in which
+     * N1MM instances happened to come online. */
+    function orderedSeatChoices() {
+        const choices = seatChoices();
+        ensureSeatNumbers(choices.map(choice => choice.value));
+        return choices.slice().sort((a, b) => seatNumber(a.value) - seatNumber(b.value));
+    }
+
     function seatLabel(choice) {
         if (!choice) return '';
-        const parts = [choice.stationName || t('op.seat.n', {n: choice.index + 1})];
-        if (choice.radioNr) parts.push(t('op.seat.radio', {n: choice.radioNr}));
-        if (choice.operator) parts.push(choice.operator);
-        return parts.join(' · ');
+        ensureSeatNumbers(seatChoices().map(item => item.value));
+        return t('op.seat.n', {n: seatNumber(choice.value)});
     }
 
     function seatNameOf(key) {
         const choice = seatChoices().find(item => item.value === String(key));
-        return choice ? seatLabel(choice) : t('op.radio.n', {n: radioNrOfKey(key)});
+        return choice ? seatLabel(choice) : t('op.seat.n', {n: seatNumber(key)});
     }
 
     function currentSeat() {
-        const choices = seatChoices();
+        const choices = orderedSeatChoices();
+        /* No seat yet: keep the legacy radio-1 read key so history still has a
+         * filter; the seat card itself shows the empty state. */
         if (!choices.length) return '1';
-        if (state.selectedSeat === 'all' && choices.length > 1) return 'all';
         const values = choices.map(choice => choice.value);
         return values.includes(String(state.selectedSeat))
             ? String(state.selectedSeat) : values[0];
     }
 
     function visibleSeats() {
-        const key = currentSeat();
-        return key === 'all' ? seatChoices().map(choice => choice.value) : [key];
+        return [currentSeat()];
     }
 
     /* Empty targets are global alerts and retain the original QSO-page path.
@@ -216,7 +255,6 @@ export function createOpPage(ctx) {
     function radioName(key) {
         const radio = radioOf(key);
         if (radio && (radio.radioName || radio.name)) return radio.radioName || radio.name;
-        if (radio && radio.stationName) return radio.stationName;
         return seatNameOf(key);
     }
 
@@ -310,7 +348,6 @@ export function createOpPage(ctx) {
 
     function qsosFor(key) {
         const list = [...state.qsos.values()];
-        if (key === 'all') return list;
         if (String(key).includes(':')) return list.filter(qso => seatOfQso(qso) === String(key));
         return list.filter(qso => String(qso.radioNr) === String(key));
     }
@@ -331,7 +368,9 @@ export function createOpPage(ctx) {
         const label = $('#opSeatLabel');
         const name = $('#opSeatName');
         if (!select) return;
-        const choices = seatChoices();
+        const choices = orderedSeatChoices();
+        ensureSeatNumbers(choices.map(choice => choice.value));
+        const empty = !choices.length;
         const show = choices.length > 1;
         select.classList.toggle('hidden', !show);
         if (label) {
@@ -339,14 +378,17 @@ export function createOpPage(ctx) {
             label.textContent = t('op.seat');
         }
         const current = currentSeat();
-        select.innerHTML = (show ? '<option value="all">' + esc(t('op.seat.all')) + '</option>' : '') +
-            choices.map(choice => '<option value="' + esc(choice.value) + '">' +
-                esc(seatLabel(choice)) + '</option>').join('');
-        select.value = current === 'all' && show ? 'all' : current;
-        /* One seat means no dropdown: the card shows the seat name instead. */
+        select.innerHTML = choices.map(choice => '<option value="' + esc(choice.value) + '">' +
+            esc(seatLabel(choice)) + '</option>').join('');
+        if (show) select.value = current;
+        /* One seat means no dropdown: the card shows the seat name instead.
+         * No seat at all gets an explicit hint, never an empty dropdown. */
         if (name) {
             const active = choices.find(choice => choice.value === current);
-            name.textContent = show ? '' : (active ? seatLabel(active) : t('op.seat.all'));
+            name.classList.toggle('empty', empty);
+            name.textContent = empty
+                ? t('op.seat.empty')
+                : (show ? '' : (active ? seatLabel(active) : ''));
         }
     }
 
@@ -369,9 +411,10 @@ export function createOpPage(ctx) {
         if ($('#opRateChart')) drawBars('#opRateChart', perMinute(timed, 60), '#35d6a4');
         const note = $('#opRateNote');
         if (note) {
-            const rates = visibleSeats().map(key => radioName(key) + ' ' + rateFor(key));
-            rates.push(t('op.top.rateGlobal') + ' ' + rateFor('all'));
-            note.textContent = rates.join(' · ');
+            /* No seat bound yet: do not invent a "seat 1" rate line. */
+            note.textContent = seatChoices().length
+                ? visibleSeats().map(key => radioName(key) + ' ' + rateFor(key)).join(' · ')
+                : '—';
         }
         const bands = new Map();
         rows.forEach(qso => {
@@ -515,7 +558,7 @@ export function createOpPage(ctx) {
 
     function currentBand() {
         const key = currentSeat();
-        const radio = key === 'all' ? radioOf(visibleSeats()[0]) : radioOf(key);
+        const radio = radioOf(key);
         const band = radio && radio.freqKhz ? bandOf(radio.freqKhz) : '';
         if (band) return band.toLowerCase();
         const latest = lastQsoFor(key);
@@ -660,9 +703,8 @@ export function createOpPage(ctx) {
     function laneLabel(lane) {
         const radio = lane && lane.radio || {};
         const seatValue = String(lane && lane.seat || '');
-        const nr = radio.radioNr ||
-            (seatValue.includes(':') ? seatValue.slice(seatValue.lastIndexOf(':') + 1) : seatValue);
-        return radio.stationName || radio.radioName || t('op.radio.n', {n: nr || 1});
+        /* No computer name here either: the seat ordinal is the display name. */
+        return radio.radioName || (seatValue ? seatNameOf(seatValue) : t('op.radio.n', {n: 1}));
     }
 
     function engineAdvice() {
@@ -672,7 +714,7 @@ export function createOpPage(ctx) {
             ? data.seats
             : [{seat: data.seat, radio: null, gates: data.gates, advice: data.advice}];
         const selected = currentSeat();
-        if (selected !== 'all') {
+        if (selected) {
             const matched = lanes.filter(lane => String(lane.seat) === selected);
             if (matched.length) lanes = matched;
         }
@@ -747,7 +789,7 @@ export function createOpPage(ctx) {
             // 只有服务端真实席位键（DXI 复合键）才按席位请求；占位电台号
             // 传过去会凭空多出一个 lane。
             state.adviceEngine = await fetchAdvice({
-                seat: seat !== 'all' && seat.includes(':') ? seat : ''
+                seat: seat.includes(':') ? seat : ''
             });
         } catch (error) {
             state.adviceEngine = null;
@@ -823,7 +865,7 @@ export function createOpPage(ctx) {
         state.map.setData({
             qsos: all,
             spots,
-            radioFilter: key === 'all' ? 'all' : String(radioNrOfKey(key))
+            radioFilter: String(radioNrOfKey(key))
         });
         renderMapLegend();
     }
@@ -880,7 +922,7 @@ export function createOpPage(ctx) {
                 esc(key) + '" data-freq="' + own.freqKhz + '">' + esc(t('op.claim.release')) + '</button>';
         } else {
             note = occupied
-                ? t('op.claim.occupiedBy', {seat: occupied.operator || seatNameOf(occupied.seat)})
+                ? t('op.claim.occupiedBy', {seat: seatNameOf(occupied.seat)})
                 : t('op.claim.free');
             button = '<button type="button" class="op-mini op-claim-btn" data-op-claim="claim" data-seat="' +
                 esc(key) + '" data-freq="' + (Number.isFinite(freqKhz) ? freqKhz : '') + '"' +
@@ -905,10 +947,7 @@ export function createOpPage(ctx) {
     }
 
     function commandSeat() {
-        const key = currentSeat();
-        if (key !== 'all') return key;
-        const seats = visibleSeats();
-        return seats.length ? seats[0] : 'OP';
+        return currentSeat() || 'OP';
     }
 
     function rotatorDevice() {
@@ -1407,6 +1446,25 @@ export function createOpPage(ctx) {
         opponentPanel.render(state.opponentRows, myCall(), calls);
     }
 
+    // ---- selected seat -----------------------------------------------------
+    /* The OP view has no "all seats" aggregate any more: one concrete seat is
+     * always active and the choice survives a reload. */
+    function loadSeat() {
+        try {
+            return localStorage.getItem(SEAT_KEY) || '';
+        } catch {
+            return '';
+        }
+    }
+
+    function saveSeat(value) {
+        try {
+            localStorage.setItem(SEAT_KEY, String(value));
+        } catch {
+            // Remembering the seat is a convenience only.
+        }
+    }
+
     // ---- call sanity check ------------------------------------------------
     function loadReview() {
         try {
@@ -1691,7 +1749,6 @@ export function createOpPage(ctx) {
     }
 
     function renderTitles() {
-        $('#opKicker').textContent = t('op.title');
         $('#opSeatTitle').textContent = t('op.seat');
         $('#opRateTitle').textContent = t('qsoRate');
         $('#opBandQsoTitle').textContent = t('op.top.bandCounts');
@@ -1719,6 +1776,7 @@ export function createOpPage(ctx) {
         $('#opSeat')?.addEventListener('change', event => {
             stopTowerHold();
             state.selectedSeat = event.target.value;
+            saveSeat(state.selectedSeat);
             refreshAll();
             renderMap();
             renderMultipliers();
@@ -1743,7 +1801,7 @@ export function createOpPage(ctx) {
                     if (Array.isArray(body.claims)) {
                         ctx.qso.handleStationMessage({type: 'frequencyClaims', claims: body.claims});
                     }
-                    const owner = body.owner && (body.owner.operator || seatNameOf(body.owner.seat));
+                    const owner = body.owner && seatNameOf(body.owner.seat);
                     const key = body.error === 'frequency-claimed' ? 'op.claim.conflict'
                         : body.error === 'not-claim-owner' ? 'op.claim.notOwner' : 'op.claim.failed';
                     state.claimFeedback = {seat, bad: true, text: t(key, {seat: owner || ''})};
