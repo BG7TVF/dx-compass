@@ -212,26 +212,132 @@ test('switch config normalizes protocol, counts and rejects unsupported models',
     assert.deepEqual(badBands, {ok: false, error: 'invalid-config-antenna-bands'});
 });
 
-test('mapping prefers device readback and never merges with local config', () => {
-    const device = deviceRow({
-        type: 'matrix',
-        config_json: JSON.stringify({antenna_bands: {'1': ['20m'], '2': ['40m']}})
-    });
-    const fromDevice = switchModels.mappingFor(storage.devices.toDevice(device), {
-        switch: {
-            antennas: [{index: 1, name: 'EFHW', bands: ['15m']}],
-            bands: [{index: 1, name: '15m'}]
+test('mapping derives port bands from the RF topology and follows changes immediately', () => {
+    const sw = storage.devices.toDevice(deviceRow({
+        id: 'sw-1', type: 'switch', config_json: JSON.stringify({out_count: 4})
+    }));
+    const a1 = storage.devices.toDevice(deviceRow({
+        id: 'ant-1', name: 'EFHW', type: 'antenna', bands: '20m,15m'
+    }));
+    const links = [{link_id: 'rf:1', a_device: 'sw-1', a_port: 'ant1', b_device: 'ant-1', b_port: 'in'}];
+
+    const first = switchModels.mappingFor(sw, {}, {devices: [sw, a1], links});
+    assert.equal(first.ports.ant1.source, 'topology');
+    assert.deepEqual(first.ports.ant1.bands, ['20m', '15m']);
+    assert.deepEqual(first.ports.ant1.antennas.map(item => item.name), ['EFHW']);
+    assert.deepEqual(first.conflicts, []);
+
+    // 改天线波段：下一次计算立即跟随，不需要重新配置。
+    const a1b = Object.assign({}, a1, {bands: ['40m']});
+    const changed = switchModels.mappingFor(sw, {}, {devices: [sw, a1b], links});
+    assert.deepEqual(changed.ports.ant1.bands, ['40m']);
+
+    // 换端口：映射跟着连线走，旧端口回到无映射。
+    const moved = [{link_id: 'rf:2', a_device: 'sw-1', a_port: 'ant3', b_device: 'ant-1', b_port: 'in'}];
+    const movedView = switchModels.mappingFor(sw, {}, {devices: [sw, a1b], links: moved});
+    assert.equal(movedView.ports.ant1.source, 'none');
+    assert.equal(movedView.ports.ant3.source, 'topology');
+    assert.deepEqual(movedView.ports.ant3.bands, ['40m']);
+
+    // 删连线：端口回到无映射。
+    const removed = switchModels.mappingFor(sw, {}, {devices: [sw, a1b], links: []});
+    assert.equal(removed.ports.ant3.source, 'none');
+    assert.deepEqual(removed.ports.ant3.bands, []);
+    assert.equal(removed.source, 'none');
+});
+
+test('parallel antennas behind one port are unioned, not first-link-wins', () => {
+    const sw = storage.devices.toDevice(deviceRow({
+        id: 'sw-1', type: 'switch', config_json: JSON.stringify({out_count: 4})
+    }));
+    const div = storage.devices.toDevice(deviceRow({
+        id: 'div-1', type: 'divider', config_json: JSON.stringify({out_count: 2})
+    }));
+    const a1 = storage.devices.toDevice(deviceRow({
+        id: 'ant-1', name: 'Vertical', type: 'antenna', bands: '20m'
+    }));
+    const a2 = storage.devices.toDevice(deviceRow({
+        id: 'ant-2', name: 'Dipole', type: 'antenna', bands: '40m,20m'
+    }));
+    const links = [
+        {link_id: 'rf:1', a_device: 'sw-1', a_port: 'ant1', b_device: 'div-1', b_port: 'in'},
+        {link_id: 'rf:2', a_device: 'div-1', a_port: 'out1', b_device: 'ant-1', b_port: 'in'},
+        {link_id: 'rf:3', a_device: 'div-1', a_port: 'out2', b_device: 'ant-2', b_port: 'in'}
+    ];
+    const mapping = switchModels.mappingFor(sw, {}, {devices: [sw, div, a1, a2], links});
+    assert.deepEqual(mapping.ports.ant1.bands, ['20m', '40m']);
+    assert.deepEqual(mapping.ports.ant1.antennas.map(item => item.name), ['Vertical', 'Dipole']);
+});
+
+test('manual fallback is silent when it agrees and explicit when it conflicts', () => {
+    const sw = storage.devices.toDevice(deviceRow({
+        id: 'sw-1', type: 'switch',
+        config_json: JSON.stringify({out_count: 4, antenna_bands: {'1': ['20m']}})
+    }));
+    const a1 = storage.devices.toDevice(deviceRow({
+        id: 'ant-1', name: 'EFHW', type: 'antenna', bands: '20m'
+    }));
+    const links = [{link_id: 'rf:1', a_device: 'sw-1', a_port: 'ant1', b_device: 'ant-1', b_port: 'in'}];
+
+    const agrees = switchModels.mappingFor(sw, {}, {devices: [sw, a1], links});
+    assert.equal(agrees.ports.ant1.source, 'topology');
+    assert.equal(agrees.ports.ant1.manual_agrees, true);
+    assert.deepEqual(agrees.conflicts, []);
+
+    const a1b = Object.assign({}, a1, {bands: ['40m']});
+    const conflict = switchModels.mappingFor(sw, {}, {devices: [sw, a1b], links});
+    assert.equal(conflict.ports.ant1.source, 'topology');
+    assert.deepEqual(conflict.ports.ant1.bands, ['40m']);
+    assert.deepEqual(conflict.ports.ant1.manual_bands, ['20m']);
+    assert.equal(conflict.conflicts.length, 1);
+    assert.equal(conflict.conflicts[0].port, 'ant1');
+    assert.deepEqual(conflict.conflicts[0].topology_bands, ['40m']);
+    assert.deepEqual(conflict.conflicts[0].manual_bands, ['20m']);
+    assert.equal(conflict.conflicts[0].antennas[0].name, 'EFHW');
+
+    // 没有拓扑时手工兜底才是来源。
+    const onlyManual = switchModels.mappingFor(sw, {}, {devices: [sw, a1], links: []});
+    assert.equal(onlyManual.ports.ant1.source, 'manual');
+    assert.deepEqual(onlyManual.ports.ant1.bands, ['20m']);
+});
+
+test('device readback still wins over topology and manual', () => {
+    const sw = storage.devices.toDevice(deviceRow({
+        id: 'sw-1', type: 'switch',
+        config_json: JSON.stringify({out_count: 4, antenna_bands: {'1': ['20m']}})
+    }));
+    const a1 = storage.devices.toDevice(deviceRow({
+        id: 'ant-1', name: 'EFHW', type: 'antenna', bands: '20m'
+    }));
+    const links = [{link_id: 'rf:1', a_device: 'sw-1', a_port: 'ant1', b_device: 'ant-1', b_port: 'in'}];
+    const mapping = switchModels.mappingFor(sw, {
+        switch: {antennas: [{index: 1, name: 'AG port 1', bands: ['40m']}]}
+    }, {devices: [sw, a1], links});
+    assert.equal(mapping.ports.ant1.source, 'device');
+    assert.deepEqual(mapping.ports.ant1.bands, ['40m']);
+    assert.deepEqual(mapping.conflicts, []);
+});
+
+test('snapshot exposes topology mapping per port without manual configuration', () => {
+    const rows = [
+        deviceRow({
+            id: 'sw-1', name: 'Switch', type: 'switch', bands: '',
+            config_json: JSON.stringify({out_count: 4})
+        }),
+        deviceRow({
+            id: 'ant-1', name: 'EFHW', type: 'antenna', bands: '20m,15m'
+        }),
+        {
+            kind: 'rf', id: 'rf:1', link_id: 'rf:1',
+            a_device: 'sw-1', a_port: 'ant1', b_device: 'ant-1', b_port: 'in'
         }
-    });
-    assert.equal(fromDevice.source, 'device');
-    assert.deepEqual(fromDevice.antennas, [{index: 1, name: 'EFHW', bands: ['15m']}]);
-
-    const fromLocal = switchModels.mappingFor(storage.devices.toDevice(device), {switch: {}});
-    assert.equal(fromLocal.source, 'local');
-    assert.deepEqual(fromLocal.antennas.map(item => item.index), [1, 2]);
-
-    const none = switchModels.mappingFor(storage.devices.toDevice(deviceRow({type: 'switch'})), {});
-    assert.equal(none.source, 'none');
+    ];
+    const snapshot = service.snapshot(makeContext(), rows, new Date());
+    const view = snapshot.switches['sw-1'];
+    assert.equal(view.port_mapping.ant1.source, 'topology');
+    assert.deepEqual(view.port_mapping.ant1.bands, ['20m', '15m']);
+    assert.deepEqual(view.port_mapping.ant1.antennas.map(item => item.name), ['EFHW']);
+    assert.deepEqual(view.conflicts, []);
 });
 
 // ---- 状态语义 ----

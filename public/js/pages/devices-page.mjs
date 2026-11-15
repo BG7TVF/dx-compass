@@ -68,7 +68,8 @@ const SWITCH_STATE_KEYS = {
 };
 const SWITCH_SOURCE_KEYS = {
     device: 'dev.switch.sourceDevice',
-    local: 'dev.switch.sourceLocal',
+    topology: 'dev.switch.sourceTopology',
+    manual: 'dev.switch.sourceManual',
     none: 'dev.switch.sourceNone'
 };
 const TOWER_KEYS = {
@@ -1688,8 +1689,29 @@ export function createDevicesPage(ctx) {
                 }
                 if (view.last_readback) parts.push(t('dev.switch.lastReadback', {ts: view.last_readback}));
                 if (view.stale) parts.push(t('dev.switch.stale'));
+                const mapping = view.antenna_bands || {};
                 parts.push(t('dev.switch.mappingSource') + ' ' +
-                    t(SWITCH_SOURCE_KEYS[view.antenna_bands ? view.antenna_bands.source : 'none'] || SWITCH_SOURCE_KEYS.none));
+                    t(SWITCH_SOURCE_KEYS[mapping.source] || SWITCH_SOURCE_KEYS.none));
+                const portKeys = Object.keys(mapping.ports || {});
+                if (portKeys.length) {
+                    parts.push(t('dev.switch.portMapping'));
+                    for (const key of portKeys) {
+                        const item = mapping.ports[key];
+                        const bands = (item.bands || []).join('/') || '—';
+                        parts.push(key + ': ' + t(SWITCH_SOURCE_KEYS[item.source] ||
+                            SWITCH_SOURCE_KEYS.none) + ' ' + bands);
+                    }
+                }
+                for (const conflict of mapping.conflicts || []) {
+                    const names = (conflict.antennas || []).map(antenna => antenna.name || antenna.id)
+                        .filter(Boolean).join('、');
+                    parts.push(t('dev.switch.conflictDetail', {
+                        port: conflict.port,
+                        antennas: names || '—',
+                        topology: (conflict.topology_bands || []).join('/') || '—',
+                        manual: (conflict.manual_bands || []).join('/') || '—'
+                    }));
+                }
                 if (view.error) parts.push(errorText(view.error));
             }
         }
