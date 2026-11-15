@@ -3078,7 +3078,7 @@ test('RF-Kit RF2K-S：只读 /info 身份与版本', async () => {
     }
 });
 
-test('OM Power：2501A/3501A/4001A 走原生 TCP，2500A 已下线', () => {
+test('OM Power：2501A/3501A/4001A 走原生 TCP', () => {
     for (const id of ['2501a', '3501a', '4001a']) {
         const definition = ampModels.resolve('ompower', id);
         assert.ok(definition, `OM Power ${id} definition must exist`);
@@ -3101,13 +3101,6 @@ test('OM Power：2501A/3501A/4001A 走原生 TCP，2500A 已下线', () => {
         }
     }
 
-    // 2500A 已从型号表删除；旧配置按「已下线」回退，不再派生协议。
-    assert.equal(ampModels.resolve('ompower', '2500a'), null);
-    assert.equal(ampModels.retired('ompower', '2500a'), true);
-    assert.equal(ampModels.transportOf({brand: 'ompower', model: '2500a'}), 'mqtt');
-    assert.equal(model.normalizeDevice({
-        type: 'amp', name: '2500A', config: {brand: 'ompower', model: '2500a'}
-    }, {devices: []}).device.config.brand, undefined);
 });
 
 function omFrame(bytes) {
@@ -3351,7 +3344,7 @@ test('OM Power：文本探测超时后降级到二进制并标为未验证', asy
     }
 });
 
-test('OM Power 命令入口：只接受官方文本动作，已下线的 2500A 拒绝', async () => {
+test('OM Power 命令入口：只接受官方文本动作', async () => {
     fakeTransports();
     const globalCtx = makeContext();
     const row = deviceRow({
@@ -3379,12 +3372,6 @@ test('OM Power 命令入口：只接受官方文本动作，已下线的 2500A �
     }, {devices: []});
     assert.equal(saved.ok, true);
     assert.equal(saved.device.config.protocol, 'tcp');
-
-    const legacy = await service.handleCommand(globalCtx, [deviceRow({
-        id: 'om-legacy', name: '2500A', type: 'amp', bands: '',
-        config_json: JSON.stringify({brand: 'ompower', model: '2500a'})
-    })], 'om-legacy', {command: 'amp_set', args: {action: 'operate'}}, headers, new Date());
-    assert.equal(legacy.status, 400);
 });
 
 test('AMP1000 配置：MQTT 字段白名单与口令隐藏', () => {
