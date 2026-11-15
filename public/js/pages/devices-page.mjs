@@ -1684,6 +1684,13 @@ export function createDevicesPage(ctx) {
             if (amp.command_pending) {
                 parts.push(t('dev.amp.commandPending', {action: amp.command_pending}));
             }
+            if (amp.protocol === 'binary-legacy') {
+                parts.push(t('dev.amp.protocolUnverified'));
+            }
+            if (amp.temperature_calibrated === false && amp.current_temperature_raw !== null &&
+                amp.current_temperature_raw !== undefined) {
+                parts.push(t('dev.amp.tempUncalibrated'));
+            }
         }
         if (device.type === 'switch' || device.type === 'matrix') {
             const view = (snapshot.switches && snapshot.switches[device.id]) || null;

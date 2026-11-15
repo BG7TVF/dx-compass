@@ -3086,16 +3086,16 @@ test('OM Power：2501A/3501A/4001A 走原生 TCP，2500A 已下线', () => {
         assert.equal(definition.protocol, 'tcp');
         assert.equal(definition.transport, 'om-tcp');
         assert.equal(definition.fields.find(field => field.key === 'port').default, 10001);
-        // 只开放仓库真实存在的五个动作。
+        // 官方文本协议的动作：电源、模式、自动/手动调谐与调谐下一步。
         assert.deepEqual(definition.controls.map(item => item.delta.action),
-            ['power_on', 'power_off', 'operate', 'standby', 'autotune']);
+            ['power_on', 'power_off', 'operate', 'standby', 'autotune', 'manual_tune', 'tune_step']);
         assert.equal(ampModels.transportOf({brand: 'ompower', model: id}), 'om-tcp');
         const keys = definition.status.map(item => item.key);
         for (const key of [
             'status_text', 'antenna_name', 'work_freq', 'out_fwd_power', 'out_rev_power',
             'out_swr', 'drive_power', 'plate_current', 'plate_voltage', 'screen_current',
-            'screen_voltage', 'grid_a_voltage', 'grid_b_voltage', 'heater_a_voltage',
-            'heater_b_voltage', 'mains_voltage', 'current_temperature'
+            'screen_voltage', 'grid_a_voltage', 'grid_b_voltage', 'grid_current',
+            'heater_a_voltage', 'heater_b_voltage', 'mains_voltage', 'current_temperature_raw'
         ]) {
             assert.ok(keys.includes(key), `${id} must expose ${key}`);
         }
@@ -3114,66 +3114,116 @@ function omFrame(bytes) {
     return Buffer.from([0x3d].concat(bytes, [0x3b]));
 }
 
-test('OM Power：10 字节测量帧与 ASCII token 解析', () => {
-    const measurement = {amp: ampLink.blankOm(), buffer: Buffer.alloc(0)};
-    const result = ampLink.feedOm(measurement, omFrame([0xf4, 0x01, 10, 35, 120, 0, 0, 0]));
-    assert.equal(result.measurements, 1);
-    assert.equal(measurement.amp.out_fwd_power, 500);
-    assert.equal(measurement.amp.out_rev_power, 20);
-    assert.ok(Math.abs(measurement.amp.out_swr - 1.5) < 1e-9);
-    assert.equal(measurement.amp.drive_power, 35);
-    assert.equal(measurement.amp.screen_current, 120);
-    assert.equal(measurement.amp.transmitting, true);
-
+test('OM Power：官方文本 token 解析（ST/PO/电压/SWR/频率/INFO）', () => {
     const amp = ampLink.blankOm();
-    assert.equal(ampLink.applyOmToken(amp, 'ST1110-20m DP'), true);
-    assert.equal(amp.antenna_name, '20m DP');
+
+    // ST 固定七位布局：ST + 天线号(hex) + 电源 + 模式 + 发射 + 调谐 + 名称。
+    assert.equal(ampLink.applyOmToken(amp, 'ST3110-ANT 3'), true);
+    assert.equal(amp.antenna_number, 3);
+    assert.equal(amp.antenna_name, 'ANT 3');
     assert.equal(amp.status_text, 'Operate');
-    assert.equal(ampLink.applyOmToken(amp, 'ST1100-20m DP'), true);
+    assert.equal(amp.transmitting, false);
+    assert.equal(amp.tuning, false);
+
+    assert.equal(ampLink.applyOmToken(amp, 'ST2101-'), true);
+    assert.equal(amp.antenna_number, 2);
     assert.equal(amp.status_text, 'Standby');
-    assert.equal(ampLink.applyOmToken(amp, 'ST1000-'), true);
+    assert.equal(amp.transmitting, true);
+    assert.equal(amp.tuning, false);
+
+    assert.equal(ampLink.applyOmToken(amp, 'ST11111NAME'), true);
+    assert.equal(amp.status_text, 'Operate');
+    assert.equal(amp.transmitting, true);
+    assert.equal(amp.tuning, true);
+
+    assert.equal(ampLink.applyOmToken(amp, 'ST0000-'), true);
     assert.equal(amp.status_text, 'Off');
-    for (const [token, expected] of [
-        ['OPERATE', 'Operate'], ['STBY', 'Standby'], ['PAOFF', 'Off'],
-        ['PAON', 'On'], ['COON', 'Cooling down'], ['WA12', 'Warming up'], ['CO7', 'Cooling down']
-    ]) {
-        assert.equal(ampLink.applyOmToken(amp, token), true, token);
-        assert.equal(amp.status_text, expected, token);
-    }
-    assert.equal(ampLink.applyOmToken(amp, 'FR14250'), true);
-    assert.equal(amp.frequency_khz, 14250);
-    assert.equal(amp.work_freq, 14250000);
+
+    // 非法布局（非十六进制天线号）不再被识别。
+    assert.equal(ampLink.applyOmToken(ampLink.blankOm(), 'ST1X00-20m DP'), false);
+
+    // 功率与 SWR：只有 PO > PR > 0 才出数。
+    const power = ampLink.blankOm();
+    assert.equal(ampLink.applyOmToken(power, 'PO1500,PR20,PI12.5'), true);
+    assert.equal(power.out_fwd_power, 1500);
+    assert.equal(power.out_rev_power, 20);
+    assert.equal(power.drive_power, 12.5);
+    // r = sqrt(20/1500) ≈ 0.1155，SWR = 1.1155/0.8845 ≈ 1.261。
+    assert.ok(Math.abs(power.out_swr - 1.261) < 0.01);
+    assert.equal(ampLink.omSwr(1000, 0), null);
+    assert.equal(ampLink.omSwr(1000, 1000), null);
+    assert.equal(ampLink.omSwr(500, 1000), null);
+    assert.equal(ampLink.omSwr(0, 0), null);
+
+    // OM4001* OH 的正向功率显示前除以 2。
+    const oh = ampLink.blankOm();
+    assert.equal(ampLink.applyOmToken(oh, 'INFO:1,T1,T2,5.18,120,OM4001A OH'), true);
+    assert.equal(oh.model, 'OM4001A OH');
+    assert.equal(ampLink.applyOmToken(oh, 'PO1000,PR10,PI5.0'), true);
+    assert.equal(oh.out_fwd_power, 500);
+
+    // 电压/电流：板流 A、栅压负号、IG 按 0.1 mA 推断。
     for (const [token, key, value] of [
-        ['IP1250', 'plate_current', 1.25], ['UP3800', 'plate_voltage', 3800],
-        ['US350', 'screen_voltage', 350], ['UGA-120', 'grid_a_voltage', -120],
-        ['UGB-45', 'grid_b_voltage', -45], ['UHA6.3', 'heater_a_voltage', 6.3],
-        ['UHB6.2', 'heater_b_voltage', 6.2], ['UM230', 'mains_voltage', 230],
-        ['TE47', 'current_temperature', 23.5]
+        ['UP3800', 'plate_voltage', 3800], ['UM230', 'mains_voltage', 230],
+        ['US350', 'screen_voltage', 350], ['IP1250', 'plate_current', 1.25],
+        ['IS-35', 'screen_current', -35], ['UH6.3', 'heater_a_voltage', 6.3],
+        ['UHA6.3', 'heater_a_voltage', 6.3], ['UHB6.2', 'heater_b_voltage', 6.2],
+        ['UG120', 'grid_a_voltage', -120], ['UGA45', 'grid_a_voltage', -45],
+        ['UGB46', 'grid_b_voltage', -46], ['IG12', 'grid_current', -1.2]
     ]) {
         assert.equal(ampLink.applyOmToken(amp, token), true, token);
         assert.equal(amp[key], value, token);
     }
+    assert.equal(amp.ig_unit_inferred, true);
+
+    // 温度只保留原始值，不伪造 °C。
+    assert.equal(ampLink.applyOmToken(amp, 'TE47'), true);
+    assert.equal(amp.current_temperature_raw, 47);
+    assert.equal(amp.current_temperature, null);
+    assert.equal(amp.temperature_calibrated, false);
+
+    // FR 两种写法按 kHz，FA 按 Hz。
+    assert.equal(ampLink.applyOmToken(amp, 'FR14250'), true);
+    assert.equal(amp.frequency_khz, 14250);
+    assert.equal(amp.work_freq, 14250000);
+    assert.equal(ampLink.applyOmToken(amp, 'FR:14070'), true);
+    assert.equal(amp.frequency_khz, 14070);
+    assert.equal(ampLink.applyOmToken(amp, 'FA14250000'), true);
+    assert.equal(amp.frequency_khz, 14250);
+
+    // INFO：序列号、电子管、固件、累计分钟、型号。
+    const info = ampLink.blankOm();
+    assert.equal(ampLink.applyOmToken(info, 'INFO:12345,TUBE001,TUBE002,5.18,120,OM2501A'), true);
+    assert.equal(info.serial, '12345');
+    assert.equal(info.tube_serial, 'TUBE001');
+    assert.equal(info.tube_serial2, 'TUBE002');
+    assert.equal(info.firmware, '5.18');
+    assert.equal(info.runtime_minutes, 120);
+    assert.equal(info.model, 'OM2501A');
+
+    // 天线、故障、告警、事件。
+    assert.equal(ampLink.applyOmToken(amp, 'AN3ANT 3'), true);
+    assert.equal(amp.antenna_number, 3);
+    assert.equal(amp.antenna_name, 'ANT 3');
     assert.equal(ampLink.applyOmToken(amp, 'PTTON'), true);
     assert.equal(amp.transmitting, true);
     assert.equal(ampLink.applyOmToken(amp, 'PTTOFF'), true);
     assert.equal(amp.transmitting, false);
     assert.equal(amp.out_fwd_power, 0);
-    assert.equal(ampLink.applyOmToken(amp, 'CON'), true);
+    assert.equal(ampLink.applyOmToken(amp, 'FA05'), true);
+    assert.equal(amp.fault_code, 5);
+    assert.equal(ampLink.applyOmToken(amp, 'WG2'), true);
+    assert.equal(amp.warning_count, 2);
     assert.equal(ampLink.applyOmToken(amp, 'HELLO'), false);
 
-    // 流式：NUL 填充、跨包拼帧、假起始字节都能恢复。
-    const stream = {buffer: Buffer.alloc(0), amp: ampLink.blankOm()};
-    const payload = Buffer.concat([
-        Buffer.from([0x00, 0x00, 0x3d]),
-        omFrame([0xf4, 0x01, 10, 35, 120, 0, 0, 0]),
-        Buffer.from('ST1110-20m DP;')
-    ]);
-    assert.equal(ampLink.feedOm(stream, payload.slice(0, 6)).measurements, 0);
-    const tail = ampLink.feedOm(stream, payload.slice(6));
-    assert.equal(tail.measurements, 1);
-    assert.ok(tail.tokens.includes('ST1110-20m DP'));
-    assert.equal(stream.amp.out_fwd_power, 500);
-    assert.equal(stream.amp.status_text, 'Operate');
+    // 文本流跨包：`^` 前缀会被剥掉，token 按 `;` 切分。
+    const stream = {buffer: Buffer.alloc(0), amp: ampLink.blankOm(), protocol: 'text'};
+    const first = ampLink.feedOm(stream, Buffer.from('^PO1500,PR20,PI12.'));
+    assert.equal(first.measurements, 0);
+    const second = ampLink.feedOm(stream, Buffer.from('5;^ST3110-ANT 3;'));
+    assert.ok(second.tokens.includes('PO1500,PR20,PI12.5'));
+    assert.equal(stream.amp.out_fwd_power, 1500);
+    assert.equal(stream.amp.antenna_name, 'ANT 3');
 });
 
 class OmSocket extends require('node:events') {
@@ -3191,7 +3241,16 @@ class OmSocket extends require('node:events') {
     destroy() { this.destroyed = true; return this; }
 }
 
-test('OM Power：TCP 握手、轮询与五个动作下发', async () => {
+function omDevice(id, host) {
+    return storage.devices.toDevice(deviceRow({
+        id, name: 'OM2501A', type: 'amp', bands: '',
+        config_json: JSON.stringify({
+            brand: 'ompower', model: '2501a', protocol: 'tcp', host, port: 10001
+        })
+    }));
+}
+
+test('OM Power：文本握手、1 秒遥测、发射中 250 ms 快速功率与 COFF 重建', async () => {
     ampLink.resetForTests();
     const sockets = [];
     ampLink.setSocketFactory(() => {
@@ -3201,85 +3260,98 @@ test('OM Power：TCP 握手、轮询与五个动作下发', async () => {
     });
     const globalCtx = makeContext();
     const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-    const entries = [
-        {id: 'om-on', host: '10.0.0.11', status: 'ST1000-'},
-        {id: 'om-off', host: '10.0.0.12', status: 'ST1100-20m DP'},
-        {id: 'om-op', host: '10.0.0.13', status: 'ST1100-20m DP'},
-        {id: 'om-sb', host: '10.0.0.14', status: 'ST1110-20m DP'},
-        {id: 'om-tune', host: '10.0.0.15', status: 'ST1110-20m DP'}
-    ];
-    const devices = entries.map(item => storage.devices.toDevice(deviceRow({
-        id: item.id, name: 'OM2501A', type: 'amp', bands: '',
-        config_json: JSON.stringify({
-            brand: 'ompower', model: '2501a', protocol: 'tcp', host: item.host, port: 10001
-        })
-    })));
+    const devices = [omDevice('om-text', '10.0.0.21')];
     try {
         ampLink.pollAmps(globalCtx, devices, new Date(), {devices, links: []});
-        assert.equal(sockets.length, entries.length, '每个 OM 型号都要建立 TCP 链路');
-        for (const socket of sockets) socket.emit('connect');
-        // 仓库在 TCP 连上后等 0.6 秒再发 C。
-        assert.equal(sockets[0].writes.length, 0);
-        await sleep(650);
-        for (const socket of sockets) assert.equal(socket.writes[0], 'C');
+        const socket = sockets[0];
+        socket.emit('connect');
+        assert.equal(socket.writes[0], '^', '连上先探测文本协议');
+        socket.emit('data', Buffer.from('^OK;'));
+        assert.equal(socket.writes[1], 'C', '文本探测成功后再发 C');
+        socket.emit('data', Buffer.from('CON;'));
+        assert.deepEqual(socket.writes.slice(2, 5), ['?', '1', 'J'], '握手后取状态/信息/频率源');
 
-        for (let i = 0; i < sockets.length; i += 1) {
-            sockets[i].emit('data', Buffer.from('CON;'));
-            assert.equal(sockets[i].writes[1], '?', '握手成功后立即请求状态');
-            sockets[i].emit('data', Buffer.from(`${entries[i].status};`));
-            // 有功率的测量帧 + PTTOFF：既验证读数，也让动作不被“发射中”挡住。
-            sockets[i].emit('data', omFrame([0xf4, 0x01, 10, 35, 120, 0, 0, 0]));
-            sockets[i].emit('data', Buffer.from('PTTOFF;'));
-        }
-        const online = runtime.stateOf(globalCtx, 'om-op');
+        // ST 七位布局 + 遥测 + INFO。
+        socket.emit('data', Buffer.from('ST3110-ANT 3;PO1500,PR20,PI12.5;'
+            + 'UP3800;IP1250;UG120;IG12;TE47;FR14250;'));
+        const online = runtime.stateOf(globalCtx, 'om-text');
         assert.equal(online.amp_connected, true);
-        assert.equal(online.amp.status_text, 'Standby');
-        assert.equal(online.amp.transmitting, false);
-        assert.equal(online.amp.antenna_name, '20m DP');
+        assert.equal(online.amp.protocol, 'text');
+        assert.equal(online.amp.protocol_verified, true);
+        assert.equal(online.amp.status_text, 'Operate');
+        assert.equal(online.amp.antenna_name, 'ANT 3');
+        assert.equal(online.amp.out_fwd_power, 1500);
+        assert.equal(online.amp.out_swr !== null, true);
+        assert.equal(online.amp.plate_current, 1.25);
+        assert.equal(online.amp.grid_a_voltage, -120);
+        assert.equal(online.amp.grid_current, -1.2);
+        assert.equal(online.amp.current_temperature_raw, 47);
+        assert.equal(online.amp.current_temperature, null);
+        assert.equal(online.amp.frequency_khz, 14250);
 
-        const dispatch = async (id, action, byte) => {
-            const index = entries.findIndex(item => item.id === id);
-            const socket = sockets[index];
-            const before = socket.writes.length;
-            const sent = await ampLink.publish(devices[index], {action}, new Date(), globalCtx);
-            assert.equal(sent.ok, true, `${id} ${action}`);
-            assert.equal(socket.writes[before], byte, `${id} ${action}`);
-            return sent;
-        };
-        await dispatch('om-on', 'power_on', 'Y');
-        await dispatch('om-off', 'power_off', 'Z');
-        await dispatch('om-op', 'operate', 'O');
-        await dispatch('om-sb', 'standby', 'O');
-
-        // 状态不匹配、未确认期间重复下发、非白名单动作都要拒绝。
-        assert.equal((await ampLink.publish(devices[3], {action: 'operate'}, new Date(), globalCtx)).status, 409);
-        assert.equal((await ampLink.publish(devices[0], {action: 'power_on'}, new Date(), globalCtx)).status, 409);
-        assert.equal((await ampLink.publish(devices[0], {action: 'calibrate'}, new Date(), globalCtx)).status, 400);
-
-        // 状态 token 到达后 pending 清除；2 秒内不再接受下一条命令。
-        sockets[2].emit('data', Buffer.from('OPERATE;'));
-        assert.equal((await ampLink.publish(devices[2], {action: 'standby'}, new Date(), globalCtx)).status, 409);
-
-        // 自动调谐：L 进入自动模式，收到 AUTO 后补发 &，等待输入功率即结束。
-        const tune = devices[4];
-        const tuneSocket = sockets[4];
-        const tuneStart = tuneSocket.writes.length;
-        assert.equal((await ampLink.publish(tune, {action: 'autotune'}, new Date(), globalCtx)).ok, true);
-        assert.equal(tuneSocket.writes[tuneStart], 'L');
-        tuneSocket.emit('data', Buffer.from('AUTO;'));
-        assert.equal(tuneSocket.writes[tuneSocket.writes.length - 1], '&');
-        tuneSocket.emit('data', Buffer.from('AUTO:WAITING FOR INPUT POWER;'));
-        assert.equal((await ampLink.publish(tune, {action: 'standby'}, new Date(), globalCtx)).status, 409);
-
-        // 1 秒一格测量请求。
+        // 1 秒一次 #，动作走单字符。
         await sleep(1100);
-        assert.ok(sockets[0].writes.includes('#'), '轮询必须按秒请求测量帧');
+        assert.ok(socket.writes.includes('#'), '每秒发送 #');
+        const sent = await ampLink.publish(devices[0], {action: 'standby'}, new Date(), globalCtx);
+        assert.equal(sent.ok, true);
+        assert.equal(socket.writes.at(-1), 'O');
+        socket.emit('data', Buffer.from('STBY;'));
+
+        // 发射中才发 I；PTTOFF 后停止。
+        socket.emit('data', Buffer.from('ST3111-ANT 3;'));
+        const beforeQuick = socket.writes.filter(value => value === 'I').length;
+        await sleep(300);
+        assert.ok(socket.writes.filter(value => value === 'I').length > beforeQuick, '发射中发 I');
+        socket.emit('data', Buffer.from('PTTOFF;'));
+        const afterTx = socket.writes.filter(value => value === 'I').length;
+        await sleep(300);
+        assert.equal(socket.writes.filter(value => value === 'I').length, afterTx, '停止发射后不再发 I');
+
+        // COFF 后补发 C 重建会话。
+        socket.emit('data', Buffer.from('COFF;'));
+        assert.equal(socket.writes.at(-1), 'C');
+        socket.emit('data', Buffer.from('CON;'));
+        assert.equal(runtime.stateOf(globalCtx, 'om-text').amp.protocol, 'text');
     } finally {
         ampLink.resetForTests();
     }
 });
 
-test('OM Power 命令入口：只接受五个动作，已下线的 2500A 拒绝', async () => {
+test('OM Power：文本探测超时后降级到二进制并标为未验证', async () => {
+    ampLink.resetForTests();
+    const sockets = [];
+    ampLink.setSocketFactory(() => {
+        const socket = new OmSocket();
+        sockets.push(socket);
+        return socket;
+    });
+    const globalCtx = makeContext();
+    const devices = [omDevice('om-bin', '10.0.0.22')];
+    try {
+        ampLink.pollAmps(globalCtx, devices, new Date(), {devices, links: []});
+        const socket = sockets[0];
+        socket.emit('connect');
+        assert.equal(socket.writes[0], '^');
+        // 2 秒内没有 ^OK，自动降级并发 C。
+        await new Promise(resolve => setTimeout(resolve, 2150));
+        assert.equal(socket.writes.at(-1), 'C');
+        socket.emit('data', Buffer.from('CON;'));
+        assert.equal(runtime.stateOf(globalCtx, 'om-bin').amp.protocol, 'binary-legacy');
+        assert.equal(runtime.stateOf(globalCtx, 'om-bin').amp.protocol_verified, false);
+
+        socket.emit('data', omFrame([0xf4, 0x01, 10, 35, 120, 0, 0, 0]));
+        const state = runtime.stateOf(globalCtx, 'om-bin');
+        assert.equal(state.amp.out_fwd_power, 500);
+        assert.equal(state.amp.out_rev_power, 20);
+        assert.ok(Math.abs(state.amp.out_swr - 1.5) < 1e-9);
+        assert.equal(state.amp.protocol, 'binary-legacy');
+        assert.equal(state.amp.protocol_verified, false);
+    } finally {
+        ampLink.resetForTests();
+    }
+});
+
+test('OM Power 命令入口：只接受官方文本动作，已下线的 2500A 拒绝', async () => {
     fakeTransports();
     const globalCtx = makeContext();
     const row = deviceRow({
@@ -3289,7 +3361,8 @@ test('OM Power 命令入口：只接受五个动作，已下线的 2500A 拒绝'
         })
     });
     const headers = {'X-DX-Seat': 'OP-A'};
-    for (const action of ['power_on', 'power_off', 'operate', 'standby', 'autotune']) {
+    for (const action of ['power_on', 'power_off', 'operate', 'standby', 'autotune',
+        'manual_tune', 'tune_step']) {
         const result = await service.handleCommand(globalCtx, [row], 'om-1',
             {command: 'amp_set', args: {action}}, headers, new Date());
         assert.equal(result.status, 202, action);
