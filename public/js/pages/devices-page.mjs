@@ -1078,6 +1078,21 @@ export function createDevicesPage(ctx) {
         render();
     }
 
+    /** 全选画布上的全部卡片（草稿与已保存设备），供整组拖动与批量删除使用。 */
+    function selectAllNodes() {
+        const keys = new Set(canvasNodes().map(node => node.key));
+        if (!keys.size) return;
+        selectedKeys = keys;
+        stopTower();
+        formDirty = false;
+        formSignature = null;
+        ctrlSignature = null;
+        for (const el of document.querySelectorAll('#devNodes [data-node-key]')) {
+            el.classList.toggle('active', keys.has(el.dataset.nodeKey));
+        }
+        renderInspector();
+    }
+
     function parentLabel(device) {
         if (!device || !device.parent_id) return t('dev.form.root');
         const parent = deviceById(device.parent_id);
@@ -2084,19 +2099,41 @@ export function createDevicesPage(ctx) {
         return null;
     }
 
-    function beginDrag(key, event) {
+    /** 拖动成员：草稿取草稿布局，已保存设备取当前生效布局（含未落库的本地覆盖）。 */
+    function dragMember(key) {
         const draft = draftByKey(key);
-        const base = draft ? draft.layout : positionOf(deviceById(key));
+        if (draft) {
+            const {x, y} = draft.layout;
+            return {key, draft: true, originX: x, originY: y, x, y};
+        }
+        const device = deviceById(key);
+        if (!device) return null;
+        const base = positionOf(device);
+        return {key, draft: false, originX: base.x, originY: base.y, x: base.x, y: base.y};
+    }
+
+    /**
+     * 开始拖动：按下的卡片若已在多选集合里，整组一起拖；否则只拖这一张。
+     * 组内草稿与已保存设备共用同一个位移，相对位置保持不变。
+     */
+    function beginDrag(key, event) {
+        const keys = selectedKeys.has(key) ? [...selectedKeys] : [key];
+        const items = keys.map(dragMember).filter(Boolean);
+        if (!items.length) return;
+        const before = {};
+        for (const item of items) {
+            if (item.draft) continue;
+            before[item.key] = localLayout && localLayout[item.key]
+                ? {x: localLayout[item.key].x, y: localLayout[item.key].y}
+                : null;
+        }
         dragging = {
-            key,
             pointerId: event.pointerId,
             startX: event.clientX,
             startY: event.clientY,
-            originX: base.x,
-            originY: base.y,
-            x: base.x,
-            y: base.y,
-            moved: false
+            moved: false,
+            items,
+            before
         };
         const node = nodeElement(key);
         try {
@@ -2112,15 +2149,33 @@ export function createDevicesPage(ctx) {
         const dy = (event.clientY - dragging.startY) / zoom;
         if (!dragging.moved && Math.abs(dx) + Math.abs(dy) < 4) return;
         dragging.moved = true;
-        dragging.x = Math.max(0, Math.round(dragging.originX + dx));
-        dragging.y = Math.max(0, Math.round(dragging.originY + dy));
-        const node = nodeElement(dragging.key);
-        if (node) {
-            node.style.left = dragging.x + 'px';
-            node.style.top = dragging.y + 'px';
+        // 整组共用一个整数位移；再按组内最靠左/上的一张做边界夹取，避免个别卡片
+        // 先撞到 0 而其它卡片继续走，破坏相对位置。
+        const items = dragging.items;
+        const minX = Math.min(...items.map(item => item.originX));
+        const minY = Math.min(...items.map(item => item.originY));
+        const shiftX = Math.max(Math.round(dx), -minX);
+        const shiftY = Math.max(Math.round(dy), -minY);
+        const live = Object.assign({}, localLayout);
+        for (const item of items) {
+            const x = item.originX + shiftX;
+            const y = item.originY + shiftY;
+            item.x = x;
+            item.y = y;
+            const node = nodeElement(item.key);
+            if (node) {
+                node.style.left = x + 'px';
+                node.style.top = y + 'px';
+            }
+            if (item.draft) {
+                const draft = draftByKey(item.key);
+                if (draft) draft.layout = {x, y};
+            } else {
+                live[item.key] = {x, y};
+            }
         }
-        const draft = draftByKey(dragging.key);
-        if (draft) draft.layout = {x: dragging.x, y: dragging.y};
+        // 已保存设备的实时位置写进本地覆盖，canvasNodes()/连线才会跟着指针走。
+        localLayout = live;
         renderWires(canvasNodes());
     }
 
@@ -2129,18 +2184,30 @@ export function createDevicesPage(ctx) {
         const drag = dragging;
         dragging = null;
         if (!drag.moved) return;
-        const draft = draftByKey(drag.key);
-        if (draft) {
-            draft.layout = {x: drag.x, y: drag.y};
+        // 草稿的 layout 在 moveDrag 里已经更新；已保存设备整组一次落库。
+        const layouts = drag.items.filter(item => !item.draft)
+            .map(item => ({id: item.key, x: item.x, y: item.y}));
+        if (!layouts.length) {
             renderCanvas();
             return;
         }
-        localLayout = Object.assign({}, localLayout, {[drag.key]: {x: drag.x, y: drag.y}});
         try {
-            const result = await saveDeviceLayouts([{id: drag.key, x: drag.x, y: drag.y}]);
+            const result = await saveDeviceLayouts(layouts);
             if (!result || !result.ok) throw new Error('layout rejected');
         } catch (error) {
-            delete localLayout[drag.key];
+            // 整组回滚到拖动前的本地覆盖，界面不能停在未落库的位置。
+            const restored = Object.assign({}, localLayout);
+            for (const item of drag.items) {
+                if (item.draft) {
+                    const draft = draftByKey(item.key);
+                    if (draft) draft.layout = {x: item.originX, y: item.originY};
+                    continue;
+                }
+                const before = drag.before[item.key];
+                if (before) restored[item.key] = before;
+                else delete restored[item.key];
+            }
+            localLayout = restored;
             showToast(errorText('invalid-layout'));
         }
         renderCanvas();
@@ -2384,6 +2451,7 @@ export function createDevicesPage(ctx) {
         $('#devRefresh').textContent = t('refresh');
         $('#devNew').textContent = t('dev.add');
         $('#devSaveAll').textContent = t('dev.saveAll');
+        $('#devSelectAll').textContent = t('dev.selectAll');
         $('#devHint').textContent = t('dev.hint.server');
         $('#devPaletteTitle').textContent = t('dev.palette.title');
         $('#devPaletteHint').textContent = t('dev.palette.hint');
@@ -2404,6 +2472,7 @@ export function createDevicesPage(ctx) {
         $('#devRefresh').addEventListener('click', () => { void refresh(); });
         $('#devNew').addEventListener('click', () => createDraft('antenna'));
         $('#devSaveAll').addEventListener('click', () => { void saveAllDrafts(); });
+        $('#devSelectAll').addEventListener('click', () => selectAllNodes());
         $('#devInspectorClose').addEventListener('click', () => {
             const key = selectedKeys.size === 1 ? [...selectedKeys][0] : '';
             if (isDraftKey(key)) {
@@ -2524,8 +2593,13 @@ export function createDevicesPage(ctx) {
             }
             if (event.button !== undefined && event.button !== 0) return;
             const key = node.dataset.nodeKey;
-            selectNode(key, event.shiftKey);
-            if (selectedKeys.has(key) && selectedKeys.size === 1) beginDrag(key, event);
+            // Shift 点击只切换选中；普通点击已选中的卡片保留多选并整组拖动。
+            if (event.shiftKey) {
+                selectNode(key, true);
+                return;
+            }
+            if (!selectedKeys.has(key)) selectNode(key, false);
+            if (selectedKeys.has(key)) beginDrag(key, event);
         });
         $('#devNodes').addEventListener('keydown', event => {
             if (event.key !== 'Enter' && event.key !== ' ') return;
@@ -2635,9 +2709,17 @@ export function createDevicesPage(ctx) {
         });
         document.addEventListener('keydown', event => {
             if (!active) return;
+            const element = document.activeElement;
+            const tag = element ? element.tagName : '';
+            const typing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(tag) || !!(element && element.isContentEditable);
+            if ((event.ctrlKey || event.metaKey) && !event.altKey && String(event.key).toLowerCase() === 'a') {
+                if (typing) return;
+                event.preventDefault();
+                selectAllNodes();
+                return;
+            }
             if (event.key !== 'Delete') return;
-            const tag = document.activeElement ? document.activeElement.tagName : '';
-            if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)) return;
+            if (typing) return;
             if (selectedKeys.size) void removeSelected();
         });
     }
