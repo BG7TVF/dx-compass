@@ -30,6 +30,12 @@ import {changeFrequencyClaim} from '../../shared/data/station.mjs';
 
 const REVIEW_KEY = 'dxcompass-op-call-review';
 const RADIO_THEME = {1: 'r1', 2: 'r2', 3: 'r3', 4: 'r4', 5: 'r5', 6: 'r6'};
+/* Printed ruler of the amplifier bay: the bar is a meter with a fixed scale,
+ * the exact value is always the numeral beside it. */
+const AMP_POWER_MAX = 2000;
+const AMP_SWR_MIN = 1;
+const AMP_SWR_MAX = 3;
+const AMP_SWR_LIMIT = 2;
 
 const timeOf = value => {
     const time = new Date(value).getTime();
@@ -921,6 +927,7 @@ export function createOpPage(ctx) {
     }
 
     function renderBottom() {
+        renderAmps();
         const host = $('#opBottom');
         const devices = controlDevices();
         $('#opBottomNote').textContent = devices.length ? '' : t('op.bottom.none');
@@ -945,6 +952,216 @@ export function createOpPage(ctx) {
             '<div class="op-recent"><div class="op-recent-row"><span></span><b>' +
             esc(t('op.bottom.recent')) + '</b><span></span><span></span></div>' + recent +
             '</div></div>';
+    }
+
+    function handleDevices() {
+        if (!state.active) return;
+        void loadDevices();
+    }
+
+    /* ---- amplifier bay -------------------------------------------------- */
+
+    function ampDevices() {
+        const snapshot = deviceSnapshot();
+        if (!snapshot || !Array.isArray(snapshot.devices)) return [];
+        return snapshot.devices
+            .filter(device => device.type === 'amp' && device.enabled !== false)
+            .sort((a, b) => String(a.name || a.id).localeCompare(String(b.name || b.id)));
+    }
+
+    function ampIdentity(device) {
+        const snapshot = deviceSnapshot() || {};
+        const catalog = snapshot.amp_models || {};
+        const config = (device && device.config) || {};
+        const brand = (catalog.brands || []).find(item => item.id === config.brand) || null;
+        const model = brand ? (brand.models || []).find(item => item.id === config.model) : null;
+        return {
+            brand: brand ? brand.name : '',
+            model: model ? model.name : (config.model && config.model !== 'other' ? config.model : '')
+        };
+    }
+
+    function ampValue(value) {
+        if (value === null || value === undefined || value === '') return null;
+        const number = Number(value);
+        return Number.isFinite(number) ? number : null;
+    }
+
+    function ampPower(power) {
+        const watts = ampValue(power);
+        if (watts === null) return null;
+        return watts >= 1000
+            ? {value: (watts / 1000).toFixed(2), unit: 'kW'}
+            : {value: String(Math.round(watts)), unit: 'W'};
+    }
+
+    function ampPercent(value, min, max) {
+        if (value === null) return 0;
+        return Math.max(0, Math.min(100, ((value - min) / (max - min)) * 100));
+    }
+
+    function ampTransmitting(amp) {
+        if (!amp) return false;
+        return amp.ptt_status === 1 || amp.transmitting === true || amp.transmitting === 1;
+    }
+
+    function ampPaChip(amp) {
+        if (!amp) return null;
+        const pa = ampValue(amp.pa_switch);
+        if (pa !== null) return {text: t(pa ? 'op.amp.paOn' : 'op.amp.paOff'), on: pa === 1};
+        const operating = ampValue(amp.operating);
+        if (operating !== null) {
+            return {text: t(operating ? 'op.amp.operate' : 'op.amp.standby'), on: operating === 1};
+        }
+        const power = ampValue(amp.power_on);
+        if (power !== null) return {text: t(power ? 'op.amp.paOn' : 'op.amp.paOff'), on: power === 1};
+        return null;
+    }
+
+    function ampAlarmCode(amp) {
+        if (!amp) return '';
+        if (amp.fault_code) return String(amp.fault_code);
+        const word = ampValue(amp.alarm_word);
+        if (word) return '0x' + word.toString(16).toUpperCase().padStart(2, '0');
+        if (amp.alarm) return String(amp.alarm);
+        if (amp.warning) return 'W' + amp.warning;
+        return '';
+    }
+
+    /** Panel with readings; `stale` keeps the numbers but marks them as held. */
+    function ampReadings(amp, stale) {
+        const power = ampPower(amp.out_fwd_power);
+        const swr = ampValue(amp.out_swr);
+        const powerWidth = ampValue(amp.out_fwd_power) === null
+            ? 0 : ampPercent(ampValue(amp.out_fwd_power), 0, AMP_POWER_MAX);
+        const swrWidth = swr === null ? 0 : ampPercent(swr, AMP_SWR_MIN, AMP_SWR_MAX);
+        const swrKind = swr === null ? '' : swr >= 2.5 ? ' bad' : swr >= AMP_SWR_LIMIT ? ' warn' : '';
+        const powerText = power ? '<b>' + esc(power.value) + '</b><small>' + esc(power.unit) + '</small>'
+            : '<b>—</b>';
+        const swrText = swr === null ? '<b>—</b>' : '<b>' + esc(swr.toFixed(2)) + '</b>';
+        const metric = (label, value, unit, digits) => {
+            const number = ampValue(value);
+            return '<span><i>' + esc(label) + '</i><b>' +
+                (number === null ? '—' : esc(number.toFixed(digits))) + '</b><u>' + esc(unit) + '</u></span>';
+        };
+        return '<div class="op-amp-gauges">' +
+                '<div class="op-amp-gauge">' +
+                    '<div class="op-amp-gauge-head"><span>' + esc(t('op.amp.forward')) + '</span>' +
+                        '<em>FWD · W</em></div>' +
+                    '<div class="op-amp-ruler"><span>0</span><span>1k</span><span>2k</span></div>' +
+                    '<div class="op-amp-track"><i style="width:' + powerWidth.toFixed(1) + '%"></i></div>' +
+                '</div>' +
+                '<div class="op-amp-gauge">' +
+                    '<div class="op-amp-gauge-head"><span>' + esc(t('op.amp.swr')) + '</span>' +
+                        '<em>SWR</em></div>' +
+                    '<div class="op-amp-ruler"><span>1.0</span><span>2.0</span><span>3.0</span></div>' +
+                    '<div class="op-amp-track"><i class="' + swrKind.trim() +
+                        '" style="width:' + swrWidth.toFixed(1) + '%"></i>' +
+                        '<u class="limit" style="left:' +
+                        ampPercent(AMP_SWR_LIMIT, AMP_SWR_MIN, AMP_SWR_MAX).toFixed(1) + '%"></u></div>' +
+                '</div>' +
+            '</div>' +
+            '<div class="op-amp-reads">' +
+                '<div class="op-amp-read' + (stale ? ' muted' : '') + '">' + powerText + '</div>' +
+                '<div class="op-amp-read swr' + (stale ? ' muted' : '') + '">' + swrText + '</div>' +
+            '</div>' +
+            '<div class="op-amp-metrics">' +
+                metric(t('op.amp.reflected'), amp.out_rev_power, 'W', 0) +
+                metric(t('op.amp.temp'), amp.current_temperature, '°C', 0) +
+                metric(t('op.amp.voltage'), amp.current_voltage, 'V', 1) +
+                metric(t('op.amp.current'), amp.current_current, 'A', 1) +
+            '</div>';
+    }
+
+    function ampEmptyFace(headline, note, hint) {
+        return '<div class="op-amp-empty"><b>' + esc(headline) + '</b><span>' + esc(note) + '</span>' +
+            (hint ? '<em>' + esc(hint) + '</em>' : '') + '</div>';
+    }
+
+    function ampPanel(device) {
+        const snapshot = deviceSnapshot() || {};
+        const status = (snapshot.status || {})[device.id] || {state: 'unknown'};
+        const amp = status.amp || null;
+        const hasReading = !!amp;
+        const offline = status.state === 'offline';
+        const stale = offline && hasReading;
+        const transmitting = !stale && ampTransmitting(amp);
+        const alarm = !!(amp && amp.alarm_active);
+        const identity = ampIdentity(device);
+        const frequency = ampValue(amp && amp.work_freq);
+        const band = (amp && amp.band) || (frequency === null ? '' : bandOf(frequency / 1000));
+        const flags = [];
+        const pa = ampPaChip(amp);
+        if (pa && hasReading) {
+            flags.push('<span class="op-amp-chip' + (pa.on ? ' pa-on' : '') + '">' + esc(pa.text) + '</span>');
+        }
+        if (transmitting) flags.push('<span class="op-amp-chip tx">TX</span>');
+        if (alarm) {
+            const code = ampAlarmCode(amp);
+            flags.push('<span class="op-amp-chip alarm">' + esc(t('op.amp.alarm')) +
+                (code ? ' ' + esc(code) : '') + '</span>');
+        }
+        if (stale) {
+            const age = ampValue(status.age_ms);
+            const text = age === null ? t('op.amp.stale') : t('op.amp.staleAge', {s: Math.round(age / 1000)});
+            flags.push('<span class="op-amp-chip stale" title="' +
+                esc(status.last_report || '') + '">' + esc(text) + '</span>');
+        }
+        let face;
+        if (hasReading) {
+            face = ampReadings(amp, stale);
+        } else if (status.state === 'no-source') {
+            face = ampEmptyFace(t('op.amp.noSource'), t('op.amp.noSourceNote'), t('op.amp.noSourceHint'));
+        } else if (offline) {
+            face = ampEmptyFace(t('op.amp.offline'), t('op.amp.offlineNote'), status.error || '');
+        } else {
+            face = ampEmptyFace(t('op.amp.waiting'), t('op.amp.waitingNote'), '');
+        }
+        return '<article class="op-amp" data-state="' +
+                (stale ? 'stale' : offline ? 'offline' : hasReading ? 'live' : 'empty') +
+                '" data-tx="' + (transmitting ? '1' : '0') + '" data-alarm="' + (alarm ? '1' : '0') +
+                '" data-amp="' + esc(device.id) + '">' +
+            (stale ? '<div class="op-amp-hatch"></div>' : '') +
+            '<div class="op-amp-id"><b>' + esc(device.name || device.id) + '</b>' +
+                (identity.brand ? '<span class="op-amp-model">' + esc(identity.brand) + '</span>' : '') +
+                (identity.model && String(identity.model).toLowerCase() !==
+                    String(device.name || '').toLowerCase()
+                    ? '<span class="op-amp-model">' + esc(identity.model) + '</span>' : '') +
+                (frequency === null ? '' : '<span class="op-amp-freq">' +
+                    esc((frequency / 1e6).toFixed(3)) + ' <i>MHz</i></span>') +
+                (band ? '<span class="op-amp-band">' + esc(band) + '</span>' : '') +
+                (flags.length ? '<span class="op-amp-flags">' + flags.join('') + '</span>' : '') +
+            '</div>' + face + '</article>';
+    }
+
+    function renderAmps() {
+        const grid = $('#opAmpGrid');
+        if (!grid) return;
+        const devices = ampDevices();
+        const snapshot = deviceSnapshot() || {};
+        const statuses = snapshot.status || {};
+        const summary = [];
+        let txCount = 0;
+        let alarmCount = 0;
+        let downCount = 0;
+        for (const device of devices) {
+            const status = statuses[device.id] || {};
+            if (status.state === 'offline') downCount += 1;
+            if (status.amp && status.amp.alarm_active) alarmCount += 1;
+            if (status.state !== 'offline' && ampTransmitting(status.amp)) txCount += 1;
+        }
+        summary.push('<span>' + esc(t('op.amp.count', {n: devices.length})) + '</span>');
+        if (txCount) summary.push('<span class="live">TX ' + txCount + '</span>');
+        if (alarmCount) summary.push('<span class="bad">' + esc(t('op.amp.alarm')) + ' ' + alarmCount + '</span>');
+        if (downCount) summary.push('<span>' + esc(t('op.amp.down', {n: downCount})) + '</span>');
+        const host = $('#opAmpSum');
+        if (host) host.innerHTML = devices.length ? summary.join('<i>·</i>') : '';
+        /* No amplifier at all: still an explicit face, not an empty strip. */
+        grid.innerHTML = devices.length
+            ? devices.map(device => ampPanel(device)).join('')
+            : '<article class="op-amp" data-state="empty"><div class="op-amp-id"><b>' +
+                esc(t('op.amp.none')) + '</b></div>' +
+                ampEmptyFace(t('op.amp.none'), t('op.amp.noneNote'), t('op.amp.noneHint')) + '</article>';
     }
 
     function deviceCard(device) {
@@ -1478,6 +1695,7 @@ export function createOpPage(ctx) {
         $('#opMultTitle').textContent = t('op.right.multipliers');
         $('#opMultExpand').textContent = state.multExpanded ? t('op.mult.collapse') : t('op.mult.expand');
         $('#opBottomTitle').textContent = t('op.bottom.devices');
+        $('#opAmpTitle').textContent = t('op.amp.title');
     }
 
     function bind() {
@@ -1589,6 +1807,7 @@ export function createOpPage(ctx) {
         handleQso,
         handleDelete,
         handleStation,
+        handleDevices,
         handleSpot,
         showRuleAlert
     };

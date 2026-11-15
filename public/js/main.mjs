@@ -80,6 +80,7 @@ async function start() {
                     break;
                 case 'devices':
                     if (ctx.qso.state.view === 'dev') void ctx.devices.refresh();
+                    ctx.op.handleDevices();
                     break;
                 default:
                     ctx.spot.handleSpot(message);

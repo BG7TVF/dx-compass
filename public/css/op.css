@@ -23,9 +23,10 @@
      * context and paint over the settings panel (z-index 90) while it is open. */
     position: relative;
     z-index: 0;
-    /* Five columns: opponents | map (two tracks) | devices | side stack. */
+    /* Five columns: opponents | map (two tracks) | devices | side stack.
+       Five rows: header / seat + advice / working row / amp bay / data cells. */
     grid-template-columns: 272px minmax(0, 1fr) minmax(0, 1fr) 300px 280px;
-    grid-template-rows: auto auto minmax(0, 1fr) 118px;
+    grid-template-rows: auto auto minmax(0, 1fr) auto 118px;
     gap: 6px 8px;
     padding: 8px;
     background: var(--bg);
@@ -40,12 +41,13 @@
 .op-view > .op-opp-card { grid-column: 1; grid-row: 3; }
 .op-view > .op-center { grid-column: 2 / 4; grid-row: 3; }
 .op-view > .op-device-card { grid-column: 4; grid-row: 3; }
-.op-view > .op-right { grid-column: 5; grid-row: 3; }
-.op-view > .op-rate-card { grid-column: 1; grid-row: 4; }
-.op-view > .op-total-card { grid-column: 2; grid-row: 4; }
-.op-view > .op-bandqso-card { grid-column: 3; grid-row: 4; }
-.op-view > .op-suspect-card { grid-column: 4; grid-row: 4; }
-.op-view > .op-mult-card { grid-column: 5; grid-row: 4; }
+.op-view > .op-right { grid-column: 5; grid-row: 3 / 5; }
+.op-view > .op-amp-bay { grid-column: 1 / 5; grid-row: 4; }
+.op-view > .op-rate-card { grid-column: 1; grid-row: 5; }
+.op-view > .op-total-card { grid-column: 2; grid-row: 5; }
+.op-view > .op-bandqso-card { grid-column: 3; grid-row: 5; }
+.op-view > .op-suspect-card { grid-column: 4; grid-row: 5; }
+.op-view > .op-mult-card { grid-column: 5; grid-row: 5; }
 
 .op-top {
     display: flex;
@@ -629,3 +631,373 @@
 .op-mult-card > h3 { min-height: 26px; }
 .op-suspect-card .op-suspect-list,
 .op-mult-card .op-mult-list { padding: 4px 6px; }
+
+/* ---- power amplifier bay ------------------------------------------------
+ * The reference instrument face: black LCD wells, a printed ruler over every
+ * bar, one oversized numeral per gauge and hairline separators. The colours
+ * and radii are the OP console tokens, so this reads as the same panel family
+ * rather than a second skin. */
+.op-amp-bay {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    border: 1px solid var(--op-rule);
+    border-radius: 4px;
+    background: linear-gradient(180deg, var(--op-face-top), var(--op-face-bottom));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .035);
+}
+.op-amp-bay-head {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 26px;
+    padding: 0 10px;
+    border-bottom: 1px solid var(--op-rule);
+}
+.op-amp-bay-head h3 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: .13em;
+    text-transform: uppercase;
+    color: #8fa6c2;
+}
+.op-amp-bay-head h3::before {
+    content: '';
+    flex: 0 0 auto;
+    width: 2px;
+    height: 11px;
+    background: var(--accent);
+    box-shadow: 0 0 7px rgba(96, 165, 250, .55);
+}
+.op-amp-bay-sum {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 9px;
+    letter-spacing: .06em;
+    color: var(--text-dim);
+}
+.op-amp-bay-sum .bad { color: var(--red); }
+.op-amp-bay-sum .live { color: var(--green); }
+.op-amp-bay-sum i { font-style: normal; opacity: .4; }
+
+.op-amp-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 7px;
+    min-height: 0;
+    padding: 6px 8px 8px;
+    overflow: auto;
+}
+
+/* One amplifier: id strip, two gauges, two readouts, one metric strip. */
+.op-amp {
+    position: relative;
+    min-width: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 96px;
+    grid-template-areas:
+        "id id"
+        "gauges reads"
+        "metrics metrics";
+    gap: 4px 10px;
+    padding: 5px 8px 6px;
+    border: 1px solid var(--op-rule);
+    border-radius: var(--r-sm);
+    background: var(--well);
+    transition: border-color .15s ease, box-shadow .15s ease;
+}
+.op-amp[data-tx="1"] {
+    border-color: color-mix(in srgb, var(--green) 55%, var(--op-rule));
+    background: color-mix(in srgb, var(--green) 5%, var(--well));
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--green) 14%, transparent),
+        0 0 12px color-mix(in srgb, var(--green) 12%, transparent);
+}
+/* A lit edge strip: transmission is readable from across the room. */
+.op-amp[data-tx="1"]::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 6px;
+    bottom: 6px;
+    width: 3px;
+    border-radius: 2px;
+    background: var(--green);
+    box-shadow: 0 0 10px color-mix(in srgb, var(--green) 70%, transparent);
+}
+.op-amp[data-alarm="1"] {
+    border-color: color-mix(in srgb, var(--red) 62%, var(--op-rule));
+}
+.op-amp[data-state="stale"] .op-amp-read b,
+.op-amp[data-state="stale"] .op-amp-metrics b { color: var(--text-dim); }
+
+.op-amp-id {
+    grid-area: id;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    min-width: 0;
+    overflow: hidden;
+    font-size: 9px;
+    letter-spacing: .05em;
+    color: var(--text-dim);
+}
+.op-amp-id b {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .1em;
+    color: var(--text-strong);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.op-amp-id .op-amp-model { color: var(--text-dim); white-space: nowrap; }
+.op-amp-id .op-amp-freq {
+    font-family: var(--op-num);
+    font-variant-numeric: tabular-nums;
+    color: var(--text);
+    white-space: nowrap;
+}
+.op-amp-id .op-amp-freq i { font-style: normal; font-size: 8px; color: var(--text-dim); }
+.op-amp-id .op-amp-band { color: var(--accent); letter-spacing: .1em; }
+.op-amp-flags { margin-left: auto; display: flex; align-items: center; gap: 5px; }
+.op-amp-chip {
+    padding: 1px 5px;
+    border: 1px solid var(--op-rule);
+    border-radius: 2px;
+    font-size: 8px;
+    letter-spacing: .08em;
+    line-height: 1.4;
+    white-space: nowrap;
+    color: var(--text-dim);
+}
+.op-amp-chip.pa-on { color: var(--green); border-color: color-mix(in srgb, var(--green) 45%, var(--op-rule)); }
+.op-amp-chip.tx {
+    color: var(--bg);
+    background: var(--green);
+    border-color: var(--green);
+    font-weight: 700;
+    box-shadow: 0 0 8px color-mix(in srgb, var(--green) 55%, transparent);
+}
+.op-amp-chip.alarm {
+    color: var(--red);
+    border-color: var(--red);
+    font-weight: 700;
+}
+.op-amp-chip.stale { color: var(--yellow); border-color: color-mix(in srgb, var(--yellow) 55%, var(--op-rule)); }
+
+.op-amp-gauges {
+    grid-area: gauges;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    min-width: 0;
+}
+.op-amp-gauge { min-width: 0; }
+.op-amp-gauge-head {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    font-size: 8px;
+    line-height: 1.1;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    white-space: nowrap;
+}
+.op-amp-gauge-head em { font-style: normal; color: color-mix(in srgb, var(--text-dim) 66%, transparent); }
+.op-amp-ruler {
+    position: relative;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    height: 9px;
+    padding-bottom: 3px;
+    font-size: 8px;
+    line-height: 1;
+    color: var(--text-dim);
+    font-variant-numeric: tabular-nums;
+}
+/* Printed ticks hanging under the ruler labels. */
+.op-amp-ruler::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 2px;
+    background-image: repeating-linear-gradient(90deg,
+        color-mix(in srgb, var(--text-dim) 60%, transparent) 0 1px,
+        transparent 1px 8px);
+}
+.op-amp-track {
+    position: relative;
+    height: 12px;
+    border: 1px solid var(--op-rule);
+    border-radius: 1px;
+    background: linear-gradient(180deg, var(--panel-2), var(--well));
+    overflow: hidden;
+}
+.op-amp-track > i {
+    display: block;
+    height: 100%;
+    width: 0;
+    transition: width .25s ease;
+    /* Bright hairline on top, deep body below: the LCD bar of the reference. */
+    background: linear-gradient(180deg,
+        color-mix(in srgb, var(--accent) 35%, #fff) 0 1px,
+        color-mix(in srgb, var(--accent) 82%, var(--well)) 1px,
+        color-mix(in srgb, var(--accent) 42%, var(--well)) 100%);
+    box-shadow: 0 0 6px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.op-amp-track > i.warn {
+    background: linear-gradient(180deg,
+        color-mix(in srgb, var(--yellow) 35%, #fff) 0 1px,
+        color-mix(in srgb, var(--yellow) 82%, var(--well)) 1px,
+        color-mix(in srgb, var(--yellow) 45%, var(--well)) 100%);
+}
+.op-amp-track > i.bad {
+    background: linear-gradient(180deg,
+        color-mix(in srgb, var(--red) 35%, #fff) 0 1px,
+        color-mix(in srgb, var(--red) 82%, var(--well)) 1px,
+        color-mix(in srgb, var(--red) 45%, var(--well)) 100%);
+}
+.op-amp-track > u {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: color-mix(in srgb, var(--text) 55%, transparent);
+}
+.op-amp-track > u.limit { background: color-mix(in srgb, var(--red) 70%, transparent); }
+
+.op-amp-reads {
+    grid-area: reads;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 2px;
+    min-width: 0;
+    padding-left: 10px;
+    border-left: 1px solid var(--op-rule);
+}
+.op-amp-read {
+    display: flex;
+    align-items: baseline;
+    justify-content: flex-end;
+    gap: 4px;
+    line-height: 1;
+    min-width: 0;
+}
+.op-amp-read b {
+    font-family: var(--op-num);
+    font-size: 26px;
+    font-weight: 600;
+    letter-spacing: .01em;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-strong);
+}
+.op-amp-read small {
+    font-size: 10px;
+    letter-spacing: .08em;
+    color: var(--text-dim);
+}
+.op-amp-read.swr b { font-size: 18px; color: var(--text); }
+.op-amp-read.muted b { color: var(--text-dim); font-size: 16px; }
+
+.op-amp-metrics {
+    grid-area: metrics;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 4px;
+    padding-top: 4px;
+    border-top: 1px solid var(--op-rule);
+}
+.op-amp-metrics span {
+    display: flex;
+    align-items: baseline;
+    gap: 3px;
+    min-width: 0;
+    white-space: nowrap;
+}
+.op-amp-metrics i {
+    font-style: normal;
+    font-size: 8px;
+    letter-spacing: .06em;
+    color: var(--text-dim);
+    text-transform: uppercase;
+}
+.op-amp-metrics b {
+    font-family: var(--op-num);
+    font-size: 12px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-strong);
+}
+.op-amp-metrics u { text-decoration: none; font-size: 8px; color: var(--text-dim); }
+
+/* No readings: an explicit face, never a zeroed gauge. */
+.op-amp-empty {
+    grid-area: 2 / 1 / 4 / -1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1px;
+    min-height: 62px;
+    padding: 6px;
+    border: 1px dashed color-mix(in srgb, var(--text-dim) 32%, transparent);
+    border-radius: var(--r-sm);
+    background: repeating-linear-gradient(135deg,
+        transparent 0 6px,
+        color-mix(in srgb, var(--text-dim) 4%, transparent) 6px 12px);
+    text-align: center;
+}
+.op-amp-empty b {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .16em;
+    color: var(--text-dim);
+}
+.op-amp-empty span { font-size: 10px; color: var(--text); }
+.op-amp-empty em { font-style: normal; font-size: 8px; color: var(--text-dim); }
+
+/* Held readings: a hatch behind the LCD says "this is not live". */
+.op-amp-hatch {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    border-radius: var(--r-sm);
+    background: repeating-linear-gradient(135deg,
+        transparent 0 7px,
+        color-mix(in srgb, var(--yellow) 8%, transparent) 7px 9px);
+}
+/* Keep every reading above the hatch so the held values stay legible. */
+.op-amp > *:not(.op-amp-hatch) { position: relative; z-index: 1; }
+
+/* Brand/model are secondary identity: the first thing to give way when two
+ * amps share a narrow centre column. */
+@media (max-width: 1700px) {
+    .op-amp-model { display: none; }
+}
+@media (max-width: 1500px) {
+    .op-amp { grid-template-columns: minmax(0, 1fr) 86px; }
+    .op-amp-read b { font-size: 23px; }
+    .op-amp-read.swr b { font-size: 16px; }
+    .op-amp-metrics i,
+    .op-amp-metrics u { font-size: 7px; }
+}
+
+@media (max-height: 800px) {
+    .op-amp-read b { font-size: 22px; }
+    .op-amp-read.swr b { font-size: 16px; }
+    .op-amp-empty { min-height: 52px; }
+}
