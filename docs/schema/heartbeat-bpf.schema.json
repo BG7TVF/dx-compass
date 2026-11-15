@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://dx-compass.local/schema/heartbeat-bpf.schema.json",
   "title": "DX-Compass 多波段 BPF 组 heartbeat（设备 → 服务端）",
-  "description": "主题 bpf/device/{device_id}/heartbeat。band 为空串表示未插入任何滤波仓。规范见 §9.2。",
+  "description": "主题 bpf/device/{device_id}/heartbeat。band 为空串表示未插入任何滤波仓。规范见 §11.2。",
   "allOf": [
     { "$ref": "https://dx-compass.local/schema/common.schema.json#/$defs/heartbeat_envelope" }
   ],

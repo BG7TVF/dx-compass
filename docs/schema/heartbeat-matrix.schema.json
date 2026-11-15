@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://dx-compass.local/schema/heartbeat-matrix.schema.json",
   "title": "DX-Compass 矩阵切换器 heartbeat（设备 → 服务端）",
-  "description": "主题 matrix/device/{device_id}/heartbeat。ports 按键增量合并。规范见 §7.2。",
+  "description": "主题 matrix/device/{device_id}/heartbeat。ports 按键增量合并。规范见 §9.2。",
   "allOf": [
     { "$ref": "https://dx-compass.local/schema/common.schema.json#/$defs/heartbeat_envelope" }
   ],

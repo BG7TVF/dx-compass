@@ -43,7 +43,7 @@
       "type": "integer",
       "minimum": 0,
       "maximum": 4294967295,
-      "description": "位图，位定义见规范 §11.4"
+      "description": "位图，位定义见规范 §13.4"
     },
     "state": {
       "type": "string",
@@ -56,7 +56,7 @@
       "type": "string",
       "maxLength": 64,
       "pattern": "^[a-z0-9-]*$",
-      "description": "开放枚举，含义见规范 §11.1；空串表示无错误"
+      "description": "开放枚举，含义见规范 §13.1；空串表示无错误"
     },
     "error_detail": {
       "type": "string",

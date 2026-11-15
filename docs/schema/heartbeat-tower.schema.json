@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://dx-compass.local/schema/heartbeat-tower.schema.json",
   "title": "DX-Compass 铁塔升降控制器 heartbeat（设备 → 服务端）",
-  "description": "主题 tower/device/{device_id}/heartbeat。limit_top / limit_bottom 上报接点原始电平，NO/NC 由上位机全局配置解释，设备不得取反。规范见 §8.2。",
+  "description": "主题 tower/device/{device_id}/heartbeat。limit_top / limit_bottom 上报接点原始电平，NO/NC 由平台全局配置解释，设备不得取反。规范见 §10.2。",
   "allOf": [
     { "$ref": "https://dx-compass.local/schema/common.schema.json#/$defs/heartbeat_envelope" }
   ],

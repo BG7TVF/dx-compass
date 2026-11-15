@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://dx-compass.local/schema/http-tx.schema.json",
   "title": "DX-Compass 发射状态上报（POST /api/devices/tx）",
-  "description": "tx_active 必须是 JSON 布尔；seq 单调递增，回退帧被 200 ignored:stale-seq 丢弃。规范见 §10.3。",
+  "description": "tx_active 必须是 JSON 布尔；seq 单调递增，回退帧被 200 ignored:stale-seq 丢弃。规范见 §12.3。",
   "type": "object",
   "required": ["source_id", "tx_active"],
   "properties": {

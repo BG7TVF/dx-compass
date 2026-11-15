@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://dx-compass.local/schema/heartbeat-swr.schema.json",
   "title": "DX-Compass 驻波表 heartbeat（设备 → 服务端）",
-  "description": "主题 swr/device/{device_id}/heartbeat。swr 无 RF 时为 null；tx_active 是互锁输入，必须在 200/300 ms 内翻转。规范见 §10.2。",
+  "description": "主题 swr/device/{device_id}/heartbeat。swr 无 RF 时为 null；tx_active 是互锁输入，必须在 200/300 ms 内翻转。规范见 §12.2。",
   "allOf": [
     { "$ref": "https://dx-compass.local/schema/common.schema.json#/$defs/heartbeat_envelope" }
   ],
