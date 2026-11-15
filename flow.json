@@ -4976,7 +4976,9 @@
         "x": 1490,
         "y": 80,
         "wires": [
-            []
+            [
+                "dxdev0000000090"
+            ]
         ]
     },
     {
@@ -5766,6 +5768,70 @@
             [
                 "dxseat000000003"
             ]
+        ]
+    },
+    {
+        "id": "dxdev0000000090",
+        "type": "function",
+        "z": "dxdev0000000000",
+        "name": "Build tower seed query",
+        "func": "if (flow.get('towerSeedQueued')) return null;\nflow.set('towerSeedQueued', true);\nconst dx = global.get('dx');\nmsg.topic = dx.storage.devices.towerSeedQuery();\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "x": 1730,
+        "y": 80,
+        "wires": [
+            [
+                "dxdev0000000091"
+            ]
+        ]
+    },
+    {
+        "id": "dxdev0000000091",
+        "type": "sqlite",
+        "z": "dxdev0000000000",
+        "mydb": "dxc0000000000027",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "Read tower configs",
+        "x": 1950,
+        "y": 80,
+        "wires": [
+            [
+                "dxdev0000000092"
+            ]
+        ]
+    },
+    {
+        "id": "dxdev0000000092",
+        "type": "function",
+        "z": "dxdev0000000000",
+        "name": "Build tower seed updates",
+        "func": "const dx = global.get('dx');\nconst raw = global.get('uiSettings');\nconst available = raw && typeof raw === 'object';\nconst settings = available ? raw : {towerLimitType: 'NO', towerPulseWidthMs: 400};\nif (!available) node.warn('[devices] tower config seed: uiSettings unavailable, using NO/400 defaults');\nconst result = dx.storage.devices.towerSeedMigrations(msg.payload, settings, new Date().toISOString());\nnode.log('[devices] tower config seed: written=' + result.written + ' skipped=' + result.skipped + ' failed=' + result.failed + ' source=' + JSON.stringify(result.source) + (result.failedIds.length ? ' failedIds=' + result.failedIds.slice(0, 10).join(',') : ''));\nif (!result.statements.length) return null;\nreturn [result.statements.map(topic => ({topic}))];",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "x": 2170,
+        "y": 80,
+        "wires": [
+            [
+                "dxdev0000000093"
+            ]
+        ]
+    },
+    {
+        "id": "dxdev0000000093",
+        "type": "sqlite",
+        "z": "dxdev0000000000",
+        "mydb": "dxc0000000000027",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "Apply tower seed updates",
+        "x": 2390,
+        "y": 80,
+        "wires": [
+            []
         ]
     }
 ]

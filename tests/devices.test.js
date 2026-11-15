@@ -604,26 +604,43 @@ test('flow registers device routes and startup schema migration', () => {
     assert.match(byName('Run tower release on start').func, /dx\.devices\.towerReleaseAll/);
 });
 
-test('two new settings ship with the agreed defaults and no gating', () => {
+test('tower limit switch and pulse live on the device, not in global settings', () => {
     const schema = require('../public/shared/settings/schema.js');
-    const defaults = schema.defaultSettings();
-    assert.equal(defaults.towerLimitType, 'NO');
-    assert.equal(defaults.towerPulseWidthMs, 400);
-    assert.equal(defaults.towerLimitType, 'NO', 'limit switch defaults to normally open');
+    assert.equal(schema.FIELDS.some(field => field.key === 'towerLimitType'), false);
+    assert.equal(schema.FIELDS.some(field => field.key === 'towerPulseWidthMs'), false);
+    assert.equal(schema.defaultSettings().towerLimitType, undefined);
 
-    const nc = schema.sanitize({towerLimitType: 'NC', towerPulseWidthMs: 600}).settings;
-    assert.equal(nc.towerLimitType, 'NC');
-    assert.equal(nc.towerPulseWidthMs, 600);
+    const nc = model.normalizeConfig({limit_switch_type: 'NC'}, {}, 'tower');
+    assert.equal(nc.ok, true);
+    assert.equal(nc.config.limit_switch_type, 'NC');
+    assert.equal(model.normalizeConfig({limit_switch_type: 'bogus'}, {}, 'tower').ok, false);
 
-    const bounds = schema.sanitize({towerPulseWidthMs: 10}).settings;
-    assert.equal(bounds.towerPulseWidthMs, 400);
+    const rows = [
+        {id: 'tower-1', config_json: '{"relay_url":"http://relay"}'},
+        {id: 'tower-2', config_json: '{"limit_switch_type":"NO","pulse_ms":600}'},
+        {id: 'tower-3', config_json: 'not-json'}
+    ];
+    const migrated = storage.devices.towerSeedMigrations(rows,
+        {towerLimitType: 'NC', towerPulseWidthMs: 700}, '2026-01-01T00:00:00.000Z');
+    assert.equal(migrated.written, 1);
+    assert.equal(migrated.skipped, 1);
+    assert.equal(migrated.failed, 1);
+    assert.deepEqual(migrated.failedIds, ['tower-3']);
+    assert.match(migrated.statements[0], /limit_switch_type/);
+    assert.match(migrated.statements[0], /NC/);
+    assert.match(migrated.statements[0], /700/);
 
-    const limitField = schema.FIELDS.find(field => field.key === 'towerLimitType');
-    assert.deepEqual(limitField.values, ['NO', 'NC']);
-    assert.equal(limitField.wired, true);
-    const pulseField = schema.FIELDS.find(field => field.key === 'towerPulseWidthMs');
-    assert.equal(pulseField.wired, true);
-    assert.equal(pulseField.default, 400);
+    // 再跑一次：已经补齐的塔跳过，只有仍缺键的塔会再次生成语句。
+    const seeded = storage.devices.towerSeedMigrations(
+        [{id: 'tower-1', config_json: '{"limit_switch_type":"NC","pulse_ms":700}'}],
+        {towerLimitType: 'NO', towerPulseWidthMs: 400}, '2026-01-02T00:00:00.000Z');
+    assert.equal(seeded.written, 0);
+    assert.equal(seeded.skipped, 1);
+
+    // 拿不到 uiSettings 时绝不用默认值覆盖，交由下次启动重试并留下原因。
+    const unavailable = storage.devices.towerSeedMigrations(rows, null, '2026-01-01T00:00:00.000Z');
+    assert.equal(unavailable.written, 0);
+    assert.equal(unavailable.reason, 'settings-unavailable');
 });
 
 test('command channel requires seat identity and rejects malformed requests', async () => {

@@ -64,7 +64,8 @@
     const DOMAINS = [
         {key: 'ui', pane: 'global', title: 'Global', titleZh: '全局', desc: 'Language, theme, identity and clock display.'},
         {key: 'map', pane: 'spot', title: 'Spot Map', titleZh: 'SPOT 地图', desc: 'Spot map lifetime, layers and marker density.'},
-        {key: 'qso', pane: 'qso', title: 'QSO Map', titleZh: 'QSO 地图', desc: 'QSO map display and alert thresholds.'},
+        {key: 'qso', pane: 'qso', title: 'QSO Map', titleZh: 'QSO 地图', desc: 'QSO map display; alert thresholds live in the Alerts group.'},
+        {key: 'alert', pane: 'alert', title: 'Alerts & voice', titleZh: '告警与语音', desc: 'When to alert, how loud, and quiet hours shared by every page.'},
         {key: 'wall', pane: 'wall', title: 'Wall', titleZh: '大屏', desc: 'Read-only wall overlay and rotation.'},
         {key: 'data', pane: 'data', title: 'Data & Alerts', titleZh: '数据与告警', desc: 'Upstream polling, retention and diagnostics.'},
         {key: 'contest', pane: 'contest', title: 'Contest', titleZh: '比赛', desc: 'Hand-entered contest name, UTC window, modes, bands and rules link.'},
@@ -229,7 +230,7 @@
         field('qsoAutoFit', 'qso', 'bool', true, {
             label: 'Auto zoom to fit QSOs', zh: 'QSO 自动缩放', desc: 'Auto-fit the QSO map after updates.'
         }),
-        field('qsoVoiceAlert', 'qso', 'bool', true, {
+        field('qsoVoiceAlert', 'alert', 'bool', true, {
             label: 'Voice alert', zh: '语音告警', desc: 'Speak new spots with SpeechSynthesis.'
         }),
         field('mySpotTtl', 'qso', 'int', 30, {
@@ -258,45 +259,45 @@
             min: 100, max: 2000, label: 'QSO history limit', zh: 'QSO 历史条数',
             desc: 'QSO rows fetched on load.'
         }),
-        field('freqDeltaKhz', 'qso', 'number', 1, {
+        field('freqDeltaKhz', 'alert', 'number', 1, {
             min: 0, max: 50, label: 'Frequency alert delta (kHz)', zh: '换频播报阈值（kHz）',
             desc: 'Minimum frequency change before announcing.'
         }),
-        field('alertPopupMs', 'qso', 'int', 8000, {
+        field('alertPopupMs', 'alert', 'int', 8000, {
             min: 2000, max: 30000, label: 'Alert popup duration (ms)', zh: '弹窗时长（毫秒）',
             desc: 'Visible time of the spot alert card.'
         }),
-        field('alertSnrMin', 'qso', 'int', -30, {
+        field('alertSnrMin', 'alert', 'int', -30, {
             min: -30, max: 30, label: 'Alert min SNR (-30 = off)', zh: '告警 SNR 门槛（-30 关）',
             desc: 'Only alert when spot SNR is at least this value.'
         }),
-        field('alertDistanceKmMin', 'qso', 'int', 0, {
+        field('alertDistanceKmMin', 'alert', 'int', 0, {
             min: 0, max: 20000, label: 'Alert min distance (km, 0 = off)', zh: '告警距离门槛（km，0 关）',
             desc: 'Only alert when the path is longer than this.'
         }),
-        field('voiceRate', 'qso', 'number', 1.05, {
+        field('voiceRate', 'alert', 'number', 1.05, {
             min: 0.6, max: 1.6, label: 'Voice rate', zh: '语速',
             desc: 'SpeechSynthesisUtterance.rate.'
         }),
-        field('voiceVolume', 'qso', 'number', 1, {
+        field('voiceVolume', 'alert', 'number', 1, {
             min: 0, max: 1, label: 'Voice volume', zh: '音量',
             desc: 'SpeechSynthesisUtterance.volume.'
         }),
-        field('quietFrom', 'qso', 'time', '', {
+        field('quietFrom', 'alert', 'time', '', {
             pattern: /^([01]\d|2[0-3]):[0-5]\d$/, allowEmpty: true,
             label: 'Quiet hours from', zh: '静音开始',
             desc: 'Local time when spot popups and voice alerts stop (empty = disabled).'
         }),
-        field('quietTo', 'qso', 'time', '', {
+        field('quietTo', 'alert', 'time', '', {
             pattern: /^([01]\d|2[0-3]):[0-5]\d$/, allowEmpty: true,
             label: 'Quiet hours to', zh: '静音结束',
             desc: 'Local time when alerts resume; a window crossing midnight is supported.'
         }),
-        field('alertSound', 'qso', 'bool', false, {
+        field('alertSound', 'alert', 'bool', false, {
             label: 'Alert tone', zh: '提示音',
             desc: 'Short beep with each spot alert; off by default, independent of voice.'
         }),
-        field('alertSoundVolume', 'qso', 'number', 0.5, {
+        field('alertSoundVolume', 'alert', 'number', 0.5, {
             min: 0, max: 1, label: 'Alert tone volume', zh: '提示音音量',
             desc: 'Beep volume (0 = silent); separate from the speech volume.'
         }),
@@ -311,16 +312,6 @@
         field('opSuspiciousQrz', 'qso', 'bool', true, {
             label: 'OP view: allow QRZ review', zh: 'OP 视图：允许 QRZ 复核',
             desc: 'Only called when SCP misses; off = the call stays unconfirmed.'
-        }),
-        field('towerLimitType', 'qso', 'enum', 'NO', {
-            values: ['NO', 'NC'], scope: 'both',
-            label: 'Tower limit switch type', zh: '天线塔限位开关类型',
-            desc: '按实际接线选择，选错会显示相反状态。'
-        }),
-        field('towerPulseWidthMs', 'qso', 'int', 400, {
-            min: 50, max: 5000, scope: 'both',
-            label: 'Tower start pulse (ms)', zh: '天线塔启动脉冲宽度（ms）',
-            desc: '脉冲过短接触器可能不吸合，过长会增加误动作窗口；随时可改。'
         }),
         field('opRunIdleMin', 'qso', 'int', 10, {
             min: 2, max: 60, label: 'OP view: RUN idle reminder (min)', zh: 'OP 视图：RUN 空闲提醒（分钟）',
@@ -518,22 +509,22 @@
             scope: 'server', wired: true, label: 'Disk alert', zh: '磁盘告警',
             desc: 'Emit a Node-RED warning when free space crosses the threshold.'
         }),
-        field('alertsEnabled', 'data', 'bool', false, {
+        field('alertsEnabled', 'alert', 'bool', false, {
             scope: 'server', wired: true,
             label: 'Conditional alerts', zh: '条件告警',
             desc: 'Master switch for rule-based spot alerts; off by default so a new install never beeps.'
         }),
-        field('alertMinIntervalSec', 'data', 'int', 60, {
+        field('alertMinIntervalSec', 'alert', 'int', 60, {
             min: 0, max: 3600, scope: 'server', wired: true,
             label: 'Alert min interval (s)', zh: '告警最短间隔（秒）',
             desc: 'Global floor between two rule alerts; 0 disables the throttle.'
         }),
-        field('alertDedupeMin', 'data', 'int', 10, {
+        field('alertDedupeMin', 'alert', 'int', 10, {
             min: 1, max: 1440, scope: 'server', wired: true,
             label: 'Alert dedupe window (min)', zh: '告警去重窗口（分钟）',
             desc: 'The same call + band is announced at most once inside this window (frequency inside freqDeltaKhz counts as the same spot).'
         }),
-        field('alertPopup', 'data', 'bool', true, {
+        field('alertPopup', 'alert', 'bool', true, {
             scope: 'both', wired: true,
             label: 'Rule alert popup', zh: '规则告警弹窗',
             desc: 'Allow the in-page alert card for rule hits; still muted by quiet hours.'

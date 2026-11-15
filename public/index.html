@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -6,7 +6,7 @@
     <title>DX-Compass</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%230b1220'/%3E%3Ccircle cx='8' cy='8' r='4' fill='%2300e08a'/%3E%3C/svg%3E">
     <link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
-    <link rel="stylesheet" href="css/style.css?v=2.3.4">
+    <link rel="stylesheet" href="css/style.css?v=2.4.0">
     <link rel="stylesheet" href="css/op.css?v=1.3.2">
     <link rel="stylesheet" href="css/devices.css?v=2.0.0">
     <link rel="stylesheet" href="shared/opponents/opponents.css?v=2.3.4">
@@ -30,6 +30,8 @@
             <span class="title">DX-Compass</span>
             <span class="subtitle">Spot &amp; Contest Monitor</span>
         </div>
+
+        <button class="action-btn page-gear hidden" id="btnSpotSettings" type="button" title="SPOT page settings" aria-label="SPOT page settings">⚙</button>
 
         <span class="toolbar-countdown hidden" id="contestCountdown" aria-live="polite"></span>
         <span class="toolbar-clock" id="utcClock">UTC: --:--:--</span>
@@ -76,6 +78,7 @@
                 </div>
                 <div class="qt-meta" id="qtMeta">
                     <span id="qtRadios"></span>
+                    <button class="action-btn page-gear" id="btnQsoSettings" type="button" title="QSO page settings" aria-label="QSO page settings">⚙</button>
                 </div>
             </div>
         </div>
@@ -88,6 +91,7 @@
                 <label id="propLayerLabel" for="propLayer">Layer</label>
                 <select id="propLayer" class="prop-sel"></select>
                 <span class="prop-hint" id="propHint">Click the map to set DX</span>
+                <button class="action-btn page-gear" id="btnPropSettings" type="button" title="Propagation page settings" aria-label="Propagation page settings">⚙</button>
             </div>
             <!-- U-shaped layout: band conditions and the SDO image run down
                  the left edge, the map fills the centre at the full Robinson
@@ -116,6 +120,7 @@
                     <label class="op-cat-label" for="opSeat" id="opSeatLabel">Seat</label>
                     <select id="opSeat" class="op-cat-select"></select>
                     <span class="op-seat-name" id="opSeatName"></span>
+                    <button class="op-mini page-gear" id="btnOpSettings" type="button" title="OP page settings" aria-label="OP page settings">⚙</button>
                 </div>
             </section>
 
@@ -274,6 +279,7 @@
         <div id="recordsPanel" class="dock-panel">
             <div class="panel-header">
                 <span class="panel-title">Spot Records</span>
+                <button class="action-btn page-gear" id="btnRecordsSettings" type="button" title="Records page settings" aria-label="Records page settings">⚙</button>
             </div>
             <div class="panel-body">
                 <div class="panel-controls-row status-strip">
@@ -413,9 +419,8 @@
                 <div class="cfg-topbar-inner">
                     <div class="cfg-tabs" id="cfgTabs" role="tablist" aria-label="Settings sections">
                         <button type="button" class="cfg-tab active" data-pane="global" id="tabGlobal" role="tab" aria-selected="true" aria-controls="paneGlobal">Global</button>
-                        <button type="button" class="cfg-tab" data-pane="spot" id="tabSpot" role="tab" aria-selected="false" aria-controls="paneSpot">Spot Map</button>
-                        <button type="button" class="cfg-tab" data-pane="qso" id="tabQso" role="tab" aria-selected="false" aria-controls="paneQso">QSO Map</button>
                         <button type="button" class="cfg-tab" data-pane="contest" id="tabContest" role="tab" aria-selected="false" aria-controls="paneContest">Contest</button>
+                        <button type="button" class="cfg-tab" data-pane="alert" id="tabAlert" role="tab" aria-selected="false" aria-controls="paneAlert">Alerts</button>
                         <button type="button" class="cfg-tab" data-pane="wall" id="tabWall" role="tab" aria-selected="false" aria-controls="paneWall">Wall</button>
                         <button type="button" class="cfg-tab" data-pane="data" id="tabData" role="tab" aria-selected="false" aria-controls="paneData">Data</button>
                         <button type="button" class="cfg-tab" data-pane="prop" id="tabProp" role="tab" aria-selected="false" aria-controls="paneProp">Propagation</button>
@@ -459,6 +464,21 @@
                             <div class="set-grid" id="globalAdvanced"></div>
                         </div>
                         <div class="form-section">
+                            <div class="section-title" id="globalMapTitle">Map</div>
+                            <div class="set-grid" id="globalMap"></div>
+                        </div>
+                        <div class="form-section">
+                            <div class="section-title" id="pagesIndexTitle">Page settings</div>
+                            <p class="hint" id="pagesIndexHint"></p>
+                            <div class="pages-index" id="pagesIndex">
+                                <button type="button" class="mini-btn" data-page-settings="spot">SPOT</button>
+                                <button type="button" class="mini-btn" data-page-settings="qso">QSO</button>
+                                <button type="button" class="mini-btn" data-page-settings="op">OP</button>
+                                <button type="button" class="mini-btn" data-page-settings="prop">Propagation</button>
+                                <button type="button" class="mini-btn" data-page-settings="records">Records</button>
+                            </div>
+                        </div>
+                        <div class="form-section">
                             <div class="section-title" id="backupTitle">Backup</div>
                             <div class="btn-row">
                                 <button type="button" class="mini-btn" id="btnExportSettings">Export JSON</button>
@@ -486,107 +506,19 @@
                         </div>
                     </div>
 
-                    <!-- Spot map settings -->
-                    <div class="cfg-pane" id="paneSpot" role="tabpanel" aria-labelledby="tabSpot">
+                    <!-- Alerts and voice: shared by every page and seat -->
+                    <div class="cfg-pane" id="paneAlert" role="tabpanel" aria-labelledby="tabAlert">
                         <div class="form-section">
-                            <div class="section-title" id="cfgSectionTitle">Monitored Callsigns</div>
-                            <div class="call-inputs" id="callInputs">
-                                <input type="text" class="cfg-call" placeholder="Slot 1" maxlength="16">
-                                <input type="text" class="cfg-call" placeholder="Slot 2" maxlength="16">
-                                <input type="text" class="cfg-call" placeholder="Slot 3" maxlength="16">
-                                <input type="text" class="cfg-call" placeholder="Slot 4" maxlength="16">
-                                <input type="text" class="cfg-call" placeholder="Slot 5" maxlength="16">
-                                <input type="text" class="cfg-call" placeholder="Slot 6" maxlength="16">
-                                <input type="text" class="cfg-call" placeholder="Slot 7" maxlength="16">
-                                <input type="text" class="cfg-call" placeholder="Slot 8" maxlength="16">
-                                <input type="text" class="cfg-call" placeholder="Slot 9" maxlength="16">
-                            </div>
-                        </div>
-                        <div class="form-section">
-                            <div class="section-title" id="spotSectionTitle">Spot Map</div>
-                            <div class="form-row">
-                                <label id="ttlTitle">Marker lifetime (minutes)</label>
-                                <div class="ttl-grid">
-                                    <span>CW</span><input type="number" id="ttlCw" min="1" max="180" step="1">
-                                    <span>SSB</span><input type="number" id="ttlSsb" min="1" max="180" step="1">
-                                    <span>DIGI</span><input type="number" id="ttlDigi" min="1" max="180" step="1">
-                                </div>
-                            </div>
-                            <div class="form-row">
-                                <label id="bandTitle">Band colors</label>
-                                <div class="band-colors" id="bandColors"></div>
-                            </div>
-                        </div>
-                        <div class="form-section">
-                            <div class="section-title" id="spotAdvancedTitle">Display</div>
-                            <div class="set-grid" id="spotAdvanced"></div>
+                            <div class="section-title" id="alertSectionTitle">Alerts &amp; voice</div>
+                            <p class="hint" id="alertHint">These thresholds, tones and quiet hours apply to every page and seat.</p>
+                            <div class="set-grid" id="alertFields"></div>
                         </div>
                         <div class="form-row reset-row">
-                            <label id="spotResetLabel">Reset Spot Map settings</label>
-                            <button type="button" class="mini-btn danger-btn" data-reset-domain="map" id="btnResetSpot">Reset group</button>
+                            <label id="alertResetLabel">Reset alert settings</label>
+                            <button type="button" class="mini-btn danger-btn" data-reset-domain="alert" id="btnResetAlert">Reset group</button>
                         </div>
                     </div>
 
-                    <!-- QSO map settings -->
-                    <div class="cfg-pane" id="paneQso" role="tabpanel" aria-labelledby="tabQso">
-                        <div class="form-section">
-                            <div class="section-title" id="qsoSectionTitle">QSO Map</div>
-                            <div class="form-row">
-                                <label id="qsoAutoFitLabel" for="setQsoAutoFit">Auto zoom to fit QSOs</label>
-                                <input type="checkbox" id="setQsoAutoFit" class="set-check">
-                            </div>
-                            <div class="form-row">
-                                <label id="qsoLinesLabel" for="setQsoLines">Home - QSO great-circle lines</label>
-                                <input type="checkbox" id="setQsoLines" class="set-check">
-                            </div>
-                            <div class="form-row">
-                                <label id="qsoVoiceLabel" for="setQsoVoice">Voice alert</label>
-                                <input type="checkbox" id="setQsoVoice" class="set-check">
-                            </div>
-                            <div class="form-row">
-                                <label id="qsoDoubleLabel" for="setQsoDouble">QSO markers limit</label>
-                                <input type="number" id="setQsoMax" class="set-input" min="200" max="4000" step="100">
-                            </div>
-                        </div>
-                        <div class="form-section">
-                            <div class="section-title" id="mySpotSectionTitle">My Spots</div>
-                            <div class="form-row">
-                                <label id="mySpotTtlLabel" for="setMySpotTtl">Marker lifetime (minutes)</label>
-                                <input type="number" id="setMySpotTtl" class="set-input" min="1" max="180" step="1">
-                            </div>
-                            <div class="form-row">
-                                <label id="mySpotMaxLabel" for="setMySpotMax">Max markers shown</label>
-                                <input type="number" id="setMySpotMax" class="set-input" min="10" max="2000" step="10">
-                            </div>
-                            <div class="form-row">
-                                <label id="mySpotPopupLabel" for="setMySpotPopup">Popup alert</label>
-                                <input type="checkbox" id="setMySpotPopup" class="set-check">
-                            </div>
-                            <div class="form-row">
-                                <label id="mySpotVoiceLabel" for="setMySpotVoice">Voice alert</label>
-                                <input type="checkbox" id="setMySpotVoice" class="set-check">
-                            </div>
-                        </div>
-                        <div class="form-section">
-                            <div class="section-title" id="qrzSectionTitle">QRZ.com</div>
-                            <div class="form-row">
-                                <label id="qrzUserLabel" for="setQrzUser">QRZ.com username</label>
-                                <input type="text" id="setQrzUser" class="set-input" maxlength="32" autocomplete="username">
-                            </div>
-                            <div class="form-row">
-                                <label id="qrzPassLabel" for="setQrzPass">QRZ.com password</label>
-                                <input type="password" id="setQrzPass" class="set-input" maxlength="64" autocomplete="new-password">
-                            </div>
-                        </div>
-                        <div class="form-section">
-                            <div class="section-title" id="qsoAdvancedTitle">Display &amp; alerts</div>
-                            <div class="set-grid" id="qsoAdvanced"></div>
-                        </div>
-                        <div class="form-row reset-row">
-                            <label id="qsoResetLabel">Reset QSO Map settings</label>
-                            <button type="button" class="mini-btn danger-btn" data-reset-domain="qso" id="btnResetQso">Reset group</button>
-                        </div>
-                    </div>
                     <!-- Contest window -->
                     <div class="cfg-pane" id="paneContest" role="tabpanel" aria-labelledby="tabContest">
                         <div class="form-section">
@@ -681,9 +613,20 @@
                     <!-- Data / server settings -->
                     <div class="cfg-pane" id="paneData" role="tabpanel" aria-labelledby="tabData">
                         <div class="form-section">
-                            <div class="section-title" id="dataTitle">Data &amp; Alerts</div>
+                            <div class="section-title" id="dataTitle">Data &amp; diagnostics</div>
                             <p class="hint" id="dataHint">Server-side ingest, retention and diagnostics. Restart-marked items apply after a Node-RED restart.</p>
                             <div class="set-grid" id="dataFields"></div>
+                        </div>
+                        <div class="form-section">
+                            <div class="section-title" id="qrzSectionTitle">QRZ.com</div>
+                            <div class="form-row">
+                                <label id="qrzUserLabel" for="setQrzUser">QRZ.com username</label>
+                                <input type="text" id="setQrzUser" class="set-input" maxlength="32" autocomplete="username">
+                            </div>
+                            <div class="form-row">
+                                <label id="qrzPassLabel" for="setQrzPass">QRZ.com password</label>
+                                <input type="password" id="setQrzPass" class="set-input" maxlength="64" autocomplete="new-password">
+                            </div>
                         </div>
                         <div class="form-row reset-row">
                             <label id="dataResetLabel">Reset Data settings</label>
@@ -704,18 +647,26 @@
                         </div>
                     </div>
 
-                    <div class="form-actions">
-                        <button type="submit" class="primary-btn" id="btnSaveCfg">Save</button>
-                    </div>
-                    <p class="hint" id="cfgHint">Callsigns are assigned to map slots in order. Empty slots stay blank on the dashboard.<br>
-                    Distance is computed between the monitored station and the spotting station.<br>
-                    Spots are provided automatically: CW by reversebeacon.net RBN (10s), other modes by dxwatch.com (30s) - no cluster login or connection setup is needed.</p>
+                    <p class="hint" id="cfgHint">Settings save as you change them. Monitored callsigns and map display options live behind the gear on each page.</p>
                 </form>
             </div>
         </div>
     </div>
 
     <div class="toast" id="toast"></div>
+
+    <!-- Page-scoped settings: opened from the gear on each page -->
+    <aside class="page-settings hidden" id="pageSettings" aria-labelledby="psTitle">
+        <div class="ps-head">
+            <h3 id="psTitle"></h3>
+            <button class="panel-close" id="psClose" type="button" title="Close">&times;</button>
+        </div>
+        <p class="hint" id="psNote"></p>
+        <div class="ps-body" id="psBody"></div>
+        <div class="ps-foot">
+            <button class="mini-btn danger-btn" id="psReset" type="button">Restore defaults</button>
+        </div>
+    </aside>
 
     <!-- Single new-spot alert (any view): a newer spot overwrites this one -->
     <div class="spot-alert hidden" id="spotAlert">
@@ -748,8 +699,8 @@
 
     <script src="vendor/leaflet/leaflet.js"></script>
     <script src="vendor/leaflet-heat.js"></script>
-    <script src="js/i18n-gap.js?v=2.3.4"></script>
-    <script src="js/i18n.js?v=2.3.4"></script>
+    <script src="js/i18n-gap.js?v=2.4.0"></script>
+    <script src="js/i18n.js?v=2.4.0"></script>
     <script>
         /* Classic top-level const declarations are not window properties. */
         window.I18N = I18N;
@@ -758,7 +709,7 @@
     </script>
     <script src="shared/map/data/land.js?v=2.3.4"></script>
     <script src="shared/map/data/borders-50m.js?v=2.3.4"></script>
-    <script type="module" src="js/main.mjs?v=2.3.4"></script>
+    <script type="module" src="js/main.mjs?v=2.4.0"></script>
 </body>
 </html>
 

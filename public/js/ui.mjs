@@ -1,7 +1,7 @@
 import {formatClockDateTime} from '../shared/core/clock.mjs';
 
 export const $ = selector => document.querySelector(selector);
-export const $$ = selector => document.querySelectorAll(selector);
+export const $$ = (selector, root = document) => root.querySelectorAll(selector);
 
 export function showToast(message, ms = 2500) {
     const element = $('#toast');

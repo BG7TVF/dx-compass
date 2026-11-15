@@ -12,17 +12,67 @@ import {
 import {$, $$, showConfirm, showToast} from '../ui.mjs';
 import {changeSeatIdentity, getSeatIdentities} from '../../shared/data/station.mjs';
 
-const FIELD_CONTAINERS = {
-    ui: '#globalAdvanced', map: '#spotAdvanced', qso: '#qsoAdvanced',
-    contest: '#contestFields', wall: '#wallAdvanced', data: '#dataFields', prop: '#propFields'
+/* Explicit field groups: the settings page only carries system-wide groups.
+ * Page display options live in the per-page drawer (see PAGE_GROUPS). */
+const KEY_GROUPS = {
+    '#globalAdvanced': ['txPowerW', 'pskWindowMin', 'timeZone', 'hour12', 'showSeconds', 'clockSec'],
+    // Shared by more than one page, so it stays global: SPOT + QSO maps,
+    // QSO + OP marker caps and my-spot lifetime.
+    '#globalMap': ['autoFitMaxZoom', 'fitPad', 'historyLimit', 'qsoMax', 'mySpotTtl'],
+    '#alertFields': [
+        'alertsEnabled', 'alertPopup', 'alertMinIntervalSec', 'alertDedupeMin',
+        'qsoVoiceAlert', 'alertSound', 'alertSoundVolume', 'voiceRate', 'voiceVolume',
+        'alertPopupMs', 'alertSnrMin', 'alertDistanceKmMin', 'freqDeltaKhz', 'quietFrom', 'quietTo'
+    ],
+    '#contestFields': [],
+    '#wallAdvanced': [],
+    '#dataFields': [
+        'pollDxwatchSec', 'pollRbnSec', 'pollPskrSyncSec', 'sourceDxwatch', 'sourceRbn', 'sourcePskr',
+        'freshSec', 'retentionSpotsDays', 'retentionRecordingMonths', 'retentionQsoDays',
+        'retentionActivityDays', 'autoPurge', 'maxCallsigns', 'logLevel', 'httpProxy',
+        'fetchTimeoutMs', 'upstreamBase', 'n1mmPorts', 'n1mmToken', 'recordingRepeat',
+        'diskWarnPct', 'diskCheckSec', 'diskAlert'
+    ],
+    '#propFields': ['collectSec', 'condClosed', 'condGood', 'condFair']
+};
+
+const DOMAIN_GROUPS = {'#contestFields': 'contest', '#wallAdvanced': 'wall'};
+
+/* Per-page drawers. Keys must be unambiguously owned by one page; any key
+ * shared by two pages stays in KEY_GROUPS instead and is pointed at from the
+ * drawer note. */
+const PAGE_GROUPS = {
+    spot: {
+        title: 'pageSettings.title.spot', note: 'pageSettings.note.spot',
+        keys: ['ttl', 'bandColors', 'terminatorShow', 'terminatorSec', 'heatShow', 'heatRadius',
+            'heatBlur', 'heatOpacity', 'gcShow', 'gcSamples', 'spotterSize', 'monitoredSize',
+            'markerMax', 'fadeSec', 'pruneSec'],
+        calls: true
+    },
+    qso: {
+        title: 'pageSettings.title.qso', note: 'pageSettings.note.qso',
+        keys: ['qsoLines', 'qsoAutoFit', 'mySpotMax', 'mySpotPopup', 'mySpotVoice',
+            'rateBucketMin', 'minBuckets', 'qsoHistoryLimit']
+    },
+    op: {
+        title: 'pageSettings.title.op', note: 'pageSettings.note.op',
+        keys: ['opSuspiciousCheck', 'opScpCheck', 'opSuspiciousQrz', 'opRunIdleMin']
+    },
+    prop: {
+        title: 'pageSettings.title.prop', note: 'pageSettings.note.prop',
+        keys: ['propPollSec', 'mufOpacity', 'nightOpacity']
+    },
+    records: {
+        title: 'pageSettings.title.records', note: 'pageSettings.note.records',
+        keys: ['recordsRefreshSec']
+    }
 };
 
 /* Keys with a hand-written control in index.html; generated schema fields
  * skip them to avoid duplicate inputs. */
 const LEGACY_FIELD_KEYS = new Set([
     'lang', 'theme', 'tiles', 'myCall', 'grid', 'layout', 'rotationSec',
-    'category', 'qsoMax', 'qsoLines', 'qsoAutoFit', 'qsoVoiceAlert',
-    'mySpotTtl', 'mySpotMax', 'mySpotPopup', 'mySpotVoice',
+    'category',
     'wallTitle', 'wallLayers', 'wallMode', 'wallTimerOn', 'wallTimerStart', 'wallTimerEnd',
     'multPerBand',
     'ttl', 'bandColors'
@@ -40,10 +90,7 @@ const EXTERNAL_CONTROL_KEYS = new Set(['propProj', 'propLayer', 'propDxLat', 'pr
  * and unit logic applies to legacy markup and generated rows. */
 const LEGACY_ROW_KEYS = {
     setLang: 'lang', setTheme: 'theme', setTiles: 'tiles', setMyCall: 'myCall', setGrid: 'grid',
-    setCategory: 'category', setQsoMax: 'qsoMax', setQsoAutoFit: 'qsoAutoFit',
-    setQsoLines: 'qsoLines', setQsoVoice: 'qsoVoiceAlert',
-    setMySpotTtl: 'mySpotTtl', setMySpotMax: 'mySpotMax', setMySpotPopup: 'mySpotPopup',
-    setMySpotVoice: 'mySpotVoice', setWallTitle: 'wallTitle', setWallMode: 'wallMode',
+    setCategory: 'category', setWallTitle: 'wallTitle', setWallMode: 'wallMode',
     setWallTimerOn: 'wallTimerOn', setWallTimerStart: 'wallTimerStart', setWallTimerEnd: 'wallTimerEnd',
     ttlCw: 'ttl', ttlSsb: 'ttl', ttlDigi: 'ttl',
     setWallProp: 'wallLayers', setWallAurora: 'wallLayers', setWallWeather: 'wallLayers',
@@ -55,8 +102,6 @@ const CUSTOM_DESC_KEYS = {
     setWallProp: 'wallProp', setWallAurora: 'wallAurora', setWallWeather: 'wallWeather',
     setWallQso: 'wallQso', setWallMySpot: 'wallMySpot', setWallDxSpot: 'wallDxSpot'
 };
-/* Rows whose control carries no id of its own (multi-input groups). */
-const LEGACY_LABEL_KEYS = {bandTitle: 'bandColors', ttlTitle: 'ttl'};
 /* Units that are not written in the label parenthetical. */
 const UNIT_BY_KEY = {propDxLat: '°', propDxLon: '°'};
 
@@ -200,8 +245,9 @@ export function createSettingsPage(ctx) {
         ctx.qso.setTileProvider(key);
     }
 
-    function buildBandColorInputs() {
-        const wrap = $('#bandColors');
+    function buildBandColorInputs(container) {
+        const wrap = container || $('#psBandColors');
+        if (!wrap) return;
         wrap.innerHTML = '';
         Object.keys(DEFAULT_BAND_COLORS).forEach(band => {
             const item = document.createElement('div');
@@ -220,6 +266,122 @@ export function createSettingsPage(ctx) {
             item.append(input, label);
             wrap.appendChild(item);
         });
+    }
+
+    // ------------------------------------------------- page settings drawer
+    let pageOpen = null;
+
+    function ttlRowHtml() {
+        const desc = escapeHtml(t('settings.field.ttl.desc'));
+        return `<div class="set-row"><div class="set-text">` +
+            `<label class="set-label"><span class="set-label-text">${escapeHtml(t('settings.field.ttl.label'))}</span></label>` +
+            `<p class="set-desc">${desc}</p></div>` +
+            `<div class="set-ctl ttl-grid">` +
+            ['CW', 'SSB', 'DIGI'].map(mode =>
+                `<label class="ttl-item"><input type="number" class="set-input" data-ttl="${mode}" min="1" max="180" step="1">` +
+                `<span>${mode}</span></label>`).join('') +
+            `</div></div>`;
+    }
+
+    function bandRowHtml() {
+        return `<div class="set-row"><div class="set-text">` +
+            `<label class="set-label"><span class="set-label-text">${escapeHtml(t('settings.field.bandColors.label'))}</span></label>` +
+            `<p class="set-desc">${escapeHtml(t('settings.field.bandColors.desc'))}</p></div>` +
+            `<div class="set-ctl"><div id="psBandColors" class="band-colors"></div></div></div>`;
+    }
+
+    function callsHtml() {
+        return `<div class="form-section"><div class="section-title">${escapeHtml(t('pageSettings.callsigns'))}</div>` +
+            `<p class="hint">${escapeHtml(t('pageSettings.callsignsHint'))}</p>` +
+            `<div class="ps-calls">` +
+            Array.from({length: 9}, (_, index) =>
+                `<input type="text" class="set-input cfg-call" maxlength="12" placeholder="${escapeHtml(t('nav.slot', {n: index + 1}))}">`).join('') +
+            `</div><div class="form-row"><button type="button" class="mini-btn" id="psSaveCalls">` +
+            `${escapeHtml(t('pageSettings.saveCalls'))}</button></div></div>`;
+    }
+
+    function syncTtlInputs(root) {
+        $$('[data-ttl]', root).forEach(input => {
+            input.value = ctx.settings.ttl[input.dataset.ttl];
+        });
+    }
+
+    function openPageSettings(page) {
+        const group = PAGE_GROUPS[page];
+        if (!group) return;
+        pageOpen = page;
+        const panel = $('#pageSettings');
+        $('#psTitle').textContent = t(group.title);
+        $('#psNote').textContent = t(group.note);
+        $('#psReset').textContent = t('pageSettings.reset');
+        const body = $('#psBody');
+        body.innerHTML = group.keys.map(key => {
+            if (key === 'ttl') return ttlRowHtml();
+            if (key === 'bandColors') return bandRowHtml();
+            const field = SETTINGS_SCHEMA.FIELD_MAP[key];
+            return field ? fieldHtml(field) : '';
+        }).join('') + (group.calls ? callsHtml() : '');
+        bindGeneratedFields(body);
+        syncGeneratedFields(body);
+        syncTtlInputs(body);
+        $$('[data-ttl]', body).forEach(input => {
+            input.addEventListener('change', () => {
+                let value = parseInt(input.value, 10);
+                if (!Number.isFinite(value) || value < 1) value = 1;
+                if (value > 180) value = 180;
+                input.value = value;
+                ctx.settings.ttl[input.dataset.ttl] = value;
+                save({ttl: {...ctx.settings.ttl}});
+            });
+        });
+        if (group.keys.includes('bandColors')) buildBandColorInputs($('#psBandColors'));
+        const saveCalls = $('#psSaveCalls');
+        if (saveCalls) saveCalls.addEventListener('click', () => { void saveCallsConfig(); });
+        panel.classList.remove('hidden');
+        if (group.calls) void loadConfig();
+    }
+
+    function closePageSettings() {
+        pageOpen = null;
+        $('#pageSettings').classList.add('hidden');
+        // Settle the debounced patch so closing and reloading keeps the change.
+        void flushAll();
+    }
+
+    /** Restore only the drawer's own keys; shared keys stay in the settings page. */
+    async function resetPageSettings() {
+        const group = pageOpen && PAGE_GROUPS[pageOpen];
+        if (!group) return;
+        const confirmed = await showConfirm(ctx, t('pageSettings.resetConfirm'), {
+            title: t(group.title), okText: t('danger'), danger: true
+        });
+        if (!confirmed) return;
+        const patch = {};
+        for (const key of group.keys) {
+            const field = SETTINGS_SCHEMA.FIELD_MAP[key];
+            if (!field) continue;
+            ctx.settings[key] = structuredClone(field.default);
+            patch[key] = ctx.settings[key];
+        }
+        save(patch);
+        await flushAll();
+        if ($('#psBandColors')) buildBandColorInputs($('#psBandColors'));
+        ctx.spot.applyBandColors();
+        openPageSettings(pageOpen);
+        showToast(t('saved'));
+    }
+
+    async function saveCallsConfig() {
+        const calls = [...$$('.cfg-call')].map(input => input.value.trim().toUpperCase());
+        try {
+            await postJson('/api/callsigns', calls);
+            await flushAll();
+            ctx.spot.applyCallsigns(calls);
+            void ctx.spot.replayHistory();
+            showToast(ctx.t('saved'));
+        } catch {
+            showToast(ctx.t('saveFail'));
+        }
     }
 
     // ------------------------------------------------- schema-driven fields
@@ -282,8 +444,6 @@ export function createSettingsPage(ctx) {
     function rowKey(row) {
         const keyed = row.querySelector('[data-key]');
         if (keyed) return keyed.dataset.key;
-        const label = row.querySelector('label[id]');
-        if (label && LEGACY_LABEL_KEYS[label.id]) return LEGACY_LABEL_KEYS[label.id];
         for (const control of row.querySelectorAll('input[id], select[id]')) {
             if (LEGACY_ROW_KEYS[control.id]) return LEGACY_ROW_KEYS[control.id];
             if (control.id.startsWith('set')) {
@@ -365,17 +525,23 @@ export function createSettingsPage(ctx) {
         });
     }
 
+    function groupKeys(selector, keys) {
+        if (keys.length) return keys;
+        const domain = DOMAIN_GROUPS[selector];
+        return domain ? SETTINGS_FIELDS.filter(field => field.domain === domain).map(field => field.key) : [];
+    }
+
     function renderSchemaFields() {
-        for (const [domain, selector] of Object.entries(FIELD_CONTAINERS)) {
+        for (const [selector, keys] of Object.entries(KEY_GROUPS)) {
             const wrap = $(selector);
             if (!wrap) continue;
-            wrap.innerHTML = SETTINGS_FIELDS
-                .filter(field => field.domain === domain &&
-                    !LEGACY_FIELD_KEYS.has(field.key) && !EXTERNAL_CONTROL_KEYS.has(field.key))
+            wrap.innerHTML = groupKeys(selector, keys)
+                .map(key => SETTINGS_SCHEMA.FIELD_MAP[key])
+                .filter(field => field && !LEGACY_FIELD_KEYS.has(field.key))
                 .map(fieldHtml).join('');
         }
-        bindGeneratedFields();
-        syncGeneratedFields();
+        bindGeneratedFields($('#configPanel'));
+        syncGeneratedFields($('#configPanel'));
         decorateRows();
     }
 
@@ -385,17 +551,18 @@ export function createSettingsPage(ctx) {
         else input.value = value === undefined || value === null ? '' : value;
     }
 
-    function syncGeneratedFields() {
-        $$('[data-key]').forEach(input => {
+    function syncGeneratedFields(root = document) {
+        $$('[data-key]', root).forEach(input => {
             const field = SETTINGS_SCHEMA.FIELD_MAP[input.dataset.key];
             if (field) syncField(input, field);
         });
     }
 
-    function bindGeneratedFields() {
-        $$('[data-key]').forEach(input => {
+    function bindGeneratedFields(root = document) {
+        $$('[data-key]', root).forEach(input => {
             const field = SETTINGS_SCHEMA.FIELD_MAP[input.dataset.key];
-            if (!field) return;
+            if (!field || input.dataset.bound === '1') return;
+            input.dataset.bound = '1';
             input.addEventListener('change', () => {
                 const raw = field.type === 'bool' ? input.checked
                     : field.type === 'int' ? parseInt(input.value, 10)
@@ -699,20 +866,14 @@ export function createSettingsPage(ctx) {
             '.rec-tz': 'recTz', '.rec-tab[data-view="all"]': 'tabAll', '.rec-tab[data-view="rec"]': 'tabRec',
             '#configPanel .panel-title': 'settings', '#cfgSectionTitle': 'cfgSection',
             '#langLabel': 'langLabel', '#themeLabel': 'theme', '#tilesLabel': 'mapTiles',
-            '#myCallLabel': 'myCall', '#mySpotSectionTitle': 'mySpotSection',
-            '#mySpotTtlLabel': 'mySpotTtl', '#mySpotMaxLabel': 'mySpotMax',
-            '#mySpotPopupLabel': 'mySpotPopup', '#mySpotVoiceLabel': 'mySpotVoice',
-            '#ttlTitle': 'ttlTitle', '#bandTitle': 'bandTitle', '#gridLabel': 'myGrid',
+            '#myCallLabel': 'myCall', '#gridLabel': 'myGrid',
             '#qrzUserLabel': 'qrzUser', '#qrzPassLabel': 'qrzPass', '#tabGlobal': 'setGlobal',
-            '#tabSpot': 'setSpot', '#tabQso': 'setQso', '#spotSectionTitle': 'setSpot',
-            '#qsoSectionTitle': 'setQso', '#catLabel': 'contestCat', '#qsoAutoFitLabel': 'qsoAutoFit',
-            '#qsoLinesLabel': 'qsoLines', '#qsoDoubleLabel': 'qsoMaxMarkers', '#tabWall': 'setWall',
+            '#catLabel': 'contestCat', '#tabWall': 'setWall',
             '#wallSectionTitle': 'setWall', '#wallTitleLabel': 'wallTitle', '#wallLayer1Label': 'wallLayer1',
             '#wallLayer2Label': 'wallLayer2', '#wallPropLabel': 'wallProp', '#wallAuroraLabel': 'wallAurora',
             '#wallWeatherLabel': 'wallWeather', '#wallQsoLabel': 'wallQso', '#wallMySpotLabel': 'wallMySpot',
             '#wallDxSpotLabel': 'wallDxSpot', '#wallModeLabel': 'wallMode', '#wallModeAll': 'wallModeAll',
             '#wallModeCycle': 'wallModeCycle', '#wallTimerLabel': 'wallTimer',
-            '#qsoVoiceLabel': 'qsoVoice',
             '#resetAllLabel': 'resetAll', '#btnResetAll': 'resetAll', '#qtLFreq': 'lblFreq',
             '#qtLCall': 'lblCall', '#qtLRst': 'lblRst', '#qtLExch': 'lblExch', '#qtLBand': 'lblBand',
             '#qtLMode': 'lblMode', '#qtLOp': 'lblOp', '#qtLAge': 'lblAge', '#btnSpotView': 'spotView',
@@ -722,7 +883,7 @@ export function createSettingsPage(ctx) {
             '#propLayerLabel': 'propLayer', '#qsoPanelTitle': 'stPanel', '#qLastTitle': 'stLastQso',
             '#qRateTitle': 'qsoRate', '#qMinTitle': 'qsoPerMin', '#qOpTitle': 'qsoByOp',
             '#qBandTitle': 'qsoByBand', '#qLQsos': 'stQsos', '#qLMults': 'stMults',
-            '#qLPoints': 'stPoints', '#qLScore': 'stScore', '#btnSaveCfg': 'save'
+            '#qLPoints': 'stPoints', '#qLScore': 'stScore'
         };
         Object.entries(texts).forEach(([selector, key]) => {
             const element = $(selector);
@@ -756,12 +917,18 @@ export function createSettingsPage(ctx) {
         setText('#tabData', t('settings.tab.data'));
         setText('#tabProp', t('settings.tab.prop'));
         setText('#tabContest', t('settings.tab.contest'));
-        setText('#globalAdvancedTitle', t('settings.section.advanced'));
-        setText('#basicSectionTitle', t('settings.section.basic'));
-        setText('#spotAdvancedTitle', t('settings.section.display'));
-        setText('#qsoAdvancedTitle', t('settings.section.displayAlerts'));
-        setText('#wallAdvancedTitle', t('settings.section.advanced'));
+        setText('#tabAlert', t('settings.tab.alert'));
+        setText('#alertSectionTitle', t('settings.section.alert'));
+        setText('#alertHint', t('settings.hint.alert'));
+        setText('#alertResetLabel', t('settings.reset.alert'));
         setText('#dataTitle', t('settings.section.data'));
+        setText('#qrzSectionTitle', t('settings.section.qrz'));
+        setText('#globalAdvancedTitle', t('settings.section.advanced'));
+        setText('#globalMapTitle', t('settings.section.map'));
+        setText('#pagesIndexTitle', t('settings.section.pages'));
+        setText('#pagesIndexHint', t('settings.hint.pages'));
+        setText('#basicSectionTitle', t('settings.section.basic'));
+        setText('#wallAdvancedTitle', t('settings.section.advanced'));
         setText('#propTitle', t('settings.section.prop'));
         setText('#contestWindowTitle', t('settings.section.contestWindow'));
         setText('#contestResetLabel', t('settings.reset.contest'));
@@ -771,12 +938,26 @@ export function createSettingsPage(ctx) {
         setText('#btnImportSettings', t('settings.action.import'));
         setText('#dataHint', t('settings.hint.data'));
         setText('#propSettingsHint', t('settings.hint.prop'));
-        setText('#spotResetLabel', t('settings.reset.spot'));
-        setText('#qsoResetLabel', t('settings.reset.qso'));
         setText('#wallResetLabel', t('settings.reset.wall'));
         setText('#dataResetLabel', t('settings.reset.data'));
         setText('#propResetLabel', t('settings.reset.prop'));
         setText('#globalResetLabel', t('settings.reset.global'));
+        $$('[data-page-settings]').forEach(button => {
+            button.textContent = t(`settings.pages.${button.dataset.pageSettings}`);
+        });
+        const gearLabels = {
+            '#btnSpotSettings': 'settings.pages.spot', '#btnQsoSettings': 'settings.pages.qso',
+            '#btnOpSettings': 'settings.pages.op', '#btnPropSettings': 'settings.pages.prop',
+            '#btnRecordsSettings': 'settings.pages.records'
+        };
+        Object.entries(gearLabels).forEach(([selector, key]) => {
+            const button = $(selector);
+            if (!button) return;
+            button.title = t(key);
+            button.setAttribute('aria-label', t(key));
+        });
+        $('#psReset').textContent = t('pageSettings.reset');
+        if (pageOpen) openPageSettings(pageOpen);
         $$('[data-reset-domain]').forEach(button => {
             button.textContent = t('settings.action.resetGroup');
         });
@@ -830,23 +1011,16 @@ export function createSettingsPage(ctx) {
             setValue('#setGrid', ctx.settings.grid);
             setValue('#setMyCall', ctx.settings.myCall);
             setValue('#setCategory', ctx.settings.category);
-            setValue('#setQsoMax', ctx.settings.qsoMax);
+            for (const [selector, key] of [['#setWallTimerOn', 'wallTimerOn']]) {
+                setChecked(selector, ctx.settings[key]);
+            }
             for (const [selector, key] of [
-                ['#setQsoLines', 'qsoLines'], ['#setQsoAutoFit', 'qsoAutoFit'],
-                ['#setQsoVoice', 'qsoVoiceAlert'],
-                ['#setMySpotPopup', 'mySpotPopup'], ['#setMySpotVoice', 'mySpotVoice'],
-                ['#setWallTimerOn', 'wallTimerOn']
-            ]) setChecked(selector, ctx.settings[key]);
-            for (const [selector, key] of [
-                ['#setMySpotTtl', 'mySpotTtl'], ['#setMySpotMax', 'mySpotMax'],
                 ['#setWallTitle', 'wallTitle'], ['#setWallMode', 'wallMode'],
                 ['#setWallTimerStart', 'wallTimerStart'], ['#setWallTimerEnd', 'wallTimerEnd']
             ]) setValue(selector, ctx.settings[key]);
             WALL_LAYERS.forEach(key => setChecked(WALL_CHECKS[key], ctx.settings.wallLayers.includes(key)));
-            setValue('#ttlCw', ctx.settings.ttl.CW);
-            setValue('#ttlSsb', ctx.settings.ttl.SSB);
-            setValue('#ttlDigi', ctx.settings.ttl.DIGI);
             syncGeneratedFields();
+            syncTtlInputs(document);
             if (ctx.settings.lang !== previous.lang || ctx.settings.theme !== previous.theme) {
                 applyTheme(ctx.settings.theme);
                 applyLang();
@@ -856,7 +1030,7 @@ export function createSettingsPage(ctx) {
                 ctx.qso.setTileProvider(ctx.settings.tiles);
             }
             if (JSON.stringify(ctx.settings.bandColors) !== previous.colors) {
-                buildBandColorInputs();
+                if ($('#psBandColors')) buildBandColorInputs($('#psBandColors'));
                 ctx.spot.applyBandColors();
             }
             if (ctx.settings.grid !== previous.grid || ctx.settings.qsoLines !== previous.qsoLines) {
@@ -924,23 +1098,6 @@ export function createSettingsPage(ctx) {
             void ctx.spot.replayHistory();
         } catch {
             // Keep the currently configured calls when the backend is offline.
-        }
-    }
-
-    async function saveConfig(event) {
-        event.preventDefault();
-        const calls = [...$$('.cfg-call')].map(input => input.value.trim().toUpperCase());
-        try {
-            await postJson('/api/callsigns', calls);
-            // Settle the debounced settings patch before the panel closes, so a
-            // reload straight after Save cannot drop the last change.
-            await flushAll();
-            ctx.spot.applyCallsigns(calls);
-            void ctx.spot.replayHistory();
-            showToast(ctx.t('saved'));
-            closeConfig();
-        } catch {
-            showToast(ctx.t('saveFail'));
         }
     }
 
@@ -1079,18 +1236,6 @@ export function createSettingsPage(ctx) {
             save({category: category.value});
             ctx.qso.renderQsoPanel();
         });
-        bindNumberSetting('#setQsoMax', 'qsoMax', 200, 4000, 1500);
-        bindCheckedSetting('#setQsoLines', 'qsoLines', () => ctx.qso.rebuildQsoMap());
-        bindCheckedSetting('#setQsoAutoFit', 'qsoAutoFit', () => ctx.qso.fitQsoMap());
-        bindCheckedSetting('#setQsoVoice', 'qsoVoiceAlert', enabled => {
-            if (!enabled && 'speechSynthesis' in window) speechSynthesis.cancel();
-        });
-        bindNumberSetting('#setMySpotTtl', 'mySpotTtl', 1, 180, ctx.settings.mySpotTtl, () => ctx.qso.applyMySpotLimits());
-        bindNumberSetting('#setMySpotMax', 'mySpotMax', 10, 2000, ctx.settings.mySpotMax, () => ctx.qso.applyMySpotLimits());
-        bindCheckedSetting('#setMySpotPopup', 'mySpotPopup');
-        bindCheckedSetting('#setMySpotVoice', 'mySpotVoice', enabled => {
-            if (!enabled && 'speechSynthesis' in window) speechSynthesis.cancel();
-        });
         bindTextSetting('#setWallTitle', 'wallTitle', value => value.slice(0, 24) || 'DX-COMPASS');
         WALL_LAYERS.forEach(key => {
             const input = $(WALL_CHECKS[key]);
@@ -1117,7 +1262,30 @@ export function createSettingsPage(ctx) {
         $('#btnPropView').addEventListener('click', () => { closeConfig(); ctx.qso.setViewMode('prop'); });
         $('#btnOpView').addEventListener('click', () => { closeConfig(); ctx.qso.setViewMode('op'); });
         $('#btnDevView').addEventListener('click', () => { closeConfig(); ctx.qso.setViewMode('dev'); });
-        $('#configForm').addEventListener('submit', saveConfig);
+        $('#configForm').addEventListener('submit', event => event.preventDefault());
+
+        // Page-scoped gears. The settings page keeps only system-wide groups;
+        // each page owns its display options.
+        $('#btnSpotSettings').addEventListener('click', () => openPageSettings('spot'));
+        $('#btnSpotSettings').classList.toggle('hidden', ctx.qso.state.view !== 'spots');
+        $('#btnQsoSettings').addEventListener('click', () => openPageSettings('qso'));
+        $('#btnOpSettings').addEventListener('click', () => openPageSettings('op'));
+        $('#btnPropSettings').addEventListener('click', () => openPageSettings('prop'));
+        $('#btnRecordsSettings').addEventListener('click', () => openPageSettings('records'));
+        $('#psClose').addEventListener('click', closePageSettings);
+        $('#psReset').addEventListener('click', () => { void resetPageSettings(); });
+        document.addEventListener('keydown', event => {
+            if (event.key === 'Escape' && pageOpen) closePageSettings();
+        });
+        $$('[data-page-settings]').forEach(button => button.addEventListener('click', () => {
+            const page = button.dataset.pageSettings;
+            closeConfig();
+            if (page === 'qso') ctx.qso.setViewMode('qso');
+            else if (page === 'op') ctx.qso.setViewMode('op');
+            else if (page === 'prop') ctx.qso.setViewMode('prop');
+            else ctx.qso.setViewMode('spots');
+            openPageSettings(page);
+        }));
 
         $('#btnExportSettings').addEventListener('click', exportSettings);
         $('#btnImportSettings').addEventListener('click', () => $('#importSettingsFile').click());
@@ -1170,19 +1338,6 @@ export function createSettingsPage(ctx) {
                 showToast(ctx.t('saveFail'));
             }
         });
-        for (const [id, mode] of [['ttlCw', 'CW'], ['ttlSsb', 'SSB'], ['ttlDigi', 'DIGI']]) {
-            const input = $(`#${id}`);
-            input.value = ctx.settings.ttl[mode];
-            input.addEventListener('change', () => {
-                let value = parseInt(input.value, 10);
-                if (!Number.isFinite(value) || value < 1) value = 1;
-                if (value > 180) value = 180;
-                input.value = value;
-                ctx.settings.ttl[mode] = value;
-                save({ttl: {...ctx.settings.ttl}});
-            });
-        }
-        buildBandColorInputs();
         renderSchemaFields();
     }
 
@@ -1325,6 +1480,7 @@ export function createSettingsPage(ctx) {
     return {
         bind, pull, save, flush: flushAll, applyRemote, applyLang, applyTheme,
         openConfig, closeConfig, closeAppMenu, loadConfig, buildBandColorInputs,
+        openPageSettings, closePageSettings,
         exportSettings, importSettings, resetDomainSettings, filterSettings
     };
 }

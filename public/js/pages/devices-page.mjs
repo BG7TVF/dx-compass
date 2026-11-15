@@ -1468,10 +1468,16 @@ export function createDevicesPage(ctx) {
                 ? `<label>${t('dev.config.upChannel')}<input name="cfg_up_channel" type="number" min="0" max="255" step="1" value="${esc(config.up_channel === undefined ? '' : config.up_channel)}"></label>
                    <label>${t('dev.config.downChannel')}<input name="cfg_down_channel" type="number" min="0" max="255" step="1" value="${esc(config.down_channel === undefined ? '' : config.down_channel)}"></label>`
                 : `<label>${t('dev.config.channels')}<textarea name="cfg_channels" rows="3" spellcheck="false">${esc(JSON.stringify(config.channels || {}))}</textarea></label>`;
+            const limit = value.type === 'tower'
+                ? `<label>${t('dev.config.limitSwitchType')}<select name="cfg_limit_switch_type">
+                     <option value="NO"${config.limit_switch_type !== 'NC' ? ' selected' : ''}>${t('dev.config.limitNO')}</option>
+                     <option value="NC"${config.limit_switch_type === 'NC' ? ' selected' : ''}>${t('dev.config.limitNC')}</option>
+                   </select></label>`
+                : '';
             return `<label>${t('dev.config.relayUrl')}<input name="cfg_relay_url" maxlength="300" value="${esc(config.relay_url || '')}"></label>
                 <label>${t('dev.config.relayToken')}<input name="cfg_relay_token" type="password" autocomplete="off" placeholder="${esc(t('dev.config.keepToken'))}"></label>
                 <label>${t('dev.config.pulse')}<input name="cfg_pulse_ms" type="number" min="50" max="5000" step="1" value="${esc(config.pulse_ms || '')}"></label>
-                ${counts}${channels}`;
+                ${limit}${counts}${channels}`;
         }
         return '';
     }
@@ -2055,6 +2061,7 @@ export function createDevicesPage(ctx) {
             } else {
                 config.up_channel = String(data.get('cfg_up_channel') || '');
                 config.down_channel = String(data.get('cfg_down_channel') || '');
+                config.limit_switch_type = String(data.get('cfg_limit_switch_type') || 'NO');
             }
             const channelsText = String(data.get('cfg_channels') || '').trim();
             if (type !== 'tower' && channelsText) {
