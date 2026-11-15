@@ -58,7 +58,7 @@
 - 切换器：`in` 是电台侧 COMMON，`ant1…antN` 是天线侧出口；`N = out_count`，1–16，缺省 2。
 - 矩阵：`in1…inN` 输入、`out1…outM` 输出；`N = in_count`（缺省 2）、`M = out_count`（缺省 4），各 1–16。
 - 天线与假负载只有 `in`；驻波表、BPF 为串联环节，`in`/`out` 各一。
-- BPF 必须显式配置 `bands`（1–16 个，格式 `^\d{1,3}m$`），未配置不得保存。
+- BPF 的射频口固定为 `in` + `out` 各一个；**支持哪些波段由设备自己上报 `supported_bands`（§11.2）**，平台不预置波段清单。首帧上报之前平台按"能力未知"处理：不生成可选波段、不据此做 RF 剪枝，但仍可展示该设备为在线。
 - 端口键只允许 `[A-Za-z0-9:_-]{1,32}`。
 
 ### 1.5 两种接入档
@@ -371,7 +371,7 @@ P(dBm) = 10·log10(P(W) / 1mW) = 10·log10(P(W)) + 30
 
 ### 4.9 枚举扩展
 
-所有枚举（`state`、`error`、`fault`、`mode`、`direction`）按开放枚举处理：
+所有开放枚举（`state`、`error`、`fault`、告警 `code`）按以下规则处理：
 
 1. 接收方**必须**把不认识的枚举值当作 `unknown`（或忽略该字段），**不得崩溃、不得拒绝整帧**。
 2. 发送方新增枚举值前必须登记到本文，并把 `proto` minor +1。
@@ -427,7 +427,10 @@ P(dBm) = 10·log10(P(W) / 1mW) = 10·log10(P(W)) + 30
 | BPF | 立即发 | 每 5 s | 最近上报 | 10 s |
 | 驻波表 | 立即发（发射起止必须即时） | 每 1 s | 最近上报；TX 源另按 `timeout_ms` | 10 s / 2 s |
 
-保活帧允许裁剪到：`device_id`、`device_class`、`seq`、`uptime_ms`、`state`、`ts`、`timestamp`。**铁塔与驻波表不要裁剪限位/发射字段**，其超时判定以整帧为准。
+保活帧允许裁剪到：`device_id`、`device_class`、`seq`、`uptime_ms`、`state`、`ts`、`timestamp`。例外：
+
+- **铁塔与驻波表不要裁剪限位/发射字段**，其超时判定以整帧为准。
+- **BPF 的保活帧必须保留 `supported_bands`、`capability_rev`、`current_band`、`bypass`、`alarms`**（§11.2 规则 1、§11.4），不得裁剪。
 
 ### 5.3 去重
 
@@ -548,7 +551,7 @@ P(dBm) = 10·log10(P(W) / 1mW) = 10·log10(P(W)) + 30
 | `ack_msg_id` | string | 可选 | 1–64 | `""` | 回应哪条下发 |
 | `error` | string | 可选 | 见 §13.1 | `""` | 机器可读错误码 |
 | `error_detail` | string | 可选 | ≤200 | `""` | 人读补充，不参与决策 |
-| `fault_word` | number | 可选 | uint32 | 0 | 位图见 §13.4 |
+| `fault_word` | number | 可选 | uint32 | 0 | 位图见 §13.4；**BPF 不使用**（改用 `alarms[]`，§11.4） |
 | `temperature_c` | number | 可选 | -40–125，有符号 | `null` | 设备内部温度 |
 
 ## 8. 天线切换器（1×n）
@@ -1088,92 +1091,202 @@ X-DX-Seat: OP-A
 | LWT | `bpf/device/{device_id}/status` |
 | Schema | `heartbeat-bpf.schema.json`、`command-bpf.schema.json` |
 
-波段归属规则：
+设备形态（必须先明确）：
 
-- `bands` 是整机允许通过的波段集合，RF 遍历用它剪枝。
-- 一台多波段 BPF 组在拓扑上仍是单个 `in`/`out` 串联环节，**不按波段分口**（分口是合路器的事）。
-- 整机 `bands` 应覆盖所有滤波仓的并集；单次插入的仓由 `band` 表达。
+- 硬件对外只有**一个射频输入 `in`、一个射频输出 `out`**，与 §1.4 的端口模型一致；内部是多波段滤波器组。
+- 任何时刻只有一个射频通路：要么插入某个波段滤波器，要么旁路直通。
+- **不存在多路 `in` 或多路 `out`**，也不按波段分口（分口是合路器的事）。平台侧 RF 遍历把它当作单个串联环节。
+- 设备必须自己上报支持的波段列表，平台不预设、不硬编码。
 
-### 11.2 状态上报字段
+支持的波段以设备上报为准；平台只做校验、展示与指令下发，不在协议层固定某个波段清单。
 
-| 字段 | 类型 | 必填 | 单位 | 范围 | 符号 | 缺省行为 |
-|---|---|---|---|---|---|---|
-| `band` | string | 必须 | — | `^\d{1,3}m$` 或 `""` | — | `""` = 未插入任何滤波仓 |
-| `mode` | string | 必须 | — | `manual` / `auto` | — | `manual` |
-| `bypass` | boolean | 必须 | — | true/false | — | `false`；true = 直通 |
-| `switching` | boolean | 必须 | — | true/false | — | `false` |
-| `filter_bank` | array<string> | 必须 | — | `^\d{1,3}m$`，1–16 | — | 本机安装的滤波仓列表 |
-| `rf_detected` | boolean | 必须 | — | true/false | — | 本地 RF 检测 |
-| `tx_active` | boolean | 必须 | — | true/false | — | 本地发射判定 |
-| `insertion_loss_db` | number | 可选 | dB | 0–10，3 位小数 | 无符号 | `null` |
-| `fault` | string | 可选 | — | 见 §13.1 | — | `""` |
+### 11.2 能力上报：`supported_bands`
 
-完整快照示例：
+| 字段 | 类型 | 单位/取值 | 必填 | 缺省值 | 说明 |
+|---|---|---|---|---|---|
+| `supported_bands` | array<string> | `^\d{1,3}m$`，1–16 项，不重复 | 必须 | — | 设备实际支持的波段；**不允许空数组** |
+| `capability_rev` | number | uint32，≥1 | 必须 | 1 | 能力版本号；`supported_bands` 每次变化必须 +1 |
+
+规则：
+
+1. **上线首帧与每一次心跳都必须携带 `supported_bands`**（保活帧也不得裁剪）；平台据此生成可选波段。
+2. 列表发生变化时：`capability_rev` +1，并**立即**发一帧完整快照，不等下一个周期。平台发现 `capability_rev` 变化即刷新可选波段。
+3. 平台绝不在协议层写死波段清单；设备报什么就是什么。
+4. 平台**不得**把未支持的波段"映射"成邻近波段，也不得因为未识别而丢弃整条设备记录。
+
+波段标识：
+
+| 情形 | 示例 | 平台处理 |
+|---|---|---|
+| 语法合法且平台可识别 | 平台波段表中已有的项（如 `20m`、`15m`） | 正常进入可选波段与 RF 剪枝 |
+| 语法合法但平台未识别 | 平台波段表中尚无的合法标识（如 `4m`） | 保留展示、标记"未识别波段"（告警 `band-unrecognized`，`info` 级）；**不进入可选列表、不参与 RF 剪枝**；设备仍可被切到该波段并如实回读 |
+| 语法非法 | `20M`、`20`、`hf-20`、`""`、`7000kHz` | 平台丢弃该项并记 `warning`；不得下发给设备 |
+
+- 设备**禁止**发明标识写法：`supported_bands` 的每一项都必须匹配 `^\d{1,3}m$`。
+- 设备收到不在自身 `supported_bands` 内的目标时必须拒绝，见 §11.5。
+- 波段标识只用米制波段名，不用频率区间；频率区间一律不做支持性判定依据。上表左列仅为判定方式的说明，**不构成协议级波段清单**——设备能支持哪些波段由设备自己上报。
+
+### 11.3 状态回读
+
+| 字段 | 类型 | 单位/取值 | 必填 | 缺省值 | 说明 |
+|---|---|---|---|---|---|
+| `current_band` | string \| null | `^\d{1,3}m$` 或 `null` | 必须 | `null` | 当前实际插入的滤波器；`bypass=true` 时必须为 `null` |
+| `bypass` | boolean | true/false | 必须 | `false` | true = 直通（不插滤波器） |
+| `switching` | boolean | true/false | 必须 | `false` | 切换动作进行中 |
+| `filter_health` | string | `ok`/`degraded`/`fault`/`unknown` | 必须 | `unknown` | 滤波器组整体健康度 |
+| `filter_fault_bands` | array<string> | `^\d{1,3}m$`，≤16 | 可选 | `[]` | 具体失效的波段，用于定位 |
+| `insertion_loss_db` | number \| null | dB，0–10，3 位小数 | 可选 | `null` | 当前通路插损 |
+
+- `current_band` 与 `bypass` **不得同时表达"生效通路"**：`bypass=true` 时 `current_band` 必须是 `null`；`bypass=false` 时 `current_band` 必须是具体波段或 `null`（未知）。
+- `filter_health` 是整体结论，`filter_fault_bands` 是明细；两者矛盾时以 `filter_health` 为准并置 `self-test-failed`。
+- 回读值必须来自实际位置/传感器，**禁止**回显最后一条指令。
+
+### 11.4 告警
+
+| 字段 | 类型 | 单位/取值 | 必填 | 缺省值 | 说明 |
+|---|---|---|---|---|---|
+| `alarms` | array<object> | ≤16 项 | 必须 | `[]` | 当前活动告警；无告警即空数组 |
+| `alarms[].code` | string | `^[a-z][a-z0-9-]*$` | 必须 | — | 告警码，开放枚举 |
+| `alarms[].severity` | string | `info`/`warning`/`major`/`critical` | 必须 | — | 严重程度 |
+| `alarms[].latched` | boolean | true/false | 必须 | — | 是否锁定（需确认才清除） |
+| `alarms[].acknowledged` | boolean | true/false | 必须 | `false` | 平台是否已确认 |
+| `alarms[].since` | string | ISO 8601 UTC | 必须 | — | 告警首次发生时间 |
+| `alarms[].detail` | string | ≤200 | 可选 | `""` | 人读补充 |
+| `fault` | string | 告警码或 `""` | 必须 | `""` | 最高严重级别的活动告警码，无告警为 `""` |
+
+必须覆盖的告警码：
+
+| code | severity | latched | 触发条件 | 清除方式 |
+|---|---|---|---|---|
+| `band-unsupported` | `warning` | false | 收到的 `band` 不在 `supported_bands` 内 | 条件消失后下一帧自动清除 |
+| `switch-failed` | `major` | **true** | 切换超时（>1 s 未到位）或继电器反馈不符 | 需 `ack_alarms` **且**故障条件已消失 |
+| `self-test-failed` | `critical` | **true** | 上电自检失败、内部总线/传感器异常 | 需 `ack_alarms` 且重新自检通过 |
+| `filter-degraded` | `warning` | **true** | 某波段插损超限、继电器接触不良 | 需 `ack_alarms` 且指标恢复 |
+| `filter-fault` | `major` | **true** | 某波段滤波器开路/短路 | 需 `ack_alarms` 且硬件修复 |
+| `band-unrecognized` | `info` | false | **平台侧**告警：设备上报的波段标识平台无法识别 | 条件消失后自动清除 |
+
+严重程度与平台处理：
+
+| severity | 含义 | 平台行为 |
+|---|---|---|
+| `info` | 提示，不影响运行 | 仅记录，设备卡片显示灰点 |
+| `warning` | 降级，仍可用 | 黄点 + 文本；允许继续下发 |
+| `major` | 功能受损 | 红点；该设备标记为不可用于自动切换 |
+| `critical` | 设备不可用 | 红点 + 阻断该设备的控制指令 |
+
+清除规则：
+
+1. `latched=false` 的告警由设备自动清除，平台只跟随，不得自行丢弃。
+2. `latched=true` 的告警**必须**由平台下发 `ack_alarms` 才算确认；但确认不等于消失——故障条件仍在时告警继续存在，仅 `acknowledged=true`。
+3. 设备重启后，`latched` 告警仍然保留（若条件依旧），并带上新的 `boot_id`。
+4. **禁止**用"清告警"代替修复：`ack_alarms` 不改变 `filter_health`、不改 `current_band`。
+
+### 11.5 切换控制
+
+| 字段 | 类型 | 单位/取值 | 必填 | 缺省值 | 说明 |
+|---|---|---|---|---|---|
+| `device_id` | string | ≤100 | 必须 | — | 与主题一致 |
+| `band` | string | `^\d{1,3}m$` | 三选一 | — | 目标波段，必须在 `supported_bands` 内 |
+| `bypass` | boolean | true/false | 三选一 | — | 直通 / 退出直通 |
+| `action` | string | `ack_alarms` | 三选一 | — | 确认锁定告警 |
+| `codes` | array<string> | 告警码，≤16 | 可选 | 全部 | 仅 `ack_alarms` 使用；省略表示确认全部 |
+
+`band`、`bypass`、`action` 三个动作字段**必须且只能出现一个**；出现零个或多个时回 `empty-command` / `invalid-arg`。
+
+切换语义（全部写死，硬件不得自选）：
+
+1. **目标必须受支持**：`band` 不在 `supported_bands` 内 → 回 `error="unknown-band"`，同时置 `band-unsupported` 告警；**不动作**。禁止静默失败、禁止退到邻近波段、禁止自动旁路。
+2. **发射中禁止切换**：`tx_active=true` → 回 `error="tx-active"`；仅 `rf_detected=true`（检测到 RF 但未确认是本机发射）→ 回 `error="rf-detected"`。两者任一为真都**不动作**。这是设备侧硬性拒绝，不依赖平台先做互锁。
+3. **切换是异步的**：设备收到后 ≤50 ms 内开始动作，典型 ≤200 ms 完成；期间 `switching=true`。完成后发快照（`switching=false` + 实际 `current_band`/`bypass`）。平台**只在收到回读后**才把该波段标为生效；回读前一律 `pending`。
+4. **失败默认行为**：切换超时（>1 s 未到位）或继电器反馈不符时，设备**必须恢复到切换前的状态**——原来插着哪个波段就回到哪个波段，原来旁路就保持旁路——并置 `switch-failed`（`major`，latched）。**不得转旁路、不得转邻近波段、不得停在中间态**。
+5. **切换期间再收指令**：回 `error="busy"`，不排队、不预存。
+6. **机械要求**：break-before-make，断开窗口 ≤50 ms；同一时刻只允许一个滤波器接入。
+7. **`ack_alarms` 不改变射频状态**，只清 `acknowledged` 标记；发射中也可执行。
+
+
+### 11.6 状态机
+
+上电默认：**旁路直通**。自检通过后 `state="idle"`、`bypass=true`、`current_band=null`；自检失败则 `state="fault"` 并置 `self-test-failed`。
+
+| `state` | `bypass` | `current_band` | 含义 | 允许的操作 |
+|---|---|---|---|---|
+| `init` | 按实测 | `null` | 上电自检中 | 仅 `ack_alarms`；其余回 `busy` |
+| `idle` | `true` | `null` | 直通 | `band` 切换、`bypass=false`、`ack_alarms` |
+| `idle` | `false` | 具体波段 | 正常插入 | 换波段、`bypass=true`、`ack_alarms` |
+| `switching` | 保持切换前值 | 保持切换前值 | 动作中（≤1 s） | 仅 `ack_alarms`；其余回 `busy` |
+| `fault` | 按实测 | 按实测 | 自检/滤波器故障 | `bypass=true`、`ack_alarms`；`band` 回 `hardware-fault` |
+| `unknown` | 按实测 | `null` | 位置读不出 | 仅 `ack_alarms` 与 `bypass=true` |
+
+```
+        上电（两路断开 → 直通）
+              │
+              ▼
+            init ── 自检失败 ──► fault（critical 告警）
+              │ 自检通过
+              ▼
+        idle / bypass=true
+              │ band 指令（非发射中）
+              ▼
+          switching ── 到位 ──► idle / 目标波段
+              │
+              ├─ 超时/反馈不符 ──► 恢复切换前状态 + switch-failed（major）
+              └─ 滤波器故障 ────► fault（critical/major）
+```
+
+| 边界 | 规则 |
+|---|---|
+| 上电/断电 | 默认直通；不得自动插入断电前的波段；位置以实测为准 |
+| 发射中 | 拒绝一切射频动作（`tx-active`），含 `bypass` 的往返切换 |
+| 切换失败 | 恢复切换前状态 + `switch-failed`；不转旁路、不转邻近波段、不停中间态 |
+| 位置读不出 | `current_band=null`、`state="unknown"`，不得猜测 |
+| 断线 | 保持当前机械位置（不自动回直通，避免发射中断路） |
+| 多波段并存 | 机械上一次只能插入一个；不得同时插入两个波段 |
+| 告警确认 | `ack_alarms` 只改 `acknowledged`，不改射频状态 |
+
+### 11.7 六项核心字段总表
+
+| 名称 | 方向 | 类型 | 单位/取值 | 必填 | 缺省值 |
+|---|---|---|---|---|---|
+| `supported_bands` | 上报 | array<string> | `^\d{1,3}m$`，1–16 | 必须 | — |
+| `capability_rev` | 上报 | number | uint32，≥1 | 必须 | 1 |
+| `current_band` | 上报 | string \| null | `^\d{1,3}m$` / `null` | 必须 | `null` |
+| `bypass` | 上报 | boolean | true/false | 必须 | `false`（上电为 `true`） |
+| `filter_health` | 上报 | string | `ok`/`degraded`/`fault`/`unknown` | 必须 | `unknown` |
+| `alarms` | 上报 | array<object> | 见 §11.4 | 必须 | `[]` |
+| `fault` | 上报 | string | 告警码 / `""` | 必须 | `""` |
+| `band`（指令） | 下发 | string | `^\d{1,3}m$` | 三选一 | — |
+| `bypass`（指令） | 下发 | boolean | true/false | 三选一 | — |
+| `action`（指令） | 下发 | string | `ack_alarms` | 三选一 | — |
+| `codes`（指令） | 下发 | array<string> | 告警码，≤16 | 可选 | 全部 |
+
+### 11.8 示例（请求 / 响应成对）
+
+**(1) 上线首帧（直通、上报能力）**
 
 ```json
 {"msg_id":"bpf-a-0001","cmd":"remote_control",
  "timestamp":1794725300,"ts":"2026-11-15T06:48:20.000Z","proto":"1.0",
  "data":{"device_id":"BPF-A","device_class":"bpf","model":"DXC-BPF-6",
-  "serial":"BPFA2026001","firmware_version":"1.0.1","boot_id":"e5c210",
-  "uptime_ms":98200,"seq":64,"state":"idle","band":"20m","mode":"auto",
-  "bypass":false,"switching":false,
-  "filter_bank":["160m","80m","40m","20m","15m","10m"],
-  "rf_detected":false,"tx_active":false,"insertion_loss_db":0.6,
-  "fault":"","error":"","result":"ok"}}
+  "serial":"BPFA2026001","firmware_version":"1.1.0","boot_id":"e5c210",
+  "uptime_ms":98200,"seq":64,"state":"idle",
+  "supported_bands":["160m","80m","40m","20m","15m","10m"],
+  "capability_rev":1,"current_band":null,"bypass":true,
+  "switching":false,"filter_health":"ok","filter_fault_bands":[],
+  "rf_detected":false,"tx_active":false,"insertion_loss_db":null,
+  "alarms":[],"fault":"","error":"","result":"ok"}}
 ```
 
-### 11.3 控制指令字段
+**(2) 切到 20m：下发 → ack → 回读**
 
-| 字段 | 类型 | 必填 | 范围 | 缺省行为 |
-|---|---|---|---|---|
-| `device_id` | string | 必须 | ≤100 | — |
-| `band` | string | 可选 | `filter_bank` 中的一项 | 不变 |
-| `bypass` | boolean | 可选 | true/false | 不变 |
-| `mode` | string | 可选 | `manual` / `auto` | 不变 |
-
-三者至少给一个，否则回 `error="empty-command"`。
-
-约束：
-
-- `band` 必须已安装，否则 `unknown-band`，不动作。
-- **`bypass=true` 不得由平台在发射中下发**（§14.4）；设备检测到 RF 时必须拒绝。
-- break-before-make，断开窗口 ≤50 ms，总动作 ≤200 ms。
-- `mode="auto"` 时设备可自行跟随外部波段，但**不得静默切换**：切换前后都必须发快照。
-
-### 11.4 状态机与边界
-
-```
-   init（继电器复位 → 直通）
-     │
-     ├─ 已读出仓位置 ──► idle（band=实际仓）
-     └─ 读不出 ────────► unknown（band=""）
-              │ band 指令
-              ▼
-           switching ── 到位 ──► idle
-              │
-              ├─ RF 存在 ──► 拒绝，保持原位
-              └─ 继电器未到位 ──► fault
-```
-
-| 边界 | 规则 |
-|---|---|
-| 上电/断电 | **默认直通**（`bypass=true`、`band=""`），不得自动插入断电前的仓 |
-| 发射中 | 拒绝任何插入/直通切换，回 `tx-active` 或 `rf-detected` |
-| 未知仓 | `band=""`、`bypass` 按实测；不得用最后一条命令填充 |
-| 多波段并存 | 机械上一次只能插入一个仓；不得同时插入两个波段 |
-| 断线 | 保持当前机械位置（不自动回直通，避免发射中断路） |
-
-### 11.5 示例
-
-**(1) 切到 15m**
+下发：
 
 ```json
 {"msg_id":"dxc-m7k2pd-1234abcd","cmd":"remote_control",
  "timestamp":1794725310,"ts":"2026-11-15T06:48:30.000Z","proto":"1.0",
- "data":{"device_id":"BPF-A","band":"15m"}}
+ "data":{"device_id":"BPF-A","band":"20m"}}
 ```
 
-**(2) ack**
+ack：
 
 ```json
 {"msg_id":"bpf-a-0101","cmd":"remote_control",
@@ -1182,43 +1295,124 @@ X-DX-Seat: OP-A
   "ack_msg_id":"dxc-m7k2pd-1234abcd","seq":65}}
 ```
 
-**(3) 回读**
+回读（到位后；此前平台保持 `pending`）：
 
 ```json
 {"msg_id":"bpf-a-0102","cmd":"remote_control",
  "timestamp":1794725311,"ts":"2026-11-15T06:48:31.000Z","proto":"1.0",
  "data":{"device_id":"BPF-A","device_class":"bpf","state":"idle",
-  "band":"15m","bypass":false,"switching":false,"seq":66}}
+  "current_band":"20m","bypass":false,"switching":false,
+  "filter_health":"ok","seq":66}}
 ```
 
-**(4) 发射中拒绝**
+**(3) 目标不在 `supported_bands`：拒绝并告警**
+
+下发：
+
+```json
+{"msg_id":"dxc-m7k2pf-99aabbcc","cmd":"remote_control",
+ "timestamp":1794725320,"ts":"2026-11-15T06:48:40.000Z","proto":"1.0",
+ "data":{"device_id":"BPF-A","band":"30m"}}
+```
+
+ack：
 
 ```json
 {"msg_id":"bpf-a-0103","cmd":"remote_control",
  "timestamp":1794725320,"ts":"2026-11-15T06:48:40.000Z","proto":"1.0",
  "data":{"device_id":"BPF-A","device_class":"bpf","result":"error",
-  "ack_msg_id":"dxc-m7k2pe-5678efgh","error":"tx-active",
-  "error_detail":"fwd_power=410W","seq":67}}
+  "ack_msg_id":"dxc-m7k2pf-99aabbcc","error":"unknown-band",
+  "error_detail":"30m not in supported_bands","seq":67}}
 ```
 
-### 11.6 响应与错误码
+紧随其后的快照（原波段不变，带告警）：
 
-| 情形 | 设备返回 | 说明 |
+```json
+{"msg_id":"bpf-a-0104","cmd":"remote_control",
+ "timestamp":1794725320,"ts":"2026-11-15T06:48:40.000Z","proto":"1.0",
+ "data":{"device_id":"BPF-A","device_class":"bpf","state":"idle",
+  "current_band":"20m","bypass":false,"switching":false,
+  "alarms":[{"code":"band-unsupported","severity":"warning","latched":false,
+             "acknowledged":false,"since":"2026-11-15T06:48:40.000Z",
+             "detail":"requested 30m"}],
+  "fault":"band-unsupported","seq":68}}
+```
+
+**(4) 发射中拒绝**
+
+```json
+{"msg_id":"bpf-a-0105","cmd":"remote_control",
+ "timestamp":1794725330,"ts":"2026-11-15T06:48:50.000Z","proto":"1.0",
+ "data":{"device_id":"BPF-A","device_class":"bpf","result":"error",
+  "ack_msg_id":"dxc-m7k2pg-11223344","error":"tx-active",
+  "error_detail":"fwd_power=410W","seq":69}}
+```
+
+**(5) 切换失败：恢复原波段并置锁存告警**
+
+```json
+{"msg_id":"bpf-a-0106","cmd":"remote_control",
+ "timestamp":1794725340,"ts":"2026-11-15T06:49:00.000Z","proto":"1.0",
+ "data":{"device_id":"BPF-A","device_class":"bpf","state":"idle",
+  "current_band":"20m","bypass":false,"switching":false,
+  "filter_health":"degraded",
+  "alarms":[{"code":"switch-failed","severity":"major","latched":true,
+             "acknowledged":false,"since":"2026-11-15T06:49:00.000Z",
+             "detail":"target 15m not reached in 1s, restored 20m"}],
+  "fault":"switch-failed","seq":70}}
+```
+
+**(6) 确认锁存告警**
+
+下发：
+
+```json
+{"msg_id":"dxc-m7k2ph-55667788","cmd":"remote_control",
+ "timestamp":1794725350,"ts":"2026-11-15T06:49:10.000Z","proto":"1.0",
+ "data":{"device_id":"BPF-A","action":"ack_alarms","codes":["switch-failed"]}}
+```
+
+ack：
+
+```json
+{"msg_id":"bpf-a-0107","cmd":"remote_control",
+ "timestamp":1794725350,"ts":"2026-11-15T06:49:10.000Z","proto":"1.0",
+ "data":{"device_id":"BPF-A","device_class":"bpf","result":"ok",
+  "ack_msg_id":"dxc-m7k2ph-55667788","seq":71}}
+```
+
+回读（故障条件已消失，`alarms` 变空）：
+
+```json
+{"msg_id":"bpf-a-0108","cmd":"remote_control",
+ "timestamp":1794725351,"ts":"2026-11-15T06:49:11.000Z","proto":"1.0",
+ "data":{"device_id":"BPF-A","device_class":"bpf","state":"idle",
+  "current_band":"20m","bypass":false,"switching":false,
+  "filter_health":"ok","alarms":[],"fault":"","seq":72}}
+```
+
+### 11.9 响应与错误码
+
+| 情形 | 设备返回 | 是否置告警 |
 |---|---|---|
-| 波段未安装 | `unknown-band` | 不动作 |
-| 无有效字段 | `empty-command` | 三个字段至少一个 |
-| 发射中 | `tx-active` | 不动作 |
-| 继电器反馈不符 | `fault="relay-mismatch"` + 报实际位置 | — |
-| 平台下发 `bands` | 忽略 | 只读字段 |
+| 波段不受支持 | `unknown-band` | `band-unsupported`（warning） |
+| 发射中切换（含旁路往返） | `tx-active`；仅检测到 RF 时 `rf-detected` | 否 |
+| 切换中再收指令 | `busy` | 否 |
+| 三个动作字段都给或都没给 | `invalid-arg` / `empty-command` | 否 |
+| 标识语法非法 | `invalid-arg` | 否 |
+| 滤波器故障时请求换波段 | `hardware-fault` | 已有 `filter-fault` / `self-test-failed` |
+| 主版本不支持 | `proto-unsupported` | 否 |
 
-### 11.7 异常与超时
+### 11.10 异常与超时
 
 | 情形 | 设备行为 |
 |---|---|
-| 继电器反馈与命令不一致 | `state="fault"`、`fault="relay-mismatch"`，上报实际位置 |
-| 平台 `bands` 与 `filter_bank` 不一致 | 以 `filter_bank` 执行，`error_detail` 提示 |
-| 通信中断 | 保持位置；重连后全量快照 |
-| 仓位置读不出 | `band=""`，等指令，不猜测 |
+| 继电器反馈与命令不一致 | 1 s 内恢复切换前状态，置 `switch-failed`；`filter_health` 按实测 |
+| 切换超时 | 同上，不得停在中间态 |
+| 自检失败 | `state="fault"`、`self-test-failed`（critical，latched），只允许 `bypass=true` 与 `ack_alarms` |
+| 通信中断 | 保持当前机械位置；重连后全量快照（含 `supported_bands` 与 `capability_rev`） |
+| 位置读不出 | `current_band=null`、`state="unknown"`，等指令，不猜测 |
+| 平台下发的波段标识平台自身不认识 | 设备仍按自己的 `supported_bands` 判定；支持则执行，不支持则 `unknown-band` |
 
 ---
 
@@ -1409,7 +1603,7 @@ HTTP 200，平台**不更新**状态。
 | `tx-active` | 检测到发射，拒绝射频动作 | 保持原位，不改 `ports` |
 | `rf-detected` | 检测到 RF 能量（可能非本机发射） | 同上 |
 | `unknown-channel` | 端口/通道不存在 | 不动作 |
-| `unknown-band` | 波段不在 `filter_bank` | 不动作 |
+| `unknown-band` | 波段不在设备的 `supported_bands` | 不动作 |
 | `output-busy` | 矩阵目标输出已被占用 | 不动作、不抢占 |
 | `unknown-command` | 指令不认识 | 不动作 |
 | `invalid-arg` | 参数越界 | 不动作 |
@@ -1506,6 +1700,8 @@ HTTP 200，平台**不更新**状态。
 | 9 | `power-fault` | 供电异常 |
 | 10–31 | 保留 | 必须为 0 |
 
+> 本表适用于 switch / matrix / tower / swr。BPF 不使用 `fault_word`，改用 `alarms[]`（§11.4），`fault` 为最高严重级别的告警码。
+
 ### 13.5 关键语义
 
 - **202 只表示"已发出"**，不代表已执行；真正确认来自回读。
@@ -1538,7 +1734,7 @@ HTTP 200，平台**不更新**状态。
 | 情况 | 返回 | 依据 |
 |---|---|---|
 | 发射中切换天线/矩阵 OUT | `tx-active` | §8.3、§9.3 |
-| 发射中切换 BPF / 直通 | `tx-active` / `rf-detected` | §11.3 |
+| 发射中切换 BPF / 直通 | `tx-active` / `rf-detected` | §11.5 |
 | 远程把切换器置"全断" | `invalid-arg` | §8.3 |
 | 远程把矩阵某输入置 `null` | `invalid-arg` | §9.3 |
 | 多输入接同一输出 | `output-busy` | §9.3 |
@@ -1556,7 +1752,7 @@ HTTP 200，平台**不更新**状态。
 | 切换器 | `state="init"`，实测 `position`（读不到则 `null`），`ports` 按实测 | 沿用断电前 `ports` |
 | 矩阵 | 每输入实测通路，读不到的那个输入报 `null` | 把全部输入报成"上次选择" |
 | 铁塔 | 两路 `motor_on=false`、`hold_active=false`，实测两限位 | 自动继续断电前方向 |
-| BPF | `bypass` 按实测（推荐上电即直通），`band` 按实测仓 | 自动插入断电前仓 |
+| BPF | `state="init"`→自检通过后 `bypass=true`、`current_band=null`（§11.6 写死）；`supported_bands` 与 `capability_rev` 必须重发；`alarms` 按实测 | 自动插入断电前波段；省略 `supported_bands` |
 | 驻波表 | `tx_active=false`、`cal_valid` 按实测、`peak_fwd_w=0` | 报上一次 `tx_active=true`（会永久锁死切换） |
 
 统一要求：
@@ -1620,8 +1816,8 @@ HTTP 200，平台**不更新**状态。
 | R8 | 是否强制装配 `rf_detected` | 硬件成本 |
 | R9 | 矩阵 `output-busy` 互斥口径（§9.3） | 是否允许输出共用 |
 | R10 | 塔 A 档用 `direction` 还是沿用干接点通道号（§10.3） | 塔控制器固件接口 |
-| R11 | BPF 是否开放远程控制（§11.3） | 只做在线可见 vs 可切换 |
-| R12 | 断电后 BPF 默认直通（§11.4） | 安全取舍 |
+| R11 | BPF 必须支持旁路（§11.3、§11.5）。本协议已按"必须支持"写死；若某型号物理上无法旁路，需走不兼容变更评审，不在协议里留"不支持"分支 | 影响所有 BPF 固件与状态机 |
+| R12 | BPF 上电默认直通（§11.6，已写死） | 安全取舍，评审确认 |
 | R13 | 切换器 200 ms 动作 / 1 s 超时（§8.4） | 依赖继电器与机械结构 |
 | R14 | `fault_word` 位分配（§13.4） | 位定义一旦发布不宜改 |
 | R15 | 设备侧 `msg_id` 去重缓存 16 条（§3.7） | 内存与去重强度取舍 |
@@ -1744,3 +1940,23 @@ Schema 的枚举策略（与 §4.9 一致）：
 - **开放枚举**（`state`、`error`、`fault`）：只做 `type: string` + 长度/字符约束，**不使用 `enum`**，保证旧校验器不会拒绝新值。
 - **封闭枚举**（`device_class`、`result`、`action`）：使用 `enum`；新增值属 minor 升级，Schema 随之更新。
 - 数值一律用 `minimum`/`maximum` + `type`，不用 `multipleOf` 约束小数位（浮点在验证器间行为不一致，精度由 §4.4 的发送方规则保证）。
+
+### B.4 回归用例
+
+`docs/schema/check-examples.mjs` 是随文档交付的可执行用例，覆盖结构校验与关键语义裁决：
+
+```bash
+node docs/schema/check-examples.mjs
+```
+
+要求全部用例 `PASS`、进程退出码 0。它固定了下列行为，改动协议前必须先改用例并说明理由：
+
+| 类别 | 用例 |
+|---|---|
+| 结构 | 五类设备 heartbeat / json_command 的必填、类型、范围、枚举 |
+| 组合约束 | BPF 指令 `band`/`bypass`/`action` 三选一（给两个或零个均拒绝）；`codes` 只能与 `action` 同时出现 |
+| BPF 快照 | `supported_bands` 不允许空数组、标识必须匹配 `^\d{1,3}m$`、`bypass=true` 时 `current_band` 必须为 `null` |
+| BPF 语义 | 波段不在 `supported_bands` → `unknown-band` + `band-unsupported`；发射中（`tx_active`/`rf_detected`）→ `tx-active`；切换中 → `busy`；`fault` 状态换波段 → `hardware-fault`；`ack_alarms` 在发射中仍可执行 |
+| 波段标识 | 平台已知 / 语法合法未识别 / 语法非法 三种分类的判定 |
+
+用例中的平台波段集合仅用于演示"平台可识别"的判定方式，不是对设备能力的要求。

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://dx-compass.local/schema/heartbeat-bpf.schema.json",
   "title": "DX-Compass 多波段 BPF 组 heartbeat（设备 → 服务端）",
-  "description": "主题 bpf/device/{device_id}/heartbeat。band 为空串表示未插入任何滤波仓。规范见 §11.2。",
+  "description": "主题 bpf/device/{device_id}/heartbeat。单个射频 in / 单个 out；设备自报 supported_bands；bypass=true 时 current_band 必须为 null。规范见 §11.2–§11.4。",
   "allOf": [
     { "$ref": "https://dx-compass.local/schema/common.schema.json#/$defs/heartbeat_envelope" }
   ],
@@ -16,27 +16,20 @@
       ],
       "required": [
         "device_class",
-        "band",
-        "mode",
+        "supported_bands",
+        "capability_rev",
+        "current_band",
         "bypass",
         "switching",
-        "filter_bank",
+        "filter_health",
         "rf_detected",
-        "tx_active"
+        "tx_active",
+        "alarms",
+        "fault"
       ],
       "properties": {
         "device_class": { "const": "bpf" },
-        "band": {
-          "type": "string",
-          "pattern": "^(\\d{1,3}m)?$"
-        },
-        "mode": {
-          "type": "string",
-          "enum": ["manual", "auto"]
-        },
-        "bypass": { "type": "boolean" },
-        "switching": { "type": "boolean" },
-        "filter_bank": {
+        "supported_bands": {
           "type": "array",
           "minItems": 1,
           "maxItems": 16,
@@ -44,7 +37,76 @@
           "items": {
             "type": "string",
             "pattern": "^\\d{1,3}m$"
+          },
+          "description": "设备实际支持的波段；平台不预设。列表变化时 capability_rev 必须 +1"
+        },
+        "capability_rev": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295,
+          "description": "能力版本号；supported_bands 每次变化必须 +1"
+        },
+        "current_band": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^\\d{1,3}m$"
+            },
+            { "type": "null" }
+          ],
+          "description": "当前实际插入的滤波器；bypass=true 时为 null"
+        },
+        "bypass": { "type": "boolean" },
+        "switching": { "type": "boolean" },
+        "filter_health": {
+          "type": "string",
+          "enum": ["ok", "degraded", "fault", "unknown"]
+        },
+        "filter_fault_bands": {
+          "type": "array",
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^\\d{1,3}m$"
+          },
+          "description": "具体失效的波段，用于定位"
+        },
+        "alarms": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "type": "object",
+            "required": ["code", "severity", "latched", "acknowledged", "since"],
+            "properties": {
+              "code": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64,
+                "pattern": "^[a-z][a-z0-9-]*$"
+              },
+              "severity": {
+                "type": "string",
+                "enum": ["info", "warning", "major", "critical"]
+              },
+              "latched": { "type": "boolean" },
+              "acknowledged": { "type": "boolean" },
+              "since": {
+                "$ref": "https://dx-compass.local/schema/common.schema.json#/$defs/iso_ts"
+              },
+              "detail": {
+                "type": "string",
+                "maxLength": 200
+              }
+            },
+            "additionalProperties": true
           }
+        },
+        "fault": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^[a-z0-9-]*$",
+          "description": "最高严重级别的活动告警码；无告警为 \"\""
         },
         "rf_detected": { "type": "boolean" },
         "tx_active": { "type": "boolean" },
@@ -53,11 +115,6 @@
             { "type": "number", "minimum": 0, "maximum": 10 },
             { "type": "null" }
           ]
-        },
-        "fault": {
-          "type": "string",
-          "maxLength": 64,
-          "pattern": "^[a-z0-9-]*$"
         }
       },
       "additionalProperties": true
