@@ -582,6 +582,8 @@
 .dev-nodes {
     position: absolute;
     inset: 0;
+    /* 空白区域让给下面的连线命中层；卡片自己重新开启指针事件。 */
+    pointer-events: none;
 }
 
 .dev-canvas-node {
@@ -598,6 +600,7 @@
     cursor: grab;
     user-select: none;
     z-index: 2;
+    pointer-events: auto;
 }
 
 .dev-canvas-node:hover { border-color: var(--accent); }
@@ -732,6 +735,7 @@
     stroke: transparent;
     stroke-width: 12;
     fill: none;
+    pointer-events: stroke;
     cursor: pointer;
 }
 
@@ -767,6 +771,15 @@
 }
 
 .dev-rf-wire-hit:hover { stroke: rgba(240, 160, 32, .35); }
+
+/* 选中的连线：加粗并换成醒目的选中色，Delete 删除。 */
+.dev-wire.dev-wire-selected,
+.dev-rf-wire.dev-wire-selected,
+.dev-ctl-wire.dev-wire-selected {
+    stroke: #ffb020;
+    stroke-width: 3.5;
+    opacity: 1;
+}
 
 .dev-canvas-empty {
     position: absolute;

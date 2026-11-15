@@ -142,6 +142,8 @@ export function createDevicesPage(ctx) {
     let snapshot = null;
     let drafts = [];
     let selectedKeys = new Set();
+    // 选中的连线：{kind: 'rf'|'ctl'|'parent', id}。画布上同时只选中一条线。
+    let selectedWire = null;
     let commandSeat = null;
     let draftSeq = 0;
     let formDirty = false;
@@ -521,6 +523,8 @@ export function createDevicesPage(ctx) {
         wrap.scrollTop = contentY * zoom - localY;
         const label = $('#devZoomValue');
         if (label) label.textContent = `${Math.round(zoom * 100)}%`;
+        // 命中宽度依赖缩放比例，缩放后重画连线命中层。
+        if (snapshot) renderWires(canvasNodes());
     }
 
     function zoomBy(factor, anchor) {
@@ -836,33 +840,45 @@ export function createDevicesPage(ctx) {
         const byId = new Map();
         for (const node of list) byId.set(node.key, node);
         const parts = [];
+        // 命中宽度按屏幕像素折算回画布单位：25% 缩放时线只有 0.5px 粗，也要留出可点区域。
+        const hitWidth = px => (px / zoom).toFixed(2);
+        const isSelected = (kind, id) => !!selectedWire && selectedWire.kind === kind && selectedWire.id === id;
+        let selectionAlive = false;
         for (const node of list) {
             if (node.draft) continue;
             const parentId = node.device.parent_id;
             const parent = parentId ? byId.get(parentId) : null;
             if (!parent) continue;
+            const sel = isSelected('parent', node.device.id);
+            if (sel) selectionAlive = true;
             const d = wirePath(parent.layout, node.layout);
-            parts.push(`<path class="dev-wire" d="${d}"></path>`);
-            parts.push(`<path class="dev-wire-hit" d="${d}" data-wire-child="${esc(node.device.id)}"><title>${esc(t('dev.wire.remove'))}</title></path>`);
+            parts.push(`<path class="dev-wire${sel ? ' dev-wire-selected' : ''}" d="${d}"></path>`);
+            parts.push(`<path class="dev-wire-hit" d="${d}" style="stroke-width:${hitWidth(14)}" data-wire-child="${esc(node.device.id)}"><title>${esc(t('dev.wire.remove'))}</title></path>`);
         }
         for (const link of rfLinksForRender()) {
             if (!byId.has(link.a_device) || !byId.has(link.b_device)) continue;
             const from = rfPortPoint(link.a_device, link.a_port);
             const to = rfPortPoint(link.b_device, link.b_port);
             if (!from || !to) continue;
+            const sel = !link.pending && isSelected('rf', link.link_id);
+            if (sel) selectionAlive = true;
             const d = rfWirePath(from, to);
-            parts.push(`<path class="dev-rf-wire${link.pending ? ' dev-rf-wire-pending' : ''}" d="${d}"></path>`);
-            parts.push(`<path class="dev-rf-wire-hit" d="${d}" data-rf-link="${esc(link.link_id)}"${link.pending ? ' data-rf-pending="1"' : ''}><title>${esc(t('dev.rf.remove'))}</title></path>`);
+            parts.push(`<path class="dev-rf-wire${link.pending ? ' dev-rf-wire-pending' : ''}${sel ? ' dev-wire-selected' : ''}" d="${d}"></path>`);
+            parts.push(`<path class="dev-rf-wire-hit" d="${d}" style="stroke-width:${hitWidth(14)}" data-rf-link="${esc(link.link_id)}"${link.pending ? ' data-rf-pending="1"' : ''}><title>${esc(t('dev.rf.remove'))}</title></path>`);
         }
         for (const link of controlLinksForRender()) {
             if (!byId.has(link.a_device) || !byId.has(link.b_device)) continue;
             const from = controlPortPoint(link.a_device, link.a_port);
             const to = controlPortPoint(link.b_device, link.b_port);
             if (!from || !to) continue;
+            const sel = !link.pending && isSelected('ctl', link.link_id);
+            if (sel) selectionAlive = true;
             const d = controlWirePath(from, to);
-            parts.push(`<path class="dev-ctl-wire${link.pending ? ' dev-ctl-wire-pending' : ''}" d="${d}"></path>`);
-            parts.push(`<path class="dev-ctl-wire-hit" d="${d}" data-ctl-link="${esc(link.link_id)}"${link.pending ? ' data-ctl-pending="1"' : ''}><title>${esc(t('dev.ctl.remove'))}</title></path>`);
+            parts.push(`<path class="dev-ctl-wire${link.pending ? ' dev-ctl-wire-pending' : ''}${sel ? ' dev-wire-selected' : ''}" d="${d}"></path>`);
+            parts.push(`<path class="dev-ctl-wire-hit" d="${d}" style="stroke-width:${hitWidth(12)}" data-ctl-link="${esc(link.link_id)}"${link.pending ? ' data-ctl-pending="1"' : ''}><title>${esc(t('dev.ctl.remove'))}</title></path>`);
         }
+        // 连线被删掉或刷新后不再存在时，清掉过期的选中态。
+        if (selectedWire && !selectionAlive) selectedWire = null;
         if (wiring) {
             parts.push(`<path class="dev-wire dev-wire-draft" d="${draftWirePath(wiring.x1, wiring.y1, wiring.x2, wiring.y2)}"></path>`);
         }
@@ -1065,6 +1081,8 @@ export function createDevicesPage(ctx) {
     }
 
     function selectNode(key, additive) {
+        // 选设备会取消连线选择，避免 Delete 落到另一种对象上。
+        selectedWire = null;
         if (additive) {
             if (selectedKeys.has(key)) selectedKeys.delete(key);
             else selectedKeys.add(key);
@@ -1082,6 +1100,7 @@ export function createDevicesPage(ctx) {
     function selectAllNodes() {
         const keys = new Set(canvasNodes().map(node => node.key));
         if (!keys.size) return;
+        selectedWire = null;
         selectedKeys = keys;
         stopTower();
         formDirty = false;
@@ -1090,6 +1109,7 @@ export function createDevicesPage(ctx) {
         for (const el of document.querySelectorAll('#devNodes [data-node-key]')) {
             el.classList.toggle('active', keys.has(el.dataset.nodeKey));
         }
+        renderWires(canvasNodes());
         renderInspector();
     }
 
@@ -2091,6 +2111,39 @@ export function createDevicesPage(ctx) {
         }
     }
 
+    /**
+     * 点中连线：第一次选中并高亮，再点同一条或按 Delete 走原有的确认删除。
+     * 选线时清掉设备选择，避免 Delete 误删设备。
+     */
+    function pickWire(wire) {
+        if (selectedWire && selectedWire.kind === wire.kind && selectedWire.id === wire.id) {
+            void deleteSelectedWire();
+            return;
+        }
+        selectedWire = wire;
+        if (selectedKeys.size) {
+            selectedKeys.clear();
+            formDirty = false;
+            formSignature = null;
+            ctrlSignature = null;
+            for (const el of document.querySelectorAll('#devNodes [data-node-key]')) {
+                el.classList.remove('active');
+            }
+            renderInspector();
+        }
+        renderWires(canvasNodes());
+    }
+
+    async function deleteSelectedWire() {
+        const wire = selectedWire;
+        if (!wire) return;
+        selectedWire = null;
+        renderWires(canvasNodes());
+        if (wire.kind === 'ctl') await removeControlLinkById(wire.id);
+        else if (wire.kind === 'rf') await removeRfLinkById(wire.id);
+        else await removeWire(wire.id);
+    }
+
     function nodeElement(key) {
         const nodes = document.querySelectorAll('#devNodes [data-node-key]');
         for (const node of nodes) {
@@ -2387,6 +2440,11 @@ export function createDevicesPage(ctx) {
     }
 
     function startMarquee(event) {
+        // 在空白处拖框：先取消连线选中，框选只作用于卡片。
+        if (selectedWire) {
+            selectedWire = null;
+            renderWires(canvasNodes());
+        }
         const point = canvasPoint(event);
         marquee = {x: point.x, y: point.y, startX: point.x, startY: point.y, moved: false};
         const box = document.createElement('div');
@@ -2442,6 +2500,7 @@ export function createDevicesPage(ctx) {
         }
         // 单击空白：清空选择。
         selectedKeys.clear();
+        selectedWire = null;
         render();
     }
 
@@ -2523,7 +2582,7 @@ export function createDevicesPage(ctx) {
             if (spaceHeld) return;
             const target = event.target;
             if (target.closest('[data-node-key]') || target.closest('[data-wire-child]') ||
-                target.closest('[data-rf-link]')) return;
+                target.closest('[data-rf-link]') || target.closest('[data-ctl-link]')) return;
             startMarquee(event);
         });
 
@@ -2608,21 +2667,24 @@ export function createDevicesPage(ctx) {
             event.preventDefault();
             selectNode(node.dataset.nodeKey, event.shiftKey);
         });
-        $('#devWires').addEventListener('click', event => {
+        // 用 pointerdown 而不是 click：轮询重绘会替换 SVG 节点，click 在按下/松开
+        // 之间遇到重绘可能丢失；按下即选中，再按同一条线走删除。
+        $('#devWires').addEventListener('pointerdown', event => {
+            if (event.button !== undefined && event.button !== 0) return;
             const ctlHit = event.target.closest('[data-ctl-link]');
             if (ctlHit) {
                 if (ctlHit.dataset.ctlPending) void removeDraftLink('ctl', ctlHit.dataset.ctlLink);
-                else void removeControlLinkById(ctlHit.dataset.ctlLink);
+                else pickWire({kind: 'ctl', id: ctlHit.dataset.ctlLink});
                 return;
             }
             const rfHit = event.target.closest('[data-rf-link]');
             if (rfHit) {
                 if (rfHit.dataset.rfPending) void removeDraftLink('rf', rfHit.dataset.rfLink);
-                else void removeRfLinkById(rfHit.dataset.rfLink);
+                else pickWire({kind: 'rf', id: rfHit.dataset.rfLink});
                 return;
             }
             const hit = event.target.closest('[data-wire-child]');
-            if (hit) void removeWire(hit.dataset.wireChild);
+            if (hit) pickWire({kind: 'parent', id: hit.dataset.wireChild});
         });
 
         window.addEventListener('pointermove', event => {
@@ -2720,6 +2782,10 @@ export function createDevicesPage(ctx) {
             }
             if (event.key !== 'Delete') return;
             if (typing) return;
+            if (selectedWire) {
+                void deleteSelectedWire();
+                return;
+            }
             if (selectedKeys.size) void removeSelected();
         });
     }
@@ -2740,6 +2806,7 @@ export function createDevicesPage(ctx) {
         active = false;
         stopTower();
         dragging = null;
+        selectedWire = null;
         wiring = null;
         rfWiring = null;
         ctlWiring = null;
