@@ -923,11 +923,11 @@ export function createOpPage(ctx) {
             state.devices = null;
         }
         renderBottom();
+        renderAmps();
         updateMapHint();
     }
 
     function renderBottom() {
-        renderAmps();
         const host = $('#opBottom');
         const devices = controlDevices();
         $('#opBottomNote').textContent = devices.length ? '' : t('op.bottom.none');
@@ -1088,14 +1088,16 @@ export function createOpPage(ctx) {
         const transmitting = !stale && ampTransmitting(amp);
         const alarm = !!(amp && amp.alarm_active);
         const identity = ampIdentity(device);
-        const frequency = ampValue(amp && amp.work_freq);
+        const rawFrequency = ampValue(amp && amp.work_freq);
+        /* 0 Hz means "not tuned", so it gets no readout rather than 0.000. */
+        const frequency = rawFrequency !== null && rawFrequency > 0 ? rawFrequency : null;
         const band = (amp && amp.band) || (frequency === null ? '' : bandOf(frequency / 1000));
         const flags = [];
+        if (transmitting) flags.push('<span class="op-amp-chip tx">TX</span>');
         const pa = ampPaChip(amp);
         if (pa && hasReading) {
             flags.push('<span class="op-amp-chip' + (pa.on ? ' pa-on' : '') + '">' + esc(pa.text) + '</span>');
         }
-        if (transmitting) flags.push('<span class="op-amp-chip tx">TX</span>');
         if (alarm) {
             const code = ampAlarmCode(amp);
             flags.push('<span class="op-amp-chip alarm">' + esc(t('op.amp.alarm')) +
@@ -1137,6 +1139,14 @@ export function createOpPage(ctx) {
     function renderAmps() {
         const grid = $('#opAmpGrid');
         if (!grid) return;
+        /* First paint happens before the snapshot lands: say so instead of
+         * claiming there is no amplifier. */
+        if (!deviceSnapshot()) {
+            grid.innerHTML = '<article class="op-amp" data-state="empty"><div class="op-amp-id"><b>' +
+                esc(t('op.amp.loading')) + '</b></div>' +
+                ampEmptyFace(t('op.amp.loadingNote'), '', '') + '</article>';
+            return;
+        }
         const devices = ampDevices();
         const snapshot = deviceSnapshot() || {};
         const statuses = snapshot.status || {};
@@ -1161,7 +1171,7 @@ export function createOpPage(ctx) {
             ? devices.map(device => ampPanel(device)).join('')
             : '<article class="op-amp" data-state="empty"><div class="op-amp-id"><b>' +
                 esc(t('op.amp.none')) + '</b></div>' +
-                ampEmptyFace(t('op.amp.none'), t('op.amp.noneNote'), t('op.amp.noneHint')) + '</article>';
+                ampEmptyFace(t('op.amp.noneNote'), t('op.amp.noneHint'), '') + '</article>';
     }
 
     function deviceCard(device) {
@@ -1543,6 +1553,7 @@ export function createOpPage(ctx) {
         renderSuspects();
         renderMultipliers();
         renderBottom();
+        renderAmps();
         updateMapHint();
         renderAdvice();
         renderMap();
