@@ -167,33 +167,33 @@ export function createOpPage(ctx) {
         }));
     }
 
-    /* Seat numbers: canonical order (radio number, then seat key). The rank is
-     * recomputed from the keys themselves, never from the order N1MM instances
-     * happened to report in, so a reconnect or a page reload prints the same
-     * numbers for the same seats. A seat that briefly drops out keeps its slot
-     * because its key stays in the set. The underlying seat keys and every
-     * matching rule stay untouched. */
+    /* Seat numbers: canonical order (radio number, then seat key), ranked over
+     * the seats that exist right now. The rank never comes from the order N1MM
+     * instances happened to report in, so a reconnect or a page reload prints
+     * the same numbers for the same seats, and no number is skipped when an
+     * earlier placeholder seat gives way to the real ones. The underlying seat
+     * keys and every matching rule stay untouched. */
     const seatNumbers = new Map();
-    const knownSeatKeys = new Set();
+
+    function compareSeatKeys(a, b) {
+        return radioNrOfKey(a) - radioNrOfKey(b) || a.localeCompare(b);
+    }
 
     function ensureSeatNumbers(keys) {
-        let learned = false;
-        for (const key of keys) {
-            const value = String(key);
-            if (knownSeatKeys.has(value)) continue;
-            knownSeatKeys.add(value);
-            learned = true;
-        }
-        if (!learned && seatNumbers.size) return;
-        [...knownSeatKeys]
-            .sort((a, b) => radioNrOfKey(a) - radioNrOfKey(b) || a.localeCompare(b))
-            .forEach((key, index) => seatNumbers.set(key, index + 1));
+        const list = [...new Set(keys.map(String))].sort(compareSeatKeys);
+        seatNumbers.clear();
+        list.forEach((key, index) => seatNumbers.set(key, index + 1));
     }
 
     function seatNumber(key) {
         const value = String(key);
-        if (!seatNumbers.has(value)) ensureSeatNumbers([value]);
-        return seatNumbers.get(value) || 1;
+        const known = seatNumbers.get(value);
+        if (known) return known;
+        /* A seat referenced outside the current list (a claim or a lane from
+         * another instance): rank it against the seats that are listed. */
+        const list = seatChoices().map(choice => String(choice.value));
+        return (list.includes(value) ? list : list.concat(value))
+            .sort(compareSeatKeys).indexOf(value) + 1;
     }
 
     /* Display order always follows the seat number, never the order in which
