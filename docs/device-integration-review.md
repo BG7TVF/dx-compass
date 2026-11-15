@@ -24,10 +24,10 @@
 |---|---|
 | 当前提交 | 本地 HEAD `88b35c3`（2026-11-15 15:49 +0800，`fix: 修正功放开机命令与切换器下发语义`） |
 | 远端 | 本地 main 已推送 origin；远端不再停在 11-13 的 `c57558f` |
-| 部署 | 生产目录先清理人工覆盖的 `public/index.html`、`public/js/pages/qso-page.mjs`，再正常 pull 到 `ac371d5` 并重启，HTTP 200；陈旧 `deploy.bundle` 已删除 |
+| 部署 | 生产先清理人工覆盖的 `public/index.html`、`public/js/pages/qso-page.mjs`，再正常 pull；审计项完成后已拉到 `856c6b3` 并重启，`systemctl is-active` = active、`http://127.0.0.1:5758/` = 200 |
 | 本轮受版本控制修改 | `.gitignore`、`README.md`、`docs/rf-component-spec.md`、`lib/devices/commands.js`、`lib/devices/model.js`、`lib/devices/rotator-link.js`、`lib/devices/service.js`、`lib/devices/switch-link.js`、`lib/devices/switch-models.js`、`lib/settings/service.js`、`lib/spots/service.js`、`public/js/i18n.js`、`public/js/pages/devices-page.mjs`、`tests/architecture.test.js`、`tests/backend-settings.test.js`、`tests/backend-spots.test.js`、`tests/devices.test.js`、`tests/switch-link.test.js` |
 | 本轮新增入库文档 | `docs/contesting-tactics-research.md`、`docs/device-canvas-editor-plan.md`、`docs/device-integration-implementation-plan.md`、`docs/device-integration-review.md`、`docs/dx-compass-m2-mm-gap-plan.md`、`docs/dx-compass-official-device-json-protocol.md`、`docs/hamalert-server-research.md`、`docs/m2-mm-collaboration-playbook.md`、`docs/m2-mm-rules-constraints.md`、`docs/supercheckpartial-research.md` |
-| 测试状态 | 本轮起点 537 通过、0 失败；新增传输层、AG 双栈、旋转器串口继承、SPOT 回填等用例后，以最新全量 `node --test` 结果为准 |
+| 测试状态 | 本轮起点 537 通过、0 失败；新增传输层、AG 双栈、旋转器串口继承、SPOT 回填等用例后，全量 `node --test` 为 548 通过、0 失败 |
 | 已清理 | `.commit-msg.tmp`、空的 `lib/deployment/`；`artifacts/`、`.screenshots/` 已加入 `.gitignore` |
 | 处置 | 文档与代码一并入库；不再保持“未提交、未部署” |
 
