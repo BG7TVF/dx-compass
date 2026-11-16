@@ -57,8 +57,11 @@ const STATUS_KEYS = {
     'no-source': 'dev.status.noSource',
     unbound: 'dev.status.unbound',
     awaiting: 'dev.status.awaiting',
-    unverified: 'dev.status.unverified'
+    unverified: 'dev.status.unverified',
+    manual: 'dev.status.manual'
 };
+// 没有数据接入也没有控制通道的类型：仍然可以选自动/手动，但要说明选了自动也不会出读数。
+const NO_ACCESS_TYPES = ['antenna', 'bpf', 'combiner'];
 const SWITCH_STATE_KEYS = {
     verified: 'dev.switch.stateVerified',
     pending: 'dev.switch.statePending',
@@ -79,7 +82,8 @@ const TOWER_KEYS = {
     moving: 'dev.tower.moving',
     fault: 'dev.tower.fault',
     offline: 'dev.tower.offline',
-    unknown: 'dev.tower.unknown'
+    unknown: 'dev.tower.unknown',
+    manual: 'dev.tower.manual'
 };
 const COLOR_KEYS = {red: 'dev.color.red', yellow: 'dev.color.yellow', green: 'dev.color.green'};
 const HEALTH_KEYS = {ok: 'dev.tx.health.ok', stale: 'dev.tx.health.stale', offline: 'dev.tx.health.offline'};
@@ -119,6 +123,8 @@ const ERROR_KEYS = {
     'invalid-band': 'dev.error.invalid-band',
     'device-locked': 'dev.error.device-locked',
     'device-disabled': 'dev.error.device-disabled',
+    'device-manual': 'dev.error.device-manual',
+    'invalid-access-mode': 'dev.error.invalid-access-mode',
     'device-busy': 'dev.error.device-busy',
     'device-transmitting': 'dev.error.device-transmitting',
     'device-countdown': 'dev.error.device-countdown',
@@ -1074,6 +1080,7 @@ export function createDevicesPage(ctx) {
                 bands: [],
                 install_offset_deg: 0,
                 enabled: true,
+                access_mode: 'auto',
                 travel_timeout_sec: TRAVEL_TYPES.includes(type) ? 120 : 0,
                 notes: '',
                 config: {},
@@ -1516,6 +1523,13 @@ export function createDevicesPage(ctx) {
         const seat = value.type === 'radio'
             ? `<p class="dev-note">${t('dev.form.seat')} · ${esc(radioSeatLabel(value))}</p>`
             : '';
+        const access = `<label>${t('dev.form.accessMode')}<select name="access_mode">
+                <option value="auto"${value.access_mode !== 'manual' ? ' selected' : ''}>${esc(t('dev.form.accessAuto'))}</option>
+                <option value="manual"${value.access_mode === 'manual' ? ' selected' : ''}>${esc(t('dev.form.accessManual'))}</option>
+            </select></label>`;
+        const accessHint = `<p class="dev-note">${esc(t('dev.form.accessModeHint'))}</p>`;
+        const noAccessHint = NO_ACCESS_TYPES.includes(value.type)
+            ? `<p class="dev-note">${esc(t('dev.form.noAccessHint'))}</p>` : '';
         return `<form id="devFormEl" class="dev-form" data-dev-id="${esc(isDraft ? '' : value.id)}" data-draft="${isDraft ? '1' : '0'}">
             <h3>${t(isDraft ? 'dev.form.new' : 'dev.form.edit')}</h3>
             <div class="dev-form-type"><span class="dev-node-badge">${esc(TYPE_BADGE[value.type] || 'O')}</span>${esc(typeLabel(value.type))}</div>
@@ -1525,7 +1539,10 @@ export function createDevicesPage(ctx) {
                 ${bands}
                 ${offset}
                 ${travel}
+                ${access}
             </div>
+            ${accessHint}
+            ${noAccessHint}
             ${seat}
             <p class="dev-note">${t('dev.form.address')} · ${esc(controlAddressLabel(value, isDraft ? key : value.id) || '—')}</p>
             <p class="dev-note">${t('dev.form.parentFixed')} · ${esc(isDraft ? '—' : parentLabel(value))}</p>
@@ -1619,19 +1636,24 @@ export function createDevicesPage(ctx) {
         const status = '<p class="dev-ctrl-status" id="devCtrlStatus"></p>';
         const error = '<p class="dev-form-error hidden" id="devCtrlError"></p>';
         const seat = `<label>${t('dev.control.seat')}<select id="devCtrlSeat">${seatOptions()}</select></label>`;
+        // 手动设备把按钮置灰并说明原因，而不是让人点了没反应。
+        const manual = device.access_mode === 'manual';
+        const off = manual ? ' disabled' : '';
+        const manualHint = manual
+            ? `<p class="dev-note dev-warn">${esc(t('dev.control.manualHint'))}</p>` : '';
         if (device.type === 'rotator') {
             return `<h3>${t('dev.control.title')}</h3>${status}
                 <div class="dev-ctrl-row">
                     <label>${t('dev.control.target')}<input id="devCtrlAzimuth" type="number" min="0" max="360" step="1" inputmode="numeric"></label>
-                    <button class="dev-btn primary" type="button" data-cmd="rotate">${t('dev.control.rotate')}</button>
-                    <button class="dev-btn" type="button" data-cmd="stop">${t('dev.control.stop')}</button>
+                    <button class="dev-btn primary" type="button" data-cmd="rotate"${off}>${t('dev.control.rotate')}</button>
+                    <button class="dev-btn" type="button" data-cmd="stop"${off}>${t('dev.control.stop')}</button>
                 </div>
-                <div class="dev-ctrl-row">${seat}</div>${error}`;
+                <div class="dev-ctrl-row">${seat}</div>${manualHint}${error}`;
         }
         if (device.type === 'matrix' || device.type === 'switch') {
             const definition = switchDefinitionFor(device.type, device.config);
             const readback = !!(definition && definition.readback);
-            const controllable = !definition || definition.control !== false;
+            const controllable = (!definition || definition.control !== false) && !manual;
             const portHint = device.type === 'switch' ? t('dev.control.switchHint') : t('dev.control.matrixHint');
             const stateHint = !controllable ? t('dev.switch.readOnlyHint')
                 : readback ? t('dev.switch.readbackHint') : t('dev.switch.writeOnlyHint');
@@ -1646,26 +1668,26 @@ export function createDevicesPage(ctx) {
                 </div>
                 <div class="dev-ctrl-row">${seat}</div>
                 <p class="dev-note">${esc(portHint)}</p>
-                <p class="dev-note">${esc(stateHint)}</p>${protocolHint}${error}`;
+                <p class="dev-note">${esc(stateHint)}</p>${manualHint}${protocolHint}${error}`;
         }
         if (device.type === 'amp') {
             const definition = ampDefinitionFor(device.config);
             // 可控制项由型号描述表给出；未选型号时用通用定义（常规操作，不含校准）。
             const buttons = ((definition && definition.controls) || []).map(control =>
-                `<button class="dev-btn${control.primary ? ' primary' : ''}" type="button" data-cmd="amp_set"
+                `<button class="dev-btn${control.primary ? ' primary' : ''}" type="button" data-cmd="amp_set"${off}
                     data-amp="${esc(control.action)}" data-amp-delta="${esc(JSON.stringify(control.delta || {}))}">${esc(t(control.label))}</button>`).join('');
             return `<h3>${t('dev.control.title')}</h3>${status}
                 <div class="dev-ctrl-row">${buttons}</div>
                 <div class="dev-ctrl-row">${seat}</div>
-                <p class="dev-note">${esc(t('dev.amp.controlHint'))}</p>${error}`;
+                <p class="dev-note">${esc(t('dev.amp.controlHint'))}</p>${manualHint}${error}`;
         }
         return `<h3>${t('dev.control.title')}</h3>${status}
             <div class="dev-ctrl-row">
-                <button class="dev-btn" type="button" data-tower="up">${t('dev.control.up')}</button>
-                <button class="dev-btn" type="button" data-tower="down">${t('dev.control.down')}</button>
+                <button class="dev-btn" type="button" data-tower="up"${off}>${t('dev.control.up')}</button>
+                <button class="dev-btn" type="button" data-tower="down"${off}>${t('dev.control.down')}</button>
             </div>
             <div class="dev-ctrl-row">${seat}</div>
-            <p class="dev-note">${t('dev.control.holdHint')}</p>${error}`;
+            <p class="dev-note">${t('dev.control.holdHint')}</p>${manualHint}${error}`;
     }
 
     function updateControlStatus(device) {
@@ -1758,7 +1780,8 @@ export function createDevicesPage(ctx) {
             ctrlSignature = null;
             return;
         }
-        const signature = [value.id, value.type,
+        // access_mode 决定按钮是否可用，必须参与签名，切模式后控制面板才会重绘。
+        const signature = [value.id, value.type, value.access_mode || 'auto',
             (value.config && value.config.brand) || '', (value.config && value.config.model) || ''].join('|');
         if (signature !== ctrlSignature) {
             container.innerHTML = controlHtml(value);
@@ -1947,6 +1970,7 @@ export function createDevicesPage(ctx) {
             type,
             name: String(data.get('name') || ''),
             enabled: data.get('enabled') === 'on',
+            access_mode: data.get('access_mode') === 'manual' ? 'manual' : 'auto',
             notes: String(data.get('notes') || '')
         };
         if (form.dataset.devId) device.id = form.dataset.devId;

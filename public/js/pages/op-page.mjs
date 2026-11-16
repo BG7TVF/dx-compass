@@ -1176,6 +1176,8 @@ export function createOpPage(ctx) {
         let face;
         if (hasReading) {
             face = ampReadings(amp, stale);
+        } else if (status.state === 'manual') {
+            face = ampEmptyFace(t('op.amp.manual'), t('op.amp.manualNote'), t('op.amp.manualHint'));
         } else if (status.state === 'no-source') {
             face = ampEmptyFace(t('op.amp.noSource'), t('op.amp.noSourceNote'), t('op.amp.noSourceHint'));
         } else if (offline) {

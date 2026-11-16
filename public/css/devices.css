@@ -162,6 +162,12 @@
 .dev-dot-unbound { background: var(--yellow); }
 .dev-dot-awaiting { background: var(--yellow); }
 .dev-dot-no-source { background: var(--text-dim); opacity: .5; }
+/* 手动是刻意不接入，用空心点与“无状态源/离线”区分。 */
+.dev-dot-manual {
+    background: transparent;
+    border: 1px solid var(--accent);
+    box-sizing: border-box;
+}
 
 .dev-chip {
     display: inline-block;

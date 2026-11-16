@@ -16,6 +16,7 @@ const commands = require('../lib/devices/commands.js');
 const rotatorLink = require('../lib/devices/rotator-link.js');
 const ampLink = require('../lib/devices/amp-link.js');
 const ampModels = require('../lib/devices/amp-models.js');
+const switchLink = require('../lib/devices/switch-link.js');
 const rotatorModels = require('../lib/devices/rotator-models.js');
 const service = require('../lib/devices/service.js');
 
@@ -3486,4 +3487,151 @@ test('功放切换型号保留已配置的地址与凭据', () => {
         config_json: JSON.stringify(switched.device.config)
     })], new Date());
     assert.equal(view.amp_models.brands[0].models[0].id, 'amp1000');
+});
+
+test('接入方式：默认自动，切手动保留地址与凭据，非法值拒绝', () => {
+    const auto = model.normalizeDevice({
+        type: 'rotator', name: 'G-2800',
+        config: {brand: 'yaesu', model: 'g-2800dxa', host: '10.0.0.1', port: 4001}
+    }, {devices: []});
+    assert.equal(auto.ok, true);
+    assert.equal(auto.device.access_mode, 'auto');
+
+    const existing = device({
+        id: 'rot-1', name: 'G-2800', type: 'rotator', bands: '',
+        config_json: JSON.stringify({brand: 'yaesu', model: 'g-2800dxa', host: '10.0.0.1', port: 4001})
+    });
+    const manual = model.normalizeDevice({id: 'rot-1', access_mode: 'manual'}, {devices: [existing]});
+    assert.equal(manual.ok, true);
+    assert.equal(manual.device.access_mode, 'manual');
+    // 地址与凭据不因为切手动被清掉。
+    assert.equal(manual.device.config.host, '10.0.0.1');
+    assert.equal(manual.device.config.port, 4001);
+    assert.equal(model.publicDevice(manual.device).access_mode, 'manual');
+
+    const back = model.normalizeDevice({id: 'rot-1', access_mode: 'auto'}, {devices: [manual.device]});
+    assert.equal(back.device.access_mode, 'auto');
+    assert.equal(back.device.config.host, '10.0.0.1');
+
+    assert.equal(model.normalizeDevice({type: 'tower', name: 'T', access_mode: 'sometimes'},
+        {devices: []}).error, 'invalid-access-mode');
+});
+
+test('手动设备不建连接、不轮询、不接受上报，切回自动恢复', async () => {
+    ampLink.resetForTests();
+    rotatorLink.resetLinks();
+    switchLink.resetForTests();
+    let mqttClients = 0;
+    let switchSockets = 0;
+    let rotatorSockets = 0;
+    ampLink.setClientFactory(() => { mqttClients += 1; return new FakeMqttClient(); });
+    rotatorLink.setSocketFactory(() => {
+        rotatorSockets += 1;
+        return fakeSocket(line => line === 'C2;' ? '+0180+0000\r\n' : 'RPRT 0\r\n');
+    });
+    switchLink.setSocketFactory(() => {
+        switchSockets += 1;
+        return new EventEmitter();
+    });
+
+    const rows = [
+        deviceRow({
+            id: 'amp-m', name: 'PA', type: 'amp', bands: '', access_mode: 'manual',
+            config_json: JSON.stringify({
+                host: '127.0.0.1', port: 1883, protocol: 'mqtt', device_id: 'AMP1000-M'
+            })
+        }),
+        deviceRow({
+            id: 'rot-m', name: 'Rotator', type: 'rotator', bands: '', access_mode: 'manual',
+            config_json: JSON.stringify({brand: 'yaesu', model: 'g-2800dxa', host: '10.0.0.9', port: 4001})
+        }),
+        deviceRow({
+            id: 'sw-m', name: 'Switch', type: 'switch', bands: '', access_mode: 'manual',
+            config_json: JSON.stringify({brand: '4o3a', model: 'antenna-genius', host: '10.0.0.8', port: 9007})
+        })
+    ];
+    const globalCtx = makeContext();
+    const now = new Date('2026-03-01T12:00:00.000Z');
+
+    const amps = service.pollAmps(globalCtx, rows, now);
+    const rotators = await service.pollRotators(globalCtx, rows, now);
+    service.pollSwitches(globalCtx, rows, now);
+    assert.equal(mqttClients, 0);
+    assert.equal(switchSockets, 0);
+    assert.equal(rotatorSockets, 0);
+    assert.deepEqual(amps.errors, []);
+    assert.equal(rotators.polled, 0);
+
+    // 状态文案是「手动」，不是无状态源，也不是通信中断。
+    const view = service.snapshot(globalCtx, rows, now);
+    for (const id of ['amp-m', 'rot-m', 'sw-m']) {
+        assert.equal(view.status[id].state, 'manual', id);
+        assert.equal(view.status[id].online, false, id);
+    }
+    assert.equal(view.status['amp-m'].amp, null);
+    assert.equal(view.rotators['rot-m'].state, 'manual');
+    assert.equal(view.switches['sw-m'].state, 'manual');
+
+    // 手动设备不接受外部上报。
+    const report = service.handle(globalCtx, rows, {
+        action: 'report', device_id: 'rot-m', azimuth: 90
+    }, now);
+    assert.equal(report.status, 409);
+    assert.equal(report.payload.error, 'device-manual');
+
+    // 切回自动：地址仍在，链路恢复建立。
+    const autoRows = rows.map(row => row.id === 'amp-m'
+        ? Object.assign({}, row, {access_mode: 'auto'})
+        : (row.id === 'rot-m' ? Object.assign({}, row, {access_mode: 'auto'}) : row));
+    service.pollAmps(globalCtx, autoRows, now);
+    await service.pollRotators(globalCtx, autoRows, now);
+    assert.equal(mqttClients, 1);
+    assert.equal(rotatorSockets, 1);
+
+    ampLink.setClientFactory(null);
+    rotatorLink.setSocketFactory(null);
+    switchLink.setSocketFactory(null);
+    ampLink.resetForTests();
+    rotatorLink.resetLinks();
+    switchLink.resetForTests();
+});
+
+test('手动设备照常派生端口、参与波段剪枝与 TX 互锁', () => {
+    const devices = [
+        device({id: 'radio-1', type: 'radio', bands: ''}),
+        device({
+            id: 'sw-1', type: 'switch', bands: '', access_mode: 'manual',
+            config_json: '{"out_count":1}'
+        }),
+        device({id: 'ant-20', type: 'antenna', bands: '20m'})
+    ];
+    const links = [rfRow('radio-1', 'out', 'sw-1', 'in'), rfRow('sw-1', 'ant1', 'ant-20', 'in')];
+
+    assert.deepEqual(rf.portsFor(devices[1]).map(port => port.key), ['in', 'ant1']);
+    assert.deepEqual(rf.reachableAntennas({
+        devices, links, band: '20m', startDeviceId: 'radio-1'
+    }).map(hit => hit.device.id), ['ant-20']);
+    // 波段不匹配时手动设备所在的支路一样被剪掉。
+    assert.deepEqual(rf.reachableAntennas({
+        devices, links, band: '15m', startDeviceId: 'radio-1'
+    }), []);
+
+    const lock = rf.txLockPorts({devices, links, selections: {}, sourceDeviceId: 'radio-1'});
+    assert.equal(lock.devices.has('sw-1'), true);
+    assert.equal(lock.ports.get('sw-1').has('in'), true);
+    assert.equal(lock.ports.get('sw-1').has('ant1'), true);
+});
+
+test('手动设备的下发指令被拒绝，并说明是设计约束', async () => {
+    fakeTransports();
+    const globalCtx = makeContext();
+    const row = deviceRow({
+        id: 'rot-m', name: 'Rotator', type: 'rotator', bands: '', access_mode: 'manual',
+        config_json: JSON.stringify({brand: 'yaesu', model: 'g-2800dxa', host: '10.0.0.9', port: 4001})
+    });
+    const result = await service.handleCommand(globalCtx, [row], 'rot-m',
+        {command: 'rotate', azimuth: 90}, {'X-DX-Seat': 'OP-A'}, new Date());
+    assert.equal(result.status, 409);
+    assert.equal(result.payload.error, 'device-manual');
+    assert.equal(result.payload.ok, false);
 });
