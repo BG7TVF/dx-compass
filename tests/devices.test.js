@@ -3622,6 +3622,52 @@ test('手动设备照常派生端口、参与波段剪枝与 TX 互锁', () => {
     assert.equal(lock.ports.get('sw-1').has('ant1'), true);
 });
 
+test('接入方式范围：天线与合路器忽略该字段，手动电台仍显示 N1MM 状态', () => {
+    const now = new Date('2026-03-01T12:00:00.000Z');
+
+    // 无源类型：传入 manual 直接忽略；读回与公开视图都按自动。
+    const antenna = model.normalizeDevice({
+        type: 'antenna', name: '20m Yagi', bands: '20m', access_mode: 'manual'
+    }, {devices: []});
+    assert.equal(antenna.ok, true);
+    assert.equal(antenna.device.access_mode, 'auto');
+    assert.equal(model.publicDevice(antenna.device).access_mode, 'auto');
+    const combiner = model.normalizeDevice({
+        type: 'combiner', name: '2-way', bands: '20m', access_mode: 'manual'
+    }, {devices: []});
+    assert.equal(combiner.ok, true);
+    assert.equal(combiner.device.access_mode, 'auto');
+    assert.equal(model.supportsAccessMode('antenna'), false);
+    assert.equal(model.supportsAccessMode('combiner'), false);
+    assert.equal(model.supportsAccessMode('radio'), true);
+
+    // 存量数据里已经是 manual 的无源设备按“无状态源”展示，不能显示成手动。
+    const rows = [
+        deviceRow({id: 'ant-m', name: '20m', type: 'antenna', bands: '20m', access_mode: 'manual'}),
+        deviceRow({id: 'comb-m', name: '2-way', type: 'combiner', bands: '20m', access_mode: 'manual'}),
+        deviceRow({
+            id: 'radio-m', name: 'Radio', type: 'radio', bands: '', access_mode: 'manual',
+            config_json: JSON.stringify({computer: 'SHACK', model: 'IC-7610'})
+        })
+    ];
+    const globalCtx = makeContext({
+        radioStates: {
+            'OP-A': {
+                ts: now.toISOString(), computerName: 'SHACK', radioName: 'IC-7610',
+                freqKhz: 14020, mode: 'CW', tx: true
+            }
+        }
+    });
+    const view = service.snapshot(globalCtx, rows, now);
+    assert.equal(view.status['ant-m'].state, 'no-source');
+    assert.equal(view.status['comb-m'].state, 'no-source');
+
+    // 电台：N1MM 席位与频段照常，状态不能变成 manual。
+    assert.equal(view.status['radio-m'].state, 'online');
+    assert.equal(view.devices.find(item => item.id === 'radio-m').seat, 'OP-A');
+    assert.equal(view.ownership.by_seat['OP-A'].band, '20m');
+});
+
 test('手动设备的下发指令被拒绝，并说明是设计约束', async () => {
     fakeTransports();
     const globalCtx = makeContext();

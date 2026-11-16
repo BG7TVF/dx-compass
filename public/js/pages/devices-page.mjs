@@ -60,7 +60,9 @@ const STATUS_KEYS = {
     unverified: 'dev.status.unverified',
     manual: 'dev.status.manual'
 };
-// 没有数据接入也没有控制通道的类型：仍然可以选自动/手动，但要说明选了自动也不会出读数。
+// 只有存在接入通道的类型才显示「手动 / 自动」；天线与合路器是无源结构，不参与。
+const ACCESS_MODE_TYPES = ['radio', 'swr', 'amp', 'bpf', 'rotator', 'tower', 'switch', 'matrix', 'serial'];
+// 没有数据接入也没有控制通道的类型：选了自动也不会有读数，界面上要讲清楚。
 const NO_ACCESS_TYPES = ['antenna', 'bpf', 'combiner'];
 const SWITCH_STATE_KEYS = {
     verified: 'dev.switch.stateVerified',
@@ -1523,11 +1525,15 @@ export function createDevicesPage(ctx) {
         const seat = value.type === 'radio'
             ? `<p class="dev-note">${t('dev.form.seat')} · ${esc(radioSeatLabel(value))}</p>`
             : '';
-        const access = `<label>${t('dev.form.accessMode')}<select name="access_mode">
+        const accessSupported = ACCESS_MODE_TYPES.includes(value.type);
+        const access = accessSupported ? `<label>${t('dev.form.accessMode')}<select name="access_mode">
                 <option value="auto"${value.access_mode !== 'manual' ? ' selected' : ''}>${esc(t('dev.form.accessAuto'))}</option>
                 <option value="manual"${value.access_mode === 'manual' ? ' selected' : ''}>${esc(t('dev.form.accessManual'))}</option>
-            </select></label>`;
-        const accessHint = `<p class="dev-note">${esc(t('dev.form.accessModeHint'))}</p>`;
+            </select></label>` : '';
+        const accessHint = accessSupported
+            ? `<p class="dev-note">${esc(t(value.type === 'radio'
+                ? 'dev.form.accessModeRadioHint' : 'dev.form.accessModeHint'))}</p>`
+            : '';
         const noAccessHint = NO_ACCESS_TYPES.includes(value.type)
             ? `<p class="dev-note">${esc(t('dev.form.noAccessHint'))}</p>` : '';
         return `<form id="devFormEl" class="dev-form" data-dev-id="${esc(isDraft ? '' : value.id)}" data-draft="${isDraft ? '1' : '0'}">
