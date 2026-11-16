@@ -219,6 +219,8 @@
 /* 型号字段容器用 display:contents 保持原有栅格；说明行独占整行。 */
 .dev-config-fields { display: contents; }
 .dev-config-fields > .dev-note { grid-column: 1 / -1; margin: 0; }
+/* 手动设备只隐藏接入字段，输入值仍在 DOM 里，切回自动立即恢复。 */
+.dev-form.is-manual [data-conn] { display: none; }
 
 .dev-form label,
 .dev-seat-label {

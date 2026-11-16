@@ -308,12 +308,12 @@ export function createDevicesPage(ctx) {
             `<option value="${esc(item)}"${item === current ? ' selected' : ''}>${esc(item.toUpperCase())}</option>`).join('');
         const fields = (definition && definition.fields) || [];
         return `<div class="dev-config-fields" id="devConfigFields">
-            <label>${t('dev.config.brand')}<select name="cfg_rotator_brand">${brandOptions.join('')}</select></label>
-            <label>${t('dev.config.ampModel')}<select name="cfg_rotator_model">${modelOptions.join('')}</select></label>
+            <label data-conn="1">${t('dev.config.brand')}<select name="cfg_rotator_brand">${brandOptions.join('')}</select></label>
+            <label data-conn="1">${t('dev.config.ampModel')}<select name="cfg_rotator_model">${modelOptions.join('')}</select></label>
             ${protocols.length > 1
-                ? `<label>${t('dev.config.protocol')}<select name="cfg_rotator_protocol">${protocolOptions}</select></label>`
-                : `<p class="dev-note">${t('dev.config.resolvedProtocol', {protocol: current.toUpperCase()})}</p>`}
-            ${definition && definition.hint ? `<p class="dev-note">${esc(t(definition.hint))}</p>` : ''}
+                ? `<label data-conn="1">${t('dev.config.protocol')}<select name="cfg_rotator_protocol">${protocolOptions}</select></label>`
+                : `<p class="dev-note" data-conn="1">${t('dev.config.resolvedProtocol', {protocol: current.toUpperCase()})}</p>`}
+            ${definition && definition.hint ? `<p class="dev-note" data-conn="1">${esc(t(definition.hint))}</p>` : ''}
             ${fields.map(field => ampFieldHtml(field, merged)).join('')}
         </div>`;
     }
@@ -401,12 +401,12 @@ export function createDevicesPage(ctx) {
             ? `<label>${t('dev.switch.keyMap')}<textarea name="cfg_key_map" rows="2" spellcheck="false" placeholder='["7","8","9","/","*","-","0"]'>${esc(config.key_map ? JSON.stringify(config.key_map) : '')}</textarea></label>`
             : '';
         return `<div class="dev-config-fields" id="devSwitchConfigFields">
-            <label>${t('dev.config.brand')}<select name="cfg_switch_brand">${brandOptions.join('')}</select></label>
-            <label>${t('dev.config.ampModel')}<select name="cfg_switch_model">${modelOptions.join('')}</select></label>
+            <label data-conn="1">${t('dev.config.brand')}<select name="cfg_switch_brand">${brandOptions.join('')}</select></label>
+            <label data-conn="1">${t('dev.config.ampModel')}<select name="cfg_switch_model">${modelOptions.join('')}</select></label>
             ${definition && definition.protocol
-                ? `<p class="dev-note">${t('dev.config.resolvedProtocol', {protocol: definition.protocol.toUpperCase()})}</p>`
+                ? `<p class="dev-note" data-conn="1">${t('dev.config.resolvedProtocol', {protocol: definition.protocol.toUpperCase()})}</p>`
                 : ''}
-            ${definition && definition.hint ? `<p class="dev-note">${esc(t(definition.hint))}</p>` : ''}
+            ${definition && definition.hint ? `<p class="dev-note" data-conn="1">${esc(t(definition.hint))}</p>` : ''}
             ${fields.map(field => ampFieldHtml(field, config)).join('')}
             ${counts}${channels}${mapping}${keyMap}
         </div>`;
@@ -481,21 +481,22 @@ export function createDevicesPage(ctx) {
         const raw = values[field.key];
         const value = raw === undefined || raw === null || raw === '' ? field.default : raw;
         const shown = value === undefined || value === null ? '' : value;
+        // 型号字段里全是接入参数（协议/地址/凭据），手动模式下随 data-conn 一起收起。
         if (field.type === 'number') {
-            return `<label>${esc(t(field.label))}<input name="cfg_${esc(field.key)}" type="number"
+            return `<label data-conn="1">${esc(t(field.label))}<input name="cfg_${esc(field.key)}" type="number"
                 min="${esc(field.min)}" max="${esc(field.max)}" step="${esc(field.step || 1)}"
                 value="${esc(shown)}"></label>`;
         }
         if (field.type === 'select') {
             const options = (field.options || []).map(item =>
                 `<option value="${esc(item.value)}"${String(item.value) === String(shown) ? ' selected' : ''}>${esc(t(item.label))}</option>`).join('');
-            return `<label>${esc(t(field.label))}<select name="cfg_${esc(field.key)}">${options}</select></label>`;
+            return `<label data-conn="1">${esc(t(field.label))}<select name="cfg_${esc(field.key)}">${options}</select></label>`;
         }
         const type = field.type === 'password' ? 'password' : 'text';
         const extra = field.type === 'password'
             ? ` autocomplete="off" placeholder="${esc(t(field.placeholder || 'dev.config.keepPassword'))}" value="${esc(shown)}"`
             : ` maxlength="${esc(field.maxlength || 100)}" value="${esc(shown)}"`;
-        return `<label>${esc(t(field.label))}<input name="cfg_${esc(field.key)}" type="${type}"${extra}></label>`;
+        return `<label data-conn="1">${esc(t(field.label))}<input name="cfg_${esc(field.key)}" type="${type}"${extra}></label>`;
     }
 
     /** 型号决定字段集合；values 是当前表单里已填的内容（切换型号时原样带入）。 */
@@ -519,11 +520,11 @@ export function createDevicesPage(ctx) {
         const protocol = definition ? String(definition.protocol || 'mqtt') : 'mqtt';
         const fields = definition ? (definition.fields || []) : [];
         return `<div class="dev-config-fields" id="devConfigFields">
-            <label>${t('dev.config.brand')}<select name="cfg_brand">${brandOptions.join('')}</select></label>
-            <label>${t('dev.config.ampModel')}<select name="cfg_amp_model">${modelOptions.join('')}</select></label>
-            ${removed ? `<p class="dev-note">${esc(t('dev.config.ampModelRemoved'))}</p>` : ''}
-            <p class="dev-note">${t('dev.config.resolvedProtocol', {protocol: protocol.toUpperCase()})}</p>
-            ${definition && definition.hint ? `<p class="dev-note">${esc(t(definition.hint))}</p>` : ''}
+            <label data-conn="1">${t('dev.config.brand')}<select name="cfg_brand">${brandOptions.join('')}</select></label>
+            <label data-conn="1">${t('dev.config.ampModel')}<select name="cfg_amp_model">${modelOptions.join('')}</select></label>
+            ${removed ? `<p class="dev-note" data-conn="1">${esc(t('dev.config.ampModelRemoved'))}</p>` : ''}
+            <p class="dev-note" data-conn="1">${t('dev.config.resolvedProtocol', {protocol: protocol.toUpperCase()})}</p>
+            ${definition && definition.hint ? `<p class="dev-note" data-conn="1">${esc(t(definition.hint))}</p>` : ''}
             ${fields.map(field => ampFieldHtml(field, merged)).join('')}
         </div>`;
     }
@@ -1445,8 +1446,8 @@ export function createDevicesPage(ctx) {
             return ampConfigFields(config, null, value.amp_model_removed);
         }
         if (value.type === 'swr') {
-            return `<label>${t('dev.form.reportHost')}<input name="cfg_host" maxlength="100" value="${esc(config.host || '')}"></label>
-                <label>${t('dev.config.port')}<input name="cfg_port" type="number" min="1" max="65535" step="1" value="${esc(config.port || '')}"></label>`;
+            return `<label data-conn="1">${t('dev.form.reportHost')}<input name="cfg_host" maxlength="100" value="${esc(config.host || '')}"></label>
+                <label data-conn="1">${t('dev.config.port')}<input name="cfg_port" type="number" min="1" max="65535" step="1" value="${esc(config.port || '')}"></label>`;
         }
         if (value.type === 'rotator') {
             return rotatorConfigFields(config);
@@ -1455,13 +1456,14 @@ export function createDevicesPage(ctx) {
             const baud = String(config.baud || 9600);
             const option = (list, current) => list.map(item =>
                 `<option value="${item}"${String(item) === current ? ' selected' : ''}>${item}</option>`).join('');
-            return `<label>${t('dev.config.host')}<input name="cfg_host" maxlength="100" value="${esc(config.host || '')}"></label>
-                <label>${t('dev.config.listenPort')}<input name="cfg_port" type="number" min="1" max="65535" step="1" value="${esc(config.port || '')}"></label>
+            // 串口服务器的端口数是物理属性，手动时保留；地址与串口参数收起。
+            return `<label data-conn="1">${t('dev.config.host')}<input name="cfg_host" maxlength="100" value="${esc(config.host || '')}"></label>
+                <label data-conn="1">${t('dev.config.listenPort')}<input name="cfg_port" type="number" min="1" max="65535" step="1" value="${esc(config.port || '')}"></label>
                 <label>${t('dev.config.serialPorts')}<input name="cfg_port_count" type="number" min="1" max="16" step="1" value="${esc(config.port_count === undefined ? 4 : config.port_count)}"></label>
-                <label>${t('dev.config.baud')}<select name="cfg_baud">${option(SERIAL_BAUD, baud)}</select></label>
-                <label>${t('dev.config.dataBits')}<select name="cfg_data_bits">${option(['5', '6', '7', '8'], String(config.data_bits || 8))}</select></label>
-                <label>${t('dev.config.stopBits')}<select name="cfg_stop_bits">${option(['1', '2'], String(config.stop_bits || 1))}</select></label>
-                <label>${t('dev.config.parity')}<select name="cfg_parity">${option(['none', 'even', 'odd'], String(config.parity || 'none'))}</select></label>`;
+                <label data-conn="1">${t('dev.config.baud')}<select name="cfg_baud">${option(SERIAL_BAUD, baud)}</select></label>
+                <label data-conn="1">${t('dev.config.dataBits')}<select name="cfg_data_bits">${option(['5', '6', '7', '8'], String(config.data_bits || 8))}</select></label>
+                <label data-conn="1">${t('dev.config.stopBits')}<select name="cfg_stop_bits">${option(['1', '2'], String(config.stop_bits || 1))}</select></label>
+                <label data-conn="1">${t('dev.config.parity')}<select name="cfg_parity">${option(['none', 'even', 'odd'], String(config.parity || 'none'))}</select></label>`;
         }
         if (value.type === 'switch' || value.type === 'matrix') {
             return switchConfigFields(value);
@@ -1483,8 +1485,8 @@ export function createDevicesPage(ctx) {
                      <option value="NC"${config.limit_switch_type === 'NC' ? ' selected' : ''}>${t('dev.config.limitNC')}</option>
                    </select></label>`
                 : '';
-            return `<label>${t('dev.config.relayUrl')}<input name="cfg_relay_url" maxlength="300" value="${esc(config.relay_url || '')}"></label>
-                <label>${t('dev.config.relayToken')}<input name="cfg_relay_token" type="password" autocomplete="off" placeholder="${esc(t('dev.config.keepToken'))}"></label>
+            return `<label data-conn="1">${t('dev.config.relayUrl')}<input name="cfg_relay_url" maxlength="300" value="${esc(config.relay_url || '')}"></label>
+                <label data-conn="1">${t('dev.config.relayToken')}<input name="cfg_relay_token" type="password" autocomplete="off" placeholder="${esc(t('dev.config.keepToken'))}"></label>
                 <label>${t('dev.config.pulse')}<input name="cfg_pulse_ms" type="number" min="50" max="5000" step="1" value="${esc(config.pulse_ms || '')}"></label>
                 ${limit}${counts}${channels}`;
         }
@@ -1536,16 +1538,17 @@ export function createDevicesPage(ctx) {
             : '';
         const noAccessHint = NO_ACCESS_TYPES.includes(value.type)
             ? `<p class="dev-note">${esc(t('dev.form.noAccessHint'))}</p>` : '';
-        return `<form id="devFormEl" class="dev-form" data-dev-id="${esc(isDraft ? '' : value.id)}" data-draft="${isDraft ? '1' : '0'}">
+        const manual = accessSupported && value.access_mode === 'manual';
+        return `<form id="devFormEl" class="dev-form${manual ? ' is-manual' : ''}" data-dev-id="${esc(isDraft ? '' : value.id)}" data-draft="${isDraft ? '1' : '0'}" data-access="${manual ? 'manual' : 'auto'}">
             <h3>${t(isDraft ? 'dev.form.new' : 'dev.form.edit')}</h3>
             <div class="dev-form-type"><span class="dev-node-badge">${esc(TYPE_BADGE[value.type] || 'O')}</span>${esc(typeLabel(value.type))}</div>
             <div class="dev-grid">
                 <label>${t('dev.form.name')}<input name="name" maxlength="60" required value="${esc(value.name)}"></label>
+                ${access}
                 ${configFields(value)}
                 ${bands}
                 ${offset}
                 ${travel}
-                ${access}
             </div>
             ${accessHint}
             ${noAccessHint}
@@ -3015,6 +3018,16 @@ export function createDevicesPage(ctx) {
         $('#devForm').addEventListener('input', () => { formDirty = true; });
         $('#devForm').addEventListener('change', event => {
             if (!event.target) return;
+            // 切手动立刻收起只服务于自动接入的字段；只改可见性，输入值原样保留。
+            if (event.target.matches('select[name="access_mode"]')) {
+                const form = event.target.form;
+                const manual = event.target.value === 'manual';
+                if (form) {
+                    form.classList.toggle('is-manual', manual);
+                    form.dataset.access = manual ? 'manual' : 'auto';
+                }
+                return;
+            }
             // 功放品牌/型号决定字段集合；切换时保留已填写的地址与凭据。
             if (event.target.matches('select[name="cfg_brand"], select[name="cfg_amp_model"]')) {
                 refreshAmpConfigFields();
