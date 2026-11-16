@@ -17,6 +17,7 @@ const rotatorLink = require('../lib/devices/rotator-link.js');
 const ampLink = require('../lib/devices/amp-link.js');
 const ampModels = require('../lib/devices/amp-models.js');
 const switchLink = require('../lib/devices/switch-link.js');
+const switchModels = require('../lib/devices/switch-models.js');
 const rotatorModels = require('../lib/devices/rotator-models.js');
 const service = require('../lib/devices/service.js');
 
@@ -1876,17 +1877,89 @@ test('RF link actions attach, dedupe and remove links; port edits clean stale li
     assert.equal(removed.status, 200);
     assert.match(removed.sql[0], /DELETE FROM rf_links/);
 
-    // 合路器波段从 20m,15m 改为 20m：in:15m 的连线随保存清理。
+    // 合路器波段从 20m,15m 改为 20m：in:15m 的连线先报给用户确认，不再静默删除。
     const linkRows = [
         rfRow('combiner-1', 'in:15m', 'ant-multi', 'in'),
         rfRow('combiner-1', 'out', 'ant-multi', 'in')
     ];
-    const saved = service.handle(globalCtx, devices.concat(linkRows), {
+    const warned = service.handle(globalCtx, devices.concat(linkRows), {
         action: 'save', device: {id: 'combiner-1', bands: '20m'}
+    }, now);
+    assert.equal(warned.status, 409);
+    assert.equal(warned.payload.error, 'ports-in-use');
+    assert.equal(warned.payload.stale_links.length, 1);
+    assert.equal(warned.payload.stale_links[0].port, 'in:15m');
+    assert.equal(warned.payload.stale_links[0].peer_name, 'Device 1');
+    assert.deepEqual(warned.sql, []);
+
+    const saved = service.handle(globalCtx, devices.concat(linkRows), {
+        action: 'save', device: {id: 'combiner-1', bands: '20m', confirm_ports: true}
     }, now);
     assert.equal(saved.status, 200);
     assert.equal(saved.payload.removed_links, 1);
     assert.ok(saved.sql.some(sql => /DELETE FROM rf_links/.test(sql)));
+});
+
+test('切换器端口数由型号派生，与拓扑、面板同源', () => {
+    const now = new Date('2026-03-01T12:00:00.000Z');
+    const rows = [
+        deviceRow({
+            id: 'sw-1', name: 'Switch', type: 'switch', bands: '',
+            config_json: JSON.stringify({brand: 'wa4mcm', model: '1x4', out_count: 6})
+        })
+    ];
+    const deviceObj = storage.devices.toDevice(rows[0]);
+    const plan = switchModels.portPlanFor(deviceObj);
+    assert.equal(plan.source, 'model');
+    assert.equal(plan.in, 1);
+    assert.equal(plan.out, 4);
+    assert.equal(plan.mismatch, true);
+    assert.equal(plan.manual_out, 6);
+    // 配置没有被改写，只是不再参与派生。
+    assert.equal(deviceObj.config.out_count, 6);
+
+    const view = service.snapshot(makeContext(), rows, now);
+    const sw = view.devices.find(item => item.id === 'sw-1');
+    assert.equal(sw.port_plan.out, 4);
+    assert.deepEqual(rf.portsFor(sw).map(port => port.key), ['in', 'ant1', 'ant2', 'ant3', 'ant4']);
+
+    // 未选型号：仍按手填路数派生。
+    const manual = switchModels.portPlanFor({type: 'switch', config: {out_count: 5}});
+    assert.equal(manual.source, 'manual');
+    assert.equal(manual.out, 5);
+    assert.deepEqual(rf.portsFor({id: 'sw-manual', type: 'switch', config: {out_count: 5}})
+        .map(port => port.key), ['in', 'ant1', 'ant2', 'ant3', 'ant4', 'ant5']);
+});
+
+test('换型号导致端口减少：先列出失效连线，确认后才删除', () => {
+    const now = new Date('2026-03-01T12:00:00.000Z');
+    const globalCtx = makeContext();
+    const devices = [
+        device({
+            id: 'sw-1', name: 'Big switch', type: 'switch', bands: '',
+            config_json: JSON.stringify({brand: '4o3a', model: 'station-genius', host: '10.0.0.5'})
+        }),
+        device({id: 'ant-a', name: 'Ant A', type: 'antenna', bands: '20m'}),
+        device({id: 'ant-b', name: 'Ant B', type: 'antenna', bands: '20m'})
+    ];
+    const links = [rfRow('sw-1', 'ant5', 'ant-a', 'in'), rfRow('sw-1', 'ant7', 'ant-b', 'in')];
+
+    const warned = service.handle(globalCtx, devices.concat(links), {
+        action: 'save', device: {id: 'sw-1', config: {brand: 'wa4mcm', model: '1x4'}}
+    }, now);
+    assert.equal(warned.status, 409);
+    assert.equal(warned.payload.error, 'ports-in-use');
+    assert.deepEqual(warned.payload.stale_links.map(item => item.port).sort(), ['ant5', 'ant7']);
+    assert.deepEqual(warned.payload.stale_links.map(item => item.peer_name).sort(), ['Ant A', 'Ant B']);
+    assert.deepEqual(warned.sql, []);
+
+    const saved = service.handle(globalCtx, devices.concat(links), {
+        action: 'save', device: {id: 'sw-1', config: {brand: 'wa4mcm', model: '1x4'}, confirm_ports: true}
+    }, now);
+    assert.equal(saved.status, 200);
+    assert.equal(saved.payload.removed_links, 2);
+    assert.equal(saved.payload.device.port_plan.source, 'model');
+    assert.equal(saved.payload.device.port_plan.out, 4);
 });
 
 test('control addressing resolves direct network devices and serial-server proxies', () => {

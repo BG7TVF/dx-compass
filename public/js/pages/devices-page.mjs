@@ -126,6 +126,7 @@ const ERROR_KEYS = {
     'device-locked': 'dev.error.device-locked',
     'device-disabled': 'dev.error.device-disabled',
     'device-manual': 'dev.error.device-manual',
+    'ports-in-use': 'dev.error.ports-in-use',
     'invalid-access-mode': 'dev.error.invalid-access-mode',
     'device-busy': 'dev.error.device-busy',
     'device-transmitting': 'dev.error.device-transmitting',
@@ -382,15 +383,26 @@ export function createDevicesPage(ctx) {
         const definition = switchDefinitionFor(type, {brand: brandId, model: modelValue});
         const generic = !definition || definition.id === 'relay-board';
         const fields = (definition && definition.fields) || [];
+        const plan = value.port_plan && value.port_plan.source === 'model' ? value.port_plan : null;
+        // 有型号时路数由型号定义给出，面板只读展示；未选型号或选「其他」才允许手填。
+        const planned = definition && definition.ports ? definition.ports : null;
         const counts = generic
             ? (type === 'switch'
                 ? `<label>${t('dev.config.outCount')}<input name="cfg_out_count" type="number" min="1" max="16" step="1" value="${esc(config.out_count === undefined ? '' : config.out_count)}"></label>`
                 : `<label>${t('dev.config.inCount')}<input name="cfg_in_count" type="number" min="1" max="16" step="1" value="${esc(config.in_count === undefined ? '' : config.in_count)}"></label>
                    <label>${t('dev.config.outCount')}<input name="cfg_out_count" type="number" min="1" max="16" step="1" value="${esc(config.out_count === undefined ? '' : config.out_count)}"></label>`)
             : `<p class="dev-note">${t('dev.switch.fixedPorts', {
-                in: config.in_count === undefined ? '—' : config.in_count,
-                out: config.out_count === undefined ? '—' : config.out_count
-            })}</p>`;
+                in: planned ? planned.in : (config.in_count === undefined ? '—' : config.in_count),
+                out: planned ? planned.out : (config.out_count === undefined ? '—' : config.out_count)
+            })}</p>` +
+              (plan && plan.mismatch
+                  ? `<p class="dev-note dev-warn">${esc(t('dev.switch.portsRecalculated', {
+                        manual_in: plan.manual_in === null ? '—' : plan.manual_in,
+                        manual_out: plan.manual_out === null ? '—' : plan.manual_out,
+                        in: plan.in,
+                        out: plan.out
+                    }))}</p>`
+                  : '');
         const channels = generic
             ? `<label>${t('dev.config.channels')}<textarea name="cfg_channels" rows="3" spellcheck="false">${esc(JSON.stringify(config.channels || {}))}</textarea></label>`
             : '';
@@ -2160,7 +2172,22 @@ export function createDevicesPage(ctx) {
                 await refreshDraftPreview();
                 return;
             }
-            const result = await saveDevice(values);
+            let result = null;
+            try {
+                result = await saveDevice(values);
+            } catch (error) {
+                // 改型号导致路数变少：先列出会失效的连线，用户确认后才继续保存。
+                if (error && error.body && error.body.error === 'ports-in-use') {
+                    const list = (error.body.stale_links || [])
+                        .map(item => '· ' + item.port + ' ↔ ' + item.peer_name + ':' + item.peer_port)
+                        .join('\n');
+                    const ok = await showConfirm(ctx, t('dev.switch.portsInUse', {list}), {danger: true});
+                    if (!ok) return;
+                    result = await saveDevice(Object.assign({}, values, {confirm_ports: true}));
+                } else {
+                    throw error;
+                }
+            }
             if (!result || !result.ok) {
                 if (errorBox) {
                     errorBox.textContent = errorText(result && result.error);
