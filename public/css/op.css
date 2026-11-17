@@ -486,7 +486,7 @@
 /* The dial box grows to soak up the leftover vertical height so the panel
  * fills the card with no gap; the SVG fills that box and the circle stays a
  * centred square through preserveAspectRatio, so it never distorts or clips. */
-.op-compass { position: relative; align-self: stretch; flex: 1 1 auto; min-height: 0; width: 100%; max-width: 260px; margin: 0 auto; }
+.op-compass { position: relative; align-self: stretch; flex: 1 1 0; min-height: 0; width: 100%; max-width: 260px; margin: 0 auto; }
 .op-compass-svg { width: 100%; height: 100%; display: block; }
 .op-antenna > .op-ant-turn,
 .op-antenna > .op-ant-input,
