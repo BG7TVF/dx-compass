@@ -483,11 +483,11 @@
     padding: 2px;
 }
 .op-device-card .op-antenna { flex: 1 1 auto; min-height: 0; }
-/* The dial is width-driven (200px cap) so it always renders fully. The panel
- * fills the card with space-between; the smaller dial keeps the total height
- * under the card so no scrollbar appears. */
-.op-compass { position: relative; align-self: center; flex: 0 0 auto; width: 100%; max-width: 200px; }
-.op-compass-svg { width: 100%; height: auto; aspect-ratio: 1 / 1; display: block; }
+/* The dial box grows to soak up the leftover vertical height so the panel
+ * fills the card with no gap; the SVG fills that box and the circle stays a
+ * centred square through preserveAspectRatio, so it never distorts or clips. */
+.op-compass { position: relative; align-self: stretch; flex: 1 1 auto; min-height: 0; width: 100%; max-width: 260px; margin: 0 auto; }
+.op-compass-svg { width: 100%; height: 100%; display: block; }
 .op-antenna > .op-ant-turn,
 .op-antenna > .op-ant-input,
 .op-antenna > .op-ant-quick { flex: 0 0 auto; }
