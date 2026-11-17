@@ -757,6 +757,9 @@
     gap: 6px;
 }
 .op-device-card .op-device { flex: 0 0 auto; }
+/* The antenna is also an .op-device, but unlike the other device rows it must
+ * grow to fill the card body so the dial has vertical room (and no scrollbar). */
+.op-device-card .op-device.op-antenna { flex: 1 1 auto; min-height: 0; }
 .op-device-card .op-filler { flex-direction: column; }
 .op-device-card .op-radio-card { flex: 0 0 auto; }
 .op-device-card .op-recent { flex: 0 0 auto; }
