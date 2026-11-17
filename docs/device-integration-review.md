@@ -31,6 +31,8 @@
 | 已清理 | `.commit-msg.tmp`、空的 `lib/deployment/`；`artifacts/`、`.screenshots/` 已加入 `.gitignore` |
 | 处置 | 文档与代码一并入库；不再保持“未提交、未部署” |
 
+> **2026-11-17 交接核对**：本地 HEAD 已到 `bb469bd`（2026-11-16 15:49），`856c6b3..HEAD` 共 19 笔提交；全量 `npm test` 为 557 通过 / 0 失败。生产版本本次未登录复核，仍按上表 `856c6b3` 记录；接手后先核对 `/opt/dx-compass` 的 `git rev-parse --short HEAD`。
+
 ---
 
 ## 0. 结论摘要

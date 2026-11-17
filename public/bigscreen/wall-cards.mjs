@@ -187,8 +187,7 @@ export function renderRadios(station) {
         const name = radio.radioName || t('wall.station.radio', {n: id});
         return '<div class="radio' + tx + '"><label>' + esc(name) +
             (tx ? ' · TX' : '') + '</label><b>' + esc(mhz) + '</b><span>' +
-            esc(band + (radio.mode ? ' · ' + radio.mode : '') +
-                (radio.opCall ? ' · ' + radio.opCall : '')) + '</span></div>';
+            esc(band + (radio.mode ? ' · ' + radio.mode : '')) + '</span></div>';
     }).join('');
 }
 
@@ -203,15 +202,11 @@ export function renderQsoStats(rows) {
     $('#rateHour').textContent = hour;
     $('#rateMin').textContent = (ten / 10).toFixed(1);
 
-    const byOperator = new Map();
     const byBand = new Map();
     rows.forEach(qso => {
-        const operator = qso.operator || qso.op || '—';
-        byOperator.set(operator, (byOperator.get(operator) || 0) + 1);
         const band = String(qso.band || '').toUpperCase() || '—';
         byBand.set(band, (byBand.get(band) || 0) + 1);
     });
-    renderRank('#opList', byOperator, 6, false);
     renderRank('#bandList', byBand, 8, true);
 }
 

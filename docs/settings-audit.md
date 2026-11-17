@@ -1,5 +1,8 @@
 # DX-Compass 设置页调研报告
 
+> **状态：已过期，仅作历史调研保留。**
+> 本文描述的是设置体系重构前的 4 页签 / 28 键版本，代码现为 `public/shared/settings/schema.js` 的 7 域 135 键（`cfgV=4`），服务端逐键校验并支持迁移。当前设置以 schema 为准；本文结论不要用于交接或实现。
+
 > 调研对象：`d:\岑溪基地\Node-Red-Contesting-Dashboard`（DX-Compass，Node-RED + 静态前端 + 只读大屏）
 > 调研方式：通读前端 `public/`、服务端 `lib/`、Node-RED 流程 `flow.json`、启动配置 `settings.js`/`install.sh`，逐项追踪每个设置项的默认值、校验、存储与真实读取点。
 > 所有引用均给出 `文件:行号`。文中“现状值”指代码中写死的常量，不是运行时实测值。

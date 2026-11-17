@@ -715,12 +715,12 @@ export function createSettingsPage(ctx) {
             '#qsoVoiceLabel': 'qsoVoice',
             '#resetAllLabel': 'resetAll', '#btnResetAll': 'resetAll', '#qtLFreq': 'lblFreq',
             '#qtLCall': 'lblCall', '#qtLRst': 'lblRst', '#qtLExch': 'lblExch', '#qtLBand': 'lblBand',
-            '#qtLMode': 'lblMode', '#qtLOp': 'lblOp', '#qtLAge': 'lblAge', '#btnSpotView': 'spotView',
+            '#qtLMode': 'lblMode', '#qtLAge': 'lblAge', '#btnSpotView': 'spotView',
             '#btnQsoView': 'qsoView', '#btnPropView': 'propView', '#btnOpView': 'op.title',
             '#btnDevView': 'dev.title',
             '#propProjLabel': 'propProjection',
             '#propLayerLabel': 'propLayer', '#qsoPanelTitle': 'stPanel', '#qLastTitle': 'stLastQso',
-            '#qRateTitle': 'qsoRate', '#qMinTitle': 'qsoPerMin', '#qOpTitle': 'qsoByOp',
+            '#qRateTitle': 'qsoRate', '#qMinTitle': 'qsoPerMin',
             '#qBandTitle': 'qsoByBand', '#qLQsos': 'stQsos', '#qLMults': 'stMults',
             '#qLPoints': 'stPoints', '#qLScore': 'stScore', '#btnSaveCfg': 'save'
         };
@@ -1222,6 +1222,11 @@ export function createSettingsPage(ctx) {
             escapeHtml(value || t('settings.seat.none')) + '</div>';
     }
 
+    // 席位键里的 CN: 段是 N1MM 计算机名；界面只显示掩码，完整值仍保留在 data 属性里供保存使用。
+    function maskSeatKey(key) {
+        return String(key || '').replace(/(^|\|)CN:[^|]*/g, '$1CN:***');
+    }
+
     function renderSeatIdentities() {
         const section = ensureSeatSection();
         if (!section) return;
@@ -1238,14 +1243,15 @@ export function createSettingsPage(ctx) {
                 const ruleKey = 'settings.seat.rule.' + (record.rule || 'unknown');
                 const ruleLabel = t(ruleKey) === ruleKey ? t('settings.seat.rule.unknown') : t(ruleKey);
                 const badge = (record.unbound ? t('settings.seat.unbound') + ' · ' : '') + ruleLabel;
+                const fullKey = record.seatKey || '';
                 return '<div class="form-row" data-seat-identity="' + escapeHtml(record.identity) + '">' +
                     '<div style="flex:1;min-width:0">' +
-                        '<div><b>' + escapeHtml(record.seatKey || '') + '</b> · ' + escapeHtml(badge) + '</div>' +
+                        '<div><b>' + escapeHtml(maskSeatKey(fullKey)) + '</b> · ' + escapeHtml(badge) + '</div>' +
                         '<input class="set-input seat-name" maxlength="40" value="' + escapeHtml(record.displayName || '') +
                             '" placeholder="' + escapeHtml(t('settings.seat.namePlaceholder')) + '">' +
-                        '<input class="set-input seat-key" maxlength="80" value="' + escapeHtml(record.seatKey || '') +
+                        '<input class="set-input seat-key" maxlength="80" data-full-key="' + escapeHtml(fullKey) +
+                            '" value="' + escapeHtml(maskSeatKey(fullKey)) +
                             '" placeholder="' + escapeHtml(t('settings.seat.keyPlaceholder')) + '">' +
-                        seatEvidence('settings.seat.computerName', record.computerName) +
                         seatEvidence('settings.seat.radioName', record.radioName) +
                         seatEvidence('settings.seat.radioNr', record.radioNr) +
                         seatEvidence('settings.seat.source', record.source) +
@@ -1273,7 +1279,7 @@ export function createSettingsPage(ctx) {
             const history = seatData && Array.isArray(seatData.history) ? seatData.history.slice(0, 5) : [];
             historyHint.textContent = history.length
                 ? t('settings.seat.history', {n: history.length}) + ' ' +
-                    history.map(item => `${item.at || ''} ${item.action || ''} ${item.seatKey || ''}`.trim()).join(' | ')
+                    history.map(item => `${item.at || ''} ${item.action || ''} ${maskSeatKey(item.seatKey)}`.trim()).join(' | ')
                 : '';
         }
     }
@@ -1300,7 +1306,10 @@ export function createSettingsPage(ctx) {
         try {
             if (action === 'save') {
                 const displayName = nameInput ? nameInput.value.trim() : '';
-                const seatKey = keyInput ? keyInput.value.trim() : '';
+                const rawKey = keyInput ? keyInput.value.trim() : '';
+                const fullKey = keyInput ? (keyInput.dataset.fullKey || '') : '';
+                // 输入框显示的是掩码；用户没改时仍提交完整键，避免把 CN:*** 存回去。
+                const seatKey = rawKey === maskSeatKey(fullKey) ? fullKey : rawKey;
                 if (displayName !== ((current && current.displayName) || '')) {
                     await changeSeatIdentity({identity, action: 'rename', displayName});
                 }

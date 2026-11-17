@@ -313,7 +313,7 @@ export function createQsoPage(ctx) {
         if (!qso.n1mmId) return;
         state.allTs.set(qso.n1mmId, new Date(qso.ts).getTime());
         state.all.set(qso.n1mmId, {
-            ts: qso.ts, operator: qso.operator || '', band: bandLabel(qso.band, qso.freqKhz)
+            ts: qso.ts, band: bandLabel(qso.band, qso.freqKhz)
         });
     }
 
@@ -453,13 +453,11 @@ export function createQsoPage(ctx) {
     }
 
     function renderQsoDist() {
-        const operators = new Map(), bands = new Map();
+        const bands = new Map();
         state.all.forEach(value => {
-            const operator = value.operator || '—', band = value.band || '—';
-            operators.set(operator, (operators.get(operator) || 0) + 1);
+            const band = value.band || '—';
             bands.set(band, (bands.get(band) || 0) + 1);
         });
-        renderDist($('#qOpDist'), operators, false);
         renderDist($('#qBandDist'), bands, true);
     }
 
@@ -475,9 +473,7 @@ export function createQsoPage(ctx) {
             isTransmitting: !!(source && source.isTransmitting === true),
             ts: (source && source.ts) || null,
             stationName: (source && source.stationName) || '',
-            computerName: (source && source.computerName) || '',
-            radioName: (source && source.radioName) || '',
-            opCall: (source && (source.opCall || source.operator)) || ''
+            radioName: (source && source.radioName) || ''
         };
     }
 
@@ -533,7 +529,6 @@ export function createQsoPage(ctx) {
         $('#qtExch').textContent = qso && qso.exchange || '—';
         $('#qtBand').textContent = bandLabel(qso && qso.band, qso && qso.freqKhz) || '—';
         $('#qtMode').textContent = qso && qso.mode || radio && radio.mode || '—';
-        $('#qtOp').textContent = qso && qso.operator || radio && radio.opCall || '—';
         let text = '';
         if (ctx.settings.category !== 'SO1R') {
             text = liveRadios()
@@ -559,10 +554,9 @@ export function createQsoPage(ctx) {
             const frequency = Number.isFinite(radio.freqKhz)
                 ? radio.freqKhz.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})
                 : '--.--';
-            // 能区分是哪部电台：RadioNr 徽标 + 席位/计算机名 + 操作员/型号。
+            // 能区分是哪部电台：RadioNr 徽标 + 席位名/电台号 + 电台型号；不显示原始 seatKey。
             const identity = [
-                radio.stationName || radio.computerName || radio.seat,
-                radio.opCall,
+                radio.stationName || (radio.radioNr ? 'R' + radio.radioNr : ''),
                 radio.radioName
             ].filter(Boolean).join(' · ');
             const classes = ['qso-radio-card'];

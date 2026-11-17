@@ -317,7 +317,7 @@ test('startup readiness probe covers every schema object', () => {
     const sql = require('../lib/storage/ready-sql.js').probeQuery();
     assert.match(sql, /pragma_table_info\('spots'\)/);
     assert.match(sql, /sqlite_master/);
-    for (const token of ['rf_links', 'rf_links_pair', 'alert_rules', 'devices', 'tx_sources']) {
+    for (const token of ['rf_links', 'rf_links_pair', 'control_links', 'control_links_pair', 'alert_rules', 'devices', 'tx_sources']) {
         assert.match(sql, new RegExp(token));
     }
     const check = flow.find(node => node.name === 'Check DB self-check result');
@@ -327,6 +327,16 @@ test('startup readiness probe covers every schema object', () => {
     assert.match(check.func, /dx\.ready\.markFailed\(/);
     assert.match(check.func, /PROBE_TIMEOUT_MS/);
     assert.match(check.func, /node\.warn\(/);
+});
+
+test('operational UI does not render operator callsigns', () => {
+    assertNoMatch([
+        path.join(ROOT, 'public/js/pages/qso-page.mjs'),
+        path.join(ROOT, 'public/js/pages/op-page.mjs'),
+        path.join(ROOT, 'public/bigscreen/wall-cards.mjs')
+    ], /opCall/, 'operational UI must not render OpCall');
+    assert.doesNotMatch(read('public', 'index.html'), /id="qtOp"|id="qOpDist"/);
+    assert.doesNotMatch(read('public', 'bigscreen', 'index.html'), /id="opList"/);
 });
 
 test('cold-start entry points wait for the readiness gate', () => {

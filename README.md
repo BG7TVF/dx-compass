@@ -2,7 +2,7 @@
 
 基于 Node-RED 的 DX Spot 与竞赛实时监测大屏。通过 **dxwatch.com**（FT8/SSB/DIGI 等）、**reversebeacon.net RBN**（CW，含 dB 信号强度）与 **PSKReporter MQTT v2**（DIGI 实时流）三路公开数据同时监测最多 **9 个呼号**收到的 spot，在地图上实时打点；可选接入 **N1MM+**，显示本台 QSO 地图、竞赛分数与速率。支持多分屏（DVR 风格）、4 套主题、11 种界面语言，所有 spot 与 QSO 记录到 SQLite 用于赛后分析。另提供独立的**只读竞赛大屏**（端口 **5859**），适合现场投屏。
 
-当前版本 **v2.1.0**：设置体系统一为 6 域 104 项并由服务端逐键校验，大屏取景、对手卡片、空间天气轮播与字号阶梯完成重做，11 种语言全部落地。
+当前版本 **v2.1.0**：设置体系统一为 7 域 135 项并由服务端逐键校验，大屏取景、对手卡片、空间天气轮播与字号阶梯完成重做，11 种语言全部落地。
 
 ## 部署边界（仅提醒）
 
@@ -20,7 +20,7 @@
 - **对手监测改为「呼号大卡 + 频段小格」**：每个对手一张呼号大卡，卡内按活动频段分格显示频率与主攻方向；最多 **9 个对手一屏**且不出现滚动条；呼号以颜色 + 图形（圆点 / 圆环 / 方块 / 三角 / 十字 / 靶心）双重编码，与地图标记一一对应，色觉差异下仍可区分
 - **空间天气折线图轮播**：大屏空间天气卡片在同一画布内轮播 8 项指标（SFI、SSN、Kp、Dst、Bz、Bt、太阳风、X 射线）的迷你折线图，停留时间可配置
 - **全局字号阶梯**：大屏所有字号统一由 `clamp(最小值, N vh, 上限)` 驱动，随屏高连续缩放；1080p、1440p、4K 以及带浏览器边框的窄高窗口都不会溢出
-- **设置体系重构**：`public/shared/settings/schema.js` 成为唯一 schema 来源——104 个键分 6 个域（`ui` / `map` / `qso` / `wall` / `data` / `prop`，`cfgV=3`），覆盖类型、范围、默认值、作用域、迁移标记；服务端逐键校验，非法值回退默认并返回 `warnings` / `rejected`
+- **设置体系重构**：`public/shared/settings/schema.js` 成为唯一 schema 来源——135 个键分 7 个域（`ui` / `map` / `qso` / `wall` / `data` / `prop` / `contest`，`cfgV=4`），覆盖类型、范围、默认值、作用域、迁移标记；服务端逐键校验，非法值回退默认并返回 `warnings` / `rejected`
 - **新增 API**：`POST /api/settings/patch` 部分更新（只提交变更键，返回新的 `_rev`），`POST /api/settings/reset` 按域重置；设置页支持导出 / 导入 JSON、按域重置与多配置档（配置档仅保存在本浏览器）
 - **新增可配置项**：数据源轮询间隔与逐源开关、SPOT 活动窗口与历史回放窗口、数据保留与自动清理（spots / recording_spots / qsos）、磁盘占用告警、告警 SNR 与距离阈值、提示音、静音时段、地图图层参数（热力半径 / 模糊 / 透明度、大圆采样、标记尺寸与上限、淡出）、大屏轮播与时区、日志级别（error / warn / info / debug）
 - **11 种语言完整落地**：zh / en / de / fr / es / pt / ru / it / ar / ko / ja 键集合完全一致（每种 **410 键**），占位符格式统一；新增业余无线电术语表与自动化词典校验（键对齐、占位符、禁用错误译法、未翻译检测），设置页与大屏不再有硬编码文案
@@ -53,7 +53,7 @@ curl -fsSL https://gitee.com/fatman985KG/dx-compass/raw/main/bootstrap-gitee.sh 
 脚本会将代码安装到 `/opt/dx-compass`，注册并启动开机自启服务 `dx-compass`（端口 **5758**）。完成后访问：
 
 - 监测大屏：`http://<服务器IP>:5758/`
-- Node-RED 编辑器：`http://<服务器IP>:5758/red`
+- Node-RED 编辑器：默认关闭（`httpAdminRoot: false`），需在本地 `settings.js` 临时开启并重启
 - 只读竞赛大屏（`install.sh` 一并部署，见[只读大屏](#只读大屏wall-display)）：`http://<服务器IP>:5859/`
 
 > 该命令可**重复执行**：已安装时会自动更新代码到最新版本后重新部署。
@@ -86,7 +86,7 @@ curl -fsSL https://gitee.com/fatman985KG/dx-compass/raw/main/bootstrap-gitee.sh 
 - **多语言界面**：支持中文 / English / Deutsch / Français / Español / Português / Русский / Italiano / العربية / 한국어 / 日本語 共 11 种界面语言，文案独立在 `public/js/i18n.js`；每种语言 410 个键完全对齐，并使用统一的业余无线电术语表（如 spot → SPOT、band → 频段、wall → 大屏），`npm test` 会拒绝键缺失、占位符不一致与已知错误译法
 - **4 套主题**：**黑暗**（默认）、**明亮**（浅色底，适合白天或投影）、**深海**、**琥珀**，在 Settings → 全局 即时切换；整套配色（工具栏、面板、表格、弹窗、地图底色）随主题变化
 - **多人协作**：监听呼号、标记存活时间、频段颜色、底图、主题、提醒开关等设置保存在服务器端，修改后经 WebSocket 实时同步到所有打开的浏览器；分屏布局（1×1/2×2/3×3）只保存在各自浏览器
-- **统一设置体系**：104 项设置由 `public/shared/settings/schema.js` 单点定义（6 个域：全局 / Spot 地图 / QSO 地图 / 大屏 / 数据 / 传播），服务端逐键校验、非法值回退默认并回报被拒绝的键；`POST /api/settings/patch` 只提交变更项，`POST /api/settings/reset` 按域恢复默认；设置页支持关键字搜索、导出 / 导入 JSON、按域重置与多配置档，所有布尔项为滑动开关
+- **统一设置体系**：135 项设置由 `public/shared/settings/schema.js` 单点定义（7 个域：全局 / Spot 地图 / QSO 地图 / 大屏 / 数据 / 传播 / 比赛），服务端逐键校验、非法值回退默认并回报被拒绝的键；`POST /api/settings/patch` 只提交变更项，`POST /api/settings/reset` 按域恢复默认；设置页支持关键字搜索、导出 / 导入 JSON、按域重置与多配置档，所有布尔项为滑动开关
 - **本台 Spot 提醒**：本台呼号出现在 spot 上时，QSO 地图以红色标记标出（可选），并可与弹窗（8 秒自动消失）和语音播报「you get a new spot」一起开启；提醒与普通 Spot 监控独立开关，标记存活时间与最多显示数量可调，语音按当前界面语言播报
 - **底图可切换**：OpenStreetMap 与高德地图（中国大陆网络环境可用），切换后所有地图显示约定保持不变；Leaflet 本体已内置在 `public/vendor/leaflet/`，页面不依赖任何外部 CDN
 - **N1MM+ 本台集成**（可选）：接收 N1MM+ UDP 广播后，QSO 视图顶部条实时显示最新的 RUN/S&P、频率、对方呼号、RST 与交换信息，右侧面板显示当前电台频率/模式/TX、当前总分（QSO/乘数/点数/Score）、上一个 QSO 与 QSO 速率图表；一键切换全屏 **QSO 地图**，每个 QSO 按频段着色并从本台位置画大圆线，新乘数带 M 徽章，全部持久化到 `qsos` 表
@@ -106,7 +106,7 @@ N1MM+           (UDP 12060-12062, 本台 QSO/电台/记分) ──────�
 ```
 
 - **后端**：Node-RED 只保留流程与 HTTP/WS/SQLite 适配；业务统一由 `lib/index.js` 的 `dx` 入口导出，Spot/QSO、监控录制、设置、存储和传播分别位于 `lib/` 对应模块
-- **设置**：`public/shared/settings/schema.js` 是唯一 schema（6 域 104 键，`cfgV=3`），浏览器与 Node 共用同一份校验/迁移逻辑；`lib/settings/service.js` 负责保存、合并、广播与分域重置，设置页只按 schema 渲染
+- **设置**：`public/shared/settings/schema.js` 是唯一 schema（7 域 135 键，`cfgV=4`），浏览器与 Node 共用同一份校验/迁移逻辑；`lib/settings/service.js` 负责保存、合并、广播与分域重置，设置页只按 schema 渲染
 - **传播预测**：`lib/propagation/` 统一采集空间天气并计算 MUF 网格、频段条件、路径矩阵和读数；`/api/prop` 返回原始快照及同一 `forecast`，页面不再各自实现预测公式
 - **只读大屏**：`bigscreen/server.js` 为独立 HTTP 服务（默认 5859），只代理 6 个 GET 接口和精确白名单中的前端模块，无写操作
 - **数据源**：
@@ -242,11 +242,13 @@ sudo bash install.sh
 2. 安装系统编译工具（SQLite 原生模块需要 `build-essential`）
 3. 检测 / 安装 Node.js（已有 ≥18 直接使用，否则通过 NodeSource 安装 20 LTS）
 4. 在项目目录内本地安装 npm 依赖（默认源失败自动切换国内 npmmirror 镜像，含 node-gyp 头文件与 sqlite3 预编译二进制镜像，并校验原生模块可加载）
-5. 预初始化 SQLite 数据库结构（spots / recording_spots 建表兜底）
+5. 预初始化 SQLite 数据库结构（`lib/storage/` 的全部表、索引与触发器，含 `devices`、`rf_links`、`control_links`）
 6. 注册并启动 systemd 服务 `dx-compass`（开机自启）
 7. 等待端口就绪、校验数据库 API 可用，并输出访问地址
 
 脚本可重复执行（幂等）。
+
+> **SQLite 配置要求**：`flow.json` 里的 `sqlitedb` 节点必须使用 `RWC` 模式（读/写/创建）。如果被改成只读或缺少 `CREATE`，数据库文件丢失后服务会永久报 `failed to open`，重启也不会自愈；`install.sh` 会预检这一项。
 
 ### 方式三：普通用户免 root 安装
 
@@ -306,7 +308,7 @@ sudo chown -R root:root /opt/dx-compass
 ### 访问
 
 - **监测大屏**：`http://<服务器IP>:5758/`
-- **Node-RED 编辑器**：`http://<服务器IP>:5758/red`
+- **Node-RED 编辑器**：默认关闭（`httpAdminRoot: false`），需在本地 `settings.js` 临时开启并重启
 - **只读竞赛大屏**：`http://<服务器IP>:5859/`，安装脚本已部署为 `dx-compass-wall.service`，见[只读大屏](#只读大屏wall-display)
 
 > 云服务器请在安全组 / 防火墙放行 TCP 5758 端口：
@@ -323,7 +325,7 @@ sudo chown -R root:root /opt/dx-compass
    - 同时自动从数据源回溯该呼号最近 7 天的历史 spot，地图和 Records 面板很快就会有数据
 4. 无需任何集群地址、登录呼号或 Connect 操作——数据源开箱即用
 
-> Settings 为整页六标签（共 104 项，均由 schema 渲染）：**全局**（界面语言 11 种、主题 4 套、底图源 OSM/高德、本台呼号与网格、时区 / 12 小时制 / 秒、一键清除）、**Spot 地图**（监测呼号、各模式标记存活时间、频段颜色、自动适配、晨昏线、热力图与标记尺寸）、**QSO 地图**（竞赛组别 SO1R/SO2R/MS/MM、自动缩放、本台 Spot 提醒、告警阈值与提示音、静音时段、QRZ 凭据）、**大屏**（名称、图层、叠加方式、轮播节奏、地图纬度窗口、倒计时开关与起止时间）、**数据**（三个数据源的开关与轮询间隔、历史回放窗口、保留期与自动清理、磁盘告警、日志级别）、**传播**（投影、默认图层、预报阈值与渲染参数）。设置保存在服务器端并实时同步给所有浏览器（含 5859 只读大屏），仅分屏布局与配置档保存在本机。
+> Settings 为整页七标签（共 135 项，均由 schema 渲染）：**全局**（界面语言 11 种、主题 4 套、底图源 OSM/高德、本台呼号与网格、时区 / 12 小时制 / 秒、一键清除）、**Spot 地图**（监测呼号、各模式标记存活时间、频段颜色、自动适配、晨昏线、热力图与标记尺寸）、**QSO 地图**（竞赛组别 SO1R/SO2R/MS/MM、自动缩放、本台 Spot 提醒、告警阈值与提示音、静音时段、QRZ 凭据）、**大屏**（名称、图层、叠加方式、轮播节奏、地图纬度窗口、倒计时开关与起止时间）、**数据**（三个数据源的开关与轮询间隔、历史回放窗口、保留期与自动清理、磁盘告警、日志级别）、**传播**（投影、默认图层、预报阈值与渲染参数）、**比赛**（比赛名称、UTC 起止、模式、波段与规则链接）。设置保存在服务器端并实时同步给所有浏览器（含 5859 只读大屏），仅分屏布局与配置档保存在本机。
 
 > 数据来自 dxwatch.com 与 reversebeacon.net 的公开接口。CW spot 由 RBN skimmer 网络提供，带真实 SNR（dB）与发报速度（WPM）；FT8/FT4 的 SNR 来自 dxwatch；普通 SSB spot 本身不携带信号强度，对应列为空属正常。
 
@@ -609,7 +611,7 @@ curl -fsSL https://gitee.com/fatman985KG/dx-compass/raw/main/bootstrap-gitee.sh 
 **1. 大屏打开正常但收不到 spot？**
 
 - 数据源是服务器端轮询，先确认服务器能访问数据源：`curl -I https://dxwatch.com/dxsd1/s.php?s=0&r=1` 与 `curl -I https://www.reversebeacon.net/main.php`
-- 等待最多 30 秒（轮询周期）；可在 Node-RED 编辑器（`/red`）查看 `Fetch dxwatch spots` / `Fetch RBN spots` 节点状态与日志
+- 等待最多 30 秒（轮询周期）；可在服务日志中查看抓取情况：`journalctl -u dx-compass -n 100`
 - 被监测呼号必须近期（活跃时段约几分钟内）有真实 spot 上报才会打点；输入呼号时会自动回溯最近 7 天记录，可先打开 **Records** 面板确认历史数据
 - 极少数冷门呼号可能长时间无人点到，属正常现象
 

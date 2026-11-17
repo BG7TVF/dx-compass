@@ -36,7 +36,7 @@ const CANVAS_MIN_W = 1600;
 const CANVAS_MIN_H = 1000;
 const MIN_ZOOM = 0.25;
 const MAX_ZOOM = 2.5;
-// 面板提供这十种可拖出的设备；前五种是射频链路组成部分，后五种是机械与射频路由支撑。
+// 面板提供这十一种可拖出的设备；前五种是射频链路组成部分，其余是机械、射频路由与控制支撑。
 const PALETTE_TYPES = ['radio', 'swr', 'bpf', 'amp', 'antenna', 'tower', 'rotator', 'switch', 'matrix', 'combiner', 'serial'];
 const TYPE_BADGE = {
     radio: 'RIG', swr: 'SW', bpf: 'BP', amp: 'PA', antenna: 'AN', tower: 'TW', rotator: 'RT',

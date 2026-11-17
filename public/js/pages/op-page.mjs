@@ -1005,7 +1005,7 @@ export function createOpPage(ctx) {
             return '<div class="op-radio-card ' + radioTheme(key) + '"><b>' +
                 esc(radioName(key)) + '</b><span>' +
                 esc(radio && radio.freqKhz ? bandOf(radio.freqKhz) + ' ' + mini(radio.mode) : t('op.radio.waiting')) +
-                '</span><span>' + esc(radio && radio.opCall || '') + '</span>' + claimControls(key, radio) + '</div>';
+                '</span>' + claimControls(key, radio) + '</div>';
         }).join('');
         const recent = [...state.qsos.values()].slice(-6).reverse().map(qso =>
             '<div class="op-recent-row"><span>' + esc(new Date(qso.ts).toISOString().slice(11, 16)) + 'Z</span>' +
