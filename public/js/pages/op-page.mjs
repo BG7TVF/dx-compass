@@ -1043,23 +1043,66 @@ export function createOpPage(ctx) {
         renderBottom();
     }
 
+    /* The quick-turn editor opens as a modal popup on <body>, not as a panel
+     * inside the narrow antenna card: an inline form had nowhere to grow and
+     * shoved the dial around. Keeping it off the card also means the periodic
+     * rotator poll (which never rebuilds this node) cannot disturb a half-typed
+     * name or angle. */
+    function presetOverlay() {
+        let el = document.getElementById('opPresetOverlay');
+        if (!el) {
+            el = document.createElement('div');
+            el.id = 'opPresetOverlay';
+            el.className = 'op-preset-overlay hidden';
+            document.body.appendChild(el);
+        }
+        return el;
+    }
+
+    function renderPresetEditor() {
+        const el = presetOverlay();
+        if (presetEditing === null) {
+            el.classList.add('hidden');
+            el.innerHTML = '';
+            return;
+        }
+        const preset = presetAt(presetEditing);
+        el.innerHTML =
+            '<div class="op-preset-backdrop" data-op-preset-cancel></div>' +
+            '<div class="op-ant-editor op-preset-dialog" role="dialog" aria-modal="true">' +
+            '<div class="op-preset-title">' +
+            esc(t('op.device.rotator.preset', {n: presetEditing + 1})) + '</div>' +
+            '<div class="op-ant-editor-fields">' +
+            '<label>' + esc(t('op.device.rotator.presetName')) +
+            '<input data-op-preset-name type="text" maxlength="24" value="' + esc(preset ? preset.label : '') + '"></label>' +
+            '<label>' + esc(t('op.device.rotator.presetAngle')) +
+            '<input data-op-preset-angle type="number" min="0" max="360" step="1" inputmode="numeric" value="' +
+            (preset ? preset.azimuth : '') + '"></label></div>' +
+            '<div class="op-ant-editor-actions">' +
+            '<button type="button" data-op-preset-save>' + esc(t('op.device.rotator.presetSave')) + '</button>' +
+            '<button type="button" data-op-preset-clear>' + esc(t('op.device.rotator.presetClear')) + '</button>' +
+            '<button type="button" data-op-preset-cancel>' + esc(t('op.device.rotator.presetCancel')) + '</button>' +
+            '</div></div>';
+        el.classList.remove('hidden');
+        const nameEl = el.querySelector('[data-op-preset-name]');
+        if (nameEl) nameEl.focus();
+    }
+
     function openPresetEditor(index) {
         presetEditing = index;
-        antennaDirty = true;
-        renderBottom();
+        renderPresetEditor();
     }
 
     function closePresetEditor() {
         presetEditing = null;
-        antennaDirty = true;
-        renderBottom();
+        renderPresetEditor();
     }
 
     function savePresetFromForm(index) {
-        const host = $('#opBottom');
-        const nameEl = host && host.querySelector('[data-op-preset-name]');
-        const angleEl = host && host.querySelector('[data-op-preset-angle]');
-        if (!nameEl || !angleEl) return;
+        const el = presetOverlay();
+        const nameEl = el.querySelector('[data-op-preset-name]');
+        const angleEl = el.querySelector('[data-op-preset-angle]');
+        if (!nameEl || !angleEl) { closePresetEditor(); return; }
         const azimuth = Number(angleEl.value);
         if (!Number.isFinite(azimuth)) {
             angleEl.focus();
@@ -1067,12 +1110,12 @@ export function createOpPage(ctx) {
         }
         const name = String(nameEl.value).trim().slice(0, 24) ||
             t('op.device.rotator.preset', {n: index + 1});
-        presetEditing = null;
+        closePresetEditor();
         writePreset(index, {label: name, azimuth: normDeg(azimuth)});
     }
 
     function clearPreset(index) {
-        presetEditing = null;
+        closePresetEditor();
         writePreset(index, null);
     }
 
@@ -1246,7 +1289,7 @@ export function createOpPage(ctx) {
             if (note) note.textContent = rotator.name || '';
             const view = ((deviceSnapshot() || {}).rotators || {})[rotator.id] || {};
             const key = String(rotator.id) + '|' + String(currentSeat());
-            if (host.dataset.antennaKey !== key) presetEditing = null;
+            if (host.dataset.antennaKey !== key) closePresetEditor();
             if (host.dataset.antennaKey !== key || antennaDirty) {
                 host.dataset.antennaKey = key;
                 antennaDirty = false;
@@ -1258,7 +1301,7 @@ export function createOpPage(ctx) {
             return;
         }
         delete host.dataset.antennaKey;
-        presetEditing = null;
+        closePresetEditor();
         if (note) note.textContent = deviceSnapshot() ? t('op.map.rotatorOff') : t('op.bottom.none');
         const keys = visibleSeats();
         const cards = keys.map(key => {
@@ -1319,23 +1362,6 @@ export function createOpPage(ctx) {
         return out;
     }
 
-    function presetEditorMarkup() {
-        if (presetEditing === null) return '';
-        const preset = presetAt(presetEditing);
-        return '<div class="op-ant-editor">' +
-            '<div class="op-ant-editor-fields">' +
-            '<label>' + esc(t('op.device.rotator.presetName')) +
-            '<input data-op-preset-name type="text" maxlength="24" value="' + esc(preset ? preset.label : '') + '"></label>' +
-            '<label>' + esc(t('op.device.rotator.presetAngle')) +
-            '<input data-op-preset-angle type="number" min="0" max="360" step="1" inputmode="numeric" value="' +
-            (preset ? preset.azimuth : '') + '"></label></div>' +
-            '<div class="op-ant-editor-actions">' +
-            '<button type="button" data-op-preset-save>' + esc(t('op.device.rotator.presetSave')) + '</button>' +
-            '<button type="button" data-op-preset-clear>' + esc(t('op.device.rotator.presetClear')) + '</button>' +
-            '<button type="button" data-op-preset-cancel>' + esc(t('op.device.rotator.presetCancel')) + '</button>' +
-            '</div></div>';
-    }
-
     function antennaMarkup(rotator) {
         return '<div class="op-antenna op-device" data-op-device="' + esc(rotator.id) + '">' +
             '<div class="op-compass"><svg class="op-compass-svg" viewBox="0 0 120 120" aria-hidden="true">' +
@@ -1362,7 +1388,6 @@ export function createOpPage(ctx) {
             '<button type="button" data-op-cmd="stop">' + esc(t('op.device.rotator.stop')) + '</button>' +
             '</div>' +
             '<div class="op-ant-quick">' + presetCells() + '</div>' +
-            presetEditorMarkup() +
             '<span class="op-device-result"></span></div>';
     }
 
@@ -2029,6 +2054,7 @@ export function createOpPage(ctx) {
     function hide() {
         state.active = false;
         stopTowerHold();
+        closePresetEditor();
         document.querySelector('.main')?.classList.remove('op-active');
         $('#opView').classList.add('hidden');
         state.timers.forEach(timer => clearInterval(timer));
@@ -2239,13 +2265,18 @@ export function createOpPage(ctx) {
             pressIndex = null;
             pressLongFired = false;
         });
-        $('#opBottom')?.addEventListener('click', event => {
+        /* The preset dialog lives on <body>, so its handlers bind there, not on
+         * #opBottom. Clicking the backdrop is a cancel; Esc closes; Enter in a
+         * field saves. */
+        const presetDialogHost = presetOverlay();
+        presetDialogHost.addEventListener('click', event => {
             if (presetEditing === null) return;
             if (event.target.closest('[data-op-preset-save]')) { savePresetFromForm(presetEditing); return; }
             if (event.target.closest('[data-op-preset-clear]')) { clearPreset(presetEditing); return; }
             if (event.target.closest('[data-op-preset-cancel]')) { closePresetEditor(); return; }
         });
-        $('#opBottom')?.addEventListener('keydown', event => {
+        presetDialogHost.addEventListener('keydown', event => {
+            if (event.key === 'Escape') { closePresetEditor(); return; }
             if (event.key !== 'Enter') return;
             const el = event.target;
             if (el && el.matches && el.matches('[data-op-preset-name],[data-op-preset-angle]')) {

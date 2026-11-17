@@ -387,7 +387,7 @@
 }
 .op-bottom-head { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 5px 9px; border-bottom: 1px solid var(--border); }
 .op-bottom-head h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--text-dim); }
-.op-bottom-note { font-size: 9px; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.op-bottom-note { margin-left: auto; text-align: right; font-size: 9px; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .op-add-wrap { position: relative; margin-left: auto; }
 .op-add-menu {
     position: absolute;
@@ -478,10 +478,12 @@
     display: flex;
     flex-direction: column;
     align-items: stretch;
+    justify-content: space-between;
     gap: 8px;
     padding: 2px;
 }
-.op-compass { position: relative; align-self: center; width: 100%; max-width: 176px; }
+.op-device-card .op-antenna { flex: 1 1 auto; min-height: 0; }
+.op-compass { position: relative; align-self: center; width: 100%; max-width: 260px; }
 .op-compass-svg { width: 100%; height: auto; aspect-ratio: 1 / 1; display: block; }
 .op-compass-face { fill: rgba(10, 20, 34, .55); }
 .op-compass-ring { fill: none; stroke: var(--border); stroke-width: 1; }
@@ -607,6 +609,43 @@
     cursor: pointer;
 }
 .op-ant-editor-actions button[data-op-preset-save] { color: var(--on-accent); background: var(--accent); border-color: var(--accent); }
+
+/* The quick-turn editor is a modal on <body>, never a panel inside the narrow
+ * antenna card. It reuses .op-ant-editor for the field/button layout and adds
+ * the overlay frame here. */
+.op-preset-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 3000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.op-preset-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(4, 7, 10, .6);
+    backdrop-filter: blur(2px);
+}
+.op-preset-dialog {
+    position: relative;
+    width: 330px;
+    max-width: 92vw;
+    padding: 12px;
+    gap: 10px;
+    background: var(--panel);
+    border: 1px solid var(--border-2);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow);
+    animation: modalIn .16s ease;
+}
+.op-preset-title {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: .05em;
+    color: var(--accent);
+    text-transform: uppercase;
+}
 
 
 /* Map antenna-coverage wedge — same heading as the compass, redrawn live. */
