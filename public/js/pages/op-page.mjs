@@ -989,6 +989,185 @@ export function createOpPage(ctx) {
         return d;
     }
 
+    /* Operator-defined quick-turn presets: up to eight named absolute bearings.
+     * A short click steers straight to the saved angle; a long press opens an
+     * inline editor for that slot's name + bearing. Persisted only in the
+     * browser — the rotator itself has no preset memory. */
+    const PRESET_KEY = 'dxcompass-op-rotor-presets';
+    const PRESET_COUNT = 8;
+    let antennaDirty = false;
+    let presetEditing = null;
+    let pressTimer = null;
+    let pressLongFired = false;
+    let pressIndex = null;
+    let jogTimer = null;
+    let jogRepeat = null;
+    let jogLongFired = false;
+    let jogRotator = null;
+    let jogCurrent = null;
+    let jogDir = 0;
+
+    const normDeg = value => ((Math.round(Number(value)) % 360) + 360) % 360;
+
+    function loadPresets() {
+        try {
+            const raw = JSON.parse(localStorage.getItem(PRESET_KEY) || '[]');
+            return Array.isArray(raw) ? raw : [];
+        } catch (error) {
+            return [];
+        }
+    }
+
+    function savePresets(list) {
+        try {
+            localStorage.setItem(PRESET_KEY, JSON.stringify(list.slice(0, PRESET_COUNT)));
+        } catch (error) {
+            // Private mode / quota: the in-memory view still works this session.
+        }
+    }
+
+    function presetAt(index) {
+        const item = loadPresets()[index];
+        if (!item) return null;
+        const azimuth = Number(item.azimuth);
+        if (!Number.isFinite(azimuth)) return null;
+        return {label: String(item.label || '').slice(0, 24), azimuth: normDeg(azimuth)};
+    }
+
+    function writePreset(index, value) {
+        const list = loadPresets();
+        while (list.length < PRESET_COUNT) list.push(null);
+        list[index] = value;
+        savePresets(list);
+        antennaDirty = true;
+        renderBottom();
+    }
+
+    function openPresetEditor(index) {
+        presetEditing = index;
+        antennaDirty = true;
+        renderBottom();
+    }
+
+    function closePresetEditor() {
+        presetEditing = null;
+        antennaDirty = true;
+        renderBottom();
+    }
+
+    function savePresetFromForm(index) {
+        const host = $('#opBottom');
+        const nameEl = host && host.querySelector('[data-op-preset-name]');
+        const angleEl = host && host.querySelector('[data-op-preset-angle]');
+        if (!nameEl || !angleEl) return;
+        const azimuth = Number(angleEl.value);
+        if (!Number.isFinite(azimuth)) {
+            angleEl.focus();
+            return;
+        }
+        const name = String(nameEl.value).trim().slice(0, 24) ||
+            t('op.device.rotator.preset', {n: index + 1});
+        presetEditing = null;
+        writePreset(index, {label: name, azimuth: normDeg(azimuth)});
+    }
+
+    function clearPreset(index) {
+        presetEditing = null;
+        writePreset(index, null);
+    }
+
+    /* Fire a preset. An empty slot long-presses into the editor; a short tap on
+     * an empty slot also opens the editor so the first setup needs no hunting. */
+    function activatePreset(index) {
+        const rotator = rotatorDevice();
+        const preset = presetAt(index);
+        if (!preset) {
+            openPresetEditor(index);
+            return;
+        }
+        if (!rotator) return;
+        state.rotorTarget = preset.azimuth;
+        void sendDeviceCommand(rotator.id, {command: 'rotate', azimuth: preset.azimuth},
+            {seat: commandSeat()})
+            .then(() => loadDevices())
+            .catch(() => null);
+        renderBottom();
+    }
+
+    function presetDown(index) {
+        pressIndex = index;
+        pressLongFired = false;
+        clearTimeout(pressTimer);
+        pressTimer = setTimeout(() => {
+            pressLongFired = true;
+            openPresetEditor(index);
+        }, 500);
+    }
+
+    function presetUp() {
+        clearTimeout(pressTimer);
+        pressTimer = null;
+        if (!pressLongFired && pressIndex !== null) activatePreset(pressIndex);
+        pressLongFired = false;
+        pressIndex = null;
+    }
+
+    /* Left / right trim: a tap nudges ±1°, holding repeats ±10° and accumulates
+     * the commanded target so a run of presses actually travels. The rotator's
+     * own interlock still refuses a new bearing mid-travel; those refusals land
+     * in the command feedback like any other rotate. */
+    function jogBaseValue(rotator) {
+        const snap = deviceSnapshot();
+        const view = (snap && (snap.rotators || {})[rotator.id]) || {};
+        if (Number.isFinite(state.rotorTarget)) return normDeg(state.rotorTarget);
+        const physical = Number(view.physical_azimuth);
+        return Number.isFinite(physical) ? normDeg(physical) : null;
+    }
+
+    function jogSend(rotator, target) {
+        state.rotorTarget = target;
+        return sendDeviceCommand(rotator.id, {command: 'rotate', azimuth: target},
+            {seat: commandSeat()}).catch(() => null);
+    }
+
+    function jogClearTimers() {
+        clearTimeout(jogTimer);
+        clearTimeout(jogRepeat);
+        jogTimer = null;
+        jogRepeat = null;
+    }
+
+    function jogHoldStep() {
+        if (!jogRotator) return;
+        jogCurrent = normDeg(jogCurrent + jogDir * 10);
+        void jogSend(jogRotator, jogCurrent);
+    }
+
+    function jogStart(rotator, dir) {
+        if (!rotator) return;
+        jogClearTimers();
+        const base = jogBaseValue(rotator);
+        if (base === null) return;
+        jogRotator = rotator;
+        jogDir = dir;
+        jogCurrent = base;
+        jogLongFired = false;
+        jogTimer = setTimeout(() => {
+            jogLongFired = true;
+            jogHoldStep();
+            jogRepeat = setInterval(jogHoldStep, 350);
+        }, 400);
+    }
+
+    function jogRelease() {
+        if (!jogTimer && !jogRepeat) return;
+        jogClearTimers();
+        if (!jogLongFired && jogRotator) void jogSend(jogRotator, normDeg(jogCurrent + jogDir));
+        jogRotator = null;
+        jogLongFired = false;
+        renderBottom();
+    }
+
     /* Antenna control auto-picks the rotator that steers the antenna this seat
      * is actually using. The server's ownership projection already links every
      * antenna to its rotator (`antennas[].rotator_id`, found by walking the
@@ -1067,8 +1246,10 @@ export function createOpPage(ctx) {
             if (note) note.textContent = rotator.name || '';
             const view = ((deviceSnapshot() || {}).rotators || {})[rotator.id] || {};
             const key = String(rotator.id) + '|' + String(currentSeat());
-            if (host.dataset.antennaKey !== key) {
+            if (host.dataset.antennaKey !== key) presetEditing = null;
+            if (host.dataset.antennaKey !== key || antennaDirty) {
                 host.dataset.antennaKey = key;
+                antennaDirty = false;
                 needleAngle = null;
                 targetAngle = null;
                 host.innerHTML = antennaMarkup(rotator);
@@ -1077,6 +1258,7 @@ export function createOpPage(ctx) {
             return;
         }
         delete host.dataset.antennaKey;
+        presetEditing = null;
         if (note) note.textContent = deviceSnapshot() ? t('op.map.rotatorOff') : t('op.bottom.none');
         const keys = visibleSeats();
         const cards = keys.map(key => {
@@ -1119,8 +1301,43 @@ export function createOpPage(ctx) {
         return out;
     }
 
+    function presetCells() {
+        let out = '';
+        for (let i = 0; i < PRESET_COUNT; i += 1) {
+            const preset = presetAt(i);
+            if (preset) {
+                out += '<button type="button" class="op-ant-preset" data-op-preset="' + i +
+                    '" title="' + esc(t('op.device.rotator.presetGo', {deg: preset.azimuth})) + '">' +
+                    '<b>' + esc(preset.label || t('op.device.rotator.preset', {n: i + 1})) + '</b>' +
+                    '<i>' + preset.azimuth + '°</i></button>';
+            } else {
+                out += '<button type="button" class="op-ant-preset empty" data-op-preset="' + i +
+                    '" title="' + esc(t('op.device.rotator.presetHint')) + '">' +
+                    '<b>' + esc(t('op.device.rotator.preset', {n: i + 1})) + '</b></button>';
+            }
+        }
+        return out;
+    }
+
+    function presetEditorMarkup() {
+        if (presetEditing === null) return '';
+        const preset = presetAt(presetEditing);
+        return '<div class="op-ant-editor">' +
+            '<div class="op-ant-editor-fields">' +
+            '<label>' + esc(t('op.device.rotator.presetName')) +
+            '<input data-op-preset-name type="text" maxlength="24" value="' + esc(preset ? preset.label : '') + '"></label>' +
+            '<label>' + esc(t('op.device.rotator.presetAngle')) +
+            '<input data-op-preset-angle type="number" min="0" max="360" step="1" inputmode="numeric" value="' +
+            (preset ? preset.azimuth : '') + '"></label></div>' +
+            '<div class="op-ant-editor-actions">' +
+            '<button type="button" data-op-preset-save>' + esc(t('op.device.rotator.presetSave')) + '</button>' +
+            '<button type="button" data-op-preset-clear>' + esc(t('op.device.rotator.presetClear')) + '</button>' +
+            '<button type="button" data-op-preset-cancel>' + esc(t('op.device.rotator.presetCancel')) + '</button>' +
+            '</div></div>';
+    }
+
     function antennaMarkup(rotator) {
-        return '<div class="op-antenna">' +
+        return '<div class="op-antenna op-device" data-op-device="' + esc(rotator.id) + '">' +
             '<div class="op-compass"><svg class="op-compass-svg" viewBox="0 0 120 120" aria-hidden="true">' +
             '<circle class="op-compass-face" cx="60" cy="60" r="56"/>' +
             '<circle class="op-compass-ring" cx="60" cy="60" r="57"/>' +
@@ -1129,20 +1346,24 @@ export function createOpPage(ctx) {
             '<g class="op-compass-target" data-compass-target opacity="0">' +
             '<line x1="60" y1="60" x2="60" y2="10"/><path d="M60 4 l4 8 h-8 z"/></g>' +
             '<g class="op-compass-needle" data-compass-needle>' +
-            '<polygon class="north" points="60,14 55,60 65,60"/>' +
-            '<polygon class="south" points="60,106 55,60 65,60"/></g>' +
-            '<circle class="op-compass-hub" cx="60" cy="60" r="3.6"/></svg>' +
-            '<div class="op-compass-read"><b data-compass-az>—</b><i>°</i></div></div>' +
-            '<div class="op-device op-antenna-ctrl" data-op-device="' + esc(rotator.id) + '">' +
-            '<div class="op-device-head"><b>' + esc(rotator.name || '') + '</b>' +
-            '<span class="op-compass-motion unknown" data-compass-motion></span></div>' +
-            '<div class="op-device-controls">' +
-            '<span class="op-device-note" data-compass-target-label></span>' +
-            '<label>' + esc(t('op.device.rotator.targetInput')) +
-            '<input data-op-azimuth type="number" min="0" max="360" step="1" inputmode="numeric"></label>' +
+            '<polygon class="op-compass-pointer" points="60,18 56,60 64,60"/></g>' +
+            '<circle class="op-compass-hub" cx="60" cy="60" r="3.6"/></svg></div>' +
+            '<div class="op-ant-turn">' +
+            '<button type="button" class="op-ant-jog" data-op-jog="-1">' + esc(t('op.device.rotator.left')) + '</button>' +
+            '<div class="op-ant-current"><b><span data-compass-az>—</span><i>°</i></b>' +
+            '<small>' + esc(t('op.device.rotator.currentHeading')) + '</small>' +
+            '<span class="op-ant-target" data-compass-target-label></span></div>' +
+            '<button type="button" class="op-ant-jog" data-op-jog="1">' + esc(t('op.device.rotator.right')) + '</button>' +
+            '</div>' +
+            '<div class="op-ant-input">' +
+            '<input data-op-azimuth type="number" min="0" max="360" step="1" inputmode="numeric" ' +
+            'placeholder="' + esc(t('op.device.rotator.targetInput')) + '">' +
             '<button type="button" data-op-cmd="rotate">' + esc(t('op.device.rotator.rotate')) + '</button>' +
             '<button type="button" data-op-cmd="stop">' + esc(t('op.device.rotator.stop')) + '</button>' +
-            '</div><span class="op-device-result"></span></div></div>';
+            '</div>' +
+            '<div class="op-ant-quick">' + presetCells() + '</div>' +
+            presetEditorMarkup() +
+            '<span class="op-device-result"></span></div>';
     }
 
     /* Only the needle, numbers and state text change between polls, so the DOM
@@ -1174,15 +1395,7 @@ export function createOpPage(ctx) {
         const targetLabel = host.querySelector('[data-compass-target-label]');
         if (targetLabel) {
             targetLabel.textContent = Number.isFinite(tgt)
-                ? t('op.device.rotator.target', {deg: Math.round(tgt)})
-                : t('op.device.rotator.current', {deg: finite ? Math.round(az) : '—'});
-        }
-        const motionEl = host.querySelector('[data-compass-motion]');
-        if (motionEl) {
-            const raw = view.motion_state;
-            const key = raw === 'moving' || raw === 'settled' ? raw : 'unknown';
-            motionEl.textContent = t('dev.motion.' + key);
-            motionEl.className = 'op-compass-motion ' + key;
+                ? t('op.device.rotator.target', {deg: Math.round(tgt)}) : '';
         }
     }
 
@@ -1999,6 +2212,47 @@ export function createOpPage(ctx) {
         });
         document.addEventListener('pointerup', stopTowerHold);
         window.addEventListener('blur', stopTowerHold);
+        $('#opBottom')?.addEventListener('pointerdown', event => {
+            const jog = event.target.closest('[data-op-jog]');
+            if (jog) {
+                const rotator = rotatorDevice();
+                if (!rotator) return;
+                event.preventDefault();
+                jogStart(rotator, Number(jog.dataset.opJog) < 0 ? -1 : 1);
+                return;
+            }
+            const preset = event.target.closest('[data-op-preset]');
+            if (preset) {
+                event.preventDefault();
+                presetDown(Number(preset.dataset.opPreset));
+            }
+        });
+        const releaseAntennaPress = () => { jogRelease(); presetUp(); };
+        document.addEventListener('pointerup', releaseAntennaPress);
+        window.addEventListener('blur', releaseAntennaPress);
+        document.addEventListener('pointercancel', () => {
+            jogClearTimers();
+            jogRotator = null;
+            jogLongFired = false;
+            clearTimeout(pressTimer);
+            pressTimer = null;
+            pressIndex = null;
+            pressLongFired = false;
+        });
+        $('#opBottom')?.addEventListener('click', event => {
+            if (presetEditing === null) return;
+            if (event.target.closest('[data-op-preset-save]')) { savePresetFromForm(presetEditing); return; }
+            if (event.target.closest('[data-op-preset-clear]')) { clearPreset(presetEditing); return; }
+            if (event.target.closest('[data-op-preset-cancel]')) { closePresetEditor(); return; }
+        });
+        $('#opBottom')?.addEventListener('keydown', event => {
+            if (event.key !== 'Enter') return;
+            const el = event.target;
+            if (el && el.matches && el.matches('[data-op-preset-name],[data-op-preset-angle]')) {
+                event.preventDefault();
+                if (presetEditing !== null) savePresetFromForm(presetEditing);
+            }
+        });
         $('#opSuspicious')?.addEventListener('click', event => {
             const ok = event.target.closest('[data-op-ok]');
             if (ok) acceptSuspect(ok.dataset.opOk, 'ok');
