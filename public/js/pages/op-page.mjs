@@ -1351,8 +1351,7 @@ export function createOpPage(ctx) {
             if (preset) {
                 out += '<button type="button" class="op-ant-preset" data-op-preset="' + i +
                     '" title="' + esc(t('op.device.rotator.presetGo', {deg: preset.azimuth})) + '">' +
-                    '<b>' + esc(preset.label || t('op.device.rotator.preset', {n: i + 1})) + '</b>' +
-                    '<i>' + preset.azimuth + '°</i></button>';
+                    '<b>' + esc(preset.label || t('op.device.rotator.preset', {n: i + 1})) + '</b></button>';
             } else {
                 out += '<button type="button" class="op-ant-preset empty" data-op-preset="' + i +
                     '" title="' + esc(t('op.device.rotator.presetHint')) + '">' +

@@ -478,13 +478,20 @@
     display: flex;
     flex-direction: column;
     align-items: stretch;
-    justify-content: space-between;
+    justify-content: flex-start;
     gap: 8px;
     padding: 2px;
+    overflow: hidden;
 }
 .op-device-card .op-antenna { flex: 1 1 auto; min-height: 0; }
-.op-compass { position: relative; align-self: center; width: 100%; max-width: 260px; }
-.op-compass-svg { width: 100%; height: auto; aspect-ratio: 1 / 1; display: block; }
+/* The dial takes whatever vertical room the rows leave. It grows to fill the
+ * card when there is space and shrinks first when the window is short, so the
+ * antenna panel never needs a scrollbar. */
+.op-compass { position: relative; align-self: center; flex: 1 1 auto; min-height: 0; min-width: 0; width: auto; max-width: 210px; display: flex; }
+.op-compass-svg { height: 100%; width: auto; max-width: 100%; aspect-ratio: 1 / 1; display: block; margin: 0 auto; }
+.op-antenna > .op-ant-turn,
+.op-antenna > .op-ant-input,
+.op-antenna > .op-ant-quick { flex: 0 0 auto; }
 .op-compass-face { fill: rgba(10, 20, 34, .55); }
 .op-compass-ring { fill: none; stroke: var(--border); stroke-width: 1; }
 .op-compass-tick { stroke: rgba(150, 170, 195, .55); stroke-width: 1; }
