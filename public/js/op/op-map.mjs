@@ -4,12 +4,61 @@
  * Leaflet's zoom/pan gestures are disabled so a click is always a bearing pick.
  */
 import {createMapSurface} from '../../shared/map/surface.mjs';
-import {bearing, distanceKm} from '../../shared/geo/coordinates.mjs';
+import {
+    bearing, distanceKm, toRadians, toDegrees, normalizeLongitude, relativeLongitude
+} from '../../shared/geo/coordinates.mjs';
 import {trackPaths} from '../../shared/geo/great-circle.mjs';
 import {addTrackPaths} from '../../shared/map/layers.mjs';
 import {qsoDotIcon} from '../../shared/map/markers.mjs';
 
 const RADIO_COLORS = ['#00e5ff', '#ffb020'];
+/* Antenna coverage wedge: the two edges are great-circle lines leaving the home
+ * station at the rotator heading ± HALF_DEG, capped at RADIUS_DEG of arc so the
+ * beam reads as a direction, not a full lune. Longitudes are kept continuous
+ * relative to home and drawn on three world copies so the beam never splits at
+ * the antimeridian. */
+const COVERAGE_HALF_DEG = 30;
+const COVERAGE_RADIUS_DEG = 55;
+const COVERAGE_COLOR = '#ffb020';
+const COVERAGE_EDGE = 84;
+const clampLat = value => Math.max(-COVERAGE_EDGE, Math.min(COVERAGE_EDGE, value));
+
+/** Destination point on the sphere: [lat, lon] degrees from a start + bearing + arc. */
+function destination(lat, lon, headingDeg, arcDeg) {
+    const delta = toRadians(arcDeg);
+    const theta = toRadians(headingDeg);
+    const phi1 = toRadians(lat);
+    const lambda1 = toRadians(lon);
+    const sinPhi2 = Math.sin(phi1) * Math.cos(delta) +
+        Math.cos(phi1) * Math.sin(delta) * Math.cos(theta);
+    const phi2 = Math.asin(Math.max(-1, Math.min(1, sinPhi2)));
+    const lambda2 = lambda1 + Math.atan2(
+        Math.sin(theta) * Math.sin(delta) * Math.cos(phi1),
+        Math.cos(delta) - Math.sin(phi1) * sinPhi2
+    );
+    return [toDegrees(phi2), normalizeLongitude(toDegrees(lambda2))];
+}
+
+function coverageOutline(home, heading) {
+    const left = heading - COVERAGE_HALF_DEG;
+    const right = heading + COVERAGE_HALF_DEG;
+    const radialSteps = 12;
+    const arcSteps = 24;
+    const continuous = ([lat, lon]) =>
+        [clampLat(lat), home.lon + relativeLongitude(lon, home.lon)];
+    const outline = [[home.lat, home.lon]];
+    for (let i = 1; i <= radialSteps; i += 1) {
+        outline.push(continuous(destination(home.lat, home.lon, left, COVERAGE_RADIUS_DEG * i / radialSteps)));
+    }
+    for (let i = 1; i <= arcSteps; i += 1) {
+        const headingStep = left + (right - left) * i / arcSteps;
+        outline.push(continuous(destination(home.lat, home.lon, headingStep, COVERAGE_RADIUS_DEG)));
+    }
+    for (let i = radialSteps; i >= 0; i -= 1) {
+        outline.push(continuous(destination(home.lat, home.lon, right, COVERAGE_RADIUS_DEG * i / radialSteps)));
+    }
+    return outline;
+}
 
 export function createOpMap(container, {onBearing, canRotate} = {}) {
     const L = globalThis.L;
@@ -20,7 +69,7 @@ export function createOpMap(container, {onBearing, canRotate} = {}) {
         borders: {show: true},
         interaction: {zoom: false, pan: false, click: true},
         resize: {observe: true, debounce: 120},
-        layers: ['qso', 'spot', 'home', 'rotator'],
+        layers: ['coverage', 'qso', 'spot', 'home', 'rotator'],
         on: {
             click(latlng) {
                 if (!home || !onBearing) return;
@@ -45,9 +94,37 @@ export function createOpMap(container, {onBearing, canRotate} = {}) {
     const spotLayer = surface.layer('spot');
     const homeLayer = surface.layer('home');
     const rotatorLayer = surface.layer('rotator');
+    const coverageLayer = surface.layer('coverage');
 
     let home = null;
     let target = null;
+    let coverageHeading = null;
+
+    function drawCoverage() {
+        coverageLayer.clear();
+        if (!home || coverageHeading === null || !isFinite(coverageHeading)) return;
+        const outline = coverageOutline(home, (coverageHeading + 360) % 360);
+        [-360, 0, 360].forEach(shift => {
+            L.polygon(
+                outline.map(([lat, lon]) => [lat, lon + shift]),
+                {
+                    className: 'op-coverage',
+                    color: COVERAGE_COLOR,
+                    weight: 1,
+                    opacity: 0.55,
+                    fillColor: COVERAGE_COLOR,
+                    fillOpacity: 0.12,
+                    interactive: false
+                }
+            ).addTo(coverageLayer.group);
+        });
+    }
+
+    function setCoverage(heading) {
+        const value = Number(heading);
+        coverageHeading = isFinite(value) ? value : null;
+        drawCoverage();
+    }
 
     function drawRotatorLine() {
         rotatorLayer.clear();
@@ -65,7 +142,7 @@ export function createOpMap(container, {onBearing, canRotate} = {}) {
             ? {lat: Number(next.lat), lon: Number(next.lon)}
             : null;
         homeLayer.clear();
-        if (!home) return;
+        if (!home) { drawCoverage(); return; }
         L.circleMarker([home.lat, home.lon], {
             radius: 5, color: '#00e08a', fillColor: '#00e08a', fillOpacity: 0.95, weight: 2
         }).addTo(homeLayer.group);
@@ -73,6 +150,7 @@ export function createOpMap(container, {onBearing, canRotate} = {}) {
             radius: 11, color: '#00e08a', fillColor: 'transparent', weight: 1, opacity: 0.5
         }).addTo(homeLayer.group);
         drawRotatorLine();
+        drawCoverage();
     }
 
     function setData({qsos = [], spots = [], radioFilter = 'all'} = {}) {
@@ -122,6 +200,7 @@ export function createOpMap(container, {onBearing, canRotate} = {}) {
         map,
         setHome,
         setData,
+        setCoverage,
         resize() {
             return surface.fit();
         },

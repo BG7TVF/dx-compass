@@ -882,6 +882,7 @@ export function createOpPage(ctx) {
         if (!state.map) return;
         const home = homeLatLon();
         state.map.setHome(home);
+        state.map.setCoverage(activeAzimuth());
         const cutoff = Date.now() - (Number(ctx.settings.mySpotTtl) || 30) * 60000;
         const spots = state.mySpots.filter(spot => timeOf(spot.timestamp) >= cutoff);
         const limit = Math.min(600, Math.max(60, Number(ctx.settings.qsoMax) || 1500));
@@ -975,8 +976,70 @@ export function createOpPage(ctx) {
         return currentSeat() || 'OP';
     }
 
+    /* Accumulated (un-wrapped) needle angles so the compass always turns the
+     * short way across the 0/360 seam instead of spinning a full circle. Reset
+     * whenever the panel is rebuilt for a different rotator or seat. */
+    let needleAngle = null;
+    let targetAngle = null;
+
+    function shortestDelta(from, to) {
+        let d = (to - from) % 360;
+        if (d > 180) d -= 360;
+        if (d < -180) d += 360;
+        return d;
+    }
+
+    /* Antenna control auto-picks the rotator that steers the antenna this seat
+     * is actually using. The server's ownership projection already links every
+     * antenna to its rotator (`antennas[].rotator_id`, found by walking the
+     * mechanical parent chain) and marks the antennas a seat has reached
+     * (`by_seat[seat].assigned`, red / reachable). No local wiring math: read
+     * the projection, and only fall back when it has nothing to say. */
     function rotatorDevice() {
-        return controlDevices().find(device => device.type === 'rotator') || null;
+        const snap = deviceSnapshot();
+        if (!snap) return null;
+        const rotators = controlDevices().filter(device => device.type === 'rotator');
+        if (!rotators.length) return null;
+        const byId = new Map(rotators.map(device => [String(device.id), device]));
+        const own = snap.ownership || {};
+        const antennas = Array.isArray(own.antennas) ? own.antennas : [];
+        const antById = new Map(antennas.map(item => [String(item.id), item]));
+        const rotatorForAntennas = ids => {
+            for (const id of ids) {
+                const antenna = antById.get(String(id));
+                if (!antenna || !antenna.rotator_id) continue;
+                const hit = byId.get(String(antenna.rotator_id));
+                if (hit) return hit;
+            }
+            return null;
+        };
+        const bySeat = own.by_seat || {};
+        const seat = String(currentSeat() || '');
+        let view = bySeat[seat] || null;
+        if (!view) {
+            const keys = Object.keys(bySeat);
+            const loose = keys.find(key =>
+                key === seat || key.endsWith(':' + seat) || key.split(':').pop() === seat);
+            view = (loose ? bySeat[loose] : null) ||
+                keys.map(key => bySeat[key]).find(item => item && item.online) || null;
+        }
+        if (view) {
+            const chosen = rotatorForAntennas(view.assigned || []) ||
+                rotatorForAntennas(view.candidates || []);
+            if (chosen) return chosen;
+        }
+        if (rotators.length === 1) return rotators[0];
+        return rotatorForAntennas(antennas.map(item => item.id)) || rotators[0];
+    }
+
+    /** Live heading of the auto-selected rotator, or null when it has no fix. */
+    function activeAzimuth() {
+        const snap = deviceSnapshot();
+        const rotator = rotatorDevice();
+        if (!snap || !rotator) return null;
+        const view = (snap.rotators || {})[rotator.id] || {};
+        const value = Number(view.physical_azimuth);
+        return Number.isFinite(value) ? value : null;
     }
 
     async function loadDevices() {
@@ -989,16 +1052,32 @@ export function createOpPage(ctx) {
         renderBottom();
         renderAmps();
         updateMapHint();
+        if (state.map) state.map.setCoverage(activeAzimuth());
     }
 
+    /* Antenna control: no device cards. The one rotator that steers the
+     * antenna this seat is using drives a live bearing compass; the map wedge
+     * (op-map.setCoverage) shares the same heading. */
     function renderBottom() {
         const host = $('#opBottom');
-        const devices = controlDevices();
-        $('#opBottomNote').textContent = devices.length ? '' : t('op.bottom.none');
-        if (devices.length) {
-            host.innerHTML = devices.map(device => deviceCard(device)).join('');
+        if (!host) return;
+        const note = $('#opBottomNote');
+        const rotator = rotatorDevice();
+        if (rotator) {
+            if (note) note.textContent = rotator.name || '';
+            const view = ((deviceSnapshot() || {}).rotators || {})[rotator.id] || {};
+            const key = String(rotator.id) + '|' + String(currentSeat());
+            if (host.dataset.antennaKey !== key) {
+                host.dataset.antennaKey = key;
+                needleAngle = null;
+                targetAngle = null;
+                host.innerHTML = antennaMarkup(rotator);
+            }
+            updateAntenna(view);
             return;
         }
+        delete host.dataset.antennaKey;
+        if (note) note.textContent = deviceSnapshot() ? t('op.map.rotatorOff') : t('op.bottom.none');
         const keys = visibleSeats();
         const cards = keys.map(key => {
             const radio = radioOf(key);
@@ -1016,6 +1095,95 @@ export function createOpPage(ctx) {
             '<div class="op-recent"><div class="op-recent-row"><span></span><b>' +
             esc(t('op.bottom.recent')) + '</b><span></span><span></span></div>' + recent +
             '</div></div>';
+    }
+
+    function compassTicks() {
+        const cx = 60;
+        const cy = 60;
+        let out = '';
+        for (let d = 0; d < 360; d += 5) {
+            const major = d % 30 === 0;
+            const mid = d % 10 === 0;
+            const inner = major ? 46 : mid ? 49 : 52;
+            const rad = d * Math.PI / 180;
+            const sx = Math.sin(rad);
+            const sy = -Math.cos(rad);
+            out += '<line class="op-compass-tick' + (major ? ' major' : mid ? ' mid' : '') +
+                '" x1="' + (cx + inner * sx).toFixed(2) + '" y1="' + (cy + inner * sy).toFixed(2) +
+                '" x2="' + (cx + 56 * sx).toFixed(2) + '" y2="' + (cy + 56 * sy).toFixed(2) + '"/>';
+            if (major && d % 30 === 0) {
+                out += '<text class="op-compass-num" x="' + (cx + 38 * sx).toFixed(2) +
+                    '" y="' + (cy + 38 * sy + 2.6).toFixed(2) + '" text-anchor="middle">' + d + '</text>';
+            }
+        }
+        return out;
+    }
+
+    function antennaMarkup(rotator) {
+        return '<div class="op-antenna">' +
+            '<div class="op-compass"><svg class="op-compass-svg" viewBox="0 0 120 120" aria-hidden="true">' +
+            '<circle class="op-compass-face" cx="60" cy="60" r="56"/>' +
+            '<circle class="op-compass-ring" cx="60" cy="60" r="57"/>' +
+            compassTicks() +
+            '<text class="op-compass-cardinal" x="60" y="11" text-anchor="middle">N</text>' +
+            '<g class="op-compass-target" data-compass-target opacity="0">' +
+            '<line x1="60" y1="60" x2="60" y2="10"/><path d="M60 4 l4 8 h-8 z"/></g>' +
+            '<g class="op-compass-needle" data-compass-needle>' +
+            '<polygon class="north" points="60,14 55,60 65,60"/>' +
+            '<polygon class="south" points="60,106 55,60 65,60"/></g>' +
+            '<circle class="op-compass-hub" cx="60" cy="60" r="3.6"/></svg>' +
+            '<div class="op-compass-read"><b data-compass-az>—</b><i>°</i></div></div>' +
+            '<div class="op-device op-antenna-ctrl" data-op-device="' + esc(rotator.id) + '">' +
+            '<div class="op-device-head"><b>' + esc(rotator.name || '') + '</b>' +
+            '<span class="op-compass-motion unknown" data-compass-motion></span></div>' +
+            '<div class="op-device-controls">' +
+            '<span class="op-device-note" data-compass-target-label></span>' +
+            '<label>' + esc(t('op.device.rotator.targetInput')) +
+            '<input data-op-azimuth type="number" min="0" max="360" step="1" inputmode="numeric"></label>' +
+            '<button type="button" data-op-cmd="rotate">' + esc(t('op.device.rotator.rotate')) + '</button>' +
+            '<button type="button" data-op-cmd="stop">' + esc(t('op.device.rotator.stop')) + '</button>' +
+            '</div><span class="op-device-result"></span></div></div>';
+    }
+
+    /* Only the needle, numbers and state text change between polls, so the DOM
+     * is built once and nudged here; that keeps the CSS transition animating
+     * smoothly as the rotator actually moves. */
+    function updateAntenna(view) {
+        const host = $('#opBottom');
+        if (!host) return;
+        const az = Number(view.physical_azimuth);
+        const finite = Number.isFinite(az);
+        const needle = host.querySelector('[data-compass-needle]');
+        if (needle && finite) {
+            needleAngle = needleAngle === null ? ((az % 360) + 360) % 360 : needleAngle + shortestDelta(needleAngle, az);
+            needle.style.transform = 'rotate(' + needleAngle.toFixed(2) + 'deg)';
+        }
+        const azText = host.querySelector('[data-compass-az]');
+        if (azText) azText.textContent = finite ? String(Math.round(az)) : '—';
+        const tgt = Number(view.target_azimuth);
+        const targetEl = host.querySelector('[data-compass-target]');
+        if (targetEl) {
+            if (Number.isFinite(tgt)) {
+                targetAngle = targetAngle === null ? ((tgt % 360) + 360) % 360 : targetAngle + shortestDelta(targetAngle, tgt);
+                targetEl.style.transform = 'rotate(' + targetAngle.toFixed(2) + 'deg)';
+                targetEl.style.opacity = '1';
+            } else {
+                targetEl.style.opacity = '0';
+            }
+        }
+        const targetLabel = host.querySelector('[data-compass-target-label]');
+        if (targetLabel) {
+            targetLabel.textContent = Number.isFinite(tgt)
+                ? t('op.device.rotator.target', {deg: Math.round(tgt)})
+                : t('op.device.rotator.current', {deg: finite ? Math.round(az) : '—'});
+        }
+        const motionEl = host.querySelector('[data-compass-motion]');
+        if (motionEl) {
+            const raw = view.motion_state;
+            const key = raw === 'moving' || raw === 'settled' ? raw : 'unknown';
+            motionEl.textContent = t('dev.motion.' + key);
+            motionEl.className = 'op-compass-motion ' + key;
+        }
     }
 
     function handleDevices() {
@@ -1238,51 +1406,6 @@ export function createOpPage(ctx) {
             : '<article class="op-amp" data-state="empty"><div class="op-amp-id"><b>' +
                 esc(t('op.amp.none')) + '</b></div>' +
                 ampEmptyFace(t('op.amp.noneNote'), t('op.amp.noneHint'), '') + '</article>';
-    }
-
-    function deviceCard(device) {
-        const snapshot = deviceSnapshot() || {};
-        const statuses = snapshot.status || {};
-        const status = statuses[device.id] || {state: 'unknown'};
-        const badge = '<span class="op-device-status ' + esc(status.state) + '">' +
-            esc(t('dev.status.' + status.state)) + '</span>';
-        let controls = '';
-        if (device.type === 'rotator') {
-            const view = (snapshot.rotators || {})[device.id] || {};
-            const current = view.physical_azimuth === null || view.physical_azimuth === undefined
-                ? '—' : view.physical_azimuth;
-            controls = '<span class="op-device-note">' + esc(t('op.device.rotator.current', {deg: current})) +
-                '</span><label>' + esc(t('op.device.rotator.targetInput')) +
-                '<input data-op-azimuth type="number" min="0" max="360" step="1" inputmode="numeric"></label>' +
-                '<button type="button" data-op-cmd="rotate">' + esc(t('op.device.rotator.rotate')) + '</button>' +
-                '<button type="button" data-op-cmd="stop">' + esc(t('op.device.rotator.stop')) + '</button>';
-        } else if (device.type === 'switch' || device.type === 'matrix') {
-            const ports = ((snapshot.rf || {}).ports || {})[device.id] || [];
-            const inputs = ports.filter(port => port.role !== 'out');
-            const outputs = ports.filter(port => port.role === 'out');
-            const selected = ((snapshot.controls || {})[device.id] || {}).ports || {};
-            const firstInput = inputs.length ? inputs[0].key : '';
-            const chosen = selected[firstInput] || (outputs.length ? outputs[0].key : '');
-            const inputOptions = inputs.map(port => '<option value="' + esc(port.key) + '"' +
-                (port.key === firstInput ? ' selected' : '') + '>' + esc(port.key) + '</option>').join('');
-            const outputOptions = outputs.map(port => '<option value="' + esc(port.key) + '"' +
-                (port.key === chosen ? ' selected' : '') + '>' + esc(port.key) + '</option>').join('');
-            controls = '<label>' + esc(t('op.device.port')) + '<select data-op-port>' + inputOptions +
-                '</select></label><label>' + esc(t('op.device.outlet')) + '<select data-op-outlet>' +
-                outputOptions + '</select></label>' +
-                '<button type="button" data-op-cmd="select">' + esc(t('op.device.select')) + '</button>';
-        } else if (device.type === 'tower') {
-            controls = [
-                ['up', 'op.device.tower.up'],
-                ['down', 'op.device.tower.down']
-            ].map(([direction, key]) => '<button type="button" data-op-tower="' + direction + '">' +
-                esc(t(key)) + '</button>').join('') +
-                '<button type="button" data-op-tower="stop">' + esc(t('op.device.tower.stop')) + '</button>';
-        }
-        return '<div class="op-device" data-op-device="' + esc(device.id) + '"><div class="op-device-head"><b>' +
-            esc(device.name) + '</b>' + badge + '</div><div class="op-device-controls">' + controls +
-            '</div><span class="op-device-result"></span>' +
-            '<span class="op-device-note">' + esc(t('op.device.hint')) + '</span></div>';
     }
 
     function deviceFeedback(target, ok, text) {

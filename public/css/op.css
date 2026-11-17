@@ -470,6 +470,43 @@
 .op-device-note { font-size: 8px; color: var(--text-dim); line-height: 1.3; }
 .op-device .op-link-btn { align-self: flex-start; }
 
+/* Antenna control: a live bearing compass beside the one rotator that steers
+ * the antenna this seat is using. No device cards — just the compass. */
+.op-antenna { display: flex; align-items: center; gap: 10px; }
+.op-compass { position: relative; flex: 0 0 auto; width: 84px; height: 84px; }
+.op-compass-svg { width: 84px; height: 84px; display: block; }
+.op-compass-face { fill: rgba(10, 20, 34, .55); }
+.op-compass-ring { fill: none; stroke: var(--border); stroke-width: 1; }
+.op-compass-tick { stroke: rgba(150, 170, 195, .55); stroke-width: 1; }
+.op-compass-tick.mid { stroke: rgba(170, 190, 215, .8); }
+.op-compass-tick.major { stroke: var(--text-dim); stroke-width: 1.5; }
+.op-compass-num { fill: var(--text-dim); font: 500 9px var(--font-num, monospace); }
+.op-compass-cardinal { fill: var(--text-strong); font: 700 11px var(--font-num, monospace); }
+.op-compass-target { fill: none; stroke: var(--cyan, #00e5ff); stroke-width: 1; opacity: 0; }
+.op-compass-target line { stroke: var(--cyan, #00e5ff); stroke-width: 1; stroke-dasharray: 3 3; }
+.op-compass-target path { fill: var(--cyan, #00e5ff); }
+.op-compass-needle polygon.north { fill: var(--orange); }
+.op-compass-needle polygon.south { fill: rgba(150, 170, 195, .5); }
+.op-compass-needle, .op-compass-target {
+    transform-box: view-box; transform-origin: center;
+    transition: transform 1.1s cubic-bezier(.4, 0, .2, 1), opacity .3s;
+}
+.op-compass-hub { fill: var(--bg); stroke: var(--text-strong); stroke-width: 1.5; }
+.op-compass-read {
+    position: absolute; left: 0; right: 0; bottom: 4px; text-align: center;
+    pointer-events: none;
+}
+.op-compass-read b { font: 700 13px var(--font-num, monospace); color: var(--text-strong); }
+.op-compass-read i { font: 500 9px var(--font-num, monospace); color: var(--text-dim); font-style: normal; }
+.op-antenna-ctrl { max-width: 320px; }
+.op-compass-motion { font-size: 8px; letter-spacing: .12em; text-transform: uppercase; }
+.op-compass-motion.moving { color: var(--orange); }
+.op-compass-motion.settled { color: var(--green, #00e08a); }
+.op-compass-motion.unknown { color: var(--text-dim); }
+
+/* Map antenna-coverage wedge — same heading as the compass, redrawn live. */
+.op-coverage { stroke-linejoin: round; }
+
 /* Narrow laptops: shrink the rails before the map, never below the usable map */
 @media (max-width: 1500px) {
     .op-view { grid-template-columns: 236px minmax(0, 1fr) minmax(0, 1fr) 264px 248px; }
