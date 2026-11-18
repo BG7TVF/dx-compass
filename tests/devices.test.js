@@ -1834,6 +1834,115 @@ test('ownership follows RF reachability and falls back to band matching', () => 
     assert.deepEqual(onForty.by_seat['OP-A'].amps, ['amp-1', 'amp-40']);
 });
 
+/* 生产实机的连线：两台功放各自串在自己电台后面，两路再并进同一台矩阵，
+ * 矩阵没有读回（选择未知）。互锁口径必须铺满全部端口，功放归属不能——
+ * 否则从 in1 横穿到 in2 就顺着邻座的驻波表倒着把对方功放认领成自己的，
+ * 两个席位拿到同一份功放清单，切换席位画面毫无变化。 */
+test('共享矩阵选择未知时，功放归属只认自己电台到矩阵之间的那台', () => {
+    const now = new Date('2026-03-01T12:00:00.000Z');
+    const devices = [
+        device({
+            id: 'radio-1', type: 'radio', bands: '',
+            config_json: JSON.stringify({computer: 'PC-A', model: 'IC-7610'})
+        }),
+        device({
+            id: 'radio-2', type: 'radio', bands: '',
+            config_json: JSON.stringify({computer: 'PC-B', model: 'FT-817'})
+        }),
+        device({id: 'amp-1', type: 'amp', bands: ''}),
+        device({id: 'amp-2', type: 'amp', bands: ''}),
+        device({id: 'swr-1', type: 'swr', bands: ''}),
+        device({id: 'swr-2', type: 'swr', bands: ''}),
+        device({
+            id: 'matrix-1', type: 'matrix', bands: '',
+            config_json: JSON.stringify({in_count: 2, out_count: 6})
+        }),
+        device({id: 'ant-40', type: 'antenna', bands: '40m'}),
+        device({id: 'ant-80', type: 'antenna', bands: '80m'}),
+        // 挂在矩阵之后的一台功放：只有链路能确定走过矩阵时才算进归属。
+        device({id: 'amp-post', type: 'amp', bands: ''})
+    ];
+    const links = [
+        rfRow('radio-1', 'out', 'amp-1', 'in'),
+        rfRow('amp-1', 'out', 'swr-1', 'in'),
+        rfRow('swr-1', 'out', 'matrix-1', 'in1'),
+        rfRow('radio-2', 'out', 'amp-2', 'in'),
+        rfRow('amp-2', 'out', 'swr-2', 'in'),
+        rfRow('swr-2', 'out', 'matrix-1', 'in2'),
+        rfRow('matrix-1', 'out4', 'amp-post', 'in'),
+        rfRow('amp-post', 'out', 'ant-40', 'in'),
+        rfRow('matrix-1', 'out5', 'ant-80', 'in')
+    ];
+    const radioStates = {
+        'OP-A': {
+            ts: now.toISOString(), freqKhz: 7020,
+            computerName: 'pc-a', radioName: 'IC-7610'
+        },
+        'OP-B': {
+            ts: now.toISOString(), freqKhz: 3520,
+            computerName: 'pc-b', radioName: 'FT-817'
+        }
+    };
+
+    // 严格走线：到自己那台矩阵输入口为止，不越界、也不假装导通到天线。
+    const chain = rf.chainDevices({
+        devices, links, selections: {}, startDeviceId: 'radio-1'
+    });
+    assert.equal(chain.has('amp-1'), true);
+    assert.equal(chain.has('swr-1'), true);
+    assert.equal(chain.has('matrix-1'), true);
+    assert.equal(chain.has('amp-2'), false);
+    assert.equal(chain.has('swr-2'), false);
+    assert.equal(chain.has('amp-post'), false);
+    assert.equal(chain.has('ant-40'), false);
+
+    const unknown = ownership.project({devices, links, radioStates, now});
+    assert.deepEqual(unknown.by_seat['OP-A'].amps, ['amp-1']);
+    assert.deepEqual(unknown.by_seat['OP-B'].amps, ['amp-2']);
+
+    /* 矩阵有读回之后切换器不再是断点：A 席那一路确实经过 out4，
+     * 挂在它后面的功放也算这条链路在用；B 席走 out5，链路上仍只有自己那台。 */
+    const verified = ownership.project({
+        devices, links,
+        selections: {'matrix-1': {in1: 'out4', in2: 'out5'}},
+        radioStates,
+        now
+    });
+    assert.deepEqual(verified.by_seat['OP-A'].amps, ['amp-1', 'amp-post']);
+    assert.deepEqual(verified.by_seat['OP-A'].candidates, ['ant-40']);
+    assert.deepEqual(verified.by_seat['OP-B'].amps, ['amp-2']);
+    assert.deepEqual(verified.by_seat['OP-B'].candidates, ['ant-80']);
+
+    /* 切换器只有一路输出时选择唯一，不依赖运行态，链路照旧往下走：
+     * 挂在切换器之后的功放仍归这条链路的席位。 */
+    const shared = [
+        device({
+            id: 'radio-1', type: 'radio', bands: '',
+            config_json: JSON.stringify({computer: 'PC-A', model: 'IC-7610'})
+        }),
+        device({
+            id: 'sw-1', type: 'switch', bands: '',
+            config_json: JSON.stringify({out_count: 1})
+        }),
+        device({id: 'amp-tx', type: 'amp', bands: ''}),
+        device({id: 'ant-40', type: 'antenna', bands: '40m'})
+    ];
+    const sharedLinks = [
+        rfRow('radio-1', 'out', 'sw-1', 'in'),
+        rfRow('sw-1', 'ant1', 'amp-tx', 'in'),
+        rfRow('amp-tx', 'out', 'ant-40', 'in')
+    ];
+    const downstream = ownership.project({
+        devices: shared, links: sharedLinks,
+        radioStates: {'OP-A': {
+            ts: now.toISOString(), freqKhz: 7020,
+            computerName: 'pc-a', radioName: 'IC-7610'
+        }},
+        now
+    });
+    assert.deepEqual(downstream.by_seat['OP-A'].amps, ['amp-tx']);
+});
+
 test('combiner and BPF require bands; radio stores only its addressing identity', () => {
     const combiner = model.normalizeDevice({type: 'combiner', name: 'Combiner'}, {devices: []});
     assert.equal(combiner.status, 400);
