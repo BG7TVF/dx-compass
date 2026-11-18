@@ -367,9 +367,10 @@ test('OP 功放面板：只列本席位链路上的功放，画面永远画出�
     assert.match(op, /const identity = ampIdentity\(device, manual\);/);
     assert.match(op, /const reason = manual \? t\('op\.amp\.manual'\)/);
 
-    // 功放主容器让出第 3 行第 4 列（300px），给下一步的容器。
+    // 功放容器再缩短到前两列：第 3 列电台卡片，第 4 列天线切换。
     const css = read('public', 'css', 'op.css');
-    assert.match(css, /\.op-view > \.op-amp-bay \{ grid-column: 1 \/ 4; grid-row: 3; \}/);
+    assert.match(css, /\.op-view > \.op-amp-bay \{ grid-column: 1 \/ 3; grid-row: 3; \}/);
+    assert.match(css, /\.op-view > \.op-station-card \{ grid-column: 3; grid-row: 3; \}/);
     assert.doesNotMatch(css, /\.op-amp-empty/);
 });
 
@@ -517,4 +518,62 @@ test('read-only wall keeps an exact static whitelist and GET/HEAD boundary', () 
     assert.match(source, /req\.method\s*!==\s*'GET'\s*&&\s*req\.method\s*!==\s*'HEAD'/);
     assert.doesNotMatch(source, /express\.static|sendFile\s*\(/,
         'wall must not switch to broad static directory serving');
+});
+
+test('频率联动：电台卡片、服务端判定与轮询链路都在约定位置', () => {
+    const html = read('public', 'index.html');
+    assert.match(html, /<section class="op-card op-station-card">/);
+    assert.match(html, /<div class="op-station-body" id="opStationBody"><\/div>/);
+    assert.match(html, /<input type="checkbox" id="opBandLink">/,
+        '联动开关必须是界面里看得见的复选框，不是藏在菜单里的暗桩');
+
+    const op = read('public', 'js', 'pages', 'op-page.mjs');
+    assert.match(op, /function renderStationCard\(\) \{/);
+    assert.match(op, /renderAntSwitch\(\);\s*\n\s*renderStationCard\(\);/,
+        '电台卡片要和天线切换一起进渲染链');
+    assert.match(op, /\$\('#opBandLink'\)\?\.addEventListener\('change'/);
+    assert.match(op, /await setBandLink\(seat, want/,
+        '开关联动状态写服务端，不用浏览器本地偏好');
+    assert.match(op, /function stationSeatKey\(\) \{[\s\S]*?antSwitchSeatHit\(\)/,
+        '联动必须按服务端席位键存取，和天线切换同一口径');
+    assert.match(op, /'op\.station\.reason\.' \+ last\.reason/,
+        '没动手的判定也要出文案，不能静悄悄');
+
+    const api = read('public', 'shared', 'data', 'devices.mjs');
+    assert.match(api, /export function setBandLink\(seat, enabled/);
+    assert.match(api, /action: 'band-link'/);
+
+    const model = read('lib', 'devices', 'model.js');
+    assert.match(model, /antenna: \['preferred'\]/,
+        '优先天线要过 config 白名单，否则落不了库');
+
+    const ownership = read('lib', 'devices', 'ownership.js');
+    assert.match(ownership, /preferred: !!\(antenna\.config && antenna\.config\.preferred === true\)/);
+
+    const service = read('lib', 'devices', 'service.js');
+    assert.match(service, /const bandLink = require\('\.\/band-link\.js'\)/);
+    assert.match(service, /band_link: bandLink\.view\(global\)/,
+        '快照要带联动状态，界面才不用另开一条请求');
+    assert.match(service, /if \(action === 'band-link'\)/);
+    assert.match(service, /async function bandLinkTick\(global, rows, now\)/);
+    assert.match(service, /bandLinkTick,[\s\S]*\n\};/);
+
+    const flow = JSON.parse(read('flow.json'));
+    const byId = new Map(flow.map(node => [node.id, node]));
+    const poll = byId.get('dxdev00000000b0');
+    assert.ok(poll, '频率联动要有自己的轮询 inject');
+    assert.equal(poll.repeat, '2');
+    assert.equal(poll.once, true, '重启后第一轮不等频段变化');
+    const run = byId.get('dxdev00000000b3');
+    assert.match(run.func, /dx\.devices\.bandLinkTick\(global, msg\.payload, new Date\(\)\)/);
+    assert.deepEqual(run.wires[1], ['dxc000000000000e'],
+        '判定结果要广播，其它浏览器才会跟着刷新');
+
+    const i18n = read('public', 'js', 'i18n.js');
+    for (const key of ['no-antenna', 'occupied', 'ambiguous', 'single-band', 'preferred',
+        'only', 'already', 'tx-active', 'route-failed']) {
+        const hits = i18n.split("'op.station.reason." + key + "'").length - 1;
+        assert.equal(hits, 2, 'op.station.reason.' + key + ' 需要中英两套文案');
+    }
+    assert.equal(i18n.split("'dev.form.preferred'").length - 1, 2);
 });

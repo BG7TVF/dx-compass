@@ -76,6 +76,15 @@ export function deleteTxSource(id, {transport = defaultTransport, ...options} = 
 }
 
 /**
+ * 频率联动开关：按席位存服务端（global），不是浏览器本地偏好。
+ * 关掉联动不影响手动切天线，开着也不会在发射中途抢天线。
+ */
+export function setBandLink(seat, enabled, {transport = defaultTransport, operator = '', ...options} = {}) {
+    return transport.postJson('/api/devices',
+        {action: 'band-link', seat, enabled: enabled === true, operator}, options);
+}
+
+/**
  * Send one device command through the single write channel.
  * Every command carries the seat identity; control addressing is resolved
  * server-side from the device or its upstream serial server.

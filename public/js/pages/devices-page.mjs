@@ -1501,6 +1501,12 @@ export function createDevicesPage(ctx) {
                 <label>${t('dev.config.pulse')}<input name="cfg_pulse_ms" type="number" min="50" max="5000" step="1" value="${esc(config.pulse_ms || '')}"></label>
                 ${limit}${counts}${channels}`;
         }
+        if (value.type === 'antenna') {
+            // 优先天线：频率联动在同一频段有多副可选天线时按它裁决（没设就不动）。
+            return `<label class="dev-flag">${esc(t('dev.form.preferred'))}<input class="set-check" type="checkbox" name="cfg_preferred"${
+                config.preferred === true ? ' checked' : ''
+            }></label>`;
+        }
         return '';
     }
 
@@ -2004,7 +2010,10 @@ export function createDevicesPage(ctx) {
     /** Protocol settings live under `config`; empty inputs clear the stored key. */
     function formConfig(data, type) {
         const config = {};
-        if (type === 'radio') {
+        if (type === 'antenna') {
+            // 天线唯一可设的属性：优先天线。勾上才写 true，不勾就不在 config 里留键。
+            if (data.get('cfg_preferred')) config.preferred = true;
+        } else if (type === 'radio') {
             config.computer = String(data.get('cfg_computer') || '');
             config.model = String(data.get('cfg_model') || '');
         } else if (type === 'amp') {

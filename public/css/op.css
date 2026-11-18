@@ -67,8 +67,9 @@ body[data-theme="light"] {
 .op-view > .op-center { grid-column: 2 / 4; grid-row: 2; }
 .op-view > .op-device-card { grid-column: 4; grid-row: 2; }
 .op-view > .op-right { grid-column: 5; grid-row: 2 / 4; }
-/* 功放面板只占第 3 行前 3 列：第 4 列（300px）留给天线切换容器。 */
-.op-view > .op-amp-bay { grid-column: 1 / 4; grid-row: 3; }
+/* 第 3 行分三块：功放（再缩短到前两列）| 电台卡片 | 天线切换。 */
+.op-view > .op-amp-bay { grid-column: 1 / 3; grid-row: 3; }
+.op-view > .op-station-card { grid-column: 3; grid-row: 3; }
 .op-view > .op-antswitch-card { grid-column: 4; grid-row: 3; }
 .op-view > .op-rate-card { grid-column: 1; grid-row: 4; }
 .op-view > .op-total-card { grid-column: 2; grid-row: 4; }
@@ -299,6 +300,72 @@ body[data-theme="light"] {
 .op-antswitch .op-device-result { grid-column: 1 / -1; }
 /* 接通只来自下发的命令、硬件还没回读证实：标题旁的弱提示，不改按钮主色。 */
 .op-antswitch-pending { color: var(--yellow); }
+
+/* ---- station card ------------------------------------------------------
+ * 本席位电台的四件事：收发、波段、频率、模式，外加频率联动开关。
+ * 联动开关刻意做成看得见摸得着的复选框，不做藏在菜单里的暗桩；
+ * 下面一行始终写明上一次联动判定的结论，没动作也交代原因。 */
+.op-station-card { overflow: hidden; }
+.op-station-body {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 4px 8px;
+    padding: 6px 8px 7px;
+    overflow: hidden;
+}
+.op-station-cell {
+    min-width: 0;
+    display: flex;
+    align-items: baseline;
+    gap: 5px;
+    font-size: 10px;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+}
+.op-station-cell b {
+    font-family: var(--op-num);
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--text-strong);
+    font-variant-numeric: tabular-nums;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.op-station-cell.freq b { font-size: 19px; }
+.op-station-cell b.tx { color: var(--red); }
+.op-station-cell b.rx { color: var(--green); }
+.op-station-cell b.none { color: var(--text-dim); }
+.op-station-note {
+    grid-column: 1 / -1;
+    min-width: 0;
+    font-size: 10px;
+    line-height: 1.25;
+    letter-spacing: .02em;
+    text-transform: none;
+    color: var(--text-dim);
+    overflow-wrap: anywhere;
+}
+.op-station-note.warn { color: var(--yellow); }
+.op-station-note.bad { color: var(--red); }
+.op-station-note.ok { color: var(--green); }
+.op-station-link {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    color: var(--text-dim);
+    cursor: pointer;
+    white-space: nowrap;
+}
+.op-station-link input { width: 14px; height: 14px; margin: 0; accent-color: var(--accent); cursor: pointer; }
+.op-station-link[data-busy="1"] { opacity: .5; pointer-events: none; }
 
 /* Side stack: space weather and band conditions keep their natural height,
  * workability takes the rest so the column bottom lands on the grid line. */
@@ -1003,7 +1070,7 @@ body[data-theme="light"] {
     display: flex;
     align-items: center;
     gap: 8px;
-    min-height: 26px;
+    min-height: 22px;
     padding: 0 10px;
     border-bottom: 1px solid var(--op-rule);
 }
@@ -1040,10 +1107,10 @@ body[data-theme="light"] {
 
 .op-amp-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-    gap: 7px;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 6px;
     min-height: 0;
-    padding: 6px 8px 8px;
+    padding: 5px 7px 6px;
     overflow: auto;
 }
 
@@ -1057,8 +1124,8 @@ body[data-theme="light"] {
         "id id"
         "gauges reads"
         "metrics metrics";
-    gap: 4px 10px;
-    padding: 5px 8px 6px;
+    gap: 3px 9px;
+    padding: 4px 8px 5px;
     border: 1px solid var(--op-rule);
     border-radius: var(--r-sm);
     background: var(--well);
@@ -1150,7 +1217,7 @@ body[data-theme="light"] {
     grid-area: gauges;
     display: flex;
     flex-direction: column;
-    gap: 5px;
+    gap: 4px;
     min-width: 0;
 }
 .op-amp-gauge { min-width: 0; }
@@ -1171,8 +1238,8 @@ body[data-theme="light"] {
     display: flex;
     justify-content: space-between;
     align-items: flex-end;
-    height: 10px;
-    padding-bottom: 4px;
+    height: 8px;
+    padding-bottom: 3px;
     font-size: 8px;
     line-height: 1;
     color: var(--text-dim);
@@ -1185,14 +1252,14 @@ body[data-theme="light"] {
     left: 0;
     right: 0;
     bottom: 0;
-    height: 3px;
+    height: 2px;
     background-image: repeating-linear-gradient(90deg,
         color-mix(in srgb, var(--text-dim) 55%, transparent) 0 1px,
         transparent 1px 6px);
 }
 .op-amp-track {
     position: relative;
-    height: 14px;
+    height: 10px;
     border: 1px solid var(--op-rule);
     border-radius: 1px;
     background: linear-gradient(180deg, var(--panel-2), var(--well));
@@ -1251,7 +1318,7 @@ body[data-theme="light"] {
 }
 .op-amp-read b {
     font-family: var(--op-num);
-    font-size: 26px;
+    font-size: 20px;
     font-weight: 600;
     letter-spacing: .01em;
     font-variant-numeric: tabular-nums;
@@ -1262,8 +1329,8 @@ body[data-theme="light"] {
     letter-spacing: .08em;
     color: var(--text-dim);
 }
-.op-amp-read.swr b { font-size: 18px; color: var(--text); }
-.op-amp-read.muted b { color: var(--text-dim); font-size: 16px; }
+.op-amp-read.swr b { font-size: 15px; color: var(--text); }
+.op-amp-read.muted b { color: var(--text-dim); font-size: 13px; }
 
 .op-amp-metrics {
     grid-area: metrics;
@@ -1331,14 +1398,14 @@ body[data-theme="light"] {
     .op-amp-model { display: none; }
 }
 @media (max-width: 1500px) {
-    .op-amp { grid-template-columns: minmax(0, 1fr) 86px; }
-    .op-amp-read b { font-size: 23px; }
-    .op-amp-read.swr b { font-size: 16px; }
+    .op-amp { grid-template-columns: minmax(0, 1fr) 80px; }
+    .op-amp-read b { font-size: 18px; }
+    .op-amp-read.swr b { font-size: 14px; }
     .op-amp-metrics i,
     .op-amp-metrics u { font-size: 7px; }
 }
 
 @media (max-height: 800px) {
-    .op-amp-read b { font-size: 22px; }
-    .op-amp-read.swr b { font-size: 16px; }
+    .op-amp-read b { font-size: 17px; }
+    .op-amp-read.swr b { font-size: 13px; }
 }

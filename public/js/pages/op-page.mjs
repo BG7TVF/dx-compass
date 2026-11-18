@@ -25,7 +25,7 @@ import {bandConditionCells, spaceWeatherCells, bandOf} from '../../bigscreen/wal
 import {bearing} from '../../shared/geo/coordinates.mjs';
 import {gridToLatLon} from '../../shared/geo/maidenhead.mjs';
 import {createOpMap} from '../op/op-map.mjs';
-import {getDevicesSnapshot, sendDeviceCommand} from '../../shared/data/devices.mjs';
+import {getDevicesSnapshot, sendDeviceCommand, setBandLink} from '../../shared/data/devices.mjs';
 import {changeFrequencyClaim} from '../../shared/data/station.mjs';
 
 const REVIEW_KEY = 'dxcompass-op-call-review';
@@ -1351,6 +1351,7 @@ export function createOpPage(ctx) {
         updateMapHint();
         renderBandOccupancy();
         renderAntSwitch();
+        renderStationCard();
         if (state.map) state.map.setCoverage(activeAzimuth());
     }
 
@@ -1460,6 +1461,113 @@ export function createOpPage(ctx) {
             note.textContent = info.unconfirmed ? t('op.antswitch.unconfirmed') : '';
             note.classList.toggle('op-antswitch-pending', !!info.unconfirmed);
         }
+    }
+
+    /* 电台卡片：收发状态、当前波段、当前频率、当前模式，加频率联动开关。
+     * 联动在哪切、为什么没切，全由服务端判（lib/devices/band-link.js），
+     * 这里只把结论摊开写明白——"没动作"也必须说得出原因。 */
+    function stationSeatKey() {
+        const hit = antSwitchSeatHit();
+        return hit ? hit.key : '';
+    }
+
+    function bandLinkEntry() {
+        const link = (deviceSnapshot() || {}).band_link || {};
+        const seat = stationSeatKey();
+        return seat && link.seats ? (link.seats[seat] || null) : null;
+    }
+
+    const LINK_NOTE_CLASS = {
+        ok: ['single-band', 'only', 'preferred', 'already'],
+        bad: ['route-failed']
+    };
+
+    function linkNoteClass(reason) {
+        if (LINK_NOTE_CLASS.ok.includes(reason)) return 'ok';
+        if (LINK_NOTE_CLASS.bad.includes(reason)) return 'bad';
+        return 'warn';
+    }
+
+    function linkNoteText(entry) {
+        if (!entry) return t('op.station.linkOff');
+        if (!entry.enabled) return t('op.station.linkOff');
+        const last = entry.last;
+        if (!last || !last.reason) return t('op.station.linkWaiting');
+        const key = 'op.station.reason.' + last.reason;
+        const label = t(key);
+        const reason = label === key ? last.reason : label;
+        const band = last.band ? ' ' + String(last.band).toUpperCase() : '';
+        const antenna = last.antenna_name || last.antenna_id || '';
+        if (['single-band', 'only', 'preferred'].includes(last.reason)) {
+            return reason + band + ' → ' + antenna;
+        }
+        if (last.reason === 'already') return reason + band + ' · ' + antenna;
+        return reason + band + (antenna ? ' · ' + antenna : '');
+    }
+
+    function stationCell(cls, label, value, valueClass, title) {
+        return '<div class="op-station-cell ' + cls + '"><span>' + esc(label) + '</span>' +
+            '<b' + (valueClass ? ' class="' + valueClass + '"' : '') +
+            (title ? ' title="' + esc(title) + '"' : '') + '>' + esc(value) + '</b></div>';
+    }
+
+    function renderStationCard() {
+        const host = $('#opStationBody');
+        const toggle = $('#opBandLink');
+        if (!host) return;
+        const radio = radioOf(state.seat);
+        const band = currentBand() || (radio && radio.freqKhz ? bandOf(radio.freqKhz) : '');
+        const transmitting = !!(radio && radio.isTransmitting);
+        const freqKhz = radio ? Number(radio.txFreqKhz || radio.freqKhz) : NaN;
+        const freq = Number.isFinite(freqKhz) && freqKhz > 0 ? (freqKhz / 1000).toFixed(3) : '--';
+        const entry = bandLinkEntry();
+        const seatKnown = Boolean(stationSeatKey());
+        host.innerHTML =
+            stationCell('state', t('op.station.txrx'),
+                !radio ? t('op.station.none') : (transmitting ? t('op.station.tx') : t('op.station.rx')),
+                !radio ? 'none' : (transmitting ? 'tx' : 'rx')) +
+            stationCell('band', t('op.station.band'), band ? String(band).toUpperCase() : '--') +
+            stationCell('freq', t('op.station.freq'), freq, '',
+                freqKhz > 0 ? freqKhz + ' kHz' : '') +
+            stationCell('mode', t('op.station.mode'), (radio && radio.mode) || '--') +
+            '<div class="op-station-note ' + (entry && entry.enabled ? linkNoteClass((entry.last || {}).reason) : '') +
+            '" id="opStationNote">' + esc(seatKnown
+                ? linkNoteText(entry)
+                : t('op.station.linkUnbound')) + '</div>';
+        if (toggle) {
+            /* 用户刚点下去、服务端还没回话时不要用旧快照把勾选改回去。 */
+            if (host.dataset.busy !== '1') toggle.checked = !!(entry && entry.enabled);
+            toggle.disabled = !seatKnown;
+        }
+    }
+
+    async function applyBandLink(want) {
+        const seat = stationSeatKey();
+        const host = $('#opStationBody');
+        const toggle = $('#opBandLink');
+        if (!seat || !toggle) return;
+        if (host) host.dataset.busy = '1';
+        if (toggle.parentElement) toggle.parentElement.dataset.busy = '1';
+        let ok = false;
+        try {
+            const result = await setBandLink(seat, want,
+                {operator: state.station.operators[state.station.op] || ''});
+            ok = !!result && result.ok !== false;
+        } catch (error) {
+            ok = false;
+        }
+        if (host) delete host.dataset.busy;
+        if (toggle.parentElement) delete toggle.parentElement.dataset.busy;
+        if (!ok) {
+            toggle.checked = !want;
+            const note = $('#opStationNote');
+            if (note) {
+                note.className = 'op-station-note bad';
+                note.textContent = t('op.station.linkFailed');
+            }
+            return;
+        }
+        await loadDevices();
     }
 
     function compassTicks() {
@@ -2207,6 +2315,7 @@ export function createOpPage(ctx) {
         updateMapHint();
         renderBandOccupancy();
         renderAntSwitch();
+        renderStationCard();
         renderAdvice();
         renderMap();
     }
@@ -2446,6 +2555,10 @@ export function createOpPage(ctx) {
             // 所有席位的按钮颜色都跟着快照走。
             void runDeviceCommand(chip, {id: antennaId},
                 {command: 'route', device_id: antennaId});
+        });
+        /* 频率联动开关：勾选状态存服务端，按席位生效，换浏览器/关页面都继续联动。 */
+        $('#opBandLink')?.addEventListener('change', event => {
+            void applyBandLink(event.target.checked);
         });
         $('#opBottom')?.addEventListener('pointerdown', event => {
             const button = event.target.closest('[data-op-tower]');

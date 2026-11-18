@@ -19,6 +19,7 @@ const ampModels = require('../lib/devices/amp-models.js');
 const switchLink = require('../lib/devices/switch-link.js');
 const switchModels = require('../lib/devices/switch-models.js');
 const rotatorModels = require('../lib/devices/rotator-models.js');
+const bandLink = require('../lib/devices/band-link.js');
 const service = require('../lib/devices/service.js');
 
 function fakeTransports() {
@@ -4207,4 +4208,314 @@ test('手动设备的下发指令被拒绝，并说明是设计约束', async ()
     assert.equal(result.status, 409);
     assert.equal(result.payload.error, 'device-manual');
     assert.equal(result.payload.ok, false);
+});
+
+/* 频率联动的天线形状：只用 pickAntenna 需要的字段，
+ * 与 ownership.antennas 的视图口径一致（bands / preferred / routed_by）。 */
+function linkAntenna(id, bands, options) {
+    const list = Array.isArray(bands) ? bands.slice() : [bands];
+    return Object.assign({id, name: id, bands: list, preferred: false, routed_by: []},
+        options || {});
+}
+
+test('频率联动：目标频段的天线怎么选', () => {
+    const seat = 'OP-A';
+    const run = (antennas, band, options) => bandLink.pickAntenna(Object.assign(
+        {seat, band, antennas, reachable: null}, options || {}));
+
+    // 单频段天线优先：这段频率专门架的那副，哪怕多频段天线也覆盖它。
+    const mixed = run([
+        linkAntenna('ant-multi', ['20m', '15m']),
+        linkAntenna('ant-20', ['20m'])
+    ], '20m');
+    assert.equal(mixed.antenna_id, 'ant-20');
+    assert.equal(mixed.reason, 'single-band');
+
+    // 只有一副覆盖：直接切，不需要优先标记。
+    const only = run([linkAntenna('ant-multi', ['20m', '15m'])], '20m');
+    assert.equal(only.antenna_id, 'ant-multi');
+    assert.equal(only.reason, 'only');
+
+    // 两副单频段天线并列：没设优先天线就不动手，绝不猜。
+    const tie = run([linkAntenna('ant-20a', ['20m']), linkAntenna('ant-20b', ['20m'])], '20m');
+    assert.equal(tie.antenna_id, null);
+    assert.equal(tie.reason, 'ambiguous');
+
+    // 设了优先天线才裁决得出来（id 顺序反过来也一样，靠 ID 排序取的是稳定次序）。
+    const decided = run([
+        linkAntenna('ant-20a', ['20m']),
+        linkAntenna('ant-20b', ['20m'], {preferred: true})
+    ], '20m');
+    assert.equal(decided.antenna_id, 'ant-20b');
+    assert.equal(decided.reason, 'preferred');
+
+    // 没有单频段天线、多副多频段天线并列时，同样按优先天线取。
+    const multi = run([
+        linkAntenna('ant-m1', ['20m', '10m']),
+        linkAntenna('ant-m2', ['20m', '15m'], {preferred: true})
+    ], '20m');
+    assert.equal(multi.antenna_id, 'ant-m2');
+    assert.equal(multi.reason, 'preferred');
+
+    // 两副都标了优先：等于没标，仍然不动作。
+    const greedy = run([
+        linkAntenna('ant-20a', ['20m'], {preferred: true}),
+        linkAntenna('ant-20b', ['20m'], {preferred: true})
+    ], '20m');
+    assert.equal(greedy.reason, 'ambiguous');
+
+    // 本席已经接在这频段的天线上：不重复下发，也不换到另一副等价的上去。
+    const already = run([
+        linkAntenna('ant-20a', ['20m'], {routed_by: [seat]}),
+        linkAntenna('ant-20b', ['20m'])
+    ], '20m');
+    assert.equal(already.antenna_id, 'ant-20a');
+    assert.equal(already.reason, 'already');
+
+    // 联动不抢占：全被别的席位接通着就等着。
+    const occupied = run([linkAntenna('ant-20', ['20m'], {routed_by: ['OP-B']})], '20m');
+    assert.equal(occupied.antenna_id, null);
+    assert.equal(occupied.reason, 'occupied');
+
+    // 被邻座占用的那副排除后还有空闲的，照切。
+    const halfFree = run([
+        linkAntenna('ant-20a', ['20m'], {routed_by: ['OP-B']}),
+        linkAntenna('ant-20b', ['20m'])
+    ], '20m');
+    assert.equal(halfFree.antenna_id, 'ant-20b');
+
+    // 物理够不着的天线不参与：reachable 就是天线切换容器里能点的那些。
+    const unreachable = run([linkAntenna('ant-20', ['20m'])], '20m', {reachable: ['ant-other']});
+    assert.equal(unreachable.reason, 'no-antenna');
+
+    // 该频段压根没有天线 / 电台还没报频段。
+    assert.equal(run([linkAntenna('ant-40', ['40m'])], '20m').reason, 'no-antenna');
+    assert.equal(run([linkAntenna('ant-20', ['20m'])], '').reason, 'no-band');
+});
+
+test('频率联动：开关存在 global 里，打开即重判，非法席位键拒绝', () => {
+    const globalCtx = makeContext();
+    const now = new Date('2026-03-01T12:00:00.000Z');
+
+    assert.equal(bandLink.anyEnabled(bandLink.readState(globalCtx)), false);
+
+    const opened = bandLink.setEnabled(globalCtx, {seat: ' OP-A ', enabled: true,
+        operator: 'BG7TV', now});
+    assert.equal(opened.ok, true);
+    assert.equal(opened.seat, 'OP-A');
+    assert.equal(globalCtx.store.bandLink.seats['OP-A'].enabled, true);
+    assert.equal(bandLink.anyEnabled(bandLink.readState(globalCtx)), true);
+
+    // 打开之后先记上一次判定的结果，再打开一次要清掉旧结论与待重试。
+    const state = bandLink.readState(globalCtx);
+    state.seats['OP-A'].seen_band = '40m';
+    state.seats['OP-A'].pending = {band: '40m', antenna_id: 'ant-40', attempts: 3, next_ms: 1};
+    bandLink.writeState(globalCtx, state);
+    bandLink.setEnabled(globalCtx, {seat: 'OP-A', enabled: true, now});
+    const reopened = bandLink.readState(globalCtx).seats['OP-A'];
+    assert.equal(reopened.seen_band, undefined);
+    assert.equal(reopened.pending, undefined);
+
+    // 关掉只改开关，不动持久化的判定记录；快照视图给界面的就是这些。
+    bandLink.setEnabled(globalCtx, {seat: 'OP-A', enabled: false, now});
+    const view = bandLink.view(globalCtx);
+    assert.equal(view.seats['OP-A'].enabled, false);
+    assert.equal(view.seats['OP-A'].operator, 'BG7TV');
+    assert.equal(view.retry_limit, bandLink.TX_RETRY_LIMIT);
+
+    // 席位键含管道符（RUN|B 这类）一律拒绝：这类键没法和服务端对齐。
+    assert.equal(bandLink.normalizeSeat('RUN|B'), '');
+    const rejected = bandLink.setEnabled(globalCtx, {seat: 'RUN|B', enabled: true, now});
+    assert.equal(rejected.ok, false);
+    assert.equal(rejected.status, 400);
+    assert.equal(rejected.error, 'seat-required');
+
+    // 脏数据进 global 也要被重洗：未知席位、错误类型、超长字符串。
+    bandLink.writeState(globalCtx, {version: 1, seats: {
+        'OP-B': {enabled: 'yes', operator: 'x'.repeat(80), seen_band: '  40M '},
+        'bad|seat': {enabled: true},
+        'OP-C': 'not-an-object'
+    }});
+    const cleaned = bandLink.readState(globalCtx);
+    assert.deepEqual(Object.keys(cleaned.seats), ['OP-B', 'OP-C']);
+    assert.equal(cleaned.seats['OP-B'].enabled, false);
+    assert.equal(cleaned.seats['OP-B'].operator.length, 40);
+    assert.equal(cleaned.seats['OP-B'].seen_band, '40m');
+    assert.deepEqual(cleaned.seats['OP-C'], {enabled: false});
+});
+
+test('频率联动：优先天线落在天线属性里，配置与快照都透传', () => {
+    const saved = model.normalizeDevice(
+        {id: 'ant-p', name: 'Preferred', type: 'antenna', bands: '20m',
+            config: {preferred: true}},
+        {devices: []});
+    assert.equal(saved.ok, true);
+    assert.equal(saved.device.config.preferred, true);
+
+    // 关掉标记要彻底删除，不能留 '0'/'false' 这种字符串混进判定。
+    const off = model.normalizeDevice(
+        {id: 'ant-p', name: 'Preferred', type: 'antenna', bands: '20m',
+            config: {preferred: 0}},
+        {devices: [saved.device]});
+    assert.equal(Object.prototype.hasOwnProperty.call(off.device.config, 'preferred'), false);
+    assert.equal(model.normalizeDevice(
+        {id: 'ant-q', type: 'antenna', name: 'Q', bands: '20m',
+            config: {preferred: 'true'}}, {devices: []})
+        .device.config.preferred, true);
+
+    // 白名单之外的键照旧丢弃：天线只有一个开关，别的属性不能从这条路混进来。
+    const smuggled = model.normalizeDevice(
+        {id: 'ant-r', type: 'antenna', name: 'R', bands: '20m',
+            config: {preferred: true, host: 'evil'}}, {devices: []});
+    assert.deepEqual(Object.keys(smuggled.device.config), ['preferred']);
+});
+
+test('频率联动：换频段才下发，同频段与占用中的频段不重复动手', async () => {
+    const now = new Date('2026-03-01T12:00:00.000Z');
+    const globalCtx = makeContext();
+    bandLink.setEnabled(globalCtx, {seat: 'OP-A', enabled: true, operator: 'BG7TV', now});
+    const antennas = [
+        linkAntenna('ant-20', '20m'),
+        linkAntenna('ant-40', '40m')
+    ];
+    const calls = [];
+    const route = async item => {
+        calls.push(item);
+        return {status: 200, payload: {ok: true}, sql: ['INSERT INTO audit'], broadcast: {type: 'devices'}};
+    };
+    const run = async (band, at, routed) => {
+        if (routed) antennas.forEach(item => { item.routed_by = item.id === routed ? ['OP-B'] : []; });
+        const state = bandLink.readState(globalCtx);
+        const result = await bandLink.tick({now: at, state, antennas,
+            seats: [{seat: 'OP-A', band, online: true, reachable: ['ant-20', 'ant-40']}], route});
+        bandLink.writeState(globalCtx, state);
+        return result;
+    };
+
+    const first = await run('40m', now);
+    assert.equal(first.actions.length, 1);
+    assert.equal(first.actions[0].antenna_id, 'ant-40');
+    assert.equal(first.actions[0].reason, 'single-band');
+    assert.equal(first.actions[0].executed, true);
+    assert.deepEqual(calls, [{seat: 'OP-A', operator: 'BG7TV', antenna_id: 'ant-40'}]);
+    assert.deepEqual(first.sql, ['INSERT INTO audit']);
+    assert.equal(first.broadcasts.length, 1);
+    assert.equal(bandLink.readState(globalCtx).seats['OP-A'].seen_band, '40m');
+    assert.equal(bandLink.readState(globalCtx).seats['OP-A'].last.status, 200);
+
+    // 同一次轮询里频段没变：一条命令都不发。
+    const again = await run('40m', new Date(now.getTime() + 2000));
+    assert.equal(again.actions.length, 0);
+    assert.equal(calls.length, 1);
+
+    // 换到 20m，但那副正被邻座接通：联动不抢占，原因写进状态给界面看。
+    const blocked = await run('20m', new Date(now.getTime() + 4000), 'ant-20');
+    assert.equal(blocked.actions.length, 1);
+    assert.equal(blocked.actions[0].reason, 'occupied');
+    assert.equal(blocked.actions[0].executed, false);
+    assert.equal(calls.length, 1);
+    assert.equal(bandLink.readState(globalCtx).seats['OP-A'].last.reason, 'occupied');
+
+    // 邻座后来放开了也不补动作：联动只在频段真正变化时判定，不反复拨切换器。
+    const cleared = await run('20m', new Date(now.getTime() + 6000), null);
+    assert.equal(cleared.actions.length, 0);
+    assert.equal(calls.length, 1);
+});
+
+test('频率联动：发射中挂起重试，次数用完明确放弃', async () => {
+    const now = new Date('2026-03-01T12:00:00.000Z');
+    const globalCtx = makeContext();
+    bandLink.setEnabled(globalCtx, {seat: 'OP-A', enabled: true, operator: 'BG7TV', now});
+    const antennas = [linkAntenna('ant-40', '40m')];
+    const calls = [];
+    const route = async item => {
+        calls.push(item.antenna_id);
+        return {status: 423, payload: {ok: false, error: 'tx-active'}};
+    };
+    const run = async at => {
+        const state = bandLink.readState(globalCtx);
+        const result = await bandLink.tick({now: at, state, antennas,
+            seats: [{seat: 'OP-A', band: '40m', online: true, reachable: ['ant-40']}], route});
+        bandLink.writeState(globalCtx, state);
+        return result;
+    };
+
+    const first = await run(now);
+    assert.equal(first.actions[0].reason, 'tx-active');
+    assert.equal(first.actions[0].retry, false);
+    const pending = bandLink.readState(globalCtx).seats['OP-A'].pending;
+    assert.equal(pending.antenna_id, 'ant-40');
+    assert.equal(pending.attempts, 1);
+    assert.equal(pending.next_ms, now.getTime() + bandLink.TX_RETRY_DELAY_MS);
+    // 挂起期间频段已经算“见过”，不会每两轮就重判一次，只按 next_ms 重试。
+    assert.equal(bandLink.readState(globalCtx).seats['OP-A'].seen_band, '40m');
+
+    assert.equal((await run(new Date(now.getTime() + 5000))).actions.length, 0);
+    assert.equal(calls.length, 1);
+
+    let at = now.getTime() + bandLink.TX_RETRY_DELAY_MS;
+    for (let i = 0; i < bandLink.TX_RETRY_LIMIT - 1; i++) {
+        await run(new Date(at));
+        at += bandLink.TX_RETRY_DELAY_MS;
+    }
+    assert.equal(calls.length, bandLink.TX_RETRY_LIMIT);
+
+    const gaveUp = await run(new Date(at));
+    assert.equal(calls.length, bandLink.TX_RETRY_LIMIT);
+    assert.equal(gaveUp.actions.length, 1);
+    assert.equal(gaveUp.actions[0].reason, 'tx-active');
+    assert.equal(gaveUp.actions[0].executed, false);
+    assert.equal(gaveUp.actions[0].retry, true);
+    const entry = bandLink.readState(globalCtx).seats['OP-A'];
+    assert.equal(entry.pending, undefined);
+    assert.equal(entry.last.status, 423);
+    assert.equal(entry.last.antenna_name, 'ant-40');
+});
+
+test('频率联动：API 动作、快照字段与轮询入口', async () => {
+    const fx = antSwitchFixture();
+    const globalCtx = makeContext({radioStates: fx.radioStates});
+    fakeTransports();
+
+    const closed = await service.bandLinkTick(globalCtx, fx.rows, fx.now);
+    assert.equal(closed.skipped, 'disabled');
+    assert.equal(closed.actions.length, 0);
+
+    const opened = service.handle(globalCtx, fx.rows,
+        {action: 'band-link', seat: 'OP-A', enabled: true, operator: 'BG7TV'}, fx.now);
+    assert.equal(opened.status, 200);
+    assert.equal(opened.payload.enabled, true);
+    assert.equal(opened.broadcast.action, 'band-link');
+    assert.equal(opened.sql.length, 0);
+    assert.equal(service.snapshot(globalCtx, fx.rows, fx.now).band_link.seats['OP-A'].enabled, true);
+    assert.equal(service.handle(globalCtx, fx.rows, {action: 'band-link', enabled: true}, fx.now).status, 400);
+
+    /* 真链路：OP-A 在 40m（7020 kHz），矩阵后面那副 40m 天线没人用，
+     * 一轮轮询就把 in1 拨到 out4，走的是和手动点天线完全一样的 route 指令。 */
+    const ticked = await service.bandLinkTick(globalCtx, fx.rows, fx.now);
+    assert.equal(ticked.actions.length, 1);
+    assert.equal(ticked.actions[0].antenna_id, 'ant-40');
+    // 矩阵没有读回：202 表示命令已下发、硬件尚未证实，和手动点天线的口径一致。
+    assert.equal(ticked.actions[0].status, 202, JSON.stringify(ticked.actions[0]));
+    assert.equal(ticked.actions[0].reason, 'single-band');
+    assert.ok(ticked.sql.length > 0);
+
+    const after = service.snapshot(globalCtx, fx.rows, fx.now);
+    assert.deepEqual(after.ownership.by_seat['OP-A'].ant_switch.routed, ['ant-40']);
+
+    // 频段没再变化：第二轮一条命令都不发。
+    const idle = await service.bandLinkTick(globalCtx, fx.rows,
+        new Date(fx.now.getTime() + 2000));
+    assert.equal(idle.actions.length, 0);
+    assert.equal(idle.broadcast, null);
+
+    // 电台切到 80m：矩阵换到 out5，仍然只拨本席位 in1 那一路，不动邻座的档位。
+    globalCtx.set('radioStates', Object.assign({}, fx.radioStates, {
+        'OP-A': {ts: fx.now.toISOString(), freqKhz: 3520, computerName: 'pc-a', radioName: 'IC-7610'}
+    }));
+    const switched = await service.bandLinkTick(globalCtx, fx.rows,
+        new Date(fx.now.getTime() + 4000));
+    assert.equal(switched.actions.length, 1);
+    assert.equal(switched.actions[0].antenna_id, 'ant-80');
+    assert.equal(switched.actions[0].status, 202, JSON.stringify(switched.actions[0]));
 });

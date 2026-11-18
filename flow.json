@@ -5833,5 +5833,101 @@
         "wires": [
             []
         ]
+    },
+    {
+        "id": "dxdev00000000b0",
+        "type": "inject",
+        "z": "dxdev0000000000",
+        "name": "Band link poll",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "2",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "6",
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 170,
+        "y": 1160,
+        "wires": [
+            [
+                "dxdev00000000b1"
+            ]
+        ]
+    },
+    {
+        "id": "dxdev00000000b1",
+        "type": "function",
+        "z": "dxdev0000000000",
+        "name": "Prepare band link",
+        "func": "await global.get('dx').ready.whenReady();\nconst dx = global.get('dx');\nmsg.topic = dx.storage.devices.snapshotQuery();\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 380,
+        "y": 1160,
+        "wires": [
+            [
+                "dxdev00000000b2"
+            ]
+        ]
+    },
+    {
+        "id": "dxdev00000000b2",
+        "type": "sqlite",
+        "z": "dxdev0000000000",
+        "mydb": "dxc0000000000027",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "Read devices for band link",
+        "x": 600,
+        "y": 1160,
+        "wires": [
+            [
+                "dxdev00000000b3"
+            ]
+        ]
+    },
+    {
+        "id": "dxdev00000000b3",
+        "type": "function",
+        "z": "dxdev0000000000",
+        "name": "Run band link",
+        "func": "await global.get('dx').ready.whenReady();\nconst dx = global.get('dx');\nconst result = await dx.devices.bandLinkTick(global, msg.payload, new Date());\nif (result.actions.length) {\n    node.log('band-link: ' + result.actions.map(item => [\n        item.seat,\n        (item.from || '?') + '->' + item.band,\n        item.reason,\n        item.antenna_id || '-',\n        item.error ? '(' + item.error + ')' : ''\n    ].join(' ')).join(' | '));\n}\nconst write = result.sql && result.sql.length ? {topic: result.sql.join('\\n')} : null;\nconst broadcast = result.broadcast\n    ? {payload: Object.assign({ok: true, server_ts: new Date().toISOString()}, result.broadcast)}\n    : null;\nreturn [write, broadcast];",
+        "outputs": 2,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 840,
+        "y": 1160,
+        "wires": [
+            [
+                "dxdev00000000b4"
+            ],
+            [
+                "dxc000000000000e"
+            ]
+        ]
+    },
+    {
+        "id": "dxdev00000000b4",
+        "type": "sqlite",
+        "z": "dxdev0000000000",
+        "mydb": "dxc0000000000027",
+        "sqlquery": "batch",
+        "sql": "",
+        "name": "Apply band link audit",
+        "x": 1090,
+        "y": 1160,
+        "wires": [
+            []
+        ]
     }
 ]

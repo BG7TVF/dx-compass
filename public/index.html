@@ -183,6 +183,19 @@
                 <div class="op-amp-grid" id="opAmpGrid"></div>
             </section>
 
+            <!-- 电台卡片：本席位电台的收发/波段/频率/模式，加上频率联动开关。
+                 开关存服务端，页面关掉一样继续联动。 -->
+            <section class="op-card op-station-card">
+                <div class="op-bottom-head">
+                    <h3 id="opStationTitle" data-i18n="op.station.title">Station</h3>
+                    <label class="op-station-link" for="opBandLink">
+                        <input type="checkbox" id="opBandLink">
+                        <span id="opBandLinkLabel" data-i18n="op.station.link">Band link</span>
+                    </label>
+                </div>
+                <div class="op-station-body" id="opStationBody"></div>
+            </section>
+
             <!-- row 4: five data cells -->
             <section class="op-card op-rate-card">
                 <h3><span id="opRateTitle">QSO rate</span><span class="op-rate-note" id="opRateNote"></span></h3>
