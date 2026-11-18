@@ -1594,7 +1594,11 @@ export function createOpPage(ctx) {
             .sort((a, b) => String(a.name || a.id).localeCompare(String(b.name || b.id)));
     }
 
-    function ampIdentity(device) {
+    function ampIdentity(device, manual) {
+        /* 手动设备没有接入：config 里剩下的 brand/model 只是上一次接入时留下的
+         * 配置，上报页面在手动模式下也把这两个字段一起收起来了。这里跟着不印
+         * 型号，否则改成手动设备后，OP 的功放卡还挂着之前的型号。 */
+        if (manual) return {brand: '', model: ''};
         const snapshot = deviceSnapshot() || {};
         const catalog = snapshot.amp_models || {};
         const config = (device && device.config) || {};
@@ -1716,10 +1720,13 @@ export function createOpPage(ctx) {
         const amp = status.amp || null;
         const hasReading = !!amp;
         const offline = status.state === 'offline';
+        /* 手动设备既可能由状态位给出，也可能只在设备行上标了 access_mode；
+         * 两处任一说是手动，这张卡就不再有型号，也不再有读数。 */
+        const manual = status.state === 'manual' || device.access_mode === 'manual';
         const stale = offline && hasReading;
         const transmitting = !stale && ampTransmitting(amp);
         const alarm = !!(amp && amp.alarm_active);
-        const identity = ampIdentity(device);
+        const identity = ampIdentity(device, manual);
         const rawFrequency = ampValue(amp && amp.work_freq);
         /* 0 Hz means "not tuned", so it gets no readout rather than 0.000. */
         const frequency = rawFrequency !== null && rawFrequency > 0 ? rawFrequency : null;
@@ -1744,7 +1751,7 @@ export function createOpPage(ctx) {
         /* 画面永远画出来：没有读数时刻度条与参数行照旧绘制，只把「为什么
          * 还没有数」压进右上角的标签，不再整块换成占位文字。 */
         if (!hasReading) {
-            const reason = status.state === 'manual' ? t('op.amp.manual')
+            const reason = manual ? t('op.amp.manual')
                 : status.state === 'no-source' ? t('op.amp.noSource')
                 : offline ? t('op.amp.offline') : t('op.amp.waiting');
             flags.push('<span class="op-amp-chip">' + esc(reason) + '</span>');

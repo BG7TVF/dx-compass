@@ -360,6 +360,12 @@ test('OP 功放面板：只列本席位链路上的功放，画面永远画出�
     assert.match(op, /:\s*ampSkeleton\(t\('op\.amp\.none'/);
     assert.match(op, /grid\.innerHTML = ampSkeleton\(t\('op\.amp\.loading'\)/);
     assert.doesNotMatch(op, /op-amp-empty/);
+    // 手动设备：上报页面已经收起品牌/型号字段，config 里残留的旧型号不能再印到
+    // 功放卡上，否则改成手动设备后 OP 还挂着之前设置的型号。
+    assert.match(op, /function ampIdentity\(device, manual\)/);
+    assert.match(op, /if \(manual\) return \{brand: '', model: ''\};/);
+    assert.match(op, /const identity = ampIdentity\(device, manual\);/);
+    assert.match(op, /const reason = manual \? t\('op\.amp\.manual'\)/);
 
     // 功放主容器让出第 3 行第 4 列（300px），给下一步的容器。
     const css = read('public', 'css', 'op.css');
