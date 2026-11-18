@@ -36,7 +36,8 @@
  * time, and auto-placement would otherwise leave the 1fr track to whatever
  * comes last. */
 .op-view > .op-seat-card { grid-column: 1; grid-row: 1; }
-.op-view > .op-advice { grid-column: 2 / -1; grid-row: 1; }
+.op-view > .op-advice { grid-column: 2 / 4; grid-row: 1; }
+.op-view > .op-bandocc { grid-column: 4 / 6; grid-row: 1; }
 .op-view > .op-opp-card { grid-column: 1; grid-row: 2; }
 .op-view > .op-center { grid-column: 2 / 4; grid-row: 2; }
 .op-view > .op-device-card { grid-column: 4; grid-row: 2; }
@@ -163,6 +164,59 @@
 }
 
 .op-rail { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+/* Band-occupancy strip: the space the advice banner gave up. One compact row
+ * of the ten HF bands, colour = state, callsigns stacked under the band.
+ * Green/red/yellow reuse the console tokens; the ink is dark so it stays
+ * legible on all three fills. */
+.op-bandocc-body {
+    display: flex;
+    align-items: stretch;
+    gap: 4px;
+    flex-wrap: nowrap;
+    min-width: 0;
+    overflow-x: auto;
+    padding: 6px;
+}
+.op-bandocc-cell {
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+    padding: 3px 2px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    background: var(--panel-2);
+    color: #06121f;
+}
+.op-bandocc-cell.free { background: var(--green); }
+.op-bandocc-cell.occupied { background: var(--red); }
+.op-bandocc-cell.preempted { background: var(--yellow); }
+.op-bandocc-band { font-size: 11px; font-weight: 700; line-height: 1.1; }
+.op-bandocc-calls {
+    min-height: 10px;
+    font-size: 9px;
+    line-height: 1.15;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+}
+.op-bandocc-legend {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 3px 8px 6px;
+    border-top: 1px solid var(--border);
+    font-size: 9px;
+    color: var(--text-dim);
+}
+.op-bandocc-legend span { display: inline-flex; align-items: center; gap: 4px; }
+.op-bandocc-legend i { width: 10px; height: 10px; border-radius: 2px; border: 1px solid var(--border); }
+.op-bandocc-legend i.free { background: var(--green); }
+.op-bandocc-legend i.occupied { background: var(--red); }
+.op-bandocc-legend i.preempted { background: var(--yellow); }
+
 /* Side stack: space weather and band conditions keep their natural height,
  * workability takes the rest so the column bottom lands on the grid line. */
 .op-right { min-height: 0; }

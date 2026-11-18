@@ -37,6 +37,9 @@ const AMP_POWER_MAX = 2000;
 const AMP_SWR_MIN = 1;
 const AMP_SWR_MAX = 3;
 const AMP_SWR_LIMIT = 2;
+/* Fixed ruler of the band-occupancy strip: the ten HF bands, in band order.
+ * VHF and above are out of scope, exactly like the operator's draft. */
+const HF_BANDS = ['160M', '80M', '60M', '40M', '30M', '20M', '17M', '15M', '12M', '10M'];
 
 const timeOf = value => {
     const time = new Date(value).getTime();
@@ -564,6 +567,75 @@ export function createOpPage(ctx) {
         if (band) return band.toLowerCase();
         const latest = lastQsoFor(key);
         return latest ? bandKey(latest.band || bandLabel(latest.freqKhz)).toLowerCase() : '';
+    }
+
+    /* A switcher/matrix that is actually wired up (not disabled, not manual)
+     * is the only thing that can move an antenna to a band the radio is not
+     * on, so the strip only shows pre-emption when one exists. */
+    function hasActiveSwitcher() {
+        const snapshot = deviceSnapshot();
+        if (!snapshot || !Array.isArray(snapshot.devices)) return false;
+        return snapshot.devices.some(device =>
+            (device.type === 'switch' || device.type === 'matrix') &&
+            device.enabled !== false && device.access_mode !== 'manual');
+    }
+
+    /* Band-occupancy strip: one cell per HF band.
+     *   occupied  — a seat's radio is on this band (bandOf(freqKhz)).
+     *   preempted — a seat claimed a frequency on this band while its radio is
+     *               still elsewhere; only meaningful with an active switcher.
+     *   free      — neither. The radio/station label (never the operator
+     *               callsign) stacks under the band; multiple seats on the
+     *               same band are listed together. */
+    function renderBandOccupancy() {
+        const body = $('#opBandOccBody');
+        if (!body) return;
+        const occupied = new Map();
+        for (const key of Object.keys(radios())) {
+            const radio = radios()[key] || {};
+            const freq = Number(radio.freqKhz);
+            if (!Number.isFinite(freq) || freq <= 0) continue;
+            const band = bandOf(freq);
+            if (!HF_BANDS.includes(band)) continue;
+            const list = occupied.get(band) || [];
+            const who = radioName(key);
+            if (who && !list.includes(who)) list.push(who);
+            occupied.set(band, list);
+        }
+        const preempted = new Map();
+        if (hasActiveSwitcher()) {
+            for (const claim of frequencyClaims()) {
+                const freq = Number(claim && claim.freqKhz);
+                if (!Number.isFinite(freq) || freq <= 0) continue;
+                const band = bandOf(freq);
+                if (!HF_BANDS.includes(band)) continue;
+                const seatRadio = radioOf(claim.seat) || {};
+                const seatFreq = Number(seatRadio.freqKhz);
+                const seatBand = Number.isFinite(seatFreq) && seatFreq > 0 ? bandOf(seatFreq) : '';
+                if (seatBand === band) continue; // radio already here → occupied, not pre-empted
+                const list = preempted.get(band) || [];
+                const who = radioName(claim.seat);
+                if (who && !list.includes(who)) list.push(who);
+                preempted.set(band, list);
+            }
+        }
+        body.innerHTML = HF_BANDS.map(band => {
+            const occ = occupied.get(band);
+            const pre = preempted.get(band);
+            let cls = 'free';
+            let calls = [];
+            if (occ && occ.length) { cls = 'occupied'; calls = occ; }
+            else if (pre && pre.length) { cls = 'preempted'; calls = pre; }
+            return '<div class="op-bandocc-cell ' + cls + '">' +
+                '<span class="op-bandocc-band">' + esc(band) + '</span>' +
+                '<span class="op-bandocc-calls">' + calls.map(call => esc(call)).join('<br>') +
+                '</span></div>';
+        }).join('');
+        const legend = $('#opBandOccLegend');
+        if (legend) {
+            legend.innerHTML = ['free', 'occupied', 'preempted'].map(item =>
+                '<span><i class="' + item + '"></i>' + esc(t('op.bandocc.' + item)) + '</span>').join('');
+        }
     }
 
     function renderMultipliers() {
@@ -1274,6 +1346,7 @@ export function createOpPage(ctx) {
         renderBottom();
         renderAmps();
         updateMapHint();
+        renderBandOccupancy();
         if (state.map) state.map.setCoverage(activeAzimuth());
     }
 
@@ -2000,6 +2073,7 @@ export function createOpPage(ctx) {
         renderBottom();
         renderAmps();
         updateMapHint();
+        renderBandOccupancy();
         renderAdvice();
         renderMap();
     }
@@ -2067,6 +2141,7 @@ export function createOpPage(ctx) {
         renderSeatOptions();
         renderBottom();
         renderMultipliers();
+        renderBandOccupancy();
         renderAdvice();
     }
 
@@ -2152,6 +2227,7 @@ export function createOpPage(ctx) {
         $('#opMultExpand').textContent = state.multExpanded ? t('op.mult.collapse') : t('op.mult.expand');
         $('#opBottomTitle').textContent = t('op.bottom.devices');
         $('#opAmpTitle').textContent = t('op.amp.title');
+        $('#opBandOccTitle').textContent = t('op.bandocc.title');
     }
 
     function bind() {
