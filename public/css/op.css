@@ -220,53 +220,58 @@
 .op-bandocc-legend i.preempted { background: var(--yellow); }
 
 /* 天线切换容器：一副天线一个按钮，标签只有天线名（不显示占用者）。
- * 三态配色直接沿用波段占用那套绿/红/黄，不另发明颜色；列宽只有 300px，
- * 天线可能有 6~16 副，所以用紧凑 chip 换行排布并封顶容器高度，
- * 让第 3 行的实际高度仍由功放面板决定。 */
+ * 三态配色直接沿用波段占用那套绿/红/黄，不另发明颜色。
+ * 第 4 列只有 300px，而天线名是“40M/80M 2ele 18m”这种长串，
+ * 小 chip 挤在一排根本看不清，所以按两列排、每个按钮一行高、
+ * 允许换行显示完整名称；超过三行才在容器内滚动，
+ * 第 3 行的整体高度仍大致跟着功放面板走，不把地图挤掉。 */
 .op-antswitch {
     flex: 1;
     min-height: 0;
-    max-height: 116px;
+    max-height: 152px;
     display: flex;
-    padding: 6px;
+    padding: 8px;
     overflow: hidden;
 }
 /* .op-device 只是 deviceFeedback 的落点（closest + .op-device-result），
- * 这里把它压回容器外观，只保留 flex 换行。 */
+ * 这里把它压回容器外观，只保留两列网格。 */
 .op-antswitch .op-device {
     flex: 1 1 auto;
     min-width: 0;
-    display: flex;
-    flex-wrap: wrap;
-    align-content: flex-start;
-    gap: 4px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(124px, 1fr));
+    grid-auto-rows: minmax(36px, auto);
+    align-content: start;
+    gap: 7px;
     padding: 0;
     border: 0;
     background: none;
     overflow-y: auto;
 }
 .op-antswitch-btn {
-    flex: 0 1 auto;
     min-width: 0;
-    max-width: 100%;
-    padding: 3px 7px;
-    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px 8px;
+    border: 1px solid rgba(0, 0, 0, .42);
     border-radius: var(--r-sm);
     background: var(--panel-2);
     color: #06121f;
-    font-size: 10px;
-    font-weight: 600;
-    line-height: 1.2;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.15;
+    text-align: center;
+    white-space: normal;
+    overflow-wrap: anywhere;
     cursor: pointer;
 }
 .op-antswitch-btn.free { background: var(--green); }
 .op-antswitch-btn.occupied { background: var(--red); }
 .op-antswitch-btn.preempted { background: var(--yellow); }
 .op-antswitch-btn:hover { filter: brightness(1.12); }
-.op-antswitch .op-device-result { flex: 1 1 100%; }
+.op-antswitch-btn:active { transform: translateY(1px); }
+.op-antswitch .op-device-result { grid-column: 1 / -1; }
 /* 接通只来自下发的命令、硬件还没回读证实：标题旁的弱提示，不改按钮主色。 */
 .op-antswitch-pending { color: var(--yellow); }
 
