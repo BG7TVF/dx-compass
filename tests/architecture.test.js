@@ -347,6 +347,26 @@ test('operational UI does not render operator callsigns', () => {
     assert.doesNotMatch(read('public', 'bigscreen', 'index.html'), /id="opList"/);
 });
 
+test('OP 功放面板：只列本席位链路上的功放，画面永远画出来', () => {
+    const op = read('public', 'js', 'pages', 'op-page.mjs');
+    // 功放归属读服务端沿 RF 连线的投影（ownership.by_seat[seat].amps），
+    // 前端不重算走线；只有投影没有结论时才退回全部功放。
+    assert.match(op, /const bySeat = \(\(deviceSnapshot\(\) \|\| \{\}\)\.ownership \|\| \{\}\)\.by_seat \|\| \{\}/);
+    assert.match(op, /Array\.isArray\(view\.amps\)/);
+    assert.match(op, /\.filter\(device => !allowed \|\| allowed\.has\(String\(device\.id\)\)\)/);
+    // 没有读数也画刻度：空值安全 + 面板一律走 ampReadings，状态原因压进标签。
+    assert.match(op, /function ampReadings\(amp, stale\) \{\r?\n\s*const data = amp \|\| \{\}/);
+    assert.match(op, /const face = ampReadings\(amp, stale\);/);
+    assert.match(op, /:\s*ampSkeleton\(t\('op\.amp\.none'/);
+    assert.match(op, /grid\.innerHTML = ampSkeleton\(t\('op\.amp\.loading'\)/);
+    assert.doesNotMatch(op, /op-amp-empty/);
+
+    // 功放主容器让出第 3 行第 4 列（300px），给下一步的容器。
+    const css = read('public', 'css', 'op.css');
+    assert.match(css, /\.op-view > \.op-amp-bay \{ grid-column: 1 \/ 4; grid-row: 3; \}/);
+    assert.doesNotMatch(css, /\.op-amp-empty/);
+});
+
 test('cold-start entry points wait for the readiness gate', () => {
     const gate = read('nodes', 'ready-gate.js');
     assert.ok(fs.existsSync(path.join(ROOT, 'nodes', 'ready-gate.html')),

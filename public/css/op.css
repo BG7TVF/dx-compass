@@ -42,7 +42,8 @@
 .op-view > .op-center { grid-column: 2 / 4; grid-row: 2; }
 .op-view > .op-device-card { grid-column: 4; grid-row: 2; }
 .op-view > .op-right { grid-column: 5; grid-row: 2 / 4; }
-.op-view > .op-amp-bay { grid-column: 1 / 5; grid-row: 3; }
+/* 功放面板只占第 3 行前 3 列：第 4 列（300px）留给下一步的容器。 */
+.op-view > .op-amp-bay { grid-column: 1 / 4; grid-row: 3; }
 .op-view > .op-rate-card { grid-column: 1; grid-row: 4; }
 .op-view > .op-total-card { grid-column: 2; grid-row: 4; }
 .op-view > .op-bandqso-card { grid-column: 3; grid-row: 4; }
@@ -1189,31 +1190,19 @@
 }
 .op-amp-metrics u { text-decoration: none; font-size: 8px; color: var(--text-dim); }
 
-/* No readings: an explicit face, never a zeroed gauge. */
-.op-amp-empty {
-    grid-area: 2 / 1 / 4 / -1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 1px;
-    min-height: 94px;
-    padding: 6px;
-    border: 1px dashed color-mix(in srgb, var(--text-dim) 32%, transparent);
-    border-radius: var(--r-sm);
-    background: repeating-linear-gradient(135deg,
-        transparent 0 6px,
-        color-mix(in srgb, var(--text-dim) 4%, transparent) 6px 12px);
-    text-align: center;
+/* 没有功放、或功放还没有读数：照样是一块画好的面板，虚线边框 + 压暗的
+ * 标题表示空位，刻度条不画零宽度的高光。 */
+.op-amp[data-state="empty"] {
+    border-style: dashed;
+    border-color: color-mix(in srgb, var(--text-dim) 32%, transparent);
 }
-.op-amp-empty b {
+.op-amp[data-state="empty"] > .op-amp-id > b {
     font-size: 11px;
     font-weight: 700;
     letter-spacing: .16em;
     color: var(--text-dim);
 }
-.op-amp-empty span { font-size: 10px; color: var(--text); }
-.op-amp-empty em { font-style: normal; font-size: 8px; color: var(--text-dim); }
+.op-amp[data-state="empty"] .op-amp-track > i { visibility: hidden; }
 
 /* Held readings: a hatch behind the LCD says "this is not live". */
 .op-amp-hatch {

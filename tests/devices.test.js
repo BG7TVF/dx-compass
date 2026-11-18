@@ -1774,12 +1774,15 @@ test('ownership follows RF reachability and falls back to band matching', () => 
             config_json: JSON.stringify({computer: 'PC-A', model: 'IC-7610'})
         }),
         device({id: 'amp-1', type: 'amp', bands: ''}),
+        // 同轴确实串在链路上，却明确只做 40m：A 席在 20m 时不算在用。
+        device({id: 'amp-40', type: 'amp', bands: '40m'}),
         device({id: 'ant-20', type: 'antenna', bands: '20m'}),
         device({id: 'ant-other', type: 'antenna', bands: '20m'})
     ];
     const links = [
         rfRow('radio-1', 'out', 'amp-1', 'in'),
-        rfRow('amp-1', 'out', 'ant-20', 'in')
+        rfRow('amp-1', 'out', 'ant-20', 'in'),
+        rfRow('radio-1', 'out', 'amp-40', 'in')
     ];
     const radioStates = {
         'OP-A': {
@@ -1792,6 +1795,8 @@ test('ownership follows RF reachability and falls back to band matching', () => 
     assert.equal(linked.by_seat['OP-A'].source, 'rf');
     assert.deepEqual(linked.by_seat['OP-A'].candidates, ['ant-20']);
     assert.deepEqual(linked.by_seat['OP-A'].radios, ['radio-1']);
+    // 本席位链路上的功放：只做 40m 的那台不算在 20m 席位在用。
+    assert.deepEqual(linked.by_seat['OP-A'].amps, ['amp-1']);
     assert.equal(linked.by_seat['OP-A'].colors['ant-20'], 'red');
     assert.equal(linked.by_seat['OP-A'].colors['ant-other'], 'green');
     assert.deepEqual(linked.antennas.find(item => item.id === 'ant-20').owners, ['OP-A']);
@@ -1801,6 +1806,8 @@ test('ownership follows RF reachability and falls back to band matching', () => 
     assert.equal(fallback.by_seat['OP-A'].source, 'band-fallback');
     assert.deepEqual(fallback.by_seat['OP-A'].candidates.sort(), ['ant-20', 'ant-other']);
     assert.equal(fallback.by_seat['OP-A'].ambiguous, true);
+    // 连线投影给不出结论：amps 为 null，让界面自己退回，而不是当成“没有功放”。
+    assert.equal(fallback.by_seat['OP-A'].amps, null);
 
     // 席位切换波段后，RF 路径重新按当前波段判定。
     const switched = ownership.project({
@@ -1811,6 +1818,20 @@ test('ownership follows RF reachability and falls back to band matching', () => 
     });
     assert.deepEqual(switched.by_seat['OP-A'].candidates, []);
     assert.equal(switched.by_seat['OP-A'].colors['ant-20'], 'green');
+    // 这次报文认不到电台节点：链路结论同样给不出，amps 为 null。
+    assert.equal(switched.by_seat['OP-A'].amps, null);
+
+    // 换到 40m：全波段的那台仍在链路里，只做 40m 的那台也归本席位在用。
+    const onForty = ownership.project({
+        devices,
+        links,
+        radioStates: {'OP-A': {
+            ts: now.toISOString(), freqKhz: 7020,
+            computerName: 'pc-a', radioName: 'IC-7610'
+        }},
+        now
+    });
+    assert.deepEqual(onForty.by_seat['OP-A'].amps, ['amp-1', 'amp-40']);
 });
 
 test('combiner and BPF require bands; radio stores only its addressing identity', () => {

@@ -1507,11 +1507,27 @@ export function createOpPage(ctx) {
 
     /* ---- amplifier bay -------------------------------------------------- */
 
+    /* 功放的归属由服务端沿 RF 连线投影（ownership.by_seat[seat].amps），
+       本页只读结论，不在浏览器里重算走线。投影没有结论时（还没配电台节点
+       或一条 RF 连线都没拉）退回全部功放：画面照旧有内容，但绝不臆造。 */
+    function seatAmpIds() {
+        const bySeat = ((deviceSnapshot() || {}).ownership || {}).by_seat || {};
+        const seat = String(currentSeat() || '');
+        if (Array.isArray((bySeat[seat] || {}).amps)) return bySeat[seat].amps;
+        const loose = Object.keys(bySeat).find(key =>
+            key === seat || key.endsWith(':' + seat) || key.split(':').pop() === seat);
+        const view = loose ? bySeat[loose] : null;
+        return view && Array.isArray(view.amps) ? view.amps : null;
+    }
+
     function ampDevices() {
         const snapshot = deviceSnapshot();
         if (!snapshot || !Array.isArray(snapshot.devices)) return [];
+        const owned = seatAmpIds();
+        const allowed = owned ? new Set(owned.map(String)) : null;
         return snapshot.devices
             .filter(device => device.type === 'amp' && device.enabled !== false)
+            .filter(device => !allowed || allowed.has(String(device.id)))
             .sort((a, b) => String(a.name || a.id).localeCompare(String(b.name || b.id)));
     }
 
@@ -1574,12 +1590,14 @@ export function createOpPage(ctx) {
         return '';
     }
 
-    /** Panel with readings; `stale` keeps the numbers but marks them as held. */
+    /** Panel with readings; `stale` keeps the numbers but marks them as held.
+     *  amp 为空也照样画：刻度条、数值位、参数行全部就位，数值位用短横占位。 */
     function ampReadings(amp, stale) {
-        const power = ampPower(amp.out_fwd_power);
-        const swr = ampValue(amp.out_swr);
-        const powerWidth = ampValue(amp.out_fwd_power) === null
-            ? 0 : ampPercent(ampValue(amp.out_fwd_power), 0, AMP_POWER_MAX);
+        const data = amp || {};
+        const power = ampPower(data.out_fwd_power);
+        const swr = ampValue(data.out_swr);
+        const powerWidth = ampValue(data.out_fwd_power) === null
+            ? 0 : ampPercent(ampValue(data.out_fwd_power), 0, AMP_POWER_MAX);
         const swrWidth = swr === null ? 0 : ampPercent(swr, AMP_SWR_MIN, AMP_SWR_MAX);
         const swrKind = swr === null ? '' : swr >= 2.5 ? ' bad' : swr >= AMP_SWR_LIMIT ? ' warn' : '';
         const powerText = power ? '<b>' + esc(power.value) + '</b><small>' + esc(power.unit) + '</small>'
@@ -1612,16 +1630,21 @@ export function createOpPage(ctx) {
                 '<div class="op-amp-read swr' + (stale ? ' muted' : '') + '">' + swrText + '</div>' +
             '</div>' +
             '<div class="op-amp-metrics">' +
-                metric(t('op.amp.reflected'), amp.out_rev_power, 'W', 0) +
-                metric(t('op.amp.temp'), amp.current_temperature, '°C', 0) +
-                metric(t('op.amp.voltage'), amp.current_voltage, 'V', 1) +
-                metric(t('op.amp.current'), amp.current_current, 'A', 1) +
+                metric(t('op.amp.reflected'), data.out_rev_power, 'W', 0) +
+                metric(t('op.amp.temp'), data.current_temperature, '°C', 0) +
+                metric(t('op.amp.voltage'), data.current_voltage, 'V', 1) +
+                metric(t('op.amp.current'), data.current_current, 'A', 1) +
             '</div>';
     }
 
-    function ampEmptyFace(headline, note, hint) {
-        return '<div class="op-amp-empty"><b>' + esc(headline) + '</b><span>' + esc(note) + '</span>' +
-            (hint ? '<em>' + esc(hint) + '</em>' : '') + '</div>';
+    /* 空面板：与真实功放面板同尺寸，刻度画面照样画出来，
+       只在标题位说明这台为什么还不存在（快照未到 / 本席位链路没有功放）。 */
+    function ampSkeleton(headline, note) {
+        return '<article class="op-amp" data-state="empty">' +
+            '<div class="op-amp-id"><b>' + esc(headline) + '</b>' +
+            (note ? '<span class="op-amp-flags">' +
+                '<span class="op-amp-chip">' + esc(note) + '</span></span>' : '') +
+            '</div>' + ampReadings(null, false) + '</article>';
     }
 
     function ampPanel(device) {
@@ -1655,20 +1678,17 @@ export function createOpPage(ctx) {
             flags.push('<span class="op-amp-chip stale" title="' +
                 esc(status.last_report || '') + '">' + esc(text) + '</span>');
         }
-        let face;
-        if (hasReading) {
-            face = ampReadings(amp, stale);
-        } else if (status.state === 'manual') {
-            face = ampEmptyFace(t('op.amp.manual'), t('op.amp.manualNote'), t('op.amp.manualHint'));
-        } else if (status.state === 'no-source') {
-            face = ampEmptyFace(t('op.amp.noSource'), t('op.amp.noSourceNote'), t('op.amp.noSourceHint'));
-        } else if (offline) {
-            face = ampEmptyFace(t('op.amp.offline'), t('op.amp.offlineNote'), status.error || '');
-        } else {
-            face = ampEmptyFace(t('op.amp.waiting'), t('op.amp.waitingNote'), '');
+        /* 画面永远画出来：没有读数时刻度条与参数行照旧绘制，只把「为什么
+         * 还没有数」压进右上角的标签，不再整块换成占位文字。 */
+        if (!hasReading) {
+            const reason = status.state === 'manual' ? t('op.amp.manual')
+                : status.state === 'no-source' ? t('op.amp.noSource')
+                : offline ? t('op.amp.offline') : t('op.amp.waiting');
+            flags.push('<span class="op-amp-chip">' + esc(reason) + '</span>');
         }
+        const face = ampReadings(amp, stale);
         return '<article class="op-amp" data-state="' +
-                (stale ? 'stale' : offline ? 'offline' : hasReading ? 'live' : 'empty') +
+                (hasReading ? (stale ? 'stale' : 'live') : 'empty') +
                 '" data-tx="' + (transmitting ? '1' : '0') + '" data-alarm="' + (alarm ? '1' : '0') +
                 '" data-amp="' + esc(device.id) + '">' +
             (stale ? '<div class="op-amp-hatch"></div>' : '') +
@@ -1687,12 +1707,12 @@ export function createOpPage(ctx) {
     function renderAmps() {
         const grid = $('#opAmpGrid');
         if (!grid) return;
-        /* First paint happens before the snapshot lands: say so instead of
-         * claiming there is no amplifier. */
+        const host = $('#opAmpSum');
+        /* 画面永远画出来：快照未到也先铺一台同尺寸的空面板，
+         * 不再退回一条“正在读取设备快照”的文字。 */
         if (!deviceSnapshot()) {
-            grid.innerHTML = '<article class="op-amp" data-state="empty"><div class="op-amp-id"><b>' +
-                esc(t('op.amp.loading')) + '</b></div>' +
-                ampEmptyFace(t('op.amp.loadingNote'), '', '') + '</article>';
+            if (host) host.innerHTML = '';
+            grid.innerHTML = ampSkeleton(t('op.amp.loading'), t('op.amp.loadingNote'));
             return;
         }
         const devices = ampDevices();
@@ -1708,18 +1728,17 @@ export function createOpPage(ctx) {
             if (status.amp && status.amp.alarm_active) alarmCount += 1;
             if (status.state !== 'offline' && ampTransmitting(status.amp)) txCount += 1;
         }
+        /* 功放只列本席位链路上的那几台，标题里必须说清是谁的链路。 */
+        summary.push('<span>' + esc(seatNameOf(currentSeat())) + '</span>');
         summary.push('<span>' + esc(t('op.amp.count', {n: devices.length})) + '</span>');
         if (txCount) summary.push('<span class="live">TX ' + txCount + '</span>');
         if (alarmCount) summary.push('<span class="bad">' + esc(t('op.amp.alarm')) + ' ' + alarmCount + '</span>');
         if (downCount) summary.push('<span>' + esc(t('op.amp.down', {n: downCount})) + '</span>');
-        const host = $('#opAmpSum');
-        if (host) host.innerHTML = devices.length ? summary.join('<i>·</i>') : '';
-        /* No amplifier at all: still an explicit face, not an empty strip. */
+        if (host) host.innerHTML = summary.join('<i>·</i>');
+        /* 本席位链路里没有功放：同样是一块画好的空面板，不是一条空白。 */
         grid.innerHTML = devices.length
             ? devices.map(device => ampPanel(device)).join('')
-            : '<article class="op-amp" data-state="empty"><div class="op-amp-id"><b>' +
-                esc(t('op.amp.none')) + '</b></div>' +
-                ampEmptyFace(t('op.amp.noneNote'), t('op.amp.noneHint'), '') + '</article>';
+            : ampSkeleton(t('op.amp.none'), t('op.amp.noneHint'));
     }
 
     function deviceFeedback(target, ok, text) {
