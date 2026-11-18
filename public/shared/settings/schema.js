@@ -312,6 +312,15 @@
             label: 'OP view: allow QRZ review', zh: 'OP 视图：允许 QRZ 复核',
             desc: 'Only called when SCP misses; off = the call stays unconfirmed.'
         }),
+        /* Calls the operator marked 「无误」 in the OP view. Server-side so every
+         * seat shares one memory; the OP card owns the only control, so the key
+         * stays out of the settings form, and the full reset clears it together
+         * with the QSO log. Oldest entries drop off when the text is full. */
+        field('opConfirmedCalls', 'qso', 'string', '', {
+            maxLen: 2000, allowEmpty: true,
+            label: 'OP view: confirmed calls', zh: 'OP 视图：已确认无误呼号',
+            desc: 'Comma-separated calls confirmed by an operator; cleared by the full reset.'
+        }),
         field('opRunIdleMin', 'qso', 'int', 10, {
             min: 2, max: 60, label: 'OP view: RUN idle reminder (min)', zh: 'OP 视图：RUN 空闲提醒（分钟）',
             desc: 'Suggest S&P when a RUN radio has no QSO for this many minutes.'

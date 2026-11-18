@@ -30,8 +30,11 @@ const LEGACY_FIELD_KEYS = new Set([
 
 /* Keys whose only control lives outside this page: the propagation toolbar
  * owns projection/layer and a click on the propagation map owns the DX
- * target. Rendering them here as well duplicated a live entry point. */
-const EXTERNAL_CONTROL_KEYS = new Set(['propProj', 'propLayer', 'propDxLat', 'propDxLon']);
+ * target. Rendering them here as well duplicated a live entry point.
+ * opConfirmedCalls is the OP view's 「无误」 list: maintained by the suspect
+ * card, wiped by the full reset, so it has no business in the form. */
+const EXTERNAL_CONTROL_KEYS = new Set(
+    ['propProj', 'propLayer', 'propDxLat', 'propDxLon', 'opConfirmedCalls']);
 
 /* Short descriptions come from the dictionary (settings.field.<key>.desc,
  * see docs/i18n-glossary-and-gap-audit.md); the schema keeps English as a
@@ -1144,7 +1147,7 @@ export function createSettingsPage(ctx) {
             if (!confirmed) return;
             try {
                 await Promise.all([postJson('/api/reset'), postJson('/api/callsigns', [])]);
-                ['dxcompass-settings', 'dxcompass-rot-sec']
+                ['dxcompass-settings', 'dxcompass-rot-sec', 'dxcompass-op-call-review']
                     .forEach(key => localStorage.removeItem(key));
                 location.reload();
             } catch {

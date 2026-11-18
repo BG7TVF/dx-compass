@@ -1930,6 +1930,31 @@ export function createOpPage(ctx) {
     }
 
     // ---- call sanity check ------------------------------------------------
+    /* 操作员点「无误」= 这个呼号本身没有错。白名单存在服务端设置
+       opConfirmedCalls 里，所以全部席位共享一份记忆，后续再录入同一
+       呼号不再提示；「全部重置」把设置恢复默认，记忆随之清空。 */
+    const CONFIRM_MAX_CHARS = 2000;
+
+    function confirmedCalls() {
+        return new Set(String(ctx.settings.opConfirmedCalls || '')
+            .split(',').map(value => value.trim().toUpperCase()).filter(Boolean));
+    }
+
+    function rememberConfirmedCall(call) {
+        const value = String(call || '').trim().toUpperCase();
+        if (!value) return;
+        const known = confirmedCalls();
+        known.delete(value);
+        const list = [...known, value];
+        while (list.length > 1 && list.join(',').length > CONFIRM_MAX_CHARS) list.shift();
+        ctx.settings.opConfirmedCalls = list.join(',');
+        ctx.saveSettings({opConfirmedCalls: ctx.settings.opConfirmedCalls});
+        // 同一呼号在其他席位/电台上的提醒也一并撤掉。
+        for (const [key, item] of [...state.suspects.entries()]) {
+            if (item.call === value) state.suspects.delete(key);
+        }
+    }
+
     function loadReview() {
         try {
             const raw = JSON.parse(localStorage.getItem(REVIEW_KEY) || '{}');
@@ -1970,12 +1995,19 @@ export function createOpPage(ctx) {
         for (const key of [...state.suspects.keys()]) {
             if (!latestKeys.has(key)) state.suspects.delete(key);
         }
+        const confirmed = confirmedCalls();
+        // 别的席位刚点过「无误」：这条提醒已经不该再挂着了。
+        for (const [key, item] of [...state.suspects.entries()]) {
+            if (confirmed.has(item.call)) state.suspects.delete(key);
+        }
         for (const qso of candidates) {
             const key = reviewKey(qso);
-            if (state.review[key] || state.suspects.has(key)) continue;
+            const call = String(qso.call || '').trim().toUpperCase();
+            // 「已确认无误」的呼号是全部席位共享的记忆，不再重复提示。
+            if (confirmed.has(call) || state.review[key] || state.suspects.has(key)) continue;
             state.suspects.set(key, {
                 key,
-                call: String(qso.call || '').toUpperCase(),
+                call,
                 radioNr: qso.radioNr || 1,
                 ts: qso.ts,
                 band: qso.band,
@@ -2043,8 +2075,15 @@ export function createOpPage(ctx) {
     }
 
     function acceptSuspect(key, status) {
-        state.review[key] = {status, at: Date.now()};
-        saveReview();
+        const item = state.suspects.get(key);
+        if (status === 'ok') {
+            // 「无误」认的是呼号本身：写进服务端白名单，之后不再提示。
+            if (item) rememberConfirmedCall(item.call);
+        } else {
+            // 「已修改」只认这一条 QSO，等 N1MM 把改好的呼号送上来。
+            state.review[key] = {status, at: Date.now()};
+            saveReview();
+        }
         state.suspects.delete(key);
         renderSuspects();
         if (status === 'fixed' && ctx.qso && ctx.qso.loadStation) {

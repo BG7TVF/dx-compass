@@ -2,8 +2,12 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const {lookupQuery, parseLookup} = require('../lib/qsos/qrz.js');
 const {checkCall} = require('../lib/storage/qso-sql.js');
+
+const read = (...parts) => fs.readFileSync(path.join(__dirname, '..', ...parts), 'utf8');
 
 test('QRZ lookup query encodes the call and needs a session key', () => {
     assert.equal(lookupQuery('dl1abc', ''), null);
@@ -37,4 +41,23 @@ test('local call log check excludes the QSO under review and escapes input', () 
         "SELECT COUNT(*) AS n FROM qsos WHERE UPPER(call) = 'DL1''ABC';");
     assert.equal(checkCall('DL1ABC', 'abc-1'),
         "SELECT COUNT(*) AS n FROM qsos WHERE UPPER(call) = 'DL1ABC' AND n1mm_id <> 'abc-1';");
+});
+
+test('OP 点「无误」记的是呼号，存在服务端设置里，全部席位共享', () => {
+    const op = read('public', 'js', 'pages', 'op-page.mjs');
+    assert.match(op, /ctx\.settings\.opConfirmedCalls = list\.join\(','\)/);
+    assert.match(op, /ctx\.saveSettings\(\{opConfirmedCalls: ctx\.settings\.opConfirmedCalls\}\)/);
+    // 命中白名单的直接跳过，连检查请求都不发。
+    assert.match(op, /if \(confirmed\.has\(call\)/);
+    // 「已修改」只是这一条 QSO 的事，不能把写错的呼号本身放进白名单。
+    assert.match(op, /if \(status === 'ok'\) \{[\s\S]*?rememberConfirmedCall\(item\.call\);[\s\S]*?\} else \{\s*\/\/[^\n]*\n\s*state\.review\[key\] = \{status, at: Date\.now\(\)\};/);
+});
+
+test('呼号白名单是服务端设置，不进设置表单，只由全部重置清除', () => {
+    const schema = read('public', 'shared', 'settings', 'schema.js');
+    assert.match(schema, /field\('opConfirmedCalls', 'qso', 'string', ''/);
+    const settings = read('public', 'js', 'pages', 'settings-page.mjs');
+    assert.match(settings, /const EXTERNAL_CONTROL_KEYS = new Set\(\s*\[[^\]]*'opConfirmedCalls'/);
+    // 全部重置清掉本机的旧复核记忆；服务端那一份由 settings.reset 恢复默认。
+    assert.match(settings, /\['dxcompass-settings', 'dxcompass-rot-sec', 'dxcompass-op-call-review'\]/);
 });

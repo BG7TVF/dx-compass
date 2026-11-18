@@ -35,7 +35,9 @@ async function start() {
     ctx.op = createOpPage(ctx);
     ctx.devices = createDevicesPage(ctx);
     ctx.settingsPage = createSettingsPage(ctx);
-    ctx.saveSettings = () => ctx.settingsPage.save();
+    // Pages that write ctx.settings directly pass the keys they changed, so a
+    // save cannot flush someone else's half-finished edit.
+    ctx.saveSettings = patch => ctx.settingsPage.save(patch);
 
     await ctx.settingsPage.pull();
     ctx.settingsPage.applyTheme(settings.theme);
