@@ -9,7 +9,7 @@ import {
     PROP_SOUTH_MIN
 } from '../public/shared/map/projection.mjs';
 import {
-    fitWorld, fitWorldContain, mercLat, mercY, ringPoints, worldViewCenter, createLandCanvas
+    fitWorld, mercLat, mercY, ringPoints, worldViewCenter, createLandCanvas
 } from '../public/shared/map/base-map.mjs';
 import {
     computeTerminator, createTerminator, propTerminator, solarCos, solarCosAt
@@ -148,27 +148,32 @@ test('wide containers still fit one world to the full width', () => {
     close(256 * Math.pow(2, zoom), size.x);
 });
 
-test('contain fit keeps one whole world on screen in a wide pane', () => {
-    /* The OP map box is much wider than it is tall. fitWorld covers the pane and
-     * crops the poles; fitWorldContain fits the shorter axis instead, so every
-     * continent stays visible and the leftover width is simply left unused. */
-    const size = {x: 1200, y: 400};
-    const calls = {minZoom: 1};
+test('a slightly wide box still leaves Antarctica on screen', () => {
+    /* The OP map buys width from the empty band on the right (5:4). The fit then
+     * no longer shows the whole world: the squashed polar interior runs past the
+     * southern edge, but the northern coast of Antarctica must stay inside and no
+     * northern coastline may be pushed out. */
+    globalThis.LAND = [
+        [-42, 83.565, -20, 70, -42, 83.565],
+        [-180, -90, 180, -90, 180, -63.226, -180, -63.226, -180, -90]
+    ];
+    const size = {x: 500, y: 400};
+    const calls = {};
     const map = {
         getSize: () => size,
         project: ([, lon], zoom) => ({x: (lon + 180) / 360 * 256 * Math.pow(2, zoom)}),
-        setMinZoom: value => { calls.minZoom = value; },
-        setView: (center, value) => { calls.zoom = value; calls.center = center; }
+        getBoundsZoom: () => Math.log2(size.x / 256),
+        setMinZoom: () => {},
+        setView: (center, zoom) => { calls.center = center; calls.zoom = zoom; }
     };
-    const zoom = fitWorldContain(map);
-    const contain = Math.log2(size.y / 256);
-    close(zoom, contain);
-    close(calls.zoom, contain);
-    close(calls.minZoom, contain);
-    // One world tall: nothing is cropped. Narrower than the pane: free band.
-    close(256 * Math.pow(2, zoom), size.y);
-    assert.ok(256 * Math.pow(2, zoom) < size.x);
-    assert.ok(Number.isFinite(calls.center[0]));
+    fitWorld(map);
+    const span = size.y / (256 * Math.pow(2, calls.zoom));
+    const top = mercY(calls.center[0]) - span / 2;
+    const bottom = mercY(calls.center[0]) + span / 2;
+    assert.ok(span < 1, 'the polar interior is cropped, one world no longer fits');
+    assert.ok(top <= mercY(83.565) + 1e-9, 'Greenland keeps its northern coast');
+    assert.ok(bottom >= mercY(-63.226) + 1e-9, 'Antarctica must not be cropped away');
+    assert.ok(bottom < mercY(-85) - 1e-9, 'only part of Antarctica is cut');
     assert.equal(calls.center[1], 0);
 });
 

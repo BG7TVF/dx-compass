@@ -639,15 +639,16 @@ body[data-theme="light"] {
     border-radius: var(--r-md);
     background: var(--map-bg);
 }
-/* The world is square in Web Mercator, so the map box keeps that ratio: the
- * whole globe stays on screen (no continent gets cropped), the box only ever
- * shrinks to fit, and the band freed on the right is left for other content. */
+/* The box is a little wider than it is tall: fitWorld fills the width and lets
+ * the squashed polar interior of Antarctica run past the southern edge, while
+ * every other coastline (Greenland down to the Antarctic peninsula) stays in
+ * frame. The band freed on the right is still left for other content. */
 #opMap {
     position: absolute;
     top: 0;
     left: 0;
     height: 100%;
-    aspect-ratio: 1;
+    aspect-ratio: 5 / 4;
     max-width: 100%;
     background: var(--map-bg);
 }
