@@ -9,7 +9,7 @@
  * come from the existing repositories; nothing is recalculated locally except
  * trivial per-radio rates over the same QSO rows.
  */
-import {$, escapeHtml as esc} from '../ui.mjs';
+import {$, cssVar, escapeHtml as esc} from '../ui.mjs';
 import {CONTEST_CATEGORIES, bandLabel, dbRowToQso} from '../settings-model.mjs';
 import {fetchQsos} from '../../shared/data/qsos.mjs';
 import {fetchSpots} from '../../shared/data/spots.mjs';
@@ -412,7 +412,7 @@ export function createOpPage(ctx) {
         const rows = [...state.qsos.values()];
         /* The shared binner reads row.timestamp; QSO rows carry ts. */
         const timed = rows.map(qso => ({timestamp: qso.timestamp || qso.ts}));
-        if ($('#opRateChart')) drawBars('#opRateChart', perMinute(timed, 60), '#35d6a4');
+        if ($('#opRateChart')) drawBars('#opRateChart', perMinute(timed, 60), cssVar('--op-chart-rate', '#35d6a4'));
         const note = $('#opRateNote');
         if (note) {
             /* No seat bound yet: do not invent a "seat 1" rate line. */
@@ -426,7 +426,7 @@ export function createOpPage(ctx) {
             if (key) bands.set(key, (bands.get(key) || 0) + 1);
         });
         const entries = [...bands.entries()].sort((a, b) => b[1] - a[1]);
-        if ($('#opBandChart')) drawBars('#opBandChart', entries.map(entry => entry[1]), '#4cc9f0');
+        if ($('#opBandChart')) drawBars('#opBandChart', entries.map(entry => entry[1]), cssVar('--op-chart-band', '#4cc9f0'));
         const labels = $('#opBandLabels');
         if (labels) {
             labels.innerHTML = entries.map(([band, count]) =>
@@ -947,8 +947,8 @@ export function createOpPage(ctx) {
             parts[0] = '<span><i style="background:var(--op-r1)"></i>' +
                 esc(seatNameOf(keys[0])) + '</span>';
         }
-        parts.push('<span><i style="background:#00e08a"></i>' + esc(t('op.map.legend.home')) + '</span>');
-        parts.push('<span><i style="background:#8fe3ff;border-radius:1px"></i>' +
+        parts.push('<span><i style="background:var(--map-open)"></i>' + esc(t('op.map.legend.home')) + '</span>');
+        parts.push('<span><i style="background:var(--map-spot);border-radius:1px"></i>' +
             esc(t('op.map.legend.spot')) + '</span>');
         $('#opMapLegend').innerHTML = parts.join('');
         $('#opMapCredit').textContent = t('op.map.fixedBorders');

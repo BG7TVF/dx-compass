@@ -3,6 +3,18 @@ import {formatClockDateTime} from '../shared/core/clock.mjs';
 export const $ = selector => document.querySelector(selector);
 export const $$ = selector => document.querySelectorAll(selector);
 
+/* A colour that lives in the theme sheet, for the things CSS cannot reach:
+ * canvas fills and Leaflet's vector options. Read at draw time, so switching
+ * the finish recolours them on the next repaint; the fallback keeps a headless
+ * environment (tests) painting what it always did. */
+export function cssVar(name, fallback) {
+    if (typeof document === 'undefined' || typeof getComputedStyle !== 'function') return fallback;
+    const node = document.body || document.documentElement;
+    if (!node) return fallback;
+    const value = getComputedStyle(node).getPropertyValue(name);
+    return value && value.trim() ? value.trim() : fallback;
+}
+
 export function showToast(message, ms = 2500) {
     const element = $('#toast');
     element.textContent = message;

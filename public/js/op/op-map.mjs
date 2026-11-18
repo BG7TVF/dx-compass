@@ -4,6 +4,7 @@
  * Leaflet's zoom/pan gestures are disabled so a click is always a bearing pick.
  */
 import {createMapSurface} from '../../shared/map/surface.mjs';
+import {cssVar} from '../ui.mjs';
 import {
     bearing, distanceKm, toRadians, toDegrees, normalizeLongitude, relativeLongitude
 } from '../../shared/geo/coordinates.mjs';
@@ -12,6 +13,14 @@ import {addTrackPaths} from '../../shared/map/layers.mjs';
 import {qsoDotIcon} from '../../shared/map/markers.mjs';
 
 const RADIO_COLORS = ['#00e5ff', '#ffb020'];
+/* Leaflet needs literal colours, so every draw resolves the active theme tokens
+ * and falls back to the dark-console defaults when no theme is mounted. */
+function radioColors() {
+    return [
+        cssVar('--op-r1', RADIO_COLORS[0]),
+        cssVar('--op-r2', RADIO_COLORS[1])
+    ];
+}
 /* Antenna coverage wedge: the two edges are great-circle lines leaving the home
  * station at the rotator heading ± HALF_DEG, capped at RADIUS_DEG of arc so the
  * beam reads as a direction, not a full lune. Longitudes are kept continuous
@@ -104,15 +113,16 @@ export function createOpMap(container, {onBearing, canRotate} = {}) {
         coverageLayer.clear();
         if (!home || coverageHeading === null || !isFinite(coverageHeading)) return;
         const outline = coverageOutline(home, (coverageHeading + 360) % 360);
+        const coverage = cssVar('--op-r2', COVERAGE_COLOR);
         [-360, 0, 360].forEach(shift => {
             L.polygon(
                 outline.map(([lat, lon]) => [lat, lon + shift]),
                 {
                     className: 'op-coverage',
-                    color: COVERAGE_COLOR,
+                    color: coverage,
                     weight: 1,
                     opacity: 0.55,
-                    fillColor: COVERAGE_COLOR,
+                    fillColor: coverage,
                     fillOpacity: 0.12,
                     interactive: false
                 }
@@ -129,11 +139,12 @@ export function createOpMap(container, {onBearing, canRotate} = {}) {
     function drawRotatorLine() {
         rotatorLayer.clear();
         if (!home || !target) return;
+        const heading = cssVar('--op-r2', COVERAGE_COLOR);
         L.polyline([[home.lat, home.lon], [target.lat, target.lon]], {
-            color: '#ffb020', weight: 1.6, opacity: 0.95, dashArray: '5 4', interactive: false
+            color: heading, weight: 1.6, opacity: 0.95, dashArray: '5 4', interactive: false
         }).addTo(rotatorLayer.group);
         L.circleMarker([target.lat, target.lon], {
-            radius: 4, color: '#ffb020', fillColor: '#ffb020', fillOpacity: 1, weight: 1
+            radius: 4, color: heading, fillColor: heading, fillOpacity: 1, weight: 1
         }).addTo(rotatorLayer.group);
     }
 
@@ -143,11 +154,12 @@ export function createOpMap(container, {onBearing, canRotate} = {}) {
             : null;
         homeLayer.clear();
         if (!home) { drawCoverage(); return; }
+        const open = cssVar('--map-open', '#00e08a');
         L.circleMarker([home.lat, home.lon], {
-            radius: 5, color: '#00e08a', fillColor: '#00e08a', fillOpacity: 0.95, weight: 2
+            radius: 5, color: open, fillColor: open, fillOpacity: 0.95, weight: 2
         }).addTo(homeLayer.group);
         L.circleMarker([home.lat, home.lon], {
-            radius: 11, color: '#00e08a', fillColor: 'transparent', weight: 1, opacity: 0.5
+            radius: 11, color: open, fillColor: 'transparent', weight: 1, opacity: 0.5
         }).addTo(homeLayer.group);
         drawRotatorLine();
         drawCoverage();
@@ -158,11 +170,15 @@ export function createOpMap(container, {onBearing, canRotate} = {}) {
         spotLayer.clear();
         if (!home) return;
 
+        const lanes = radioColors();
+        const spotColor = cssVar('--map-spot', '#8fe3ff');
+        const spotFill = cssVar('--map-bg', '#0a1929');
+
         for (const qso of qsos) {
             if (!isFinite(qso.lat) || !isFinite(qso.lon)) continue;
             if (radioFilter !== 'all' && String(qso.radioNr) !== String(radioFilter)) continue;
             const radio = Number(qso.radioNr) === 2 ? 2 : 1;
-            const color = RADIO_COLORS[radio - 1];
+            const color = lanes[radio - 1];
             addTrackPaths(map, trackPaths(home.lat, home.lon, qso.lat, qso.lon, 64), {
                 L,
                 group: qsoLayer.group,
@@ -184,13 +200,13 @@ export function createOpMap(container, {onBearing, canRotate} = {}) {
             addTrackPaths(map, trackPaths(home.lat, home.lon, lat, lon, 64), {
                 L,
                 group: spotLayer.group,
-                color: '#8fe3ff',
+                color: spotColor,
                 weight: 0.8,
                 opacity: 0.28,
                 dashArray: '1 5'
             });
             L.circleMarker([lat, lon], {
-                radius: 2.6, color: '#8fe3ff', fillColor: '#0a1929',
+                radius: 2.6, color: spotColor, fillColor: spotFill,
                 fillOpacity: 0.65, weight: 1, interactive: false
             }).addTo(spotLayer.group);
         }

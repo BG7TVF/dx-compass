@@ -9,6 +9,31 @@
     --op-r4: #c78bff;
     --op-r5: #ff6f91;
     --op-r6: #5ad1ff;
+    /* Ink carried on a full-saturation status fill (band occupancy, antenna
+     * buttons). The three dark themes keep the console's near-black, which is
+     * the stronger side of every dark token they ship. */
+    --op-on-green: #06121f;
+    --op-on-yellow: #06121f;
+    --op-on-red: #06121f;
+    /* Bar-chart inks for the rate / band-history canvases. A canvas cannot read
+     * a custom property, so op-page resolves these with cssVar() on each draw. */
+    --op-chart-rate: #35d6a4;
+    --op-chart-band: #4cc9f0;
+}
+/* Light theme: these lane colours are text and hairlines printed on white
+ * cards, and the neon set above disappears there. They are pulled down to the
+ * weight of the theme's own accents (every value clears 5:1 on --panel), and
+ * --red is dark enough there that white ink reads better than black. */
+body[data-theme="light"] {
+    --op-r1: #00788c;
+    --op-r2: #a35a00;
+    --op-r3: #1f7d33;
+    --op-r4: #6a35b0;
+    --op-r5: #b32b52;
+    --op-r6: #0b6fa8;
+    --op-on-red: #ffffff;
+    --op-chart-rate: #0f8f6a;
+    --op-chart-band: #1178b8;
 }
 
 .main.op-active .dock-panel { display: none; }
@@ -152,7 +177,7 @@
 }
 .op-advice-missing {
     font-style: normal;
-    color: var(--red, #e06c75);
+    color: var(--red);
     font-size: 9px;
     letter-spacing: .02em;
 }
@@ -190,11 +215,11 @@
     border: 1px solid var(--border);
     border-radius: var(--r-sm);
     background: var(--panel-2);
-    color: #06121f;
+    color: var(--text);
 }
-.op-bandocc-cell.free { background: var(--green); }
-.op-bandocc-cell.occupied { background: var(--red); }
-.op-bandocc-cell.preempted { background: var(--yellow); }
+.op-bandocc-cell.free { background: var(--green); color: var(--op-on-green); }
+.op-bandocc-cell.occupied { background: var(--red); color: var(--op-on-red); }
+.op-bandocc-cell.preempted { background: var(--yellow); color: var(--op-on-yellow); }
 .op-bandocc-band { font-size: 11px; font-weight: 700; line-height: 1.1; }
 .op-bandocc-calls {
     min-height: 10px;
@@ -254,10 +279,10 @@
     align-items: center;
     justify-content: center;
     padding: 4px 8px;
-    border: 1px solid rgba(0, 0, 0, .42);
+    border: 1px solid color-mix(in srgb, var(--bg) 45%, transparent);
     border-radius: var(--r-sm);
     background: var(--panel-2);
-    color: #06121f;
+    color: var(--text);
     font-size: 13px;
     font-weight: 700;
     line-height: 1.15;
@@ -266,9 +291,9 @@
     overflow-wrap: anywhere;
     cursor: pointer;
 }
-.op-antswitch-btn.free { background: var(--green); }
-.op-antswitch-btn.occupied { background: var(--red); }
-.op-antswitch-btn.preempted { background: var(--yellow); }
+.op-antswitch-btn.free { background: var(--green); color: var(--op-on-green); }
+.op-antswitch-btn.occupied { background: var(--red); color: var(--op-on-red); }
+.op-antswitch-btn.preempted { background: var(--yellow); color: var(--op-on-yellow); }
 .op-antswitch-btn:hover { filter: brightness(1.12); }
 .op-antswitch-btn:active { transform: translateY(1px); }
 .op-antswitch .op-device-result { grid-column: 1 / -1; }
@@ -411,14 +436,14 @@
     height: 9px;
     border-radius: 50%;
     background: var(--op-r1);
-    border: 1px solid rgba(255,255,255,.85);
-    box-shadow: 0 0 0 2px rgba(0,229,255,.18);
+    border: 1px solid var(--dot-ring);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--op-r1) 22%, transparent);
 }
 .op-map-dot.r2 i {
     border-radius: 1px;
     background: var(--op-r2);
     transform: rotate(45deg);
-    box-shadow: 0 0 0 2px rgba(255,176,32,.18);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--op-r2) 22%, transparent);
 }
 
 /* Right rail */
@@ -563,10 +588,10 @@
 .op-device-head { display: flex; align-items: center; gap: 6px; }
 .op-device-head b { font-size: 11px; color: var(--text-strong); }
 .op-device-head span { margin-left: auto; font-size: 8px; color: var(--orange); }
-.op-device-head span.ok { color: var(--green, #00e08a); }
-.op-device.ready { border-color: color-mix(in srgb, var(--green, #00e08a) 45%, var(--border)); }
+.op-device-head span.ok { color: var(--green); }
+.op-device.ready { border-color: color-mix(in srgb, var(--green) 45%, var(--border)); }
 .op-device-result { font-size: 8px; color: var(--text-dim); }
-.op-device-result.bad { color: var(--red, #ff6b6b); }
+.op-device-result.bad { color: var(--red); }
 .op-scp-credit { margin-top: 4px; font-size: 8px; color: var(--text-dim); opacity: .75; }
 .op-device-controls { display: flex; gap: 4px; flex-wrap: wrap; }
 .op-device-controls button, .op-device select {
@@ -603,16 +628,16 @@
 .op-antenna > .op-ant-turn,
 .op-antenna > .op-ant-input,
 .op-antenna > .op-ant-quick { flex: 0 0 auto; }
-.op-compass-face { fill: rgba(10, 20, 34, .55); }
+.op-compass-face { fill: color-mix(in srgb, var(--well) 70%, transparent); }
 .op-compass-ring { fill: none; stroke: var(--border); stroke-width: 1; }
-.op-compass-tick { stroke: rgba(150, 170, 195, .55); stroke-width: 1; }
-.op-compass-tick.mid { stroke: rgba(170, 190, 215, .8); }
+.op-compass-tick { stroke: color-mix(in srgb, var(--text-dim) 55%, transparent); stroke-width: 1; }
+.op-compass-tick.mid { stroke: color-mix(in srgb, var(--text-dim) 90%, transparent); }
 .op-compass-tick.major { stroke: var(--text-dim); stroke-width: 1.5; }
 .op-compass-num { fill: var(--text-dim); font: 500 9px var(--font-num, monospace); }
 .op-compass-cardinal { fill: var(--text-strong); font: 700 11px var(--font-num, monospace); }
-.op-compass-target { fill: none; stroke: var(--cyan, #00e5ff); stroke-width: 1; opacity: 0; }
-.op-compass-target line { stroke: var(--cyan, #00e5ff); stroke-width: 1; stroke-dasharray: 3 3; }
-.op-compass-target path { fill: var(--cyan, #00e5ff); }
+.op-compass-target { fill: none; stroke: var(--accent); stroke-width: 1; opacity: 0; }
+.op-compass-target line { stroke: var(--accent); stroke-width: 1; stroke-dasharray: 3 3; }
+.op-compass-target path { fill: var(--accent); }
 .op-compass-pointer { fill: var(--orange); }
 .op-compass-needle, .op-compass-target {
     transform-box: view-box; transform-origin: center;
@@ -637,7 +662,7 @@
 .op-ant-current b { font: 700 22px var(--font-num, monospace); color: var(--text-strong); }
 .op-ant-current b i { font-style: normal; font-size: 12px; color: var(--text-dim); }
 .op-ant-current small { display: block; font-size: 9px; color: var(--text-dim); }
-.op-ant-target { display: block; font-size: 9px; color: var(--cyan, #00e5ff); min-height: 11px; }
+.op-ant-target { display: block; font-size: 9px; color: var(--accent); min-height: 11px; }
 
 .op-ant-input { display: flex; gap: 6px; }
 .op-ant-input input {
@@ -788,16 +813,41 @@
  * layout above stays untouched; this layer only changes the surface. */
 .op-view {
     --op-num: "Bahnschrift", "DIN Alternate", "Segoe UI Variable", "Segoe UI", sans-serif;
-    --op-rule: rgba(122, 168, 255, .14);
-    --op-face-top: rgba(21, 30, 43, .94);
-    --op-face-bottom: rgba(12, 19, 28, .94);
+    /* Skin, not a palette: the hairline is the theme's stronger border faded
+     * out, the face is the theme's own panel pair (top slightly lifted), the
+     * inset highlight is a whisper of its text colour — light in the dark
+     * themes, near-black in the light one. Same console, four finishes. */
+    --op-rule: color-mix(in srgb, var(--border-2) 60%, transparent);
+    --op-face-top: var(--panel-2);
+    --op-face-bottom: var(--panel);
+    --op-inset-hi: color-mix(in srgb, var(--text-strong) 5%, transparent);
+    --op-title: var(--text-dim);
+    --op-tick-glow: color-mix(in srgb, var(--accent) 55%, transparent);
+    --op-grid-line: color-mix(in srgb, var(--border-2) 38%, transparent);
+    /* The opponent rail is shared with the wall, and the shared sheet keeps the
+     * wall's own values as fallbacks. Here every one of them is mapped onto the
+     * live theme, so the left column is part of the console instead of a dark
+     * island floating on a light page. */
+    --opp-face: color-mix(in srgb, var(--panel-2) 55%, transparent);
+    --opp-rule: var(--op-rule);
+    --opp-scroll: color-mix(in srgb, var(--border-2) 80%, transparent);
+    --opp-ink: var(--text);
+    --opp-dim: var(--text-dim);
+    --opp-dx-soft: color-mix(in srgb, var(--red) 62%, transparent);
+    --dim: var(--text-dim);
+    --dx: var(--red);
 }
+/* A rival's band colour is a fixed bright palette (it has to survive the wall
+ * at 1080p), which is exactly what a light theme cannot read as 11px text. The
+ * colour stays where it carries meaning — the 2px edge of the cell and the
+ * heading arrow — the label itself takes the theme's ink. */
+.op-view .ob-line b { color: var(--text-strong); }
 .op-view .op-card,
 .op-view .op-center {
     border: 1px solid var(--op-rule);
     border-radius: 4px;
     background: linear-gradient(180deg, var(--op-face-top), var(--op-face-bottom));
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .035);
+    box-shadow: inset 0 1px 0 var(--op-inset-hi);
 }
 .op-view .op-card > h3,
 .op-view .op-bottom-head,
@@ -812,7 +862,7 @@
     font-weight: 600;
     letter-spacing: .13em;
     text-transform: uppercase;
-    color: #8fa6c2;
+    color: var(--op-title);
 }
 .op-view .op-card > h3::before {
     content: '';
@@ -820,7 +870,7 @@
     width: 2px;
     height: 11px;
     background: var(--accent);
-    box-shadow: 0 0 7px rgba(96, 165, 250, .55);
+    box-shadow: 0 0 7px var(--op-tick-glow);
 }
 .op-view .op-total b,
 .op-view .op-work-row b,
@@ -900,7 +950,7 @@
     min-height: 36px;
     /* Faint instrument grid so a chart with no QSOs still reads as a gauge
      * rather than an empty card. */
-    background-image: linear-gradient(to top, rgba(122, 168, 255, .10) 1px, transparent 1px);
+    background-image: linear-gradient(to top, var(--op-grid-line) 1px, transparent 1px);
     background-size: 100% 25%;
 }
 .op-bandqso-labels {
@@ -946,7 +996,7 @@
     border: 1px solid var(--op-rule);
     border-radius: 4px;
     background: linear-gradient(180deg, var(--op-face-top), var(--op-face-bottom));
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .035);
+    box-shadow: inset 0 1px 0 var(--op-inset-hi);
 }
 .op-amp-bay-head {
     flex: 0 0 auto;
@@ -965,7 +1015,7 @@
     font-weight: 600;
     letter-spacing: .13em;
     text-transform: uppercase;
-    color: #8fa6c2;
+    color: var(--op-title);
 }
 .op-amp-bay-head h3::before {
     content: '';
@@ -973,7 +1023,7 @@
     width: 2px;
     height: 11px;
     background: var(--accent);
-    box-shadow: 0 0 7px rgba(96, 165, 250, .55);
+    box-shadow: 0 0 7px var(--op-tick-glow);
 }
 .op-amp-bay-sum {
     margin-left: auto;

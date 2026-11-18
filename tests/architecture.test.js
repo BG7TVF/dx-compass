@@ -376,10 +376,10 @@ test('OP 天线切换容器：按钮来自拓扑投影，配色沿用波段占�
     const css = read('public', 'css', 'op.css');
     // 第 3 行第 4 列：天线控制下方、疑似错误呼号上方
     assert.match(css, /\.op-view > \.op-antswitch-card \{ grid-column: 4; grid-row: 3; \}/);
-    // 三态配色复用波段占用的绿/红/黄，不另发明一套颜色
-    assert.match(css, /\.op-antswitch-btn\.free \{ background: var\(--green\); \}/);
-    assert.match(css, /\.op-antswitch-btn\.occupied \{ background: var\(--red\); \}/);
-    assert.match(css, /\.op-antswitch-btn\.preempted \{ background: var\(--yellow\); \}/);
+    // 三态配色复用波段占用的绿/红/黄，不另发明一套颜色；墨色同样走 --op-on-*
+    assert.match(css, /\.op-antswitch-btn\.free \{ background: var\(--green\); color: var\(--op-on-green\); \}/);
+    assert.match(css, /\.op-antswitch-btn\.occupied \{ background: var\(--red\); color: var\(--op-on-red\); \}/);
+    assert.match(css, /\.op-antswitch-btn\.preempted \{ background: var\(--yellow\); color: var\(--op-on-yellow\); \}/);
 
     const op = read('public', 'js', 'pages', 'op-page.mjs');
     const render = (/    function renderAntSwitch\(\) \{[\s\S]*?\n    \}/.exec(op) || [''])[0];

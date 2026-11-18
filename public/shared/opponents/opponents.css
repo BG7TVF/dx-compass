@@ -15,7 +15,7 @@
     font-style: normal;
     font-size: var(--fs-tiny, clamp(12px, 1.30vh, 24px));
     letter-spacing: .5px;
-    color: rgba(219, 230, 245, .72);
+    color: var(--opp-ink, rgba(219, 230, 245, .72));
     white-space: nowrap;
 }
 
@@ -31,16 +31,16 @@
     padding-right: 2px;
     overflow-y: auto;
     scrollbar-width: thin;
-    scrollbar-color: rgba(122, 168, 255, .28) transparent;
+    scrollbar-color: var(--opp-scroll, rgba(122, 168, 255, .28)) transparent;
 }
 .opp-rows::-webkit-scrollbar { width: 4px; }
-.opp-rows::-webkit-scrollbar-thumb { background: rgba(122, 168, 255, .28); border-radius: 2px; }
+.opp-rows::-webkit-scrollbar-thumb { background: var(--opp-scroll, rgba(122, 168, 255, .28)); border-radius: 2px; }
 .opp-call-card {
     flex: 0 0 auto;
     min-width: 0;
     padding: 5px 7px 7px;
-    background: rgba(6, 13, 22, .55);
-    border: 1px solid rgba(122, 168, 255, .14);
+    background: var(--opp-face, rgba(6, 13, 22, .55));
+    border: 1px solid var(--opp-rule, rgba(122, 168, 255, .14));
     /* Same colour the rival's map markers use, so a card is identifiable at a
      * glance without changing the existing type scale or card height. */
     border-inline-start: 4px solid var(--call-color, rgba(255, 107, 107, .4));
@@ -60,7 +60,7 @@
     gap: 7px;
     min-width: 0;
     padding-bottom: 4px;
-    border-bottom: 1px solid rgba(122, 168, 255, .12);
+    border-bottom: 1px solid var(--opp-rule, rgba(122, 168, 255, .12));
 }
 /* Callsign as a filled pill: a block of colour large enough to match against
  * a map marker at wall distance, instead of a 7px dot. */
@@ -83,7 +83,7 @@
     margin-left: auto;
     font-size: var(--fs-micro, clamp(11px, 1.24vh, 22px));
     letter-spacing: .3px;
-    color: rgba(219, 230, 245, .6);
+    color: var(--opp-dim, rgba(219, 230, 245, .6));
     white-space: nowrap;
 }
 .ob-bands {
@@ -124,7 +124,7 @@
     margin-left: 1px;
     font-size: var(--fs-micro, clamp(11px, 1.24vh, 22px));
     letter-spacing: 0;
-    color: rgba(255, 107, 107, .55);
+    color: var(--opp-dx-soft, rgba(255, 107, 107, .55));
 }
 .ob-dir { display: flex; align-items: center; gap: 3px; min-width: 0; }
 .ob-dir em {
