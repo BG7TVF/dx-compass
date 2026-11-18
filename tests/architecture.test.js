@@ -367,6 +367,35 @@ test('OP 功放面板：只列本席位链路上的功放，画面永远画出�
     assert.doesNotMatch(css, /\.op-amp-empty/);
 });
 
+test('OP 天线切换容器：按钮来自拓扑投影，配色沿用波段占用三态', () => {
+    const html = read('public', 'index.html');
+    assert.match(html, /<section class="op-card op-antswitch-card">/);
+    assert.match(html, /<h3 id="opAntSwitchTitle" data-i18n="op\.antswitch\.title">/);
+    assert.match(html, /<div id="opAntSwitch" class="op-antswitch"><\/div>/);
+
+    const css = read('public', 'css', 'op.css');
+    // 第 3 行第 4 列：天线控制下方、疑似错误呼号上方
+    assert.match(css, /\.op-view > \.op-antswitch-card \{ grid-column: 4; grid-row: 3; \}/);
+    // 三态配色复用波段占用的绿/红/黄，不另发明一套颜色
+    assert.match(css, /\.op-antswitch-btn\.free \{ background: var\(--green\); \}/);
+    assert.match(css, /\.op-antswitch-btn\.occupied \{ background: var\(--red\); \}/);
+    assert.match(css, /\.op-antswitch-btn\.preempted \{ background: var\(--yellow\); \}/);
+
+    const op = read('public', 'js', 'pages', 'op-page.mjs');
+    const render = (/    function renderAntSwitch\(\) \{[\s\S]*?\n    \}/.exec(op) || [''])[0];
+    assert.ok(render, '天线切换容器必须由 OP 页渲染');
+    // 按钮集合与配色只读服务端沿 RF 连线的投影，前端不重算走线
+    assert.match(op, /ant_switch/);
+    assert.match(render, /reachable/);
+    assert.match(render, /switch_color_by_seat/);
+    // 标签只显示天线名，不显示占用者
+    assert.match(render, /antenna\.name \|\| id/);
+    assert.doesNotMatch(render, /routed_by|\bowners\b|opCall/);
+    // 点击走既有下发通道：命令交给天线设备，端口由服务端反推
+    assert.match(op, /\$\('#opAntSwitch'\)\?\.addEventListener\('click'/);
+    assert.match(op, /\{command: 'route', device_id: antennaId\}/);
+});
+
 test('cold-start entry points wait for the readiness gate', () => {
     const gate = read('nodes', 'ready-gate.js');
     assert.ok(fs.existsSync(path.join(ROOT, 'nodes', 'ready-gate.html')),

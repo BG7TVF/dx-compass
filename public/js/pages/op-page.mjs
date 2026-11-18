@@ -1351,6 +1351,7 @@ export function createOpPage(ctx) {
         renderAmps();
         updateMapHint();
         renderBandOccupancy();
+        renderAntSwitch();
         if (state.map) state.map.setCoverage(activeAzimuth());
     }
 
@@ -1397,6 +1398,69 @@ export function createOpPage(ctx) {
             '<div class="op-recent"><div class="op-recent-row"><span></span><b>' +
             esc(t('op.bottom.recent')) + '</b><span></span><span></span></div>' + recent +
             '</div></div>';
+    }
+
+    /* 天线切换：按钮集合取自服务端沿 RF 连线的拓扑投影
+     * （ownership.by_seat[seat].ant_switch.reachable）——同轴物理可达就列入，
+     * 忽略切换器当前指向、也不按波段过滤。配色直接用 antennas[].switch_color_by_seat，
+     * 与波段占用同一套语义：红=本席位接通、黄=他席占用、绿=空闲；
+     * 前端不重算走线、不显示端口，也不显示占用者。 */
+    function antSwitchSeatHit() {
+        const bySeat = ((deviceSnapshot() || {}).ownership || {}).by_seat || {};
+        const seat = String(currentSeat() || '');
+        const key = Object.keys(bySeat).find(item =>
+            item === seat || item.endsWith(':' + seat) || item.split(':').pop() === seat);
+        return key ? {key, view: bySeat[key]} : null;
+    }
+
+    function renderAntSwitch() {
+        const host = $('#opAntSwitch');
+        if (!host) return;
+        const note = $('#opAntSwitchNote');
+        const antEmpty = key => {
+            if (note) {
+                note.textContent = '';
+                note.classList.remove('op-antswitch-pending');
+            }
+            host.innerHTML = '<div class="op-empty">' + esc(t(key)) + '</div>';
+        };
+        const snapshot = deviceSnapshot();
+        if (!snapshot) {
+            antEmpty('op.antswitch.loading');
+            return;
+        }
+        const hit = antSwitchSeatHit();
+        const info = hit ? hit.view.ant_switch : null;
+        // 投影给不出结论（本席位没绑到电台节点，或整张图没有 RF 连线）时
+        // 提示"未知"，不能显示成"一副天线都接不到"。
+        if (!info || !Array.isArray(info.reachable)) {
+            antEmpty('op.antswitch.unknown');
+            return;
+        }
+        if (!info.reachable.length) {
+            antEmpty('op.antswitch.none');
+            return;
+        }
+        const antennas = new Map(((snapshot.ownership || {}).antennas || [])
+            .map(item => [String(item.id), item]));
+        const chips = info.reachable.map(id => {
+            const antenna = antennas.get(String(id)) || {};
+            const color = (antenna.switch_color_by_seat || {})[hit.key] || 'green';
+            const cls = color === 'red' ? 'occupied' : color === 'yellow' ? 'preempted' : 'free';
+            // 标签只显示天线名称，占用者与波段都不显示。
+            const name = String(antenna.name || id);
+            return '<button type="button" class="op-antswitch-btn ' + cls +
+                '" data-op-ant-route="' + esc(id) + '" title="' + esc(name) + '">' +
+                esc(name) + '</button>';
+        }).join('');
+        // 外壳带 .op-device，让既有的 deviceFeedback 能找到这条反馈栏。
+        host.innerHTML = '<div class="op-antswitch-track op-device">' + chips +
+            '<span class="op-device-result"></span></div>';
+        // 接通只来自下发的命令、硬件还没回读证实：标题旁一个弱标记，不改按钮主色。
+        if (note) {
+            note.textContent = info.unconfirmed ? t('op.antswitch.unconfirmed') : '';
+            note.classList.toggle('op-antswitch-pending', !!info.unconfirmed);
+        }
     }
 
     function compassTicks() {
@@ -2136,6 +2200,7 @@ export function createOpPage(ctx) {
         renderAmps();
         updateMapHint();
         renderBandOccupancy();
+        renderAntSwitch();
         renderAdvice();
         renderMap();
     }
@@ -2204,6 +2269,7 @@ export function createOpPage(ctx) {
         renderBottom();
         renderMultipliers();
         renderBandOccupancy();
+        renderAntSwitch();
         renderAdvice();
     }
 
@@ -2288,6 +2354,7 @@ export function createOpPage(ctx) {
         $('#opMultTitle').textContent = t('op.right.multipliers');
         $('#opMultExpand').textContent = state.multExpanded ? t('op.mult.collapse') : t('op.mult.expand');
         $('#opBottomTitle').textContent = t('op.bottom.devices');
+        $('#opAntSwitchTitle').textContent = t('op.antswitch.title');
         $('#opAmpTitle').textContent = t('op.amp.title');
         $('#opBandOccTitle').textContent = t('op.bandocc.title');
     }
@@ -2362,6 +2429,17 @@ export function createOpPage(ctx) {
                     outlet: outlet ? outlet.value : ''
                 });
             }
+        });
+        // 天线切换按钮：委托绑定，一副天线一个 chip。
+        $('#opAntSwitch')?.addEventListener('click', event => {
+            const chip = event.target.closest('[data-op-ant-route]');
+            if (!chip) return;
+            const antennaId = chip.dataset.opAntRoute;
+            // 命令下发给天线设备本身：服务端沿 RF 连线自己反推链路上要拨哪几台
+            // 切换器/矩阵，前端不需要知道端口名；成功后 loadDevices() 刷新，
+            // 所有席位的按钮颜色都跟着快照走。
+            void runDeviceCommand(chip, {id: antennaId},
+                {command: 'route', device_id: antennaId});
         });
         $('#opBottom')?.addEventListener('pointerdown', event => {
             const button = event.target.closest('[data-op-tower]');

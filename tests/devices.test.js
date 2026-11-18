@@ -1943,6 +1943,201 @@ test('共享矩阵选择未知时，功放归属只认自己电台到矩阵之�
     assert.deepEqual(downstream.by_seat['OP-A'].amps, ['amp-tx']);
 });
 
+/* 生产站形：两台电台各自经过功放/SWR 进共享矩阵的两个输入口，
+ * 矩阵的 6 个输出口分别接 6 副天线。矩阵没有读回，
+ * 所以“接通了哪一路”只能靠下发的命令来记。 */
+function antSwitchFixture() {
+    const now = new Date('2026-03-01T12:00:00.000Z');
+    const rows = [
+        deviceRow({
+            id: 'radio-1', type: 'radio', bands: '',
+            config_json: JSON.stringify({computer: 'PC-A', model: 'IC-7610'})
+        }),
+        deviceRow({
+            id: 'radio-2', type: 'radio', bands: '',
+            config_json: JSON.stringify({computer: 'PC-B', model: 'FT-817'})
+        }),
+        deviceRow({id: 'amp-1', type: 'amp', bands: ''}),
+        deviceRow({id: 'swr-1', type: 'swr', bands: ''}),
+        deviceRow({id: 'amp-2', type: 'amp', bands: ''}),
+        deviceRow({id: 'swr-2', type: 'swr', bands: ''}),
+        deviceRow({
+            id: 'matrix-1', type: 'matrix', bands: '',
+            config_json: JSON.stringify({
+                in_count: 2, out_count: 6, relay_url: 'http://relay.local/out',
+                channels: {'in1:out4': 1, 'in1:out5': 2, 'in2:out4': 3, 'in2:out5': 4}
+            })
+        }),
+        deviceRow({id: 'ant-40', type: 'antenna', bands: '40m'}),
+        deviceRow({id: 'ant-80', type: 'antenna', bands: '80m'}),
+        // 没有连线的天线：物理上接不到，按钮都不该出现。
+        deviceRow({id: 'ant-orphan', type: 'antenna', bands: '6m'}),
+        rfRow('radio-1', 'out', 'amp-1', 'in'),
+        rfRow('amp-1', 'out', 'swr-1', 'in'),
+        rfRow('swr-1', 'out', 'matrix-1', 'in1'),
+        rfRow('radio-2', 'out', 'amp-2', 'in'),
+        rfRow('amp-2', 'out', 'swr-2', 'in'),
+        rfRow('swr-2', 'out', 'matrix-1', 'in2'),
+        rfRow('matrix-1', 'out4', 'ant-40', 'in'),
+        rfRow('matrix-1', 'out5', 'ant-80', 'in')
+    ];
+    const radioStates = {
+        'OP-A': {ts: now.toISOString(), freqKhz: 7020, computerName: 'pc-a', radioName: 'IC-7610'},
+        'OP-B': {ts: now.toISOString(), freqKhz: 3520, computerName: 'pc-b', radioName: 'FT-817'}
+    };
+    return {
+        now,
+        rows,
+        radioStates,
+        devices: rows.filter(row => row.kind !== 'rf').map(row => storage.devices.toDevice(row)),
+        links: rows.filter(row => row.kind === 'rf')
+    };
+}
+
+test('天线切换：物理可达忽略切换器指向，接通归属只看那一路', () => {
+    const fx = antSwitchFixture();
+    const view = ownership.project({
+        devices: fx.devices, links: fx.links, radioStates: fx.radioStates, now: fx.now
+    });
+    // 两个席位都能点到矩阵后面的两副天线，跟当前指向、跟波段都无关。
+    assert.deepEqual(view.by_seat['OP-A'].ant_switch.reachable, ['ant-40', 'ant-80']);
+    assert.deepEqual(view.by_seat['OP-B'].ant_switch.reachable, ['ant-40', 'ant-80']);
+    // 谁都没接通：全绿。
+    assert.deepEqual(view.by_seat['OP-A'].ant_switch.routed, []);
+    assert.equal(view.antennas.find(a => a.id === 'ant-40').switch_color_by_seat['OP-A'], 'green');
+    // 没连线的天线根本不在清单里。
+    assert.equal(view.antennas.some(a => a.id === 'ant-orphan'
+        && a.switch_color_by_seat['OP-A'] !== 'green'), false);
+
+    /* 矩阵没有读回：out5 只出现在下发的命令里。
+     * 归属必须认它，否则共享矩阵永远切不动；
+     * 已确认集合仍然为空，界面据此提示“硬件还没证实”。 */
+    const routed = ownership.project({
+        devices: fx.devices, links: fx.links, radioStates: fx.radioStates, now: fx.now,
+        selections: {},
+        intentSelections: {'matrix-1': {in1: 'out4', in2: 'out5'}}
+    });
+    assert.deepEqual(routed.by_seat['OP-A'].ant_switch.routed, ['ant-40']);
+    assert.deepEqual(routed.by_seat['OP-A'].ant_switch.confirmed, []);
+    assert.equal(routed.by_seat['OP-A'].ant_switch.unconfirmed, true);
+    assert.deepEqual(routed.by_seat['OP-B'].ant_switch.routed, ['ant-80']);
+    const ant40 = routed.antennas.find(a => a.id === 'ant-40');
+    const ant80 = routed.antennas.find(a => a.id === 'ant-80');
+    assert.deepEqual(ant40.routed_by, ['OP-A']);
+    assert.equal(ant40.switch_color_by_seat['OP-A'], 'red');
+    assert.equal(ant40.switch_color_by_seat['OP-B'], 'yellow');
+    assert.deepEqual(ant80.routed_by, ['OP-B']);
+    assert.equal(ant80.switch_color_by_seat['OP-A'], 'yellow');
+    assert.equal(ant80.switch_color_by_seat['OP-B'], 'red');
+    // 可达清单不受影响：被邻座占了也照样列出来，点了才知道冲突。
+    assert.deepEqual(routed.by_seat['OP-A'].ant_switch.reachable, ['ant-40', 'ant-80']);
+
+    /* 有读回时三份口径各自归位：已确认只认回读，
+     * 已接通把“回读 ∪ 已下发”合起来算。 */
+    const mixed = ownership.project({
+        devices: fx.devices, links: fx.links, radioStates: fx.radioStates, now: fx.now,
+        selections: {'matrix-1': {in1: 'out4'}},
+        intentSelections: {'matrix-1': {in1: 'out5', in2: 'out1'}}
+    });
+    assert.deepEqual(mixed.by_seat['OP-A'].ant_switch.confirmed, ['ant-40']);
+    assert.deepEqual(mixed.by_seat['OP-A'].ant_switch.routed, ['ant-80']);
+    assert.equal(mixed.by_seat['OP-A'].ant_switch.unconfirmed, false);
+
+    // 席位没绑到电台节点：投影给不出结论，ant_switch 为 null 而不是空清单。
+    const unbound = ownership.project({
+        devices: fx.devices, links: fx.links, now: fx.now,
+        radioStates: Object.assign({}, fx.radioStates, {
+            'OP-C': {ts: fx.now.toISOString(), freqKhz: 14020, computerName: 'pc-c', radioName: 'TS-590'}
+        })
+    });
+    assert.equal(unbound.by_seat['OP-C'].ant_switch, null);
+});
+
+test('routeToAntenna 反推链路：只动本席位那一路，优先保留已有指向', () => {
+    const fx = antSwitchFixture();
+    const args = {devices: fx.devices, links: fx.links, startDeviceId: 'radio-1'};
+
+    const fresh = rf.routeToAntenna(Object.assign({selections: {}, antennaId: 'ant-80'}, args));
+    assert.equal(fresh.ok, true);
+    assert.deepEqual(fresh.steps, [{device_id: 'matrix-1', port: 'in1', outlet: 'out5'}]);
+    assert.deepEqual(fresh.device_ids, ['radio-1', 'amp-1', 'swr-1', 'matrix-1', 'ant-80']);
+
+    /* 换天线要跨过邻座已经在用的档位：只改 in1，绝不写 in2，
+     * 否则等于把 B 席的链路一起拨走了。 */
+    const neighbor = rf.routeToAntenna(Object.assign({
+        selections: {'matrix-1': {in1: 'out4', in2: 'out5'}}, antennaId: 'ant-80'
+    }, args));
+    assert.equal(neighbor.ok, true);
+    assert.deepEqual(neighbor.steps, [{device_id: 'matrix-1', port: 'in1', outlet: 'out5'}]);
+
+    // 目标已经指着了：档位保持不动，但链路仍然成立。
+    const keep = rf.routeToAntenna(Object.assign({
+        selections: {'matrix-1': {in1: 'out5'}}, antennaId: 'ant-80'
+    }, args));
+    assert.equal(keep.ok, true);
+    assert.deepEqual(keep.steps, [{device_id: 'matrix-1', port: 'in1', outlet: 'out5'}]);
+
+    const orphan = rf.routeToAntenna(Object.assign({selections: {}, antennaId: 'ant-orphan'}, args));
+    assert.equal(orphan.ok, false);
+    assert.equal(orphan.error, 'antenna-unreachable');
+    assert.equal(rf.routeToAntenna(Object.assign({selections: {}, antennaId: 'nope'}, args)).error,
+        'unknown-antenna');
+    assert.equal(rf.routeToAntenna({
+        devices: fx.devices, links: fx.links, selections: {},
+        startDeviceId: 'radio-1', antennaId: 'radio-2'
+    }).error, 'unknown-antenna');
+});
+
+test('route 指令：下发链路通到天线，冲突按席位归属判定', async () => {
+    fakeTransports();
+    const fx = antSwitchFixture();
+    const headers = {'X-DX-Seat': 'OP-A'};
+    const globalCtx = makeContext({radioStates: fx.radioStates});
+
+    const ok = await service.handleCommand(globalCtx, fx.rows, 'ant-80',
+        {command: 'route'}, headers, fx.now);
+    assert.equal(ok.status, 202);
+    assert.deepEqual(ok.payload.steps,
+        [{device_id: 'matrix-1', port: 'in1', outlet: 'out5', status: 202}]);
+    const entry = runtime.stateOf(globalCtx, 'matrix-1');
+    assert.equal(entry.switch.commanded.in1, 'out5');
+
+    /* 邻座已经把 out5 占走（只有下发记录、没有读回）：
+     * 判定必须与界面同口径，报冲突并带出占用者。 */
+    const held = makeContext({radioStates: fx.radioStates});
+    runtime.updateEntry(held, 'matrix-1', {
+        switch: {state: 'unverified', readback: false, online: true, commanded: {in1: 'out4', in2: 'out5'}}
+    }, fx.now);
+    const occupied = await service.handleCommand(held, fx.rows, 'ant-80',
+        {command: 'route'}, headers, fx.now);
+    assert.equal(occupied.status, 409);
+    assert.equal(occupied.payload.error, 'antenna-occupied');
+    assert.equal(occupied.payload.owner, 'OP-B');
+
+    const unreachable = await service.handleCommand(globalCtx, fx.rows, 'ant-orphan',
+        {command: 'route'}, headers, fx.now);
+    assert.equal(unreachable.status, 409);
+    assert.equal(unreachable.payload.error, 'antenna-unreachable');
+
+    const unbound = await service.handleCommand(globalCtx, fx.rows, 'ant-80',
+        {command: 'route'}, {'X-DX-Seat': 'OP-Z'}, fx.now);
+    assert.equal(unbound.status, 409);
+    assert.equal(unbound.payload.error, 'radio-unbound');
+
+    // 整张图没有射频连线：反推不了链路，明确说清楚而不是说“接不到”。
+    const noLinks = makeContext({radioStates: fx.radioStates});
+    const graphless = await service.handleCommand(noLinks,
+        fx.rows.filter(row => row.kind !== 'rf'), 'ant-80', {command: 'route'}, headers, fx.now);
+    assert.equal(graphless.status, 409);
+    assert.equal(graphless.payload.error, 'rf-graph-missing');
+
+    // route 只对天线有意义，别的设备类型一律拒绝。
+    const wrongType = await service.handleCommand(globalCtx, fx.rows, 'matrix-1',
+        {command: 'route'}, headers, fx.now);
+    assert.equal(wrongType.status, 400);
+    assert.equal(wrongType.payload.error, 'invalid-device-type');
+});
+
 test('combiner and BPF require bands; radio stores only its addressing identity', () => {
     const combiner = model.normalizeDevice({type: 'combiner', name: 'Combiner'}, {devices: []});
     assert.equal(combiner.status, 400);

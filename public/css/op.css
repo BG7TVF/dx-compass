@@ -42,8 +42,9 @@
 .op-view > .op-center { grid-column: 2 / 4; grid-row: 2; }
 .op-view > .op-device-card { grid-column: 4; grid-row: 2; }
 .op-view > .op-right { grid-column: 5; grid-row: 2 / 4; }
-/* 功放面板只占第 3 行前 3 列：第 4 列（300px）留给下一步的容器。 */
+/* 功放面板只占第 3 行前 3 列：第 4 列（300px）留给天线切换容器。 */
 .op-view > .op-amp-bay { grid-column: 1 / 4; grid-row: 3; }
+.op-view > .op-antswitch-card { grid-column: 4; grid-row: 3; }
 .op-view > .op-rate-card { grid-column: 1; grid-row: 4; }
 .op-view > .op-total-card { grid-column: 2; grid-row: 4; }
 .op-view > .op-bandqso-card { grid-column: 3; grid-row: 4; }
@@ -217,6 +218,57 @@
 .op-bandocc-legend i.free { background: var(--green); }
 .op-bandocc-legend i.occupied { background: var(--red); }
 .op-bandocc-legend i.preempted { background: var(--yellow); }
+
+/* 天线切换容器：一副天线一个按钮，标签只有天线名（不显示占用者）。
+ * 三态配色直接沿用波段占用那套绿/红/黄，不另发明颜色；列宽只有 300px，
+ * 天线可能有 6~16 副，所以用紧凑 chip 换行排布并封顶容器高度，
+ * 让第 3 行的实际高度仍由功放面板决定。 */
+.op-antswitch {
+    flex: 1;
+    min-height: 0;
+    max-height: 116px;
+    display: flex;
+    padding: 6px;
+    overflow: hidden;
+}
+/* .op-device 只是 deviceFeedback 的落点（closest + .op-device-result），
+ * 这里把它压回容器外观，只保留 flex 换行。 */
+.op-antswitch .op-device {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    gap: 4px;
+    padding: 0;
+    border: 0;
+    background: none;
+    overflow-y: auto;
+}
+.op-antswitch-btn {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 100%;
+    padding: 3px 7px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    background: var(--panel-2);
+    color: #06121f;
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: pointer;
+}
+.op-antswitch-btn.free { background: var(--green); }
+.op-antswitch-btn.occupied { background: var(--red); }
+.op-antswitch-btn.preempted { background: var(--yellow); }
+.op-antswitch-btn:hover { filter: brightness(1.12); }
+.op-antswitch .op-device-result { flex: 1 1 100%; }
+/* 接通只来自下发的命令、硬件还没回读证实：标题旁的弱提示，不改按钮主色。 */
+.op-antswitch-pending { color: var(--yellow); }
 
 /* Side stack: space weather and band conditions keep their natural height,
  * workability takes the rest so the column bottom lands on the grid line. */
