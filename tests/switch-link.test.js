@@ -31,7 +31,6 @@ function deviceRow(overrides) {
         parent_id: null,
         bands: '',
         install_offset_deg: 0,
-        enabled: 1,
         travel_timeout_sec: 120,
         notes: '',
         created_ts: '2026-01-01T00:00:00.000Z',

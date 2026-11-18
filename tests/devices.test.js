@@ -52,7 +52,6 @@ function deviceRow(overrides) {
         parent_id: null,
         bands: '20m',
         install_offset_deg: 0,
-        enabled: 1,
         travel_timeout_sec: 120,
         notes: '',
         created_ts: '2026-01-01T00:00:00.000Z',
@@ -73,7 +72,6 @@ function sourceRow(overrides) {
         priority: 10,
         timeout_ms: 2000,
         token: '',
-        enabled: 1,
         created_ts: '2026-01-01T00:00:00.000Z',
         updated_ts: '2026-01-01T00:00:00.000Z'
     };
@@ -526,7 +524,7 @@ test('TX source configuration keeps the token private and validates ranges', () 
     }, now).status, 400);
 
     const updated = service.handle(globalCtx, [sourceRow({
-        id: 'radio-a', name: 'Radio A', priority: 5, timeout_ms: 2000, password: 'abc', enabled: 1
+        id: 'radio-a', name: 'Radio A', priority: 5, timeout_ms: 2000, password: 'abc'
     })], {action: 'tx-source', source: {source_id: 'radio-a', priority: 7}}, now);
     assert.equal(updated.status, 200);
     assert.equal(updated.payload.source.priority, 7);
@@ -822,6 +820,137 @@ test('select is blocked with 423 when a TX source reports active', async () => {
     result = await service.handleCommand(globalCtx, rows, 'matrix-1',
         {command: 'select'}, headers, now);
     assert.equal(result.payload.error, 'invalid-port');
+});
+
+test('设备台账彻底不再有 enabled 定义', () => {
+    for (const sql of storage.devices.createSchema()) {
+        assert.equal(/enabled/i.test(sql), false, sql);
+    }
+    assert.equal(/enabled/i.test(storage.devices.snapshotQuery()), false);
+    assert.equal(/enabled/i.test(storage.devices.insertDevice(device({id: 'ant-9'})).sql), false);
+    assert.equal(/enabled/i.test(storage.devices.updateDevice(device({id: 'ant-9'})).sql), false);
+    assert.equal(/enabled/i.test(storage.devices.insertTxSource(
+        storage.devices.toTxSource(sourceRow({id: 'src-9'}))).sql), false);
+    assert.equal(Object.prototype.hasOwnProperty.call(device({id: 'ant-9'}), 'enabled'), false);
+    assert.equal(Object.prototype.hasOwnProperty.call(
+        storage.devices.toTxSource(sourceRow({id: 'src-9'})), 'enabled'), false);
+    assert.equal(Object.prototype.hasOwnProperty.call(model.publicDevice(device({id: 'ant-9'})), 'enabled'), false);
+
+    const dropped = storage.devices.legacyMigrations([
+        'devices|id', 'devices|enabled', 'tx_sources|source_id', 'tx_sources|enabled'
+    ]);
+    assert.equal(dropped.includes('ALTER TABLE devices DROP COLUMN enabled;'), true);
+    assert.equal(dropped.includes('ALTER TABLE tx_sources DROP COLUMN enabled;'), true);
+});
+
+test('TX 源 source_id 命中设备 id 时在读侧自动绑定该设备', () => {
+    const now = new Date('2026-03-01T12:00:00.000Z');
+    const globalCtx = makeContext();
+    const devices = [device({id: 'swr-1', name: 'SWR 1', type: 'swr', bands: ''})];
+    const source = storage.devices.toTxSource(sourceRow({id: 'swr-1', name: 'SWR 1', priority: 0}));
+    assert.equal(source.device_id, '');
+
+    const reported = service.ingestTx(globalCtx, [source], {source_id: 'swr-1', tx_active: true}, {}, now);
+    assert.equal(reported.status, 200);
+
+    const snap = tx.snapshot(globalCtx, [source], now, devices);
+    assert.equal(snap.state, 'ok');
+    assert.equal(snap.current.source_id, 'swr-1');
+    assert.equal(snap.current.origin, 'external');
+    assert.equal(snap.current.device_id, 'swr-1');
+    assert.equal(snap.current.device_type, 'swr');
+    assert.equal(snap.current.type_rank, tx.TYPE_RANK.swr);
+});
+
+test('TX 降级排序：功放 > 驻波表 > 电台（N1MM）', () => {
+    const now = new Date('2026-03-01T12:00:00.000Z');
+    const devices = [
+        device({id: 'amp-1', name: 'Amp', type: 'amp', bands: ''}),
+        device({id: 'swr-1', name: 'SWR', type: 'swr', bands: ''}),
+        device({id: 'radio-1', name: 'Radio', type: 'radio', bands: '',
+            config_json: JSON.stringify({computer: 'OP-A'})})
+    ];
+    const globalCtx = makeContext({
+        radioStates: {'OP-A': {ts: now.toISOString(), isTransmitting: true, radioNr: '1', stationName: 'OP-A'}}
+    });
+    globalCtx.set(runtime.KEY, {
+        'amp-1': {updated_ms: now.getTime(), amp: {transmitting: true}},
+        'swr-1': {last_report_ms: now.getTime(), fwd_power_w: 80}
+    });
+
+    const snap = tx.snapshot(globalCtx, [], now, devices);
+    assert.deepEqual(snap.sources.map(item => item.source_id), ['amp-1', 'swr-1', 'n1mm:OP-A:1']);
+    assert.deepEqual(snap.sources.map(item => item.origin), ['internal', 'internal', 'internal']);
+    assert.equal(snap.current.source_id, 'amp-1');
+    assert.equal(snap.tx_active, true);
+
+    // 功放不再发射 → 降到驻波表。
+    globalCtx.set(runtime.KEY, {
+        'amp-1': {updated_ms: now.getTime(), amp: {transmitting: false}},
+        'swr-1': {last_report_ms: now.getTime(), fwd_power_w: 80}
+    });
+    assert.equal(tx.snapshot(globalCtx, [], now, devices).current.source_id, 'swr-1');
+
+    // 功放与驻波表都空闲 → 降到 N1MM。
+    globalCtx.set(runtime.KEY, {
+        'amp-1': {updated_ms: now.getTime(), amp: {transmitting: false}},
+        'swr-1': {last_report_ms: now.getTime(), fwd_power_w: 0}
+    });
+    const radioOnly = tx.snapshot(globalCtx, [], now, devices);
+    assert.deepEqual(radioOnly.sources.map(item => item.source_id), ['n1mm:OP-A:1']);
+    assert.equal(radioOnly.current.device_id, 'radio-1');
+});
+
+test('内部发射源只在确实正在发射且未过期时出现', () => {
+    const now = new Date('2026-03-01T12:00:00.000Z');
+    const devices = [
+        device({id: 'amp-1', name: 'Amp', type: 'amp', bands: ''}),
+        device({id: 'swr-1', name: 'SWR', type: 'swr', bands: ''})
+    ];
+    const globalCtx = makeContext();
+
+    // 空闲设备不进清单。
+    globalCtx.set(runtime.KEY, {
+        'amp-1': {updated_ms: now.getTime(), amp: {transmitting: false}},
+        'swr-1': {last_report_ms: now.getTime(), fwd_power_w: 0, tx_active: false}
+    });
+    assert.deepEqual(tx.internalSources(globalCtx, devices, now), []);
+    assert.equal(tx.snapshot(globalCtx, [], now, devices).state, 'none');
+
+    // 超过内部信号窗口（10 s）→ 即使标志仍为真也不算在发射。
+    globalCtx.set(runtime.KEY, {
+        'amp-1': {updated_ms: now.getTime() - tx.INTERNAL_TIMEOUT_MS - 1000, amp: {transmitting: true}},
+        'swr-1': {last_report_ms: now.getTime() - tx.INTERNAL_TIMEOUT_MS - 1000, tx_active: true}
+    });
+    assert.deepEqual(tx.internalSources(globalCtx, devices, now), []);
+
+    // 登记了源但全部通信中断 → interrupted，不等同于“没有发射”。
+    const offlineSource = storage.devices.toTxSource(sourceRow({id: 'ext-1', name: 'Ext', timeout_ms: 2000}));
+    const interrupted = tx.snapshot(globalCtx, [offlineSource], now, devices);
+    assert.equal(interrupted.state, 'interrupted');
+    assert.equal(interrupted.current, null);
+    assert.equal(interrupted.tx_active, null);
+});
+
+test('同一台设备上健康的外部上报优先，内部推断只兜底', () => {
+    const now = new Date('2026-03-01T12:00:00.000Z');
+    const devices = [device({id: 'swr-1', name: 'SWR', type: 'swr', bands: ''})];
+    const source = storage.devices.toTxSource(sourceRow({id: 'swr-1', name: 'SWR 上报', priority: 0}));
+    const globalCtx = makeContext();
+    globalCtx.set(runtime.KEY, {'swr-1': {last_report_ms: now.getTime(), tx_active: true}});
+
+    service.ingestTx(globalCtx, [source], {source_id: 'swr-1', tx_active: false}, {}, now);
+    const snap = tx.snapshot(globalCtx, [source], now, devices);
+    assert.equal(snap.sources.length, 1);
+    assert.equal(snap.sources[0].origin, 'external');
+    assert.equal(snap.tx_active, false);
+
+    // 外部上报进入 stale 后不再"占用"这台设备，内部推断接管兜底。
+    const later = new Date(now.getTime() + 3000);
+    const fallback = tx.snapshot(globalCtx, [source], later, devices);
+    assert.equal(fallback.sources.length, 2);
+    assert.equal(fallback.current.origin, 'internal');
+    assert.equal(fallback.tx_active, true);
 });
 
 test('tower hold skeleton validates direction and channels', async () => {

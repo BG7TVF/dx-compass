@@ -295,15 +295,6 @@
     border-color: var(--accent);
 }
 
-.dev-check {
-    flex-direction: row !important;
-    align-items: center;
-    gap: 6px !important;
-    margin-top: 10px;
-}
-
-.dev-check input { width: auto; }
-
 .dev-form-error {
     margin: 8px 0 0;
     color: var(--red);

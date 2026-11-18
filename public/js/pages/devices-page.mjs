@@ -89,6 +89,7 @@ const TOWER_KEYS = {
 };
 const COLOR_KEYS = {red: 'dev.color.red', yellow: 'dev.color.yellow', green: 'dev.color.green'};
 const HEALTH_KEYS = {ok: 'dev.tx.health.ok', stale: 'dev.tx.health.stale', offline: 'dev.tx.health.offline'};
+const ORIGIN_KEYS = {internal: 'dev.tx.origin.internal', external: 'dev.tx.origin.external'};
 const MOTION_KEYS = {
     moving: 'dev.motion.moving',
     settled: 'dev.motion.settled',
@@ -124,7 +125,6 @@ const ERROR_KEYS = {
     'too-many-links': 'dev.error.too-many-links',
     'invalid-band': 'dev.error.invalid-band',
     'device-locked': 'dev.error.device-locked',
-    'device-disabled': 'dev.error.device-disabled',
     'device-manual': 'dev.error.device-manual',
     'ports-in-use': 'dev.error.ports-in-use',
     'invalid-access-mode': 'dev.error.invalid-access-mode',
@@ -1094,7 +1094,6 @@ export function createDevicesPage(ctx) {
                 parent_id: null,
                 bands: [],
                 install_offset_deg: 0,
-                enabled: true,
                 access_mode: 'auto',
                 travel_timeout_sec: TRAVEL_TYPES.includes(type) ? 120 : 0,
                 notes: '',
@@ -1568,7 +1567,6 @@ export function createDevicesPage(ctx) {
             <p class="dev-note">${t('dev.form.address')} · ${esc(controlAddressLabel(value, isDraft ? key : value.id) || '—')}</p>
             <p class="dev-note">${t('dev.form.parentFixed')} · ${esc(isDraft ? '—' : parentLabel(value))}</p>
             <p class="dev-note">${t('dev.form.rfPorts')} · ${esc(isDraft ? '—' : (rfPorts(value.id).map(port => port.band ? `${port.key} (${port.band})` : port.key).join(' · ') || '—'))}</p>
-            <label class="dev-check"><input name="enabled" type="checkbox"${value.enabled !== false ? ' checked' : ''}> ${t('dev.form.enabled')}</label>
             <label>${t('dev.form.notes')}<input name="notes" maxlength="200" value="${esc(value.notes)}"></label>
             <p class="dev-form-error hidden" id="devFormError"></p>
             <div class="dev-form-actions">
@@ -1610,6 +1608,7 @@ export function createDevicesPage(ctx) {
         }
         const rows = view.sources.map(source => `<tr>
             <td>${esc(source.name)}</td>
+            <td>${t(source.origin === 'internal' ? ORIGIN_KEYS.internal : ORIGIN_KEYS.external)}</td>
             <td>${source.priority}</td>
             <td>${t(HEALTH_KEYS[source.health] || HEALTH_KEYS.offline)}</td>
             <td>${source.tx_active === null ? '—' : (source.tx_active ? t('dev.tx.active') : t('dev.tx.idle'))}</td>
@@ -1618,7 +1617,7 @@ export function createDevicesPage(ctx) {
         return `<h3>${t('dev.tx.title')}</h3>
             <p class="dev-tx-headline dev-tx-${view.state}">${esc(headline)}</p>
             ${rows ? `<table class="dev-table">
-                <thead><tr><th>${t('dev.form.name')}</th><th>${t('dev.tx.priority')}</th><th>${t('dev.tx.health')}</th><th>TX</th><th>${t('dev.tx.lastSeen')}</th></tr></thead>
+                <thead><tr><th>${t('dev.form.name')}</th><th>${t('dev.tx.origin')}</th><th>${t('dev.tx.priority')}</th><th>${t('dev.tx.health')}</th><th>TX</th><th>${t('dev.tx.lastSeen')}</th></tr></thead>
                 <tbody>${rows}</tbody></table>` : ''}`;
     }
 
@@ -1637,6 +1636,7 @@ export function createDevicesPage(ctx) {
         const rows = view.sources.map(source => `<div class="dev-palette-tx-row">
             <span class="dev-dot dev-dot-${source.health === 'ok' ? 'online' : (source.health === 'stale' ? 'unknown' : 'offline')}"></span>
             <span class="dev-palette-tx-name">${esc(source.name)}</span>
+            <span class="dev-chip">${t(source.origin === 'internal' ? ORIGIN_KEYS.internal : ORIGIN_KEYS.external)}</span>
             <span class="dev-chip">${source.priority}</span>
         </div>`).join('');
         return head + rows;
@@ -1990,7 +1990,6 @@ export function createDevicesPage(ctx) {
         const device = {
             type,
             name: String(data.get('name') || ''),
-            enabled: data.get('enabled') === 'on',
             access_mode: data.get('access_mode') === 'manual' ? 'manual' : 'auto',
             notes: String(data.get('notes') || '')
         };

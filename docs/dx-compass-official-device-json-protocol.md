@@ -1473,7 +1473,7 @@ ack：
 | 端点 | `POST /api/devices/tx`（RFC 9110 POST，非幂等；`seq` 去重） |
 | 频率 | 发射起止立即发；无变化时每 1 s 一帧 |
 | 认证 | 配置 token 的源必须带 `X-DX-TX-Token`，否则 403 `invalid-token` |
-| 绑定 | 源配置的 `device_id` = 本驻波表的设备记录 id，互锁才按这条 RF 通路精确锁定 |
+| 绑定 | `source_id` 命中设备台账里的设备 id 时**自动绑到该设备**，互锁按这条 RF 通路精确锁定；也可显式配置 `device_id` |
 
 请求：
 
@@ -1501,6 +1501,15 @@ ack：
 **A 档**：心跳 `data.tx_active` 与 B 档同时上报，取"或"逻辑（任一通路判发射即发射）。
 
 另外，驻波表还需上报 `POST /api/devices/report`（`device_id` + `seq`），否则设备卡片显示"等待上报"。
+
+**发射源的选择与降级**
+
+平台同时接受两条轨道的发射证据，不存在"启用/停用"开关：
+
+- **外部上报**：`POST /api/devices/tx` 的 `source_id + tx_active`，即上文 B 档。
+- **内部信号**：平台本来就收到的数据，无需再登记一遍 —— 功放 `amp.transmitting`、驻波表 `tx_active`/`fwd_power_w > 0`、N1MM `is_transmitting`。内部源只在"确实正在发射且信号 10 s 内未过期"时参与，空闲设备不进清单。
+
+选源排序为 **功放 > 驻波表 > 外部/其它 > 电台（N1MM）**；同档内再比 `priority`（越小越优先，默认 0）与 `source_id`。同一台设备上，仍然健康的外部上报优先，内部推断只兜底，避免一台设备两把锁。所有源都不可用时等同"未接入发射状态源"，正常放行。
 
 ### 12.4 控制指令字段
 
@@ -1661,7 +1670,6 @@ HTTP 200，平台**不更新**状态。
 | 401 | `seat-required` | 缺 `X-DX-Seat` |
 | 403 | `invalid-token` | TX 源 token 不匹配 |
 | 404 | `unknown-device` | 设备不存在 |
-| 409 | `device-disabled` | 设备已停用 |
 | 409 | `device-locked` | 他席持有租约（30 s） |
 | 409 | `direction-switch-too-fast` | 换向 <1000 ms |
 | 409 | `protocol-undetermined` | 设备协议尚未判定 |

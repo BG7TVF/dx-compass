@@ -577,7 +577,7 @@ export function createOpPage(ctx) {
         if (!snapshot || !Array.isArray(snapshot.devices)) return false;
         return snapshot.devices.some(device =>
             (device.type === 'switch' || device.type === 'matrix') &&
-            device.enabled !== false && device.access_mode !== 'manual');
+            device.access_mode !== 'manual');
     }
 
     /* Band-occupancy strip: one cell per HF band.
@@ -1044,8 +1044,7 @@ export function createOpPage(ctx) {
     function controlDevices() {
         const snapshot = deviceSnapshot();
         if (!snapshot || !Array.isArray(snapshot.devices)) return [];
-        return snapshot.devices.filter(device => ['rotator', 'switch', 'matrix', 'tower'].includes(device.type) &&
-            device.enabled !== false);
+        return snapshot.devices.filter(device => ['rotator', 'switch', 'matrix', 'tower'].includes(device.type));
     }
 
     function commandSeat() {
@@ -1590,7 +1589,7 @@ export function createOpPage(ctx) {
         const owned = seatAmpIds();
         const allowed = owned ? new Set(owned.map(String)) : null;
         return snapshot.devices
-            .filter(device => device.type === 'amp' && device.enabled !== false)
+            .filter(device => device.type === 'amp')
             .filter(device => !allowed || allowed.has(String(device.id)))
             .sort((a, b) => String(a.name || a.id).localeCompare(String(b.name || b.id)));
     }
