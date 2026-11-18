@@ -9,7 +9,7 @@ import {
     PROP_SOUTH_MIN
 } from '../public/shared/map/projection.mjs';
 import {
-    fitWorld, fitWorldContain, mercLat, mercY, ringPoints, worldViewCenter
+    fitWorld, fitWorldContain, mercLat, mercY, ringPoints, worldViewCenter, createLandCanvas
 } from '../public/shared/map/base-map.mjs';
 import {
     computeTerminator, createTerminator, propTerminator, solarCos, solarCosAt
@@ -239,3 +239,55 @@ test('Leaflet terminator tracks six layers and destroy removes layers/timer', ()
     assert.equal(map.layers.size, 0);
     assert.equal(controller.layers.length, 0);
 });
+
+/* Every ring createLandCanvas draws, as the raw path it handed to the context. */
+function landPaths(rings, {width = 256, height = 128} = {}) {
+    const paths = [];
+    let current = null;
+    const context = {
+        beginPath() { current = []; paths.push(current); },
+        moveTo(x, y) { current.push([x, y]); },
+        lineTo(x, y) { current.push([x, y]); },
+        closePath() { current.push(current[0].slice()); },
+        fill() {}, stroke() {}, fillRect() {}
+    };
+    createLandCanvas({
+        land: rings, width, height,
+        documentImpl: {createElement: () => ({getContext: () => context})}
+    });
+    return {paths, width, height};
+}
+
+test('pole-reaching rings close along the frame edge, not across the pole', () => {
+    /* Shape of the shipped Antarctica ring: cut at the antimeridian, so the two
+     * open ends sit on the coast at -180 and +180, and the tail steps down to the
+     * pole. A plain closePath joins them with a chord that carves a wedge of
+     * ocean out of the bottom of the continent. */
+    const coast = [-180, -84, -90, -70, 0, -69, 90, -72, 179, -84, 179, -90, 180, -90];
+    const island = [10, -50, 20, -52, 15, -48];
+    const {paths, width, height} = landPaths([coast, island]);
+    assert.equal(paths.length, 2);
+    const [pole, small] = paths;
+    const closure = pole.slice(-3, -1);
+    assert.deepEqual(closure, [[width, height], [0, height]],
+        'the ring must run down to the frame, along it, and back up');
+    assert.deepEqual(pole.at(-1), pole[0]);
+    assert.equal(pole.filter(([, y]) => y === height).length, 2,
+        'no other segment may sit on the frame row');
+    /* mercY clamps -90 to -85, so the pole vertices land just inside the frame. */
+    assert.ok(pole.at(-4)[1] < height && pole.at(-4)[1] > height * 0.99);
+    small.forEach(([x, y]) => {
+        assert.ok(y < height && y > 0, 'a mid-latitude coast keeps its own closure');
+        assert.ok(x > 0 && x < width);
+    });
+});
+
+test('rings unwrapped past the antimeridian keep their wrapped copy', () => {
+    const seam = [170, 5, -170, 6, 175, -5];
+    const {paths, width} = landPaths([seam]);
+    assert.equal(paths.length, 2, 'one copy per side of the seam');
+    const xOf = lon => (lon + 180) / 360 * width;
+    const starts = paths.map(path => path[0][0]).sort((a, b) => a - b);
+    assert.deepEqual(starts, [xOf(170 - 360), xOf(170)]);
+});
+

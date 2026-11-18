@@ -261,19 +261,35 @@ export function createLandCanvas({
     const context = canvas.getContext('2d');
     const xOf = lon => (lon + 180) / 360 * width;
     const yOf = lat => mercY(lat) * height;
+    /* mercY clamps to these parallels, and they are the frame the overlay is
+     * stretched into. The generator cuts pole-encircling rings at the
+     * antimeridian and leaves both cut ends out at the coast, so closing one of
+     * those rings with a straight line draws a chord across the pole instead of
+     * along the frame edge — which carves a wedge of open ocean into the bottom
+     * of Antarctica. Walk the ring down to the frame, along it, and back up. The
+     * frame is the canvas row itself, not the clamped parallel, so the squashed
+     * band between -85 and the pole stays filled as well. */
+    const southEdge = LAND_BOUNDS[0][0];
+    const northEdge = LAND_BOUNDS[1][0];
     context.fillStyle = ocean;
     context.fillRect(0, 0, width, height);
     (land || []).forEach(ring => {
         const points = ringPoints(ring);
         if (points.length < 3) return;
         let minLon = Infinity, maxLon = -Infinity;
+        let reachesSouth = false, reachesNorth = false;
         points.forEach(point => {
             minLon = Math.min(minLon, point[0]);
             maxLon = Math.max(maxLon, point[0]);
+            if (point[1] <= southEdge) reachesSouth = true;
+            else if (point[1] >= northEdge) reachesNorth = true;
         });
         const offsets = [0];
         if (maxLon > 180) offsets.push(-360);
         if (minLon < -180) offsets.push(360);
+        const edgeY = reachesSouth ? height : (reachesNorth ? 0 : null);
+        const last = points[points.length - 1];
+        const first = points[0];
         offsets.forEach(offset => {
             context.beginPath();
             points.forEach((point, index) => {
@@ -281,6 +297,10 @@ export function createLandCanvas({
                 if (index === 0) context.moveTo(x, y);
                 else context.lineTo(x, y);
             });
+            if (edgeY !== null) {
+                context.lineTo(xOf(last[0] + offset), edgeY);
+                context.lineTo(xOf(first[0] + offset), edgeY);
+            }
             context.closePath();
             if (fill) {
                 context.fillStyle = fill;
