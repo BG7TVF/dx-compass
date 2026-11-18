@@ -1515,7 +1515,9 @@ export function createOpPage(ctx) {
         const host = $('#opStationBody');
         const toggle = $('#opBandLink');
         if (!host) return;
-        const radio = radioOf(state.seat);
+        // 席位键就是电台状态的键（BG7TVF-2:1 这种），必须用 currentSeat()，
+        // 写成别的值只会让整张卡片静默变成"未绑定"。
+        const radio = radioOf(currentSeat());
         const band = currentBand() || (radio && radio.freqKhz ? bandOf(radio.freqKhz) : '');
         const transmitting = !!(radio && radio.isTransmitting);
         const freqKhz = radio ? Number(radio.txFreqKhz || radio.freqKhz) : NaN;

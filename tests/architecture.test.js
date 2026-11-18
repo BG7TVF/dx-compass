@@ -531,6 +531,10 @@ test('频率联动：电台卡片、服务端判定与轮询链路都在约定�
     assert.match(op, /function renderStationCard\(\) \{/);
     assert.match(op, /renderAntSwitch\(\);\s*\n\s*renderStationCard\(\);/,
         '电台卡片要和天线切换一起进渲染链');
+    assert.match(op, /const radio = radioOf\(currentSeat\(\)\);/,
+        '收发状态/频率/模式按当前席位取电台状态');
+    assert.doesNotMatch(op, /radioOf\(state\.seat\)/,
+        '电台状态不存在 state.seat 这个键，取错了整张卡片会静默显示未绑定');
     assert.match(op, /\$\('#opBandLink'\)\?\.addEventListener\('change'/);
     assert.match(op, /await setBandLink\(seat, want/,
         '开关联动状态写服务端，不用浏览器本地偏好');
