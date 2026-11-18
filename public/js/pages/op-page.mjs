@@ -1610,7 +1610,8 @@ export function createOpPage(ctx) {
             '" id="opStationNote">' + esc(seatKnown
                 ? linkNoteText(entry)
                 : t('op.station.linkUnbound')) + '</div>';
-        host.closest('.op-station-card')?.dataset.tx = transmitting ? '1' : '0';
+        const card = host.closest('.op-station-card');
+        if (card) card.dataset.tx = transmitting ? '1' : '0';
         if (toggle) {
             /* 用户刚点下去、服务端还没回话时不要用旧快照把勾选改回去。 */
             if (host.dataset.busy !== '1') toggle.checked = !!(entry && entry.enabled);

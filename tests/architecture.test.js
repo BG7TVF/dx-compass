@@ -4,6 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const {execFileSync} = require('node:child_process');
 
 const ROOT = path.join(__dirname, '..');
 
@@ -594,4 +595,21 @@ test('频率联动：电台卡片、服务端判定与轮询链路都在约定�
         assert.equal(hits, 2, 'op.station.reason.' + key + ' 需要中英两套文案');
     }
     assert.equal(i18n.split("'dev.form.preferred'").length - 1, 2);
+});
+
+test('浏览器端模块都能被解析', () => {
+    // 前端是原生 ES module，没有构建步骤：任何一行语法错误都只在浏览器里炸，
+    // 而模块一旦解析失败，整棵依赖树都不会执行——页面空白、点什么都没反应。
+    // 上面那些文本断言抓不到这种错误，必须真解析一遍。
+    const files = walk(path.join(ROOT, 'public')).filter(file => file.endsWith('.mjs'));
+    assert.ok(files.length >= 40, 'expected the whole browser module graph, got ' + files.length);
+    for (const file of files) {
+        let stderr = '';
+        try {
+            execFileSync(process.execPath, ['--check', file], {stdio: 'pipe'});
+        } catch (error) {
+            stderr = String(error.stderr || error.message).trim();
+        }
+        assert.equal(stderr, '', path.relative(ROOT, file) + ' 解析失败：\n' + stderr);
+    }
 });
