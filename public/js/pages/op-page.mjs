@@ -584,9 +584,12 @@ export function createOpPage(ctx) {
      *   occupied  — a seat's radio is on this band (bandOf(freqKhz)).
      *   preempted — a seat claimed a frequency on this band while its radio is
      *               still elsewhere; only meaningful with an active switcher.
-     *   free      — neither. The radio/station label (never the operator
-     *               callsign) stacks under the band; multiple seats on the
-     *               same band are listed together. */
+     *   free      — neither. The operator callsign stacks under the band so the
+     *               OP can see who holds it; multiple seats on the same band
+     *               are listed together. This is the one sanctioned place where
+     *               the operational UI surfaces a callsign (the opcall-exception
+     *               markers below are whitelisted by tests/architecture.test.js). */
+    /* opcall-exception:start */
     function renderBandOccupancy() {
         const body = $('#opBandOccBody');
         if (!body) return;
@@ -598,8 +601,8 @@ export function createOpPage(ctx) {
             const band = bandOf(freq);
             if (!HF_BANDS.includes(band)) continue;
             const list = occupied.get(band) || [];
-            const who = radioName(key);
-            if (who && !list.includes(who)) list.push(who);
+            const call = String(radio.opCall || '').trim();
+            if (call && !list.includes(call)) list.push(call);
             occupied.set(band, list);
         }
         const preempted = new Map();
@@ -614,8 +617,8 @@ export function createOpPage(ctx) {
                 const seatBand = Number.isFinite(seatFreq) && seatFreq > 0 ? bandOf(seatFreq) : '';
                 if (seatBand === band) continue; // radio already here → occupied, not pre-empted
                 const list = preempted.get(band) || [];
-                const who = radioName(claim.seat);
-                if (who && !list.includes(who)) list.push(who);
+                const call = String(claim.operator || seatRadio.opCall || '').trim();
+                if (call && !list.includes(call)) list.push(call);
                 preempted.set(band, list);
             }
         }
@@ -637,6 +640,7 @@ export function createOpPage(ctx) {
                 '<span><i class="' + item + '"></i>' + esc(t('op.bandocc.' + item)) + '</span>').join('');
         }
     }
+    /* opcall-exception:end */
 
     function renderMultipliers() {
         const host = $('#opMultipliers');
