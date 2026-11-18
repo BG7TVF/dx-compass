@@ -540,6 +540,20 @@ test('频率联动：电台卡片、服务端判定与轮询链路都在约定�
         '开关联动状态写服务端，不用浏览器本地偏好');
     assert.match(op, /function stationSeatKey\(\) \{[\s\S]*?antSwitchSeatHit\(\)/,
         '联动必须按服务端席位键存取，和天线切换同一口径');
+
+    // 卡片加密：读数带 + 四格副读数 + 贴底结论栏，三行缺一行就又变成空卡片。
+    assert.match(op, /class="op-station-read /,
+        '主读数带：波段牌、大号频率、模式/异频、收发灯');
+    assert.match(op, /class="op-station-meta"/,
+        '副读数四格：电台、接通天线、可达天线、心跳');
+    const stationCss = read('public', 'css', 'op.css');
+    assert.match(stationCss, /\.op-view \.op-station-card\[data-tx="1"\]/,
+        '发射态描边要带 .op-view 加权，否则被后面的通用卡片描边整条覆盖');
+    assert.match(stationCss, /\.op-station-read \{[\s\S]*?min-height: 40px;/,
+        '读数带设了下限，窄容器里不能把大号频率数字上下裁掉');
+    assert.match(stationCss,
+        /\.op-station-meta \{[\s\S]*?grid-template-columns: repeat\(4, minmax\(0, 1fr\)\);/,
+        '四格副读数永远一行等宽：换成 3+1 会把上行读数挤扁');
     assert.match(op, /'op\.station\.reason\.' \+ last\.reason/,
         '没动手的判定也要出文案，不能静悄悄');
 

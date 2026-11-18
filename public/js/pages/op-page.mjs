@@ -1505,10 +1505,57 @@ export function createOpPage(ctx) {
         return reason + band + (antenna ? ' · ' + antenna : '');
     }
 
-    function stationCell(cls, label, value, valueClass, title) {
-        return '<div class="op-station-cell ' + cls + '"><span>' + esc(label) + '</span>' +
-            '<b' + (valueClass ? ' class="' + valueClass + '"' : '') +
-            (title ? ' title="' + esc(title) + '"' : '') + '>' + esc(value) + '</b></div>';
+    function stationMetaCell(label, value, cls, title) {
+        return '<div class="op-station-meta-cell' + (cls ? ' ' + cls : '') + '">' +
+            '<span>' + esc(label) + '</span>' +
+            '<b' + (title ? ' title="' + esc(title) + '"' : '') + '>' + esc(value) + '</b></div>';
+    }
+
+    /* 心跳只报时长，判定在线/离线用服务端投影的 age_ms 与 online，
+     * 前端不再自定一套超时门限。 */
+    function stationAgeText(ms) {
+        const value = Number(ms);
+        if (!Number.isFinite(value) || value < 0) return '--';
+        const seconds = Math.round(value / 1000);
+        if (seconds < 60) return seconds + 's';
+        const minutes = Math.floor(seconds / 60);
+        if (minutes < 60) return minutes + 'min';
+        return Math.floor(minutes / 60) + 'h';
+    }
+
+    function stationHeartbeat(view, radio) {
+        if (view) {
+            return view.online === true
+                ? {text: stationAgeText(view.age_ms), cls: ''}
+                : {text: t('op.station.offline'), cls: 'offline'};
+        }
+        const ts = Date.parse(String((radio && radio.ts) || ''));
+        return {text: Number.isFinite(ts) ? stationAgeText(Date.now() - ts) : '--',
+            cls: Number.isFinite(ts) ? '' : 'none'};
+    }
+
+    /* 接通的天线来自拓扑投影，名字查 ownership.antennas；
+     * 只下发未回读的用弱色标出，与天线切换面板同一口径。 */
+    function stationAntennaRead(view) {
+        const switcher = view ? view.ant_switch : null;
+        if (!switcher) {
+            return {text: '--', cls: 'none', title: t('op.antswitch.none'), count: null};
+        }
+        const antennas = new Map((((deviceSnapshot() || {}).ownership || {}).antennas || [])
+            .map(item => [String(item.id), item]));
+        const names = (switcher.routed || []).map(id => {
+            const antenna = antennas.get(String(id)) || {};
+            return String(antenna.name || id);
+        });
+        if (!names.length) {
+            return {text: '--', cls: 'none', title: t('op.station.antennaIdle'),
+                count: (switcher.reachable || []).length};
+        }
+        const extra = names.length > 1 ? ' +' + (names.length - 1) : '';
+        let title = names.join(' / ');
+        if (switcher.unconfirmed) title += ' · ' + t('op.antswitch.unconfirmed');
+        return {text: names[0] + extra, cls: switcher.unconfirmed ? 'pending' : '',
+            title, count: (switcher.reachable || []).length};
     }
 
     function renderStationCard() {
@@ -1518,24 +1565,52 @@ export function createOpPage(ctx) {
         // 席位键就是电台状态的键（BG7TVF-2:1 这种），必须用 currentSeat()，
         // 写成别的值只会让整张卡片静默变成"未绑定"。
         const radio = radioOf(currentSeat());
+        const seatHit = antSwitchSeatHit();
+        const seat = currentSeat();
+        const seatView = seatHit ? seatHit.view : null;
         const band = currentBand() || (radio && radio.freqKhz ? bandOf(radio.freqKhz) : '');
         const transmitting = !!(radio && radio.isTransmitting);
         const freqKhz = radio ? Number(radio.txFreqKhz || radio.freqKhz) : NaN;
-        const freq = Number.isFinite(freqKhz) && freqKhz > 0 ? (freqKhz / 1000).toFixed(3) : '--';
+        const hasFreq = Number.isFinite(freqKhz) && freqKhz > 0;
+        const sendFreqKhz = radio && radio.isSplit ? Number(radio.freqKhz) : NaN;
+        const antenna = stationAntennaRead(seatView);
+        const heartbeat = stationHeartbeat(seatView, radio);
         const entry = bandLinkEntry();
         const seatKnown = Boolean(stationSeatKey());
         host.innerHTML =
-            stationCell('state', t('op.station.txrx'),
-                !radio ? t('op.station.none') : (transmitting ? t('op.station.tx') : t('op.station.rx')),
-                !radio ? 'none' : (transmitting ? 'tx' : 'rx')) +
-            stationCell('band', t('op.station.band'), band ? String(band).toUpperCase() : '--') +
-            stationCell('freq', t('op.station.freq'), freq, '',
-                freqKhz > 0 ? freqKhz + ' kHz' : '') +
-            stationCell('mode', t('op.station.mode'), (radio && radio.mode) || '--') +
+            '<div class="op-station-read ' + radioTheme(seat) + (transmitting ? ' tx' : '') + '">' +
+                '<span class="op-station-band" title="' + esc(t('op.station.band')) + '">' +
+                    esc(band ? String(band).toUpperCase() : '--') + '</span>' +
+                '<span class="op-station-hz" title="' +
+                    esc(hasFreq ? t('op.station.freq') + ' · ' + freqKhz + ' kHz' : t('op.station.freq')) + '">' +
+                    '<b>' + esc(hasFreq ? (freqKhz / 1000).toFixed(3) : '--') + '</b>' +
+                    '<i>' + esc(t('op.station.mhz')) + '</i></span>' +
+                '<span class="op-station-chip mode" title="' + esc(t('op.station.mode')) + '">' +
+                    esc((radio && radio.mode) || '--') + '</span>' +
+                (Number.isFinite(sendFreqKhz) && sendFreqKhz > 0
+                    ? '<span class="op-station-chip split" title="' +
+                        esc(t('op.station.split') + ' RX ' + sendFreqKhz + ' kHz') + '">' +
+                        esc(t('op.station.split')) + '<b>' + esc((sendFreqKhz / 1000).toFixed(3)) + '</b></span>'
+                    : '') +
+                '<span class="op-station-lamp ' +
+                    (!radio ? 'none' : transmitting ? 'tx' : 'rx') + '">' +
+                    '<i></i>' + esc(!radio ? t('op.station.none')
+                        : transmitting ? t('op.station.tx') : t('op.station.rx')) +
+                '</span>' +
+            '</div>' +
+            '<div class="op-station-meta">' +
+                stationMetaCell(t('op.station.radio'), radioName(seat), '', seatNameOf(seat)) +
+                stationMetaCell(t('op.station.antenna'), antenna.text, antenna.cls, antenna.title) +
+                stationMetaCell(t('op.station.reachable'),
+                    antenna.count === null ? '--' : String(antenna.count),
+                    antenna.count ? '' : 'none', t('op.station.reachableHint')) +
+                stationMetaCell(t('op.station.heartbeat'), heartbeat.text, heartbeat.cls, '') +
+            '</div>' +
             '<div class="op-station-note ' + (entry && entry.enabled ? linkNoteClass((entry.last || {}).reason) : '') +
             '" id="opStationNote">' + esc(seatKnown
                 ? linkNoteText(entry)
                 : t('op.station.linkUnbound')) + '</div>';
+        host.closest('.op-station-card')?.dataset.tx = transmitting ? '1' : '0';
         if (toggle) {
             /* 用户刚点下去、服务端还没回话时不要用旧快照把勾选改回去。 */
             if (host.dataset.busy !== '1') toggle.checked = !!(entry && entry.enabled);

@@ -302,58 +302,239 @@ body[data-theme="light"] {
 .op-antswitch-pending { color: var(--yellow); }
 
 /* ---- station card ------------------------------------------------------
- * 本席位电台的四件事：收发、波段、频率、模式，外加频率联动开关。
+ * 一张收发信机面板：主读数带（波段牌 + 大号频率 + 模式/异频 + 收发灯）、
+ * 一行副读数（电台、接通天线、可达天线、心跳）、底栏留给联动结论。
  * 联动开关刻意做成看得见摸得着的复选框，不做藏在菜单里的暗桩；
- * 下面一行始终写明上一次联动判定的结论，没动作也交代原因。 */
-.op-station-card { overflow: hidden; }
+ * 底栏始终写明上一次联动判定的结论，没动作也交代原因。 */
+.op-station-card { overflow: hidden; transition: border-color .15s ease; }
+/* 发射时整块点亮，读法和功放面板一致：隔一个房间也看得见在发射。
+ * 通用卡片描边规则是 .op-view .op-card（两条类），状态规则必须同样带上
+ * .op-view 并用属性选择器加权，否则红边会被后面的通用规则整条吃掉。 */
+.op-view .op-station-card[data-tx="1"] {
+    border-color: color-mix(in srgb, var(--red) 55%, var(--op-rule));
+    box-shadow: inset 0 1px 0 var(--op-inset-hi),
+        inset 0 0 0 1px color-mix(in srgb, var(--red) 12%, transparent),
+        0 0 12px color-mix(in srgb, var(--red) 10%, transparent);
+}
 .op-station-body {
     flex: 1;
     min-height: 0;
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 4px 8px;
-    padding: 6px 8px 7px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 6px 8px;
     overflow: hidden;
 }
-.op-station-cell {
+/* 主读数带：坐在 well 里，左侧一席位色标，右侧收发灯。 */
+.op-station-read {
+    position: relative;
+    flex: 1 1 auto;
+    /* 卡片变窄时读数带可以压缩，但不许压到把 30px 的数字上下裁掉。 */
+    min-height: 40px;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 2px 9px 2px 13px;
+    overflow: hidden;
+    border: 1px solid var(--op-rule);
+    border-radius: var(--r-sm);
+    background: var(--well);
+}
+.op-station-read::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 5px;
+    bottom: 5px;
+    width: 3px;
+    border-radius: 2px 0 0 2px;
+    background: var(--op-rule);
+}
+.op-station-read.r1::before { background: var(--op-r1); }
+.op-station-read.r2::before { background: var(--op-r2); }
+.op-station-read.r3::before { background: var(--op-r3); }
+.op-station-read.r4::before { background: var(--op-r4); }
+.op-station-read.r5::before { background: var(--op-r5); }
+.op-station-read.r6::before { background: var(--op-r6); }
+.op-station-band {
+    flex: 0 0 auto;
+    padding: 2px 7px;
+    border-radius: 2px;
+    background: var(--accent);
+    color: var(--on-accent);
+    font-family: var(--op-num);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: .1em;
+    white-space: nowrap;
+}
+.op-station-hz {
+    flex: 0 1 auto;
     min-width: 0;
     display: flex;
     align-items: baseline;
-    gap: 5px;
+    gap: 4px;
+    font-family: var(--op-num);
+    font-variant-numeric: tabular-nums;
+}
+.op-station-hz b {
+    font-size: 30px;
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: -.01em;
+    color: var(--text-strong);
+    text-shadow: 0 0 16px color-mix(in srgb, var(--accent) 24%, transparent);
+}
+.op-station-hz i {
+    font-style: normal;
     font-size: 10px;
-    letter-spacing: .06em;
-    text-transform: uppercase;
+    letter-spacing: .08em;
     color: var(--text-dim);
 }
-.op-station-cell b {
+.op-station-chip {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
+    padding: 2px 6px;
+    border: 1px solid var(--op-rule);
+    border-radius: 2px;
+    font-size: 10px;
+    letter-spacing: .08em;
+    line-height: 1.4;
+    white-space: nowrap;
+    color: var(--text-dim);
+}
+.op-station-chip.mode {
     font-family: var(--op-num);
-    font-size: 15px;
-    font-weight: 600;
-    letter-spacing: 0;
-    text-transform: none;
+    font-weight: 700;
+    font-size: 12px;
     color: var(--text-strong);
+}
+.op-station-chip.split {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--yellow);
+    border-color: color-mix(in srgb, var(--yellow) 45%, var(--op-rule));
+}
+.op-station-chip.split b {
+    font-family: var(--op-num);
     font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    font-size: 11px;
+    color: var(--yellow);
+}
+.op-station-lamp {
+    margin-left: auto;
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    color: var(--text-dim);
+}
+.op-station-lamp i {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--track);
+    box-shadow: inset 0 0 0 1px var(--op-rule);
+}
+.op-station-lamp.rx { color: var(--green); }
+.op-station-lamp.rx i {
+    background: var(--green);
+    box-shadow: 0 0 8px color-mix(in srgb, var(--green) 55%, transparent);
+}
+.op-station-lamp.tx { color: var(--red); }
+.op-station-lamp.tx i {
+    background: var(--red);
+    box-shadow: 0 0 10px color-mix(in srgb, var(--red) 70%, transparent);
+    animation: op-station-tx 1.1s ease-in-out infinite;
+}
+@keyframes op-station-tx { 50% { opacity: .4; } }
+@media (prefers-reduced-motion: reduce) {
+    .op-station-lamp.tx i { animation: none; }
+}
+/* 副读数四格：共用一套网格线，和右侧栏的 grid 卡片同一读法。
+ * 四格永远等宽成一行——窄容器里换成 3+1 会把上行读数挤扁。 */
+.op-station-meta {
+    flex: 0 0 auto;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1px;
+    overflow: hidden;
+    border: 1px solid var(--op-rule);
+    border-radius: var(--r-sm);
+    background: var(--op-rule);
+}
+.op-station-meta-cell {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: 3px 7px 4px;
+    background: var(--panel-2);
+}
+.op-station-meta-cell span {
+    font-size: 9px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    white-space: nowrap;
 }
-.op-station-cell.freq b { font-size: 19px; }
-.op-station-cell b.tx { color: var(--red); }
-.op-station-cell b.rx { color: var(--green); }
-.op-station-cell b.none { color: var(--text-dim); }
+.op-station-meta-cell b {
+    font-family: var(--op-num);
+    font-size: 12px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-strong);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.op-station-meta-cell.none b { color: var(--text-dim); font-weight: 400; }
+.op-station-meta-cell.pending b { color: var(--yellow); }
+.op-station-meta-cell.offline b { color: var(--yellow); }
+/* 联动结论栏：一个状态灯 + 一句人话，压到卡片底边。 */
 .op-station-note {
-    grid-column: 1 / -1;
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
     min-width: 0;
+    margin: 0 -8px -6px;
+    padding: 4px 8px 5px 13px;
+    border-top: 1px solid var(--op-rule);
+    background: color-mix(in srgb, var(--panel-2) 55%, transparent);
     font-size: 10px;
     line-height: 1.25;
     letter-spacing: .02em;
-    text-transform: none;
     color: var(--text-dim);
     overflow-wrap: anywhere;
 }
+.op-station-note::before {
+    content: '';
+    flex: 0 0 auto;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--track);
+    box-shadow: inset 0 0 0 1px var(--op-rule);
+}
 .op-station-note.warn { color: var(--yellow); }
+.op-station-note.warn::before { background: var(--yellow); }
 .op-station-note.bad { color: var(--red); }
+.op-station-note.bad::before { background: var(--red); }
 .op-station-note.ok { color: var(--green); }
+.op-station-note.ok::before { background: var(--green); }
 .op-station-link {
     margin-left: auto;
     display: flex;
