@@ -639,7 +639,18 @@ body[data-theme="light"] {
     border-radius: var(--r-md);
     background: var(--map-bg);
 }
-#opMap { position: absolute; inset: 0; background: var(--map-bg); }
+/* The world is square in Web Mercator, so the map box keeps that ratio: the
+ * whole globe stays on screen (no continent gets cropped), the box only ever
+ * shrinks to fit, and the band freed on the right is left for other content. */
+#opMap {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    aspect-ratio: 1;
+    max-width: 100%;
+    background: var(--map-bg);
+}
 #opMap .leaflet-container { background: var(--map-bg); cursor: crosshair; }
 #opMap .leaflet-control-container { display: none; }
 .op-map-legend {

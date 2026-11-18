@@ -73,7 +73,7 @@ export function createOpMap(container, {onBearing, canRotate} = {}) {
     const L = globalThis.L;
     const surface = createMapSurface(container, {
         provider: 'offline',
-        view: {kind: 'world', lockZoom: true},
+        view: {kind: 'world', lockZoom: true, fit: 'contain'},
         land: {show: true},
         borders: {show: true},
         interaction: {zoom: false, pan: false, click: true},

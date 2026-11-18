@@ -140,6 +140,64 @@
         ]
     },
     {
+        "id": "dxc00000000000d5",
+        "type": "inject",
+        "z": "dxc0000000000001",
+        "name": "Backfill QSO coords on startup",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "6",
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 180,
+        "y": 270,
+        "wires": [
+            [
+                "dxc00000000000d6"
+            ]
+        ]
+    },
+    {
+        "id": "dxc00000000000d6",
+        "type": "function",
+        "z": "dxc0000000000001",
+        "name": "Build QSO coord backfill SQL",
+        "func": "const dx = global.get('dx');\n// 建表与列迁移完成后才回填，延迟由 inject 控制；SQL 全在 lib/storage 里拼。\nconst sql = dx.storage.qso.backfillCoords(5000);\nif (!sql) return null;\nmsg.topic = sql;\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 440,
+        "y": 270,
+        "wires": [
+            [
+                "dxc00000000000d7"
+            ]
+        ]
+    },
+    {
+        "id": "dxc00000000000d7",
+        "type": "sqlite",
+        "z": "dxc0000000000001",
+        "mydb": "dxc0000000000027",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "Apply QSO coord backfill",
+        "x": 700,
+        "y": 270,
+        "wires": [
+            []
+        ]
+    },
+    {
         "id": "dxc0000000000030",
         "type": "function",
         "z": "dxc0000000000001",
@@ -1719,8 +1777,8 @@
         "type": "function",
         "z": "dxc0000000000090",
         "name": "Broadcast QSO",
-        "func": "const dx = global.get('dx');\nif (!msg.qso) return null;\nmsg.payload = dx.qso.applySpotCoords(msg.qso, msg.payload);\nreturn msg;",
-        "outputs": 1,
+        "func": "const dx = global.get('dx');\nif (!msg.qso) return null;\nconst update = dx.qso.spotCoordsUpdate(msg.qso, msg.payload);\nmsg.payload = dx.qso.applySpotCoords(msg.qso, msg.payload);\nif (!update) return [msg, null];\nreturn [msg, {topic: update, qso: msg.qso}];",
+        "outputs": 2,
         "timeout": "",
         "noerr": 0,
         "initialize": "",
@@ -1731,7 +1789,24 @@
         "wires": [
             [
                 "dxc000000000000e"
+            ],
+            [
+                "dxc00000000000d4"
             ]
+        ]
+    },
+    {
+        "id": "dxc00000000000d4",
+        "type": "sqlite",
+        "z": "dxc0000000000090",
+        "mydb": "dxc0000000000027",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "Persist QSO coords",
+        "x": 1810,
+        "y": 340,
+        "wires": [
+            []
         ]
     },
     {

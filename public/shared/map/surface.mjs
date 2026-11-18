@@ -13,6 +13,7 @@ import {
     createBaseMap,
     fitPoints,
     fitWorld,
+    fitWorldContain,
     fitWorldRange,
     LAND_BOUNDS,
     WORLD_BOUNDS
@@ -135,7 +136,9 @@ function fitTo(map, view) {
         return map.getZoom();
     }
     let zoom;
-    if (Array.isArray(view.range) && view.range.length === 2) {
+    if (view.fit === 'contain') {
+        zoom = fitWorldContain(map);
+    } else if (Array.isArray(view.range) && view.range.length === 2) {
         zoom = fitWorldRange(map, view.range[0], view.range[1]);
     } else {
         zoom = fitWorld(map);

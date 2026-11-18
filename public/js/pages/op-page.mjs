@@ -954,20 +954,52 @@ export function createOpPage(ctx) {
         $('#opMapCredit').textContent = t('op.map.fixedBorders');
     }
 
+    /* SPOT rows carry no seat field, so a seat owns the spots its own radio
+     * could have produced: same band, same mode family. Both sides are read
+     * with the same ruler (wall bandOf over kHz, one mode vocabulary), so the
+     * labels can never disagree across a case or a VHF boundary. A side that
+     * cannot be determined widens the match instead of hiding data. */
+    function modeFamily(value) {
+        const mode = String(value || '').trim().toUpperCase();
+        if (!mode) return '';
+        if (/\bCW\b/.test(mode)) return 'CW';
+        if (/\b(SSB|USB|LSB|AM|FM|PHONE)\b/.test(mode)) return 'PHONE';
+        if (/FT8|FT4|RTTY|PSK|JT65|JT9|JS8|MFSK|OLIVIA|CONTESTIA|DOMINO|HELL|THOR|THROB|DIGI/.test(mode)) return 'DIGI';
+        return '';
+    }
+
+    function spotsForSeat(key) {
+        const cutoff = Date.now() - (Number(ctx.settings.mySpotTtl) || 30) * 60000;
+        const live = state.mySpots.filter(spot => timeOf(spot.timestamp) >= cutoff);
+        const radio = radioOf(key);
+        const freq = Number(radio && radio.freqKhz);
+        /* No radio state for this seat yet: the whole station's spots stay on
+         * the map rather than an empty one. */
+        if (!freq) return live;
+        const band = bandOf(freq);
+        const mode = modeFamily(radio.mode);
+        return live.filter(spot => {
+            const spotFreq = Number(spot.freq);
+            if (!spotFreq || bandOf(spotFreq) !== band) return false;
+            const spotMode = modeFamily(spot.mode) || modeFamily(spot.comment);
+            return !mode || !spotMode || spotMode === mode;
+        });
+    }
+
     function renderMap() {
         if (!state.map) return;
         const home = homeLatLon();
         state.map.setHome(home);
         state.map.setCoverage(activeAzimuth());
-        const cutoff = Date.now() - (Number(ctx.settings.mySpotTtl) || 30) * 60000;
-        const spots = state.mySpots.filter(spot => timeOf(spot.timestamp) >= cutoff);
         const limit = Math.min(600, Math.max(60, Number(ctx.settings.qsoMax) || 1500));
-        const all = [...state.qsos.values()].slice(-limit);
         const key = currentSeat();
         state.map.setData({
-            qsos: all,
-            spots,
-            radioFilter: String(radioNrOfKey(key))
+            /* Seat ownership is decided here, by the same rule every other
+             * seat-scoped number on this page uses. radioNr is not usable:
+             * every M2 instance reports 1, and the column is often missing. */
+            qsos: qsosFor(key).slice(-limit),
+            spots: spotsForSeat(key),
+            radioFilter: 'all'
         });
         renderMapLegend();
     }

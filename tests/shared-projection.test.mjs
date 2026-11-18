@@ -9,7 +9,7 @@ import {
     PROP_SOUTH_MIN
 } from '../public/shared/map/projection.mjs';
 import {
-    fitWorld, mercLat, mercY, ringPoints, worldViewCenter
+    fitWorld, fitWorldContain, mercLat, mercY, ringPoints, worldViewCenter
 } from '../public/shared/map/base-map.mjs';
 import {
     computeTerminator, createTerminator, propTerminator, solarCos, solarCosAt
@@ -146,6 +146,30 @@ test('wide containers still fit one world to the full width', () => {
     close(calls.zoom, cover);
     close(calls.minZoom, cover);
     close(256 * Math.pow(2, zoom), size.x);
+});
+
+test('contain fit keeps one whole world on screen in a wide pane', () => {
+    /* The OP map box is much wider than it is tall. fitWorld covers the pane and
+     * crops the poles; fitWorldContain fits the shorter axis instead, so every
+     * continent stays visible and the leftover width is simply left unused. */
+    const size = {x: 1200, y: 400};
+    const calls = {minZoom: 1};
+    const map = {
+        getSize: () => size,
+        project: ([, lon], zoom) => ({x: (lon + 180) / 360 * 256 * Math.pow(2, zoom)}),
+        setMinZoom: value => { calls.minZoom = value; },
+        setView: (center, value) => { calls.zoom = value; calls.center = center; }
+    };
+    const zoom = fitWorldContain(map);
+    const contain = Math.log2(size.y / 256);
+    close(zoom, contain);
+    close(calls.zoom, contain);
+    close(calls.minZoom, contain);
+    // One world tall: nothing is cropped. Narrower than the pane: free band.
+    close(256 * Math.pow(2, zoom), size.y);
+    assert.ok(256 * Math.pow(2, zoom) < size.x);
+    assert.ok(Number.isFinite(calls.center[0]));
+    assert.equal(calls.center[1], 0);
 });
 
 test('world view centre matches the fitted latitude', () => {

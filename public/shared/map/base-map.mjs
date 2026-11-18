@@ -160,6 +160,23 @@ export function fitWorld(map) {
     return zoom;
 }
 
+/** Show one entire world inside the container without cropping anything: a wide
+ *  panel keeps a free band beside the globe instead of losing the poles. WORLD_BOUNDS
+ *  spans the whole projected height, so the world is square and the zoom that
+ *  contains it is just the shorter axis divided by one world. */
+export function fitWorldContain(map) {
+    const size = map.getSize();
+    if (!size.x || !size.y) return map.getZoom();
+    /* Same reason as fitWorld: the limit has to be lifted before asking, or a
+     * stale minZoom keeps the map wider than the pane. */
+    map.setMinZoom(0);
+    const worldPx = map.project([0, 180], 0).x - map.project([0, -180], 0).x;
+    const zoom = Math.log2(Math.min(size.x, size.y) / worldPx);
+    map.setMinZoom(zoom);
+    map.setView(worldViewCenter(map, zoom), zoom, {animate: false});
+    return zoom;
+}
+
 /** Same width-filling fit as fitWorld, but centred on an explicit latitude
  *  window. The documented defaults (85/-85) delegate to fitWorld so the wall
  *  keeps its existing framing byte-for-byte. */

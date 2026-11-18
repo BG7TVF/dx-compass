@@ -3,6 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const qsoApi = require('../lib/qsos');
+const storage = require('../lib/storage');
 
 const NOW = new Date('2026-11-08T12:34:00.000Z');
 
@@ -44,6 +45,41 @@ test('QSO coordinate lookup keeps QRZ, grid then spots priority', () => {
     assert.equal(noGrid.lat, 12.5);
     assert.equal(noGrid.lon, -45);
     assert.equal(qsoApi.coordinateRoute({type: 'qsoDelete'}, true), 'broadcast');
+});
+
+test('spots fallback coordinates are persisted for the live QSO chain', () => {
+    const hit = {n1mmId: 'DXI|REMOTE|{ABC-1}', call: 'K1ABC', lat: null, lon: null};
+    assert.match(qsoApi.spotCoordsUpdate(hit, [{dx_lat: 12.5, dx_lon: -45}]),
+        /UPDATE qsos SET lat=12\.5, lon=-45 WHERE n1mm_id='DXI\|REMOTE\|\{ABC-1\}';/);
+    // 数据库已有坐标时绝不覆盖（QRZ / 网格反算优先）。
+    assert.equal(qsoApi.spotCoordsUpdate({...hit, lat: 40, lon: 149}, [{dx_lat: 12.5, dx_lon: -45}]), null);
+    // 没有 n1mm_id 无法定位行。
+    assert.equal(qsoApi.spotCoordsUpdate({call: 'K1ABC', lat: null}, [{dx_lat: 12.5, dx_lon: -45}]), null);
+    assert.equal(qsoApi.spotCoordsUpdate(hit, []), null);
+    assert.equal(qsoApi.spotCoordsUpdate(hit, undefined), null);
+    assert.equal(qsoApi.spotCoordsUpdate(hit, [{dx_lat: null, dx_lon: null}]), null);
+    // 只有一半坐标时不落库，否则会写出一行永远画不出来的记录。
+    assert.equal(qsoApi.spotCoordsUpdate(hit, [{dx_lat: 12.5, dx_lon: null}]), null);
+    assert.equal(qsoApi.spotCoordsUpdate(null, [{dx_lat: 12.5}]), null);
+    // 只生成 SQL，不改动内存对象，广播仍由 applySpotCoords 负责。
+    assert.equal(hit.lat, null);
+});
+
+test('historical coord backfill only touches NULL rows that spots can resolve', () => {
+    const sql = storage.qso.backfillCoords(500);
+    assert.match(sql, /^UPDATE qsos SET lat = \(SELECT s\.dx_lat FROM spots s/);
+    assert.match(sql, /lon = \(SELECT s\.dx_lon FROM spots s WHERE s\.spot_call = qsos\.call/);
+    assert.match(sql, /AND s\.dx_lat IS NOT NULL AND s\.dx_lon IS NOT NULL ORDER BY s\.id DESC LIMIT 1\)/);
+    assert.match(sql, /WHERE id IN \(SELECT q\.id FROM qsos q WHERE q\.lat IS NULL/);
+    assert.match(sql, /AND EXISTS \(SELECT 1 FROM spots s WHERE s\.spot_call = q\.call AND s\.dx_lat IS NOT NULL AND s\.dx_lon IS NOT NULL\)/);
+    assert.match(sql, /ORDER BY q\.id DESC LIMIT 500\);$/);
+    // EXISTS 兜住后不会有行被写成 NULL，也不会覆盖 QRZ/网格已有坐标。
+    assert.doesNotMatch(sql, /SET lat=NULL|SET lat = NULL|ELSE NULL/i);
+    assert.match(storage.qso.backfillCoords(), /LIMIT 5000\);$/);
+    assert.match(storage.qso.backfillCoords(0), /LIMIT 5000\);$/);
+    assert.match(storage.qso.backfillCoords(-5), /LIMIT 1\);$/);
+    assert.match(storage.qso.backfillCoords(999999), /LIMIT 50000\);$/);
+    assert.match(storage.qso.backfillCoords('abc'), /LIMIT 5000\);$/);
 });
 
 test('RadioInfo and Score update current and per-radio station state', () => {
