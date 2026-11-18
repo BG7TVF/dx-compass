@@ -542,6 +542,17 @@ test('频率联动：电台卡片、服务端判定与轮询链路都在约定�
     assert.match(op, /function stationSeatKey\(\) \{[\s\S]*?antSwitchSeatHit\(\)/,
         '联动必须按服务端席位键存取，和天线切换同一口径');
 
+    // 收发指示必须跟着报文走：卡片曾经只靠 3 秒一轮的 loadDevices 重绘，
+    // 电台早就收着了灯还红着，比 QSO 地图的本台状态慢一个数量级。
+    const stationTick = op.slice(op.indexOf('function handleStation() {'),
+        op.indexOf('function handleQso('));
+    assert.ok(stationTick.length > 40, 'handleStation 必须存在');
+    assert.match(stationTick, /renderStationCard\(\);/,
+        'radio 报文一到就要重绘电台卡片，不能等轮询');
+    assert.match(read('public', 'js', 'main.mjs'),
+        /case 'radio':[\s\S]*?ctx\.op\.handleStation\(\);/,
+        'radio 报文要同时喂给 OP 视图');
+
     // 卡片加密：读数带 + 四格副读数 + 贴底结论栏，三行缺一行就又变成空卡片。
     assert.match(op, /class="op-station-read /,
         '主读数带：波段牌、大号频率、模式/异频、收发灯');

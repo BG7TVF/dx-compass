@@ -2463,6 +2463,10 @@ export function createOpPage(ctx) {
         renderMultipliers();
         renderBandOccupancy();
         renderAntSwitch();
+        /* 电台卡片跟着 radio 报文重绘：收发灯、频率、波段、模式全在 radio 状态里，
+         * 只靠 3 秒一轮的 loadDevices 轮询会滞后到实际状态之外，
+         * 而 QSO 地图的本台状态就是在同一条报文里立刻重绘的。 */
+        renderStationCard();
         renderAdvice();
     }
 
