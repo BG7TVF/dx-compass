@@ -444,7 +444,14 @@ test('OP 地图：本台位置、本席位与其他席位 QSO、本台 SPOT 都�
     assert.ok(home, '本台位置必须由 OP 页换算');
     assert.match(home, /\{\s*lat:/);
     assert.doesNotMatch(home, /return grid \? gridToLatLon\(grid\) : null;/);
-    assert.match(map, /function setHome\(next\)[\s\S]{0,120}isFinite\(next\.lat\)/);
+    assert.match(map, /const at = next && !Array\.isArray\(next\) \? pointOf\(next\.lat, next\.lon\) : null;/);
+    // 接口里没坐标的 QSO 是 lat:null；isFinite(null) 为真，旧写法会把 null 当 (0,0)
+    // 交给 Leaflet，marker 的 _latlng 变成 null，addTo 抛出 TypeError 后整个绘制循环
+    // 中断——后面的 QSO 弧线一条都画不出来。坐标一律先 Number 再校验。
+    assert.match(map, /function pointOf\(lat, lon\) \{[\s\S]*?Number\.isFinite\(north\)[\s\S]*?\n\}/);
+    assert.doesNotMatch(map, /if \(!isFinite\(qso\.lat\)/);
+    assert.match(map, /const at = pointOf\(qso\.lat, qso\.lon\);\s*if \(!at\) continue;/);
+    assert.match(map, /L\.marker\(at, \{/);
     // 图上不止本席位：席位列表 ∪ QSO 里真实出现过的席位，每席位各截一段。
     assert.match(op, /function mapSeatKeys\(current\)/);
     assert.match(op, /qsos: mapQsos\(key, limit\)/);

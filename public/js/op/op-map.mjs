@@ -26,6 +26,18 @@ function laneIndex(value) {
     if (!Number.isFinite(n) || n <= 0) return 1;
     return ((Math.floor(n) - 1) % LANE_COUNT) + 1;
 }
+/* 坐标可能是数字、数字字符串，也可能是接口里的 null。
+ * isFinite(null) 是 true（null 被当成 0），所以旧的写法会把「没坐标」的 QSO
+ * 当成 (0, 0) 交给 Leaflet：marker 的 _latlng 变成 null，addTo 时直接抛
+ * "Cannot read properties of null (reading 'lat')"，整个绘制循环当场中断，
+ * 后面的 QSO 弧线一条都画不出来。取不到坐标就跳过，(0,0) 也当没坐标处理。 */
+function pointOf(lat, lon) {
+    const north = Number(lat);
+    const east = Number(lon);
+    if (!Number.isFinite(north) || !Number.isFinite(east)) return null;
+    if (Math.abs(north) < 1e-9 && Math.abs(east) < 1e-9) return null;
+    return [north, east];
+}
 /* Antenna coverage wedge: the two edges are great-circle lines leaving the home
  * station at the rotator heading ± HALF_DEG, capped at RADIUS_DEG of arc so the
  * beam reads as a direction, not a full lune. Longitudes are kept continuous
@@ -164,9 +176,9 @@ export function createOpMap(container, {onBearing, canRotate} = {}) {
     }
 
     function setHome(next) {
-        home = next && isFinite(next.lat) && isFinite(next.lon)
-            ? {lat: Number(next.lat), lon: Number(next.lon)}
-            : null;
+        /* 只接受 {lat, lon}；数组、null 字段、(0,0) 都算「本台没有位置」。 */
+        const at = next && !Array.isArray(next) ? pointOf(next.lat, next.lon) : null;
+        home = at ? {lat: at[0], lon: at[1]} : null;
         homeLayer.clear();
         if (!home) { drawCoverage(); return; }
         const open = cssVar('--map-open', '#00e08a');
@@ -190,14 +202,15 @@ export function createOpMap(container, {onBearing, canRotate} = {}) {
         const spotFill = cssVar('--map-bg', '#0a1929');
 
         for (const qso of qsos) {
-            if (!isFinite(qso.lat) || !isFinite(qso.lon)) continue;
+            const at = pointOf(qso.lat, qso.lon);
+            if (!at) continue;
             if (radioFilter !== 'all' && String(qso.radioNr) !== String(radioFilter)) continue;
             const lane = laneIndex(qso.seatLane !== undefined ? qso.seatLane : qso.radioNr);
             const color = lanes[lane - 1];
             /* 本席位的线粗而实，其他席位的线细而淡，颜色按席位泳道分开：
              * 一眼就能分清这条 QSO 是自己打的还是隔壁席位打的。 */
             const own = qso.ownSeat !== false;
-            addTrackPaths(map, trackPaths(home.lat, home.lon, qso.lat, qso.lon, 64), {
+            addTrackPaths(map, trackPaths(home.lat, home.lon, at[0], at[1], 64), {
                 L,
                 group: qsoLayer.group,
                 color,
@@ -205,7 +218,7 @@ export function createOpMap(container, {onBearing, canRotate} = {}) {
                 opacity: own ? 0.6 : 0.34,
                 dashArray: own ? null : '3 4'
             });
-            L.marker([qso.lat, qso.lon], {
+            L.marker(at, {
                 interactive: false,
                 icon: qsoDotIcon(L, lane, {
                     className: 'op-map-dot' + (own ? '' : ' other'),
@@ -215,10 +228,9 @@ export function createOpMap(container, {onBearing, canRotate} = {}) {
         }
 
         for (const spot of spots) {
-            const lat = Number(spot.lat);
-            const lon = Number(spot.lon);
-            if (!isFinite(lat) || !isFinite(lon)) continue;
-            addTrackPaths(map, trackPaths(home.lat, home.lon, lat, lon, 64), {
+            const at = pointOf(spot.lat, spot.lon);
+            if (!at) continue;
+            addTrackPaths(map, trackPaths(home.lat, home.lon, at[0], at[1], 64), {
                 L,
                 group: spotLayer.group,
                 color: spotColor,
@@ -226,7 +238,7 @@ export function createOpMap(container, {onBearing, canRotate} = {}) {
                 opacity: 0.28,
                 dashArray: '1 5'
             });
-            L.circleMarker([lat, lon], {
+            L.circleMarker(at, {
                 radius: 2.6, color: spotColor, fillColor: spotFill,
                 fillOpacity: 0.65, weight: 1, interactive: false
             }).addTo(spotLayer.group);
