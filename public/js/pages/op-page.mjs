@@ -369,31 +369,70 @@ export function createOpPage(ctx) {
 
     function renderSeatOptions() {
         const select = $('#opSeat');
-        const label = $('#opSeatLabel');
-        const name = $('#opSeatName');
         if (!select) return;
         const choices = orderedSeatChoices();
         ensureSeatNumbers(choices.map(choice => choice.value));
         const empty = !choices.length;
+        /* One seat means no dropdown: the nameplate already carries the identity,
+         * a picker that repeats it is noise. No seat at all gets an explicit hint
+         * in the rig line instead of an empty dropdown. */
         const show = choices.length > 1;
-        select.classList.toggle('hidden', !show);
-        if (label) {
-            label.classList.toggle('hidden', !show);
-            label.textContent = t('op.seat');
-        }
         const current = currentSeat();
+        select.classList.toggle('hidden', !show);
+        select.setAttribute('aria-label', t('op.seat'));
         select.innerHTML = choices.map(choice => '<option value="' + esc(choice.value) + '">' +
             esc(seatLabel(choice)) + '</option>').join('');
         if (show) select.value = current;
-        /* One seat means no dropdown: the card shows the seat name instead.
-         * No seat at all gets an explicit hint, never an empty dropdown. */
-        if (name) {
-            const active = choices.find(choice => choice.value === current);
-            name.classList.toggle('empty', empty);
-            name.textContent = empty
-                ? t('op.seat.empty')
-                : (show ? '' : (active ? seatLabel(active) : ''));
+        renderSeatPlate(choices.find(choice => choice.value === current) || null, empty);
+    }
+
+    /* opcall-exception:start */
+    /* 席位铭牌第二处豁免：本席位的 OP 优先取 N1MM 实时上报的 OpCall；报文里没带
+     * 操作员时退回席位名单（在线实例的 operator，或 settings.field.operators 名册）
+     * 里的操作员。两处都没有就留 "--"，宁缺毋滥，不拿本机 callsign 顶上。 */
+    function seatOperator(active) {
+        if (!active) return '';
+        const radio = radioOf(active.value) || {};
+        const live = String(radio.opCall || '').trim();
+        if (live) return live.toUpperCase();
+        return String(active.operator || '').trim().toUpperCase();
+    }
+    /* opcall-exception:end */
+
+    function renderSeatPlate(active, empty) {
+        const plate = $('#opSeatPlate');
+        const index = $('#opSeatIndex');
+        const op = $('#opSeatOp');
+        const name = $('#opSeatName');
+        const call = seatOperator(active);
+        const radio = active ? (radioOf(active.value) || {}) : {};
+        if (plate) {
+            plate.className = 'op-seat-plate' + (active ? ' ' + radioTheme(active.value) : '');
+            /* 席位在报活：电台有频率，或至少上报了操作员。 */
+            if (Number(radio.freqKhz || 0) > 0 || call) plate.dataset.live = '1';
+            else delete plate.dataset.live;
         }
+        if (index) {
+            index.textContent = active ? String(seatNumber(active.value)).padStart(2, '0') : '--';
+        }
+        if (op) {
+            op.classList.toggle('on', !!call);
+            op.textContent = call || '--';
+        }
+        if (name) {
+            name.classList.toggle('empty', empty);
+            name.textContent = empty ? t('op.seat.empty') : seatRigLine(active, radio);
+        }
+    }
+
+    /** 铭牌下沿：席位台名 + 电台型号，两者相同就不重复。 */
+    function seatRigLine(active, radio) {
+        if (!active) return '';
+        const station = String(active.stationName || '').trim();
+        const bits = [station || t('op.seat.n', {n: seatNumber(active.value)})];
+        const model = String(radio.radioName || radio.name || '').trim();
+        if (model && model !== station) bits.push(model);
+        return bits.join(' · ');
     }
 
     /** QSO total and contest score: the score comes from the station snapshot,
@@ -2641,7 +2680,7 @@ export function createOpPage(ctx) {
     }
 
     function renderTitles() {
-        $('#opSeatTitle').textContent = t('op.seat');
+        $('#opSeatTitleText').textContent = t('op.seat');
         $('#opRateTitle').textContent = t('qsoRate');
         $('#opBandQsoTitle').textContent = t('op.top.bandCounts');
         $('#opQsoLabel').textContent = t('stQsos');

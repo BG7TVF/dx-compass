@@ -335,15 +335,16 @@ test('operational UI does not render operator callsigns', () => {
         path.join(ROOT, 'public/js/pages/qso-page.mjs'),
         path.join(ROOT, 'public/bigscreen/wall-cards.mjs')
     ], /opCall/, 'operational UI must not render OpCall');
-    // 波段占用横条是唯一豁免：仅 renderBandOccupancy 内允许显示操作员呼号，
-    // 否则 OP 无法判断是谁占用了某段。圈定 opcall-exception 标记后整段剔除，
-    // 其余 op-page.mjs 仍禁止出现 opCall。
+    // 只有两处豁免允许显示操作员呼号，各自用 opcall-exception 标记圈住：
+    // 一是波段占用横条，否则 OP 无法判断是谁占用了某段；
+    // 二是席位铭牌，本席位的 OP 必须显示出来。
+    // 剔除标记内的代码后，其余 op-page.mjs 仍禁止出现 opCall。
     const opSource = read('public', 'js', 'pages', 'op-page.mjs');
     assert.match(opSource, /\/\* opcall-exception:start \*\/[\s\S]*?opCall[\s\S]*?\/\* opcall-exception:end \*\//,
-        'the band-occupancy exception must wrap a real OpCall use');
+        'an OpCall exception must wrap a real OpCall use');
     assert.doesNotMatch(
         opSource.replace(/\/\* opcall-exception:start \*\/[\s\S]*?\/\* opcall-exception:end \*\//g, ''),
-        /opCall/, 'op-page must not render OpCall outside the band-occupancy strip');
+        /opCall/, 'op-page must not render OpCall outside the band-occupancy strip and the seat nameplate');
     assert.doesNotMatch(read('public', 'index.html'), /id="qtOp"|id="qOpDist"/);
     assert.doesNotMatch(read('public', 'bigscreen', 'index.html'), /id="opList"/);
 });

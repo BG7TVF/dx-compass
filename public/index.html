@@ -7,7 +7,7 @@
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%230b1220'/%3E%3Ccircle cx='8' cy='8' r='4' fill='%2300e08a'/%3E%3C/svg%3E">
     <link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
     <link rel="stylesheet" href="css/style.css?v=2.4.1">
-    <link rel="stylesheet" href="css/op.css?v=1.3.5">
+    <link rel="stylesheet" href="css/op.css?v=1.4.0">
     <link rel="stylesheet" href="css/devices.css?v=2.0.0">
     <link rel="stylesheet" href="shared/opponents/opponents.css?v=2.4.1">
 </head>
@@ -107,11 +107,18 @@
         <!-- OP view: five columns (seat + advice / opponents | map | devices | side stack / amplifier bay / five data cells) -->
         <div id="opView" class="op-view hidden">
             <section class="op-card op-seat-card">
-                <h3 id="opSeatTitle">Seat</h3>
-                <div class="op-seat-body">
-                    <label class="op-cat-label" for="opSeat" id="opSeatLabel">Seat</label>
-                    <select id="opSeat" class="op-cat-select"></select>
-                    <span class="op-seat-name" id="opSeatName"></span>
+                <h3 id="opSeatTitle"><span id="opSeatTitleText">Seat</span>
+                    <select id="opSeat" class="op-cat-select op-seat-pick"></select>
+                </h3>
+                <div class="op-seat-plate r1" id="opSeatPlate">
+                    <i class="op-seat-index" id="opSeatIndex" aria-hidden="true">--</i>
+                    <div class="op-seat-read">
+                        <div class="op-seat-opline">
+                            <span class="op-seat-tag">OP</span>
+                            <b class="op-seat-op" id="opSeatOp">--</b>
+                        </div>
+                        <span class="op-seat-name" id="opSeatName"></span>
+                    </div>
                 </div>
             </section>
 

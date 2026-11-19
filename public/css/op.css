@@ -82,17 +82,136 @@ body[data-theme="light"] {
 .op-view > .op-suspect-card { grid-column: 4; grid-row: 4; }
 .op-view > .op-mult-card { grid-column: 5; grid-row: 4; }
 
-/* Seat picker keeps its own cell; the advice banner spans the remaining four
- * columns beside it. */
-.op-seat-card { padding: 6px 9px; gap: 5px; justify-content: center; }
-.op-seat-body { display: flex; align-items: center; gap: 8px; min-width: 0; }
+/* Seat nameplate. The picker moves into the card head; the body is the seat's
+ * identity — index tile on the left, who is on the keys and on which rig on the
+ * right. The plate carries the seat's lane colour (--seat-lane, r1…r6), the same
+ * colour the band-occupancy cells and the antenna buttons use, so "which seat am
+ * I on" reads from across the room. */
+.op-seat-card { padding: 0 0 8px; gap: 0; justify-content: flex-start; }
+.op-seat-card > h3 {
+    gap: 8px;
+    padding: 0 8px;
+}
+.op-seat-card > h3 > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.op-seat-pick {
+    margin-left: auto;
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 128px;
+    height: 19px;
+    font-size: 10px;
+}
+.op-seat-plate {
+    --seat-lane: var(--text-dim);
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    flex: 1 1 auto;
+    min-height: 0;
+    min-width: 0;
+    padding: 0 9px;
+}
+.op-seat-plate.r1 { --seat-lane: var(--op-r1); }
+.op-seat-plate.r2 { --seat-lane: var(--op-r2); }
+.op-seat-plate.r3 { --seat-lane: var(--op-r3); }
+.op-seat-plate.r4 { --seat-lane: var(--op-r4); }
+.op-seat-plate.r5 { --seat-lane: var(--op-r5); }
+.op-seat-plate.r6 { --seat-lane: var(--op-r6); }
+/* Machined index tile: hatched face, inset lip, lane rail down the left edge. */
+.op-seat-index {
+    position: relative;
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    width: 46px;
+    height: 42px;
+    border: 1px solid var(--op-rule);
+    border-radius: 4px;
+    background-image: repeating-linear-gradient(135deg,
+        transparent 0 3px, color-mix(in srgb, var(--text) 5%, transparent) 3px 4px);
+    box-shadow: inset 0 1px 0 var(--op-inset-hi);
+    font-family: var(--op-num);
+    font-size: 22px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    letter-spacing: -.01em;
+    color: var(--text-dim);
+}
+.op-seat-index::after {
+    content: '';
+    position: absolute;
+    left: -1px;
+    top: 8px;
+    bottom: 8px;
+    width: 2px;
+    border-radius: 2px;
+    background: var(--seat-lane);
+    opacity: .45;
+}
+.op-seat-plate[data-live="1"] .op-seat-index { color: var(--text-strong); }
+.op-seat-plate[data-live="1"] .op-seat-index::after {
+    top: 3px;
+    bottom: 3px;
+    opacity: 1;
+    box-shadow: 0 0 8px color-mix(in srgb, var(--seat-lane) 60%, transparent);
+}
+.op-seat-read {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+.op-seat-opline {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    min-width: 0;
+}
+.op-seat-tag {
+    flex: 0 0 auto;
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: .16em;
+    color: var(--text-dim);
+}
+/* The OP callsign is the one thing worth reading at a glance, so it is the
+ * largest ink in the card. "--" in dim ink means no operator reported yet. */
+.op-seat-op {
+    min-width: 0;
+    font-family: var(--op-num);
+    font-size: 19px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.1;
+    letter-spacing: .03em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--text-dim);
+}
+.op-seat-op.on {
+    color: var(--seat-lane);
+    text-shadow: 0 0 12px color-mix(in srgb, var(--seat-lane) 35%, transparent);
+}
 .op-seat-name {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 12px;
-    color: var(--text-strong);
+    font-size: 10px;
+    letter-spacing: .02em;
+    color: var(--text-dim);
+}
+.op-seat-name.empty {
+    white-space: normal;
+    line-height: 1.35;
+    color: var(--yellow);
 }
 
 .op-cat-label { font-size: 11px; color: var(--text-dim); }
@@ -1184,28 +1303,12 @@ body[data-theme="light"] {
     font-family: var(--op-num);
     font-variant-numeric: tabular-nums;
 }
-.op-view .op-seat-card {
-    justify-content: center;
-}
-.op-view .op-seat-card > h3 {
-    border-bottom: 0;
-    min-height: 0;
-    padding: 0;
-    color: var(--text-dim);
-}
-.op-view .op-seat-card > h3::before { display: none; }
-.op-view .op-seat-name {
-    margin-left: auto;
-    font-family: var(--op-num);
-    color: var(--accent);
-    letter-spacing: .04em;
-}
-/* No seat yet: the card states it instead of showing an empty dropdown. */
-.op-view .op-seat-name.empty {
+/* Seat nameplate takes the console head as-is (accent tick + hairline rule), so
+ * only the picker inside it needs the skin's recessed control look. */
+.op-view .op-seat-pick {
+    border-color: var(--op-rule);
+    background: var(--panel-2);
     font-family: inherit;
-    font-size: 11px;
-    color: var(--yellow);
-    letter-spacing: 0;
 }
 
 /* The map is its own panel now: one frame (the card skin) instead of a card
