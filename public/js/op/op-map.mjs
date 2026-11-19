@@ -167,9 +167,18 @@ export function createOpMap(container, {onBearing, canRotate} = {}) {
         rotatorLayer.clear();
         if (!home || !target) return;
         const heading = cssVar('--op-r2', COVERAGE_COLOR);
-        L.polyline([[home.lat, home.lon], [target.lat, target.lon]], {
-            color: heading, weight: 1.6, opacity: 0.95, dashArray: '5 4', interactive: false
-        }).addTo(rotatorLayer.group);
+        /* 点击目标与本台之间画大圆线，和 QSO/SPOT 弧线同一套算法：墨卡托直线在
+         * 远方位时会明显偏离真实传播方向，跨 180° 经线还会横穿整幅图。trackPaths
+         * 负责采样并按世界副本切段，addTrackPaths 把每一段单独落到 pane 上，
+         * 于是换日线处自然打断、从另一侧续画。 */
+        addTrackPaths(map, trackPaths(home.lat, home.lon, target.lat, target.lon, 64), {
+            L,
+            group: rotatorLayer.group,
+            color: heading,
+            weight: 1.6,
+            opacity: 0.95,
+            dashArray: '5 4'
+        });
         L.circleMarker([target.lat, target.lon], {
             radius: 4, color: heading, fillColor: heading, fillOpacity: 1, weight: 1
         }).addTo(rotatorLayer.group);

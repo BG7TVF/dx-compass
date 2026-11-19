@@ -476,6 +476,23 @@ test('OP 地图：本台位置、本席位与其他席位 QSO、本台 SPOT 都�
     assert.match(op, /spots: spotsForSeat\(key\)/);
 });
 
+test('OP 地图：连线一律大圆绘制，换日线处打断重画', () => {
+    const map = read('public', 'js', 'op', 'op-map.mjs');
+    const layers = read('public', 'shared', 'map', 'layers.mjs');
+    /* 点击地图得到的旋转器目标线以前直接 L.polyline 两点连线：墨卡托直线在
+     * 远方位时方向失真，跨 180° 经线时还会横穿整幅图。它现在与 QSO/SPOT 弧线
+     * 同源，整个地图文件里不再允许出现任何未走大圆的两点连线。 */
+    assert.doesNotMatch(map, /L\.polyline\(/);
+    const rotator = (/    function drawRotatorLine\(\) \{[\s\S]*?\n    \}/.exec(map) || [''])[0];
+    assert.ok(rotator, '旋转器目标线必须自成函数');
+    assert.match(rotator, /addTrackPaths\(map, trackPaths\(home\.lat, home\.lon, target\.lat, target\.lon, 64\)/);
+    assert.match(rotator, /group: rotatorLayer\.group/);
+    /* 打断重画由共享层负责：trackPaths 按世界副本切成多段，每段各自成一条
+     * polyline，跨日更线时在两侧边缘分别收尾。 */
+    assert.match(layers, /export function addTrackPaths\(map, paths,/);
+    assert.match(layers, /\(paths \|\| \[\]\)\.map\(path => leaflet\.polyline\(path/);
+});
+
 test('摄像头设备：白名单只放行取流地址，天线绑定摄像头 id', () => {
     const model = read('lib', 'devices', 'model.js');
     assert.match(model, /antenna: \['preferred', 'camera'\]/);
