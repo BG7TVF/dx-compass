@@ -372,6 +372,9 @@ test('OP 功放面板：只列本席位链路上的功放，画面永远画出�
     const css = read('public', 'css', 'op.css');
     assert.match(css, /\.op-view > \.op-amp-bay \{ grid-column: 1 \/ 3; grid-row: 3; \}/);
     assert.match(css, /\.op-view > \.op-station-card \{ grid-column: 3; grid-row: 3; \}/);
+    // 地图容器同样只占中间两轨的第一轨：右缘与功放容器右缘落在同一条竖线上，
+    // 第二轨空出来留给后续内容。
+    assert.match(css, /\.op-view > \.op-center \{ grid-column: 2 \/ 3; grid-row: 2; \}/);
     assert.doesNotMatch(css, /\.op-amp-empty/);
 });
 

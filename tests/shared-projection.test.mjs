@@ -149,11 +149,11 @@ test('wide containers still fit one world to the full width', () => {
 });
 
 test('a track-wide OP box keeps Antarctica on screen whatever the row height', () => {
-    /* #opMap fills the whole first centre track, so the zoom comes from its
-     * width alone and a squeezed row shortens the visible latitude band. The
-     * pinned 81..-66 centre keeps the peninsula inside at the narrowest row the
-     * layout is expected to reach, where the plain land midpoint would already
-     * have pushed the continent out of frame. */
+    /* .op-center owns a single 1fr track and #opMap fills it, so the zoom comes
+     * from that width alone and a squeezed row shortens the visible latitude
+     * band. The pinned 81..-66 centre keeps the peninsula inside at the
+     * narrowest row the layout is expected to reach, where the plain land
+     * midpoint would already have pushed the continent out of frame. */
     globalThis.LAND = [
         [-42, 83.565, -20, 70, -42, 83.565],
         [-180, -90, 180, -90, 180, -63.226, -180, -63.226, -180, -90]
