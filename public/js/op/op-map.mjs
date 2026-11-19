@@ -43,7 +43,7 @@ function pointOf(lat, lon) {
  * beam reads as a direction, not a full lune. Longitudes are kept continuous
  * relative to home and drawn on three world copies so the beam never splits at
  * the antimeridian. */
-const COVERAGE_HALF_DEG = 30;
+const COVERAGE_HALF_DEG = 15;
 const COVERAGE_RADIUS_DEG = 55;
 const COVERAGE_COLOR = '#ffb020';
 const COVERAGE_EDGE = 84;
