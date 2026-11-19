@@ -251,3 +251,46 @@ test('候选集把 StationName 当作计算机名，大小写不敏感去重', (
     assert.equal(view.pairs[0].lastSeen, later.toISOString());
 });
 
+test('重连抖动：RadioName 回落成 Manual 不再开出第二个席位', () => {
+    const ctx = new Context();
+    const source = {ip: '10.0.0.90', port: '50001'};
+    feed(ctx, 'BG7TVF-2', 'FT-817', '1', source, '{1}');
+    assert.deepEqual(seats(ctx), ['BG7TVF-2:1']);
+    // N1MM 重新连上服务器，但电台还没绑回 FT-817，RadioInfo 暂时报 Manual。
+    const blip = ingestApi.ingest(ctx, radio('Manual', '1'), NOW, source);
+    assert.equal(blip.event.seat, 'BG7TVF-2:1');
+    assert.equal(blip.event.radioName, 'FT-817');
+    assert.deepEqual(seats(ctx), ['BG7TVF-2:1']);
+    assert.equal(ctx.get('radioStates')['BG7TVF-2:1'].radioName, 'FT-817');
+    assert.equal(seatIdentity.summary(ctx).seats.length, 1);
+    const back = ingestApi.ingest(ctx, radio('FT-817', '1'), NOW, source);
+    assert.equal(back.event.seat, 'BG7TVF-2:1');
+    assert.deepEqual(seats(ctx), ['BG7TVF-2:1']);
+});
+
+test('先报 Manual 再报真实型号，同样收敛到一个席位并升级型号', () => {
+    const ctx = new Context();
+    const source = {ip: '10.0.0.91', port: '50001'};
+    feed(ctx, 'BG7TVF-THINKPAD', 'Manual', '1', source, '{1}');
+    assert.equal(ctx.get('radioStates')['BG7TVF-THINKPAD:1'].radioName, 'Manual');
+    const later = ingestApi.ingest(ctx, radio('IC-7300', '1'), NOW, source);
+    assert.equal(later.event.seat, 'BG7TVF-THINKPAD:1');
+    assert.deepEqual(seats(ctx), ['BG7TVF-THINKPAD:1']);
+    assert.equal(ctx.get('radioStates')['BG7TVF-THINKPAD:1'].radioName, 'IC-7300');
+});
+
+test('陈旧席位在读取站点状态前被剔除，活席位与无时间戳的席位保留', () => {
+    const ctx = new Context();
+    ctx.set('radioStates', {
+        'BG7TVF-2:1': {freqKhz: 21021, ts: NOW.toISOString()},
+        'BG7TVF-2~MANUAL:1': {freqKhz: 14002.5, ts: new Date(NOW.getTime() - 6 * 60 * 1000).toISOString()},
+        'BG7TVF-EDGE:1': {freqKhz: 7000, ts: new Date(NOW.getTime() - 5 * 60 * 1000).toISOString()},
+        'BG7TVF-NOTS:1': {freqKhz: 3600}
+    });
+    ctx.set('operatorSessions', {'BG7TVF-2~MANUAL:1': {seat: 'BG7TVF-2~MANUAL:1', operator: 'BG7TVF'}});
+    assert.deepEqual(service.pruneStaleSeats(ctx, NOW).removed, ['BG7TVF-2~MANUAL:1']);
+    assert.deepEqual(seats(ctx).sort(), ['BG7TVF-2:1', 'BG7TVF-EDGE:1', 'BG7TVF-NOTS:1']);
+    assert.equal(ctx.get('operatorSessions')['BG7TVF-2~MANUAL:1'], undefined);
+    assert.deepEqual(service.pruneStaleSeats(ctx, NOW).removed, []);
+});
+

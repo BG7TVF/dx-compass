@@ -2015,7 +2015,7 @@
         "type": "function",
         "z": "dxc0000000000090",
         "name": "Station state",
-        "func": "const dx = global.get('dx');\nmsg.payload = dx.qso.stationState(global);\nmsg.headers = {'Content-Type': 'application/json'};\nreturn msg;",
+        "func": "const dx = global.get('dx');\nconst pruned = dx.qso.pruneStaleSeats(global, new Date());\nmsg.payload = dx.qso.stationState(global);\nmsg.payload.prunedSeats = pruned.removed;\nmsg.headers = {'Content-Type': 'application/json'};\nreturn msg;",
         "outputs": 1,
         "timeout": "",
         "noerr": 0,
