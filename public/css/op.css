@@ -631,7 +631,7 @@ body[data-theme="light"] {
 .op-center { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 6px; }
 .op-map-head { flex: 0 0 auto; display: flex; align-items: baseline; gap: 10px; }
 .op-map-head h3 { font-size: 12px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .05em; }
-.op-map-hint { font-size: 10px; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.op-map-hint { flex: 0 1 auto; min-width: 0; font-size: 10px; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .op-map-wrap {
     position: relative;
     flex: 1;
@@ -676,7 +676,11 @@ body[data-theme="light"] {
     color: var(--text-dim);
 }
 .op-map-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 3px; vertical-align: -1px; }
-.op-map-credit { position: absolute; right: 8px; bottom: 8px; z-index: 500; font-size: 8px; color: var(--text-dim); }
+/* The source credit lives in the head row, pushed to its right edge. The centre
+ * container now owns a single track and the map fills it, so an overlay in the
+ * bottom-right corner would sit on the Antarctic band and hide QSO/SPOT dots;
+ * the legend keeps the bottom-left because it has to read against the map. */
+.op-map-credit { margin-left: auto; flex: 0 0 auto; font-size: 8px; color: var(--text-dim); white-space: nowrap; }
 .op-map-flag {
     position: absolute;
     left: 50%;
