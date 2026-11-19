@@ -163,11 +163,12 @@ ok "Disk space OK ($(( FREE_KB / 1024 )) MB available)"
 # --------------------------------------------------------------------------- #
 # 2. System packages (build tools needed by the sqlite native module)
 # --------------------------------------------------------------------------- #
-info "Installing system packages (ca-certificates, curl, build tools)..."
+info "Installing system packages (ca-certificates, curl, build tools, ffmpeg)..."
 if [[ ${MODE} == "system" ]]; then
     ${SUDO} apt-get update -qq
+    # ffmpeg 是 RTSP 摄像头唯一的取流手段：lib/cameras/ingest-rtsp.js 直接 spawn 它。
     ${SUDO} env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
-        ca-certificates curl gnupg iproute2 \
+        ca-certificates curl gnupg iproute2 ffmpeg \
         build-essential python3 make g++ >/dev/null
     ok "System packages ready"
 else
@@ -183,6 +184,12 @@ else
         warn "  sudo apt-get install -y build-essential python3 make g++"
     else
         ok "Build tools present"
+    fi
+    if command -v ffmpeg >/dev/null 2>&1; then
+        ok "ffmpeg present (RTSP cameras can be pulled)"
+    else
+        warn "ffmpeg not found: RTSP cameras will fall back to HTTP JPEG snapshots."
+        warn "Ask an administrator to run: sudo apt-get install -y ffmpeg"
     fi
 fi
 

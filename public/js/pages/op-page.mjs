@@ -1004,12 +1004,6 @@ export function createOpPage(ctx) {
         renderMapLegend();
     }
 
-    function updateMapHint() {
-        const parts = [t('op.map.hintNoZoom')];
-        if (rotatorDevice()) parts.push(t('op.map.hintClick'));
-        $('#opMapHint').textContent = parts.join(' · ');
-    }
-
     function showMapFlag(text) {
         let flag = document.getElementById('opMapFlag');
         if (!flag) {
@@ -1380,10 +1374,10 @@ export function createOpPage(ctx) {
         }
         renderBottom();
         renderAmps();
-        updateMapHint();
         renderBandOccupancy();
         renderAntSwitch();
         renderStationCard();
+        renderCameraCard();
         if (state.map) state.map.setCoverage(activeAzimuth());
     }
 
@@ -1493,6 +1487,83 @@ export function createOpPage(ctx) {
             note.textContent = info.unconfirmed ? t('op.antswitch.unconfirmed') : '';
             note.classList.toggle('op-antswitch-pending', !!info.unconfirmed);
         }
+    }
+
+    /* 视频监控：显示本席位当前接通天线所绑定的摄像头（antenna.config.camera）。
+     * 绑定关系和设备清单本来就在 /api/devices 快照里下发（publicDevice 原样带
+     * config，只剥 password），所以这里只做一次查表，不再另开一条数据通道。
+     * 画面由服务器拉取后按 MJPEG 分发（nodes/camera-hub.js），浏览器只负责
+     * <img> 加载：既不碰 fetch，也不重复实现一路 WebSocket。 */
+    let cameraShownId = '';
+
+    function cameraEmpty(noteText, key) {
+        const host = $('#opCameraBody');
+        const note = $('#opCameraNote');
+        if (note) note.textContent = noteText || '';
+        cameraShownId = '';
+        if (host) host.innerHTML = '<div class="op-camera-empty">' + esc(t(key)) + '</div>';
+    }
+
+    /** 接通的天线里第一副绑了现存摄像头的，就是要在屏幕上看到的那一路。 */
+    function cameraForSeat(snapshot, routed) {
+        const byId = new Map((Array.isArray(snapshot.devices) ? snapshot.devices : [])
+            .map(item => [String(item.id), item]));
+        for (const id of routed) {
+            const antenna = byId.get(String(id));
+            if (!antenna || antenna.type !== 'antenna') continue;
+            const cameraId = String((antenna.config || {}).camera || '');
+            if (!cameraId) continue;
+            const camera = byId.get(cameraId);
+            if (!camera || camera.type !== 'camera') continue;
+            return {antenna, camera};
+        }
+        return null;
+    }
+
+    function renderCameraCard() {
+        const host = $('#opCameraBody');
+        if (!host) return;
+        const snapshot = deviceSnapshot();
+        if (!snapshot) {
+            cameraEmpty('', 'op.camera.loading');
+            return;
+        }
+        const hit = antSwitchSeatHit();
+        const info = hit ? hit.view.ant_switch : null;
+        const routed = info && Array.isArray(info.routed) ? info.routed : [];
+        if (!routed.length) {
+            cameraEmpty('', 'op.camera.idle');
+            return;
+        }
+        const found = cameraForSeat(snapshot, routed);
+        if (!found) {
+            // 接通了天线但没人绑摄像头：把天线名写在标题旁，指明该去哪儿补。
+            const names = routed.map(id => {
+                const device = (snapshot.devices || []).find(item => String(item.id) === String(id));
+                return device ? device.name : '';
+            }).filter(Boolean).join('/');
+            cameraEmpty(names, 'op.camera.unbound');
+            return;
+        }
+        const id = String(found.camera.id);
+        const note = [found.camera.name, found.antenna.name].filter(Boolean).join(' · ');
+        // 同一路画面绝不重建 <img>：重建等于每次都重连 MJPEG。
+        if (cameraShownId === id && host.querySelector('img')) {
+            const noteEl = $('#opCameraNote');
+            if (noteEl) noteEl.textContent = note;
+            return;
+        }
+        cameraEmpty(note, '');
+        const img = document.createElement('img');
+        img.alt = '';
+        img.addEventListener('error', () => {
+            // 断流只显示"无信号"，不自动重连：换天线或刷新页面才会重建。
+            if (cameraShownId !== id) return;
+            cameraEmpty(note, 'op.camera.lost');
+        });
+        img.src = '/api/cameras/' + encodeURIComponent(id) + '/stream';
+        host.appendChild(img);
+        cameraShownId = id;
     }
 
     /* 电台卡片：收发状态、当前波段、当前频率、当前模式，加频率联动开关。
@@ -2422,10 +2493,10 @@ export function createOpPage(ctx) {
         renderMultipliers();
         renderBottom();
         renderAmps();
-        updateMapHint();
         renderBandOccupancy();
         renderAntSwitch();
         renderStationCard();
+        renderCameraCard();
         renderAdvice();
         renderMap();
     }
@@ -2499,6 +2570,7 @@ export function createOpPage(ctx) {
          * 只靠 3 秒一轮的 loadDevices 轮询会滞后到实际状态之外，
          * 而 QSO 地图的本台状态就是在同一条报文里立刻重绘的。 */
         renderStationCard();
+        renderCameraCard();
         renderAdvice();
     }
 

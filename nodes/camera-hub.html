@@ -1,0 +1,15 @@
+<!-- Node-RED only recognises a local node .js file when a sibling .html
+     exists. The admin editor is disabled for this deployment, so this file
+     exists purely to make nodes/camera-hub.js part of the palette scan. -->
+<script type="text/javascript">
+    RED.nodes.registerType('camera-hub', {
+        category: 'config',
+        color: '#B3DBD8',
+        defaults: {
+            name: {value: ''}
+        },
+        label: function() {
+            return this.name || 'camera hub';
+        }
+    });
+</script>

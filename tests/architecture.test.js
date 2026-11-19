@@ -407,6 +407,57 @@ test('OP 天线切换容器：按钮来自拓扑投影，配色沿用波段占�
     assert.match(op, /\{command: 'route', device_id: antennaId\}/);
 });
 
+test('OP 视频监控卡片：与地图同一行轨道，画面按接通天线绑定的摄像头换源', () => {
+    const html = read('public', 'index.html');
+    assert.match(html, /<section class="op-card op-camera-card">/);
+    assert.match(html, /<h3 id="opCameraTitle" data-i18n="op\.camera\.title">/);
+    assert.match(html, /<div class="op-camera-body" id="opCameraBody"><\/div>/);
+    // 地图标题栏只剩标题与署名：那条「地图固定…点击地图设置旋转器目标方位」的说明整条删掉。
+    assert.doesNotMatch(html, /opMapHint/);
+
+    const css = read('public', 'css', 'op.css');
+    // 第 2 行第 3 轨：和 .op-center 同处一行轨道，所以高度天然齐平，不需要任何高度算术。
+    assert.match(css, /\.op-view > \.op-camera-card \{ grid-column: 3; grid-row: 2;/);
+    assert.doesNotMatch(css, /\.op-map-hint/);
+    // 画面黑底等比居中，高度跟着行轨道走。
+    assert.match(css, /\.op-camera-body img \{[\s\S]*?object-fit: contain;/);
+
+    const op = read('public', 'js', 'pages', 'op-page.mjs');
+    assert.doesNotMatch(op, /opMapHint|updateMapHint/);
+    // 画面由服务器拉取后分发，浏览器只加载 <img>：不直连摄像头，也不另开一路 WebSocket。
+    assert.match(op, /img\.src = '\/api\/cameras\/' \+ encodeURIComponent\(id\) \+ '\/stream';/);
+    // 绑定关系本来就在设备快照里（天线 config.camera），这里只查表，不另开数据通道。
+    assert.match(op, /antenna\.config \|\| \{\}\)\.camera/);
+    // 同一路画面绝不重建 <img>：重建等于每次刷新都重连一次 MJPEG。
+    assert.match(op, /if \(cameraShownId === id && host\.querySelector\('img'\)\)/);
+});
+
+test('摄像头设备：白名单只放行取流地址，天线绑定摄像头 id', () => {
+    const model = read('lib', 'devices', 'model.js');
+    assert.match(model, /antenna: \['preferred', 'camera'\]/);
+    assert.match(model, /camera: \['brand', 'model', 'host', 'port', 'protocol', 'username', 'password',/);
+    assert.match(model, /camera: \['onvif', 'snapshot', 'rtsp'\]/);
+    // 口令只存 username / password 一份：URL 里的 userinfo 落库前剥掉。
+    assert.match(model, /function scrubUrlAuth\(value\)/);
+    assert.match(model, /invalid-config-fps/);
+
+    const service = read('lib', 'devices', 'service.js');
+    // 摄像头没有任何上报通道：状态该显示「无状态源」，不是「状态未知」。
+    assert.match(service, /NO_STATE_SOURCE_TYPES = new Set\(\[[\s\S]*?'camera'/);
+    // 设备快照是摄取登记表的唯一同步入口，换天线/改地址都走这一条路径。
+    assert.match(service, /cameras\.sync\(devices\)/);
+
+    // 分发端点：settings.httpNodeMiddleware 在 Node-RED 3.x 开不了新端点，
+    // 唯一被验证过的挂载点是本地节点模块体内的 RED.httpNode.use。
+    const hubNode = read('nodes', 'camera-hub.js');
+    assert.ok(fs.existsSync(path.join(ROOT, 'nodes', 'camera-hub.html')),
+        'Node-RED 只加载有同名 .html 兄弟文件的本地节点');
+    assert.match(hubNode, /RED\.httpNode\.use\(handler\);/);
+    assert.match(hubNode, /\/api\/cameras\/discover/);
+    assert.match(hubNode, /require\('\.\.\/lib\/ready\.js'\)/,
+        '手写路由同样要过就绪门闩，否则冷启动会撞上未迁移的库');
+});
+
 test('cold-start entry points wait for the readiness gate', () => {
     const gate = read('nodes', 'ready-gate.js');
     assert.ok(fs.existsSync(path.join(ROOT, 'nodes', 'ready-gate.html')),
@@ -577,8 +628,8 @@ test('频率联动：电台卡片、服务端判定与轮询链路都在约定�
     assert.match(api, /action: 'band-link'/);
 
     const model = read('lib', 'devices', 'model.js');
-    assert.match(model, /antenna: \['preferred'\]/,
-        '优先天线要过 config 白名单，否则落不了库');
+    assert.match(model, /antenna: \['preferred', 'camera'\]/,
+        '优先天线与摄像头绑定都要过 config 白名单，否则落不了库');
 
     const ownership = read('lib', 'devices', 'ownership.js');
     assert.match(ownership, /preferred: !!\(antenna\.config && antenna\.config\.preferred === true\)/);

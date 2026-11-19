@@ -103,3 +103,15 @@ export function sendDeviceCommand(deviceId, command, {
         Object.assign({}, options, {headers})
     );
 }
+
+/**
+ * 摄像头发现：不带 host 时服务端跑局域网 WS-Discovery，带 host 时跑 ONVIF
+ * GetProfiles。组播应答要等几秒，超时比默认的 15s 放宽。
+ */
+export function discoverCameras(payload, {
+    transport = defaultTransport,
+    timeoutMs = 30000,
+    ...options
+} = {}) {
+    return transport.postJson('/api/cameras/discover', payload || {}, Object.assign({timeoutMs}, options));
+}

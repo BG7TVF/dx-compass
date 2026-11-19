@@ -23,6 +23,7 @@ import {
     deleteRfLink,
     saveControlLink,
     deleteControlLink,
+    discoverCameras,
     previewDrafts,
     saveDraftBatch,
     sendDeviceCommand
@@ -36,15 +37,17 @@ const CANVAS_MIN_W = 1600;
 const CANVAS_MIN_H = 1000;
 const MIN_ZOOM = 0.25;
 const MAX_ZOOM = 2.5;
-// 面板提供这十一种可拖出的设备；前五种是射频链路组成部分，其余是机械、射频路由与控制支撑。
-const PALETTE_TYPES = ['radio', 'swr', 'bpf', 'amp', 'antenna', 'tower', 'rotator', 'switch', 'matrix', 'combiner', 'serial'];
+// 面板提供这十二种可拖出的设备；前五种是射频链路组成部分，其余是机械、射频路由、控制支撑与画面采集。
+const PALETTE_TYPES = ['radio', 'swr', 'bpf', 'amp', 'antenna', 'tower', 'rotator', 'switch', 'matrix', 'combiner', 'serial', 'camera'];
 const TYPE_BADGE = {
     radio: 'RIG', swr: 'SW', bpf: 'BP', amp: 'PA', antenna: 'AN', tower: 'TW', rotator: 'RT',
-    switch: 'CX', matrix: 'MX', divider: 'DV', combiner: 'CB', serial: 'SS', other: 'OT'
+    switch: 'CX', matrix: 'MX', divider: 'DV', combiner: 'CB', serial: 'SS', camera: 'CAM', other: 'OT'
 };
 // 控制口之间的连线表达“串口设备 → 串口服务器”的从属关系；与 RF 链路无关。
 const CONTROL_TYPES = ['rotator', 'tower', 'switch', 'matrix', 'amp', 'swr', 'serial'];
 const SERIAL_BAUD = ['1200', '2400', '4800', '9600', '19200', '38400', '57600', '115200', '230400', '460800', '921600'];
+// 取流方式，取值即服务端 config.protocol 的白名单值，不做翻译。
+const CAMERA_PROTOCOLS = ['onvif', 'snapshot', 'rtsp'];
 // 唯一波段来源与 lib/radio/bands.js 保持一致；一律勾选，不允许手输。
 const BAND_OPTIONS = ['160m', '80m', '60m', '40m', '30m', '20m', '17m', '15m', '12m', '10m', '6m', '2m', '70cm'];
 const BAND_TYPES = ['amp', 'bpf', 'antenna', 'combiner'];
@@ -204,6 +207,8 @@ export function createDevicesPage(ctx) {
     let draftPreviewSeq = 0;
     // 电台属性下拉的 N1MM 候选：由服务端从已收报文汇聚，失败时保留旧值展示。
     let n1mmCandidate = {status: 'idle', data: null, loadedAt: 0, seq: 0};
+    // ONVIF 发现结果：只在当前表单里存在，选中后回填输入框，点保存才会落库。
+    let camFound = [];
 
     function t(key, params) {
         const value = ctx.t(key, params);
@@ -1097,7 +1102,8 @@ export function createDevicesPage(ctx) {
                 access_mode: 'auto',
                 travel_timeout_sec: TRAVEL_TYPES.includes(type) ? 120 : 0,
                 notes: '',
-                config: {},
+                // 摄像头按 ONVIF/80/2fps 起草，属性面板立刻可改，不用先填一遍再存。
+                config: type === 'camera' ? {protocol: 'onvif', port: 80, fps: 2} : {},
                 has_relay_token: false
             }
         };
@@ -1501,13 +1507,139 @@ export function createDevicesPage(ctx) {
                 <label>${t('dev.config.pulse')}<input name="cfg_pulse_ms" type="number" min="50" max="5000" step="1" value="${esc(config.pulse_ms || '')}"></label>
                 ${limit}${counts}${channels}`;
         }
+        if (value.type === 'camera') {
+            const protocol = CAMERA_PROTOCOLS.includes(String(config.protocol)) ? String(config.protocol) : 'onvif';
+            const option = item => `<option value="${item}"${item === protocol ? ' selected' : ''}>${item}</option>`;
+            // 摄像头只采集画面，不参与 RF 链路与控制寻址；地址与凭据填这里，
+            // 抓拍/主码流地址交给 ONVIF 发现回填，密码留空表示沿用服务端已存值。
+            return `<label>${t('dev.config.brand')}<input name="cfg_brand" maxlength="60" value="${esc(config.brand || '')}"></label>
+                <label>${t('dev.config.ampModel')}<input name="cfg_model" maxlength="60" value="${esc(config.model || '')}"></label>
+                <label data-conn="1">${t('dev.cam.host')}<input name="cfg_host" maxlength="100" value="${esc(config.host || '')}"></label>
+                <label data-conn="1">${t('dev.cam.port')}<input name="cfg_port" type="number" min="1" max="65535" step="1" value="${esc(config.port === undefined ? '' : config.port)}"></label>
+                <label>${t('dev.cam.protocol')}<select name="cfg_protocol">${CAMERA_PROTOCOLS.map(option).join('')}</select></label>
+                <label data-conn="1">${t('dev.cam.user')}<input name="cfg_username" maxlength="60" autocomplete="off" value="${esc(config.username || '')}"></label>
+                <label data-conn="1">${t('dev.cam.pass')}<input name="cfg_password" type="password" autocomplete="off" placeholder="${esc(t('dev.config.keepPassword'))}"></label>
+                <label data-conn="1">${t('dev.cam.snapshotUrl')}<input name="cfg_snapshot_url" maxlength="300" value="${esc(config.snapshot_url || '')}"></label>
+                <label data-conn="1">${t('dev.cam.streamUrl')}<input name="cfg_stream_url" maxlength="300" value="${esc(config.stream_url || '')}"></label>
+                <label>${t('dev.cam.fps')}<input name="cfg_fps" type="number" min="1" max="30" step="1" value="${esc(config.fps === undefined ? '' : config.fps)}"></label>
+                <div class="dev-candidate-row">
+                    <button class="dev-btn" type="button" data-cam-discover="1">${esc(t('dev.cam.discover'))}</button>
+                    <select name="cam_found"><option value="">${esc(t('dev.cam.foundPlaceholder'))}</option></select>
+                </div>`;
+        }
         if (value.type === 'antenna') {
             // 优先天线：频率联动在同一频段有多副可选天线时按它裁决（没设就不动）。
+            // 绑定摄像头：OP 视图接通这副天线时按它取画面，只列已落库的摄像头（草稿没有 id）。
+            const bound = String(config.camera || '');
+            const cameraOptions = [`<option value=""${bound ? '' : ' selected'}>${esc(t('dev.cam.bindNone'))}</option>`]
+                .concat(realDevices().filter(item => item.type === 'camera').map(item =>
+                    `<option value="${esc(item.id)}"${item.id === bound ? ' selected' : ''}>${esc(item.name)}</option>`))
+                .join('');
             return `<label class="dev-flag">${esc(t('dev.form.preferred'))}<input class="set-check" type="checkbox" name="cfg_preferred"${
                 config.preferred === true ? ' checked' : ''
-            }></label>`;
+            }></label>
+                <label>${t('dev.cam.bind')}<select name="cfg_camera">${cameraOptions}</select></label>`;
         }
         return '';
+    }
+
+    function cameraInput(form, name) {
+        return form.querySelector(`[name="${name}"]`);
+    }
+
+    function writeCameraInput(form, name, value) {
+        const input = cameraInput(form, name);
+        if (input && value !== undefined && value !== null && value !== '') input.value = String(value);
+    }
+
+    /** 发现结果的显示名：两步返回的字段不同，各自挑最能认出来的那个。 */
+    function camFoundLabel(item) {
+        if (item.snapshot_url || item.stream_url) return String(item.name || item.token || item.snapshot_url || item.stream_url);
+        if (item.host) return `${item.host}${item.port ? ':' + item.port : ''}`;
+        return String(item.xaddrs || item.name || '');
+    }
+
+    function fillCamFoundOptions(form, items) {
+        const select = cameraInput(form, 'cam_found');
+        if (!select) return;
+        select.innerHTML = [`<option value="">${esc(t('dev.cam.foundPlaceholder'))}</option>`]
+            .concat(items.map((item, index) => `<option value="${index}">${esc(camFoundLabel(item))}</option>`))
+            .join('');
+        select.value = '';
+    }
+
+    /** 选中一条发现结果：把该条能提供的字段写回表单，等待用户点保存。 */
+    function applyCameraFound(select) {
+        const form = select.form;
+        // 占位项的 value 是空串，不能当成第 0 条结果。
+        const item = select.value === '' ? null : camFound[Number(select.value)];
+        if (!form || !item) return;
+        writeCameraInput(form, 'cfg_host', item.host);
+        writeCameraInput(form, 'cfg_port', item.port);
+        writeCameraInput(form, 'cfg_snapshot_url', item.snapshot_url);
+        writeCameraInput(form, 'cfg_stream_url', item.stream_url);
+        formDirty = true;
+    }
+
+    /**
+     * 两步发现的请求体：表单地址为空就是第一步，服务端跑局域网 WS-Discovery；
+     * 地址已填（多半是上一步选出来的）就是第二步，带上端口与凭据取 ONVIF profile。
+     * 用户名与密码留空表示沿用服务端已存值，这时不能把空串发过去。
+     */
+    function cameraProbePayload(form) {
+        const host = String((cameraInput(form, 'cfg_host') || {}).value || '').trim();
+        if (!host) return {};
+        const payload = {host};
+        const port = Number(String((cameraInput(form, 'cfg_port') || {}).value || '').trim());
+        if (Number.isInteger(port)) payload.port = port;
+        const username = String((cameraInput(form, 'cfg_username') || {}).value || '');
+        const password = String((cameraInput(form, 'cfg_password') || {}).value || '');
+        if (username) payload.username = username;
+        if (password) payload.password = password;
+        return payload;
+    }
+
+    async function runCameraDiscovery(button) {
+        const form = button.form;
+        if (!form) return;
+        const errorBox = $('#devFormError');
+        if (errorBox) {
+            errorBox.textContent = '';
+            errorBox.classList.add('hidden');
+        }
+        const label = button.textContent;
+        const payload = cameraProbePayload(form);
+        button.disabled = true;
+        button.textContent = t('dev.cam.discovering');
+        let response = null;
+        let failure = '';
+        try {
+            response = await discoverCameras(payload);
+        } catch (error) {
+            failure = apiError(error);
+        }
+        button.disabled = false;
+        button.textContent = label;
+        // 请求期间属性面板可能被轮询重建，那时结果已经没有落脚点了。
+        if (!form.isConnected) return;
+        if (!failure && (!response || response.ok !== true)) {
+            const detail = response && response.detail ? ` · ${String(response.detail)}` : '';
+            failure = errorText(response && response.error) + detail;
+        }
+        if (failure) {
+            if (errorBox) {
+                errorBox.textContent = failure;
+                errorBox.classList.remove('hidden');
+            }
+            return;
+        }
+        camFound = Array.isArray(response.cameras) ? response.cameras : [];
+        fillCamFoundOptions(form, camFound);
+        if (!camFound.length) {
+            showToast(t('dev.cam.foundNone'));
+            return;
+        }
+        showToast(`${t('dev.cam.found', {count: camFound.length})} · ${t('dev.cam.foundHint')}`);
     }
 
     function controlAddressLabel(value, id) {
@@ -1891,6 +2023,8 @@ export function createDevicesPage(ctx) {
         const signature = [value.id || 'draft', value.type].join('|');
         if (!formDirty && signature !== formSignature) {
             formBox.innerHTML = formHtml();
+            // 表单换成另一台设备了，上一台的发现结果不再有落脚点。
+            camFound = [];
             formSignature = signature;
             if (value.type === 'radio') {
                 // 先用缓存渲染，再异步刷新候选；下拉改由服务端候选集驱动。
@@ -2011,8 +2145,10 @@ export function createDevicesPage(ctx) {
     function formConfig(data, type) {
         const config = {};
         if (type === 'antenna') {
-            // 天线唯一可设的属性：优先天线。勾上才写 true，不勾就不在 config 里留键。
+            // 天线可设的属性：优先天线 + 绑定摄像头。不勾/不选就不在 config 里留键。
             if (data.get('cfg_preferred')) config.preferred = true;
+            const boundCamera = String(data.get('cfg_camera') || '');
+            if (boundCamera) config.camera = boundCamera;
         } else if (type === 'radio') {
             config.computer = String(data.get('cfg_computer') || '');
             config.model = String(data.get('cfg_model') || '');
@@ -2124,6 +2260,22 @@ export function createDevicesPage(ctx) {
                     throw new Error('invalid-config-channels');
                 }
             }
+        } else if (type === 'camera') {
+            config.brand = String(data.get('cfg_brand') || '');
+            config.model = String(data.get('cfg_model') || '');
+            config.host = String(data.get('cfg_host') || '');
+            config.protocol = String(data.get('cfg_protocol') || 'onvif');
+            config.username = String(data.get('cfg_username') || '');
+            // 密码投影时被剥掉了，留空提交必须理解为“沿用旧值”，不能写空串覆盖。
+            const cameraPassword = String(data.get('cfg_password') || '');
+            if (cameraPassword) config.password = cameraPassword;
+            config.snapshot_url = String(data.get('cfg_snapshot_url') || '');
+            config.stream_url = String(data.get('cfg_stream_url') || '');
+            // 端口与帧率交给服务端按协议取默认，清空输入框就是不留该键。
+            const cameraPort = String(data.get('cfg_port') || '').trim();
+            if (cameraPort) config.port = cameraPort;
+            const cameraFps = String(data.get('cfg_fps') || '').trim();
+            if (cameraFps) config.fps = cameraFps;
         }
         return config;
     }
@@ -3076,6 +3228,11 @@ export function createDevicesPage(ctx) {
                 refreshSwitchConfigFields();
                 return;
             }
+            // 选中一条发现结果只把地址回填进输入框，保存才落库。
+            if (event.target.matches('select[name="cam_found"]')) {
+                applyCameraFound(event.target);
+                return;
+            }
             if (!event.target.matches('select[name="cfg_computer"], select[name="cfg_model"]')) return;
             // 切换计算机名时按新机器过滤型号；换型号时同步更新“是否已知组合”的提示。
             refreshCandidateControls();
@@ -3084,6 +3241,12 @@ export function createDevicesPage(ctx) {
             if (event.target && event.target.id === 'devCandidateRefresh') {
                 event.preventDefault();
                 void loadCandidates(true);
+                return;
+            }
+            const discover = event.target.closest ? event.target.closest('[data-cam-discover]') : null;
+            if (discover) {
+                event.preventDefault();
+                void runCameraDiscovery(discover);
             }
         });
         $('#devForm').addEventListener('click', event => {
