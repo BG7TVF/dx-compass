@@ -285,7 +285,12 @@ export function createOpPage(ctx) {
 
     function homeLatLon() {
         const grid = String(ctx.settings.grid || '').trim();
-        return grid ? gridToLatLon(grid) : null;
+        const point = grid ? gridToLatLon(grid) : null;
+        /* gridToLatLon 给出的是 [lat, lon] 数组，而 op-map 的 setHome 只认
+         * {lat, lon}。把数组直接递过去等于告诉地图「本台没有位置」，于是本台
+         * 标记、天线波束、每个席位的 QSO 线、本台 spot 一并消失，图上只剩陆地
+         * 和国界——地图「什么都不显示」的根因就在这里。 */
+        return point ? {lat: point[0], lon: point[1]} : null;
     }
 
     function qsoKey(qso) {
@@ -976,16 +981,24 @@ export function createOpPage(ctx) {
         }).join('') + credit;
     }
 
-    function renderMapLegend() {
-        const keys = visibleSeats();
-        const parts = ['<span><i style="background:var(--op-r1)"></i>' + esc(t('op.map.legend.radio1')) + '</span>'];
-        if (category() === 'SO2R') {
-            parts.push('<span><i style="background:var(--op-r2);border-radius:1px"></i>' +
-                esc(t('op.map.legend.radio2')) + '</span>');
-        } else if (keys.length && keys[0] !== '1') {
-            parts[0] = '<span><i style="background:var(--op-r1)"></i>' +
-                esc(seatNameOf(keys[0])) + '</span>';
+    /* 图例的一行：SO2R 说的是同一台机器上的两个电台，措辞保持「电台 1/2」；
+     * 其余赛制按席位编号说话，和席位铭牌上的序号同一个口径。 */
+    function mapLegendLabel(key) {
+        const number = seatNumber(key);
+        if (category() === 'SO2R' && (number === 1 || number === 2)) {
+            return t(number === 1 ? 'op.map.legend.radio1' : 'op.map.legend.radio2');
         }
+        return seatNameOf(key);
+    }
+
+    function renderMapLegend() {
+        const current = String(currentSeat());
+        /* 只列图上真的画了线的席位，一个都没有就退回本席位，图例不会空白。 */
+        const keys = mapSeatKeys(current).filter(key => qsosFor(key).length);
+        if (!keys.length) keys.push(current);
+        const parts = keys.map(key => '<span' + (String(key) === current ? ' class="own"' : '') +
+            '><i style="background:var(--op-r' + seatLane(key) + ')"></i>' +
+            esc(mapLegendLabel(key)) + '</span>');
         parts.push('<span><i style="background:var(--map-open)"></i>' + esc(t('op.map.legend.home')) + '</span>');
         parts.push('<span><i style="background:var(--map-spot);border-radius:1px"></i>' +
             esc(t('op.map.legend.spot')) + '</span>');
@@ -1025,6 +1038,49 @@ export function createOpPage(ctx) {
         });
     }
 
+    /* 地图上的席位泳道：颜色按席位编号取 --op-r1..--op-r6，和席位铭牌上印的
+     * 序号同一个口径；席位多于 6 个时循环复用，编号仍然分得开。 */
+    const MAP_LANES = 6;
+
+    function seatLane(key) {
+        return ((seatNumber(key) - 1) % MAP_LANES) + 1;
+    }
+
+    /* 画进地图的席位 = 当前席位列表 ∪ QSO 里真实出现过的席位。
+     * 席位被清理掉（掉线、重连抖动）之后它的历史 QSO 还得留在图上，
+     * 所以不能只按 seatChoices 取，否则老席位的线会凭空消失。 */
+    function mapSeatKeys(current) {
+        const keys = orderedSeatChoices().map(choice => String(choice.value));
+        const seen = new Set(keys);
+        [...state.qsos.values()].forEach(qso => {
+            const seat = seatOfQso(qso);
+            if (!seen.has(seat)) {
+                seen.add(seat);
+                keys.push(seat);
+            }
+        });
+        if (!seen.has(String(current))) keys.push(String(current));
+        return keys;
+    }
+
+    /* 本席位与其他席位的 QSO 都要上图：每个席位各自截断，本席位不会被
+     * 别的席位挤出画面；行上带 seatLane/ownSeat，由 op-map 决定线宽与颜色。 */
+    function mapQsos(current, limit) {
+        const keys = mapSeatKeys(current);
+        const own = String(current);
+        const perSeat = Math.max(20, Math.floor(limit / Math.max(1, keys.length)));
+        const rows = [];
+        keys.forEach(seat => {
+            qsosFor(seat).slice(-perSeat).forEach(qso => {
+                rows.push(Object.assign({}, qso, {
+                    seatLane: seatLane(seat),
+                    ownSeat: seat === own
+                }));
+            });
+        });
+        return rows;
+    }
+
     function renderMap() {
         if (!state.map) return;
         const home = homeLatLon();
@@ -1036,7 +1092,7 @@ export function createOpPage(ctx) {
             /* Seat ownership is decided here, by the same rule every other
              * seat-scoped number on this page uses. radioNr is not usable:
              * every M2 instance reports 1, and the column is often missing. */
-            qsos: qsosFor(key).slice(-limit),
+            qsos: mapQsos(key, limit),
             spots: spotsForSeat(key),
             radioFilter: 'all'
         });

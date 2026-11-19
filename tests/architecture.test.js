@@ -433,6 +433,36 @@ test('OP 视频监控卡片：与地图同一行轨道，画面按接通天线�
     assert.match(op, /if \(cameraShownId === id && host\.querySelector\('img'\)\)/);
 });
 
+test('OP 地图：本台位置、本席位与其他席位 QSO、本台 SPOT 都要上图', () => {
+    const op = read('public', 'js', 'pages', 'op-page.mjs');
+    const map = read('public', 'js', 'op', 'op-map.mjs');
+    const css = read('public', 'css', 'op.css');
+    /* shared/geo 的 gridToLatLon 返回 [lat, lon] 数组，而 op-map 的 setHome 只认
+     * {lat, lon}。把数组直接递过去等于声明「本台没有位置」，setData 立刻 return，
+     * 本台标记、波束扇形、每个席位的 QSO 线、本台 SPOT 一起消失。 */
+    const home = (/    function homeLatLon\(\) \{[\s\S]*?\n    \}/.exec(op) || [''])[0];
+    assert.ok(home, '本台位置必须由 OP 页换算');
+    assert.match(home, /\{\s*lat:/);
+    assert.doesNotMatch(home, /return grid \? gridToLatLon\(grid\) : null;/);
+    assert.match(map, /function setHome\(next\)[\s\S]{0,120}isFinite\(next\.lat\)/);
+    // 图上不止本席位：席位列表 ∪ QSO 里真实出现过的席位，每席位各截一段。
+    assert.match(op, /function mapSeatKeys\(current\)/);
+    assert.match(op, /qsos: mapQsos\(key, limit\)/);
+    assert.match(op, /seatLane: seatLane\(seat\),\s*ownSeat: seat === own/);
+    // 泳道号由 OP 页按席位编号定，地图只负责取色；本席位实线，他席位细虚线。
+    assert.match(map, /const lane = laneIndex\(qso\.seatLane !== undefined \? qso\.seatLane : qso\.radioNr\);/);
+    assert.match(map, /const own = qso\.ownSeat !== false;/);
+    assert.match(map, /const LANE_COUNT = RADIO_COLORS\.length;/);
+    assert.match(map, /RADIO_COLORS\.map\(\(fallback, index\) => cssVar\('--op-r' \+ \(index \+ 1\), fallback\)\)/);
+    assert.match(map, /className: 'op-map-dot' \+ \(own \? '' : ' other'\)/);
+    // 席位多于两个时颜色不能塌回 --op-r1。
+    assert.match(css, /\.op-map-dot\.r3 i \{ background: var\(--op-r3\)/);
+    assert.match(css, /\.op-map-dot\.r6 i \{ background: var\(--op-r6\)/);
+    assert.match(css, /\.op-map-dot\.other i \{/);
+    // 本台 SPOT 仍按本席位电台的波段与模式族挑选。
+    assert.match(op, /spots: spotsForSeat\(key\)/);
+});
+
 test('摄像头设备：白名单只放行取流地址，天线绑定摄像头 id', () => {
     const model = read('lib', 'devices', 'model.js');
     assert.match(model, /antenna: \['preferred', 'camera'\]/);

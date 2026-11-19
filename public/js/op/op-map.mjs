@@ -12,14 +12,19 @@ import {trackPaths} from '../../shared/geo/great-circle.mjs';
 import {addTrackPaths} from '../../shared/map/layers.mjs';
 import {qsoDotIcon} from '../../shared/map/markers.mjs';
 
-const RADIO_COLORS = ['#00e5ff', '#ffb020'];
+/* 席位泳道调色板：与 op.css 的 --op-r1..--op-r6 一一对应，
+ * 序号由 OP 页按席位编号（seatLane）送进来，地图自己不再猜电台号。 */
+const RADIO_COLORS = ['#00e5ff', '#ffb020', '#7cf05a', '#c78bff', '#ff6f91', '#5ad1ff'];
+const LANE_COUNT = RADIO_COLORS.length;
 /* Leaflet needs literal colours, so every draw resolves the active theme tokens
  * and falls back to the dark-console defaults when no theme is mounted. */
 function radioColors() {
-    return [
-        cssVar('--op-r1', RADIO_COLORS[0]),
-        cssVar('--op-r2', RADIO_COLORS[1])
-    ];
+    return RADIO_COLORS.map((fallback, index) => cssVar('--op-r' + (index + 1), fallback));
+}
+function laneIndex(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n) || n <= 0) return 1;
+    return ((Math.floor(n) - 1) % LANE_COUNT) + 1;
 }
 /* Antenna coverage wedge: the two edges are great-circle lines leaving the home
  * station at the rotator heading ± HALF_DEG, capped at RADIUS_DEG of arc so the
@@ -187,19 +192,25 @@ export function createOpMap(container, {onBearing, canRotate} = {}) {
         for (const qso of qsos) {
             if (!isFinite(qso.lat) || !isFinite(qso.lon)) continue;
             if (radioFilter !== 'all' && String(qso.radioNr) !== String(radioFilter)) continue;
-            const radio = Number(qso.radioNr) === 2 ? 2 : 1;
-            const color = lanes[radio - 1];
+            const lane = laneIndex(qso.seatLane !== undefined ? qso.seatLane : qso.radioNr);
+            const color = lanes[lane - 1];
+            /* 本席位的线粗而实，其他席位的线细而淡，颜色按席位泳道分开：
+             * 一眼就能分清这条 QSO 是自己打的还是隔壁席位打的。 */
+            const own = qso.ownSeat !== false;
             addTrackPaths(map, trackPaths(home.lat, home.lon, qso.lat, qso.lon, 64), {
                 L,
                 group: qsoLayer.group,
                 color,
-                weight: radio === 2 ? 1.1 : 1.4,
-                opacity: radio === 2 ? 0.45 : 0.6,
-                dashArray: radio === 2 ? '3 4' : null
+                weight: own ? 1.4 : 1,
+                opacity: own ? 0.6 : 0.34,
+                dashArray: own ? null : '3 4'
             });
             L.marker([qso.lat, qso.lon], {
                 interactive: false,
-                icon: qsoDotIcon(L, radio)
+                icon: qsoDotIcon(L, lane, {
+                    className: 'op-map-dot' + (own ? '' : ' other'),
+                    size: own ? 9 : 7
+                })
             }).addTo(qsoLayer.group);
         }
 

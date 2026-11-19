@@ -869,6 +869,14 @@ body[data-theme="light"] {
     transform: rotate(45deg);
     box-shadow: 0 0 0 2px color-mix(in srgb, var(--op-r2) 22%, transparent);
 }
+/* 席位泳道 3-6：多席位（M2/MULTI）时每个席位一种颜色，和席位铭牌的序号同一把尺子。 */
+.op-map-dot.r3 i { background: var(--op-r3); box-shadow: 0 0 0 2px color-mix(in srgb, var(--op-r3) 22%, transparent); }
+.op-map-dot.r4 i { background: var(--op-r4); box-shadow: 0 0 0 2px color-mix(in srgb, var(--op-r4) 22%, transparent); }
+.op-map-dot.r5 i { background: var(--op-r5); box-shadow: 0 0 0 2px color-mix(in srgb, var(--op-r5) 22%, transparent); }
+.op-map-dot.r6 i { background: var(--op-r6); box-shadow: 0 0 0 2px color-mix(in srgb, var(--op-r6) 22%, transparent); }
+/* 别的席位的点更小更淡：先看到自己打的 QSO，再顺带看见隔壁席位。 */
+.op-map-dot.other i { width: 7px; height: 7px; opacity: .78; }
+.op-map-legend span.own { color: var(--text); font-weight: 600; }
 
 /* Right rail */
 .op-chip {
