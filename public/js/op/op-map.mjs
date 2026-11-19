@@ -216,16 +216,20 @@ export function createOpMap(container, {onBearing, canRotate} = {}) {
             if (radioFilter !== 'all' && String(qso.radioNr) !== String(radioFilter)) continue;
             const lane = laneIndex(qso.seatLane !== undefined ? qso.seatLane : qso.radioNr);
             const color = lanes[lane - 1];
-            /* 本席位的线粗而实，其他席位的线细而淡，颜色按席位泳道分开：
-             * 一眼就能分清这条 QSO 是自己打的还是隔壁席位打的。 */
+            /* 本席位实线更粗，其他席位虚线次一级；两条都必须肉眼可见。
+             * 世界全景只有约 500px 宽，一度线等于 1.4px：本台周边几百公里的
+             * QSO 连线全长不到 15px，旧的 1px + 0.34 透明度 + "3 4" 虚线在这种
+             * 尺度下等于没画——用户看到的"QSO 没有线、只有点"就是这么来的。
+             * 现在把最淡的一档提到 1.4px / 0.62 透明度 / "5 5" 虚线，短线至少
+             * 留下两段可见的虚线，长线则明显成弧。 */
             const own = qso.ownSeat !== false;
             addTrackPaths(map, trackPaths(home.lat, home.lon, at[0], at[1], 64), {
                 L,
                 group: qsoLayer.group,
                 color,
-                weight: own ? 1.4 : 1,
-                opacity: own ? 0.6 : 0.34,
-                dashArray: own ? null : '3 4'
+                weight: own ? 2 : 1.4,
+                opacity: own ? 0.9 : 0.62,
+                dashArray: own ? null : '5 5'
             });
             L.marker(at, {
                 interactive: false,

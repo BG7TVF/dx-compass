@@ -491,6 +491,14 @@ test('OP 地图：连线一律大圆绘制，换日线处打断重画', () => {
      * polyline，跨日更线时在两侧边缘分别收尾。 */
     assert.match(layers, /export function addTrackPaths\(map, paths,/);
     assert.match(layers, /\(paths \|\| \[\]\)\.map\(path => leaflet\.polyline\(path/);
+    /* 世界全景下一度线约 1.4px，周边 QSO 的连线全长不到 15px。最淡那一档一旦
+     * 回到 1px + 低透明度 + 短虚线，线就等于没画，图上只剩点。 */
+    const arcs = (/                group: qsoLayer\.group,[\s\S]*?dashArray: own \? null : '5 5'/
+        .exec(map) || [''])[0];
+    assert.ok(arcs, 'QSO 连线必须由 addTrackPaths 按本席位/其他席位两档绘制');
+    assert.match(arcs, /weight: own \? 2 : 1\.4,/);
+    assert.match(arcs, /opacity: own \? 0\.9 : 0\.62,/);
+    assert.doesNotMatch(map, /opacity: own \? 0\.6 : 0\.34,/);
 });
 
 test('摄像头设备：白名单只放行取流地址，天线绑定摄像头 id', () => {
