@@ -1450,6 +1450,10 @@ body[data-theme="light"] {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
     gap: 6px;
+    /* 功放舱与第 3 行的电台卡片、天线切换同高（轨道被兄弟撑起来），网格必须
+     * 长满剩下的空间，否则舱底留下一条谁都不属于的死带。align-content 的
+     * normal 在网格里按 stretch 结算，多余的高度会平分给 auto 行。 */
+    flex: 1 1 auto;
     min-height: 0;
     padding: 5px 7px 6px;
     overflow: auto;
@@ -1465,6 +1469,10 @@ body[data-theme="light"] {
         "id id"
         "gauges reads"
         "metrics metrics";
+    /* 卡片被网格拉长时，富余全部给中间那一行仪表，标识条与底部指标带保持
+     * 原生高度贴在上下两端；minmax 的 auto 下限保证多台功放挤成两行时也不会
+     * 把内容压扁。 */
+    grid-template-rows: auto minmax(auto, 1fr) auto;
     gap: 3px 9px;
     padding: 4px 8px 5px;
     border: 1px solid var(--op-rule);
@@ -1559,6 +1567,9 @@ body[data-theme="light"] {
     display: flex;
     flex-direction: column;
     gap: 4px;
+    /* 与右列读数同样上下撑开：卡片被拉长时两条 LCD 刻度各自对齐自己的数字，
+     * 而不是堆在顶上悬出一片空白。 */
+    justify-content: space-between;
     min-width: 0;
 }
 .op-amp-gauge { min-width: 0; }
