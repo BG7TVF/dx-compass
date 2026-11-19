@@ -9,7 +9,7 @@ import {
     PROP_SOUTH_MIN
 } from '../public/shared/map/projection.mjs';
 import {
-    fitWorld, mercLat, mercY, ringPoints, worldViewCenter, createLandCanvas
+    fitWorld, fitWorldRange, mercLat, mercY, ringPoints, worldViewCenter, createLandCanvas
 } from '../public/shared/map/base-map.mjs';
 import {
     computeTerminator, createTerminator, propTerminator, solarCos, solarCosAt
@@ -148,33 +148,40 @@ test('wide containers still fit one world to the full width', () => {
     close(256 * Math.pow(2, zoom), size.x);
 });
 
-test('a slightly wide box still leaves Antarctica on screen', () => {
-    /* The OP map buys width from the empty band on the right (5:4). The fit then
-     * no longer shows the whole world: the squashed polar interior runs past the
-     * southern edge, but the northern coast of Antarctica must stay inside and no
-     * northern coastline may be pushed out. */
+test('a track-wide OP box keeps Antarctica on screen whatever the row height', () => {
+    /* #opMap fills the whole first centre track, so the zoom comes from its
+     * width alone and a squeezed row shortens the visible latitude band. The
+     * pinned 81..-66 centre keeps the peninsula inside at the narrowest row the
+     * layout is expected to reach, where the plain land midpoint would already
+     * have pushed the continent out of frame. */
     globalThis.LAND = [
         [-42, 83.565, -20, 70, -42, 83.565],
         [-180, -90, 180, -90, 180, -63.226, -180, -63.226, -180, -90]
     ];
-    const size = {x: 500, y: 400};
-    const calls = {};
-    const map = {
-        getSize: () => size,
-        project: ([, lon], zoom) => ({x: (lon + 180) / 360 * 256 * Math.pow(2, zoom)}),
-        getBoundsZoom: () => Math.log2(size.x / 256),
-        setMinZoom: () => {},
-        setView: (center, zoom) => { calls.center = center; calls.zoom = zoom; }
+    const edges = size => {
+        const calls = {};
+        const map = {
+            getSize: () => size,
+            project: ([, lon], zoom) => ({x: (lon + 180) / 360 * 256 * Math.pow(2, zoom)}),
+            getBoundsZoom: () => Math.log2(size.x / 256),
+            setMinZoom: () => {},
+            setView: (center, zoom) => { calls.center = center; calls.zoom = zoom; }
+        };
+        fitWorldRange(map, 81, -66);
+        const span = size.y / (256 * Math.pow(2, calls.zoom));
+        const y = mercY(calls.center[0]);
+        return {span, top: y - span / 2, bottom: y + span / 2, lon: calls.center[1]};
     };
-    fitWorld(map);
-    const span = size.y / (256 * Math.pow(2, calls.zoom));
-    const top = mercY(calls.center[0]) - span / 2;
-    const bottom = mercY(calls.center[0]) + span / 2;
-    assert.ok(span < 1, 'the polar interior is cropped, one world no longer fits');
-    assert.ok(top <= mercY(83.565) + 1e-9, 'Greenland keeps its northern coast');
-    assert.ok(bottom >= mercY(-63.226) + 1e-9, 'Antarctica must not be cropped away');
-    assert.ok(bottom < mercY(-85) - 1e-9, 'only part of Antarctica is cut');
-    assert.equal(calls.center[1], 0);
+    const tall = edges({x: 509, y: 430});
+    const squeezed = edges({x: 509, y: 337});
+    for (const view of [tall, squeezed]) {
+        assert.ok(view.span < 1, 'the polar interior is cropped, one world no longer fits');
+        assert.ok(view.bottom >= mercY(-63.226) + 1e-9, 'Antarctica must not be cropped away');
+        assert.ok(view.bottom < mercY(-85) - 1e-9, 'only part of Antarctica is cut');
+        assert.equal(view.lon, 0);
+    }
+    assert.ok(tall.top <= mercY(83.565) + 1e-9, 'a roomy row keeps Greenland whole');
+    assert.ok(squeezed.top > tall.top, 'a squeezed row gives up northern ice, not the south');
 });
 
 test('world view centre matches the fitted latitude', () => {

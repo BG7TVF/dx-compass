@@ -644,20 +644,18 @@ body[data-theme="light"] {
 }
 /* The map owns the first of the two centre tracks, so its right edge lands on
  * the same line as the amplifier bay's right edge: half the wrapper minus half
- * the column gap is exactly one 1fr track. fitWorld fills that width and lets
- * the squashed polar interior of Antarctica run past the southern edge, while
- * every other coastline (Greenland down to the Antarctic peninsula) stays in
- * frame. 5/4 caps the width on short windows, where filling the whole track
- * would push the ratio past 1.5 and crop Antarctica away completely; there the
- * box keeps its old shape and the rest of the track stays free for later
- * content. */
+ * the column gap is exactly one 1fr track. The width is set, not derived from a
+ * ratio, because the track is what has to stay aligned while the row height
+ * grows and shrinks with the panels below. fitWorld fills that width, so the
+ * wider the box gets the shorter its visible latitude band: op-map.mjs pins the
+ * centre south, which keeps the Antarctic peninsula on screen even when the
+ * row is squeezed, instead of cropping the continent away completely. */
 #opMap {
     position: absolute;
     top: 0;
     left: 0;
     height: 100%;
-    aspect-ratio: 5 / 4;
-    max-width: calc(50% - var(--op-gap-x, 8px) / 2);
+    width: calc(50% - var(--op-gap-x, 8px) / 2);
     background: var(--map-bg);
 }
 #opMap .leaflet-container { background: var(--map-bg); cursor: crosshair; }

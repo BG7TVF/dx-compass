@@ -32,6 +32,15 @@ const COVERAGE_COLOR = '#ffb020';
 const COVERAGE_EDGE = 84;
 const clampLat = value => Math.max(-COVERAGE_EDGE, Math.min(COVERAGE_EDGE, value));
 
+/* Width-driven world fit for the map box, which now spans the whole first
+ * centre track so its right edge lines up with the amplifier bay. Filling that
+ * width fixes the zoom, so the visible latitude band shortens as the box grows
+ * wider than it is tall: 81..-66 is the window whose centre the view holds,
+ * south of the plain land midpoint. A tall box is clamped back to the frame and
+ * still shows Greenland in full; a squeezed box loses the empty ice cap north
+ * of 81 N rather than the Antarctic peninsula. */
+const OP_VIEW_RANGE = [81, -66];
+
 /** Destination point on the sphere: [lat, lon] degrees from a start + bearing + arc. */
 function destination(lat, lon, headingDeg, arcDeg) {
     const delta = toRadians(arcDeg);
@@ -73,7 +82,7 @@ export function createOpMap(container, {onBearing, canRotate} = {}) {
     const L = globalThis.L;
     const surface = createMapSurface(container, {
         provider: 'offline',
-        view: {kind: 'world', lockZoom: true},
+        view: {kind: 'world', lockZoom: true, range: OP_VIEW_RANGE},
         land: {show: true},
         borders: {show: true},
         interaction: {zoom: false, pan: false, click: true},
