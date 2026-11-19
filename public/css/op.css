@@ -876,6 +876,21 @@ body[data-theme="light"] {
 .op-map-dot.r6 i { background: var(--op-r6); box-shadow: 0 0 0 2px color-mix(in srgb, var(--op-r6) 22%, transparent); }
 /* 别的席位的点更小更淡：先看到自己打的 QSO，再顺带看见隔壁席位。 */
 .op-map-dot.other i { width: 7px; height: 7px; opacity: .78; }
+/* 本席位的 QSO 与「谁听到了我」的 SPOT 一律用大圆点：形状固定成圆（盖掉 r2 的
+ * 菱形），尺寸 12px、光晕加厚，坐在哪个席位都能一眼认出是自己打的 QSO。
+ * 这条必须排在泳道规则之后，同优先级靠顺序取胜。 */
+.op-map-dot.own i {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    transform: none;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--op-r1) 30%, transparent);
+}
+.op-map-dot.own.r2 i { box-shadow: 0 0 0 3px color-mix(in srgb, var(--op-r2) 30%, transparent); }
+.op-map-dot.own.r3 i { box-shadow: 0 0 0 3px color-mix(in srgb, var(--op-r3) 30%, transparent); }
+.op-map-dot.own.r4 i { box-shadow: 0 0 0 3px color-mix(in srgb, var(--op-r4) 30%, transparent); }
+.op-map-dot.own.r5 i { box-shadow: 0 0 0 3px color-mix(in srgb, var(--op-r5) 30%, transparent); }
+.op-map-dot.own.r6 i { box-shadow: 0 0 0 3px color-mix(in srgb, var(--op-r6) 30%, transparent); }
 .op-map-legend span.own { color: var(--text); font-weight: 600; }
 
 /* Right rail */

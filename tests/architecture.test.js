@@ -461,7 +461,13 @@ test('OP 地图：本台位置、本席位与其他席位 QSO、本台 SPOT 都�
     assert.match(map, /const own = qso\.ownSeat !== false;/);
     assert.match(map, /const LANE_COUNT = RADIO_COLORS\.length;/);
     assert.match(map, /RADIO_COLORS\.map\(\(fallback, index\) => cssVar\('--op-r' \+ \(index \+ 1\), fallback\)\)/);
-    assert.match(map, /className: 'op-map-dot' \+ \(own \? '' : ' other'\)/);
+    assert.match(map, /className: 'op-map-dot ' \+ \(own \? 'own' : 'other'\)/);
+    // 本席位 QSO 与本席位被 spot 的位置都要画成大圆点，别的席位保持小点。
+    assert.match(map, /size: own \? 12 : 7/);
+    assert.match(map, /radius: 6, color: spotColor, fillColor: spotFill/);
+    assert.match(css, /\.op-map-dot\.own i \{\s*width: 12px;\s*height: 12px;\s*border-radius: 50%;\s*transform: none;/);
+    assert.ok(css.indexOf('.op-map-dot.own i') > css.indexOf('.op-map-dot.r2 i'),
+        '大圆点必须排在泳道形状规则之后，否则 r2 的菱形会盖掉它');
     // 席位多于两个时颜色不能塌回 --op-r1。
     assert.match(css, /\.op-map-dot\.r3 i \{ background: var\(--op-r3\)/);
     assert.match(css, /\.op-map-dot\.r6 i \{ background: var\(--op-r6\)/);

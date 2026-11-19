@@ -221,8 +221,8 @@ export function createOpMap(container, {onBearing, canRotate} = {}) {
             L.marker(at, {
                 interactive: false,
                 icon: qsoDotIcon(L, lane, {
-                    className: 'op-map-dot' + (own ? '' : ' other'),
-                    size: own ? 9 : 7
+                    className: 'op-map-dot ' + (own ? 'own' : 'other'),
+                    size: own ? 12 : 7
                 })
             }).addTo(qsoLayer.group);
         }
@@ -238,9 +238,11 @@ export function createOpMap(container, {onBearing, canRotate} = {}) {
                 opacity: 0.28,
                 dashArray: '1 5'
             });
+            /* 本席位被 spot 的位置同样用大圆点：半径 6px，是本席位 QSO 点的量级，
+             * 细线只是「谁在听我」的连线，点才是答案。 */
             L.circleMarker(at, {
-                radius: 2.6, color: spotColor, fillColor: spotFill,
-                fillOpacity: 0.65, weight: 1, interactive: false
+                radius: 6, color: spotColor, fillColor: spotFill,
+                fillOpacity: 0.55, weight: 1.4, interactive: false
             }).addTo(spotLayer.group);
         }
     }
