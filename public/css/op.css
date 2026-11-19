@@ -127,7 +127,10 @@ body[data-theme="light"] {
 
 /* Live decision strip: multiplier openings and RUN-idle advice. It sits in
    row 1 beside the seat card, so its height is capped to that card: a long
-   advice list scrolls instead of pushing the map and the cards below. */
+   advice list scrolls instead of pushing the map and the cards below.
+   align-self:end 让它贴第 1 行的底边，与同行的波段占用（默认 stretch，底边
+   即行底）齐平；max-height 仍保留，行高由席位卡与波段占用决定，建议条不会
+   把行撑高。 */
 .op-advice {
     display: flex;
     flex-wrap: wrap;
@@ -140,6 +143,7 @@ body[data-theme="light"] {
     font-size: 11px;
     max-height: 61px;
     overflow-y: auto;
+    align-self: end;
 }
 .op-advice.hidden { display: none; }
 .op-advice-title {
