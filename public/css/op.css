@@ -125,12 +125,12 @@ body[data-theme="light"] {
 .op-station-tab.r5 { border-left: 3px solid var(--op-r5); }
 .op-station-tab.r6 { border-left: 3px solid var(--op-r6); }
 
-/* Live decision strip: multiplier openings and RUN-idle advice. It sits in
-   row 1 beside the seat card, so its height is capped to that card: a long
-   advice list scrolls instead of pushing the map and the cards below.
-   align-self:end 让它贴第 1 行的底边，与同行的波段占用（默认 stretch，底边
-   即行底）齐平；max-height 仍保留，行高由席位卡与波段占用决定，建议条不会
-   把行撑高。 */
+/* Live decision strip: multiplier openings and RUN-idle advice. It shares row 1
+   with the band-occupancy card, and both must line up on top and bottom, so it
+   stretches to the full row height (align-self:stretch + min-height:0) and a
+   long advice list scrolls inside instead of clipping. Row 1 is auto, so the
+   row height is whatever the seat card and the band-occupancy card need; the
+   map below sits in a minmax(0,1fr) track and absorbs the difference. */
 .op-advice {
     display: flex;
     flex-wrap: wrap;
@@ -141,9 +141,9 @@ body[data-theme="light"] {
     border-radius: var(--r-md);
     background: var(--panel);
     font-size: 11px;
-    max-height: 61px;
+    align-self: stretch;
+    min-height: 0;
     overflow-y: auto;
-    align-self: end;
 }
 .op-advice.hidden { display: none; }
 .op-advice-title {
