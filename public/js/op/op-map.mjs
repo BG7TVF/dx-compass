@@ -111,8 +111,8 @@ export function createOpMap(container, {onBearing, canRotate} = {}) {
                 if (!home || !onBearing) return;
                 const lat = latlng.lat;
                 const lon = latlng.lng;
-                const deg = (bearing(home.lat, home.lon, lat, lon) + 360) % 360;
-                const km = distanceKm(home.lat, home.lon, lat, lon);
+                const deg = (bearing(home, {lat, lon}) + 360) % 360;
+                const km = distanceKm(home, {lat, lon});
                 // A click is only a bearing pick when a rotator is configured;
                 // without one the handler is still told so it can explain why.
                 if (canRotate && !canRotate()) {
