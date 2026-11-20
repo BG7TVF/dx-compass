@@ -8,7 +8,7 @@ import {cssVar} from '../ui.mjs';
 import {
     bearing, distanceKm, toRadians, toDegrees, normalizeLongitude, relativeLongitude
 } from '../../shared/geo/coordinates.mjs';
-import {trackPaths} from '../../shared/geo/great-circle.mjs';
+import {greatCirclePoints, trackPaths} from '../../shared/geo/great-circle.mjs';
 import {addTrackPaths} from '../../shared/map/layers.mjs';
 import {qsoDotIcon} from '../../shared/map/markers.mjs';
 
@@ -45,6 +45,10 @@ function pointOf(lat, lon) {
  * the antimeridian. */
 const COVERAGE_HALF_DEG = 15;
 const COVERAGE_RADIUS_DEG = 55;
+/* 有点击目标时，扇区改为沿本台→目标大圆航线的渐宽光束：顶点半宽小、目标端半宽受控，
+ * 经度跟随航线连续不折回，因此既能伸到目标又不会像大半径球面扇形那样自相交糊满半球。 */
+const COVERAGE_BEAM_START_DEG = 3;
+const COVERAGE_BEAM_END_DEG = 11;
 const COVERAGE_COLOR = '#ffb020';
 const COVERAGE_EDGE = 84;
 const clampLat = value => Math.max(-COVERAGE_EDGE, Math.min(COVERAGE_EDGE, value));
@@ -96,6 +100,27 @@ function coverageOutline(home, heading) {
     return outline;
 }
 
+function beamOutline(home, target) {
+    const center = greatCirclePoints(home.lat, home.lon, target.lat, target.lon, 60);
+    if (center.length < 2) return [];
+    const last = center.length - 1;
+    const left = [];
+    const right = [];
+    for (let i = 0; i <= last; i += 1) {
+        const prev = center[Math.max(0, i - 1)];
+        const next = center[Math.min(last, i + 1)];
+        const az = bearing({lat: prev[0], lon: prev[1]}, {lat: next[0], lon: next[1]});
+        const half = COVERAGE_BEAM_START_DEG
+            + (COVERAGE_BEAM_END_DEG - COVERAGE_BEAM_START_DEG) * i / last;
+        const [latL, lonLw] = destination(center[i][0], center[i][1], az - 90, half);
+        const [latR, lonRw] = destination(center[i][0], center[i][1], az + 90, half);
+        /* 保持相对中心点的连续经度，跨日期线也不折回，避免多边形跳变。 */
+        left.push([clampLat(latL), center[i][1] + relativeLongitude(lonLw, center[i][1])]);
+        right.push([clampLat(latR), center[i][1] + relativeLongitude(lonRw, center[i][1])]);
+    }
+    return left.concat(right.reverse());
+}
+
 export function createOpMap(container, {onBearing, canRotate} = {}) {
     const L = globalThis.L;
     const surface = createMapSurface(container, {
@@ -138,8 +163,14 @@ export function createOpMap(container, {onBearing, canRotate} = {}) {
 
     function drawCoverage() {
         coverageLayer.clear();
-        if (!home || coverageHeading === null || !isFinite(coverageHeading)) return;
-        const outline = coverageOutline(home, (coverageHeading + 360) % 360);
+        if (!home) return;
+        /* 有点击目标：光束沿航线伸到目标；否则回退为指向 coverageHeading 的固定扇形。 */
+        const outline = target
+            ? beamOutline(home, target)
+            : (coverageHeading !== null && isFinite(coverageHeading)
+                ? coverageOutline(home, (coverageHeading + 360) % 360)
+                : []);
+        if (!outline.length) return;
         const coverage = cssVar('--op-r2', COVERAGE_COLOR);
         [-360, 0, 360].forEach(shift => {
             L.polygon(
