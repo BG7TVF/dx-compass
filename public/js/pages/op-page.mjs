@@ -1119,6 +1119,9 @@ export function createOpPage(ctx) {
             return;
         }
         state.rotorTarget = Math.round(deg);
+        /* 点击立即把覆盖扇区画到目标方位，不等命令往返；随后 loadDevices 轮询会
+         * 用 activeAzimuth()（同样优先 rotorTarget）保持这个朝向不被刷回物理方位。 */
+        if (state.map) state.map.setCoverage(state.rotorTarget);
         void sendDeviceCommand(rotator.id, {command: 'rotate', azimuth: state.rotorTarget}, {seat: commandSeat()})
             .then(result => {
                 const ok = !!result && result.ok !== false;
@@ -1455,6 +1458,10 @@ export function createOpPage(ctx) {
         const rotator = rotatorDevice();
         if (!snap || !rotator) return null;
         const view = (snap.rotators || {})[rotator.id] || {};
+        /* 覆盖扇区优先画到「已下达的目标方位」：点击地图/预设/微调一旦设定目标，
+         * 扇区就指向目标；没有目标时才回退到天线当前的物理方位。物理实时指向仍由
+         * 底部罗盘（updateAntenna）单独呈现。 */
+        if (Number.isFinite(state.rotorTarget)) return normDeg(state.rotorTarget);
         const value = Number(view.physical_azimuth);
         return Number.isFinite(value) ? value : null;
     }
