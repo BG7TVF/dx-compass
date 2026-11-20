@@ -819,6 +819,39 @@ export function createDevicesPage(ctx) {
         return snapshot ? snapshot.ownership : {seats: [], by_seat: {}, antennas: []};
     }
 
+    /**
+     * 席位计划：服务端由电台设备派生（席位号、绑定的电台、实时席位键、在线状态）。
+     * 快照还没带 seat_plan 时退化成空计划，属性表单和席位面板都不能因此报错。
+     */
+    function seatPlan() {
+        const plan = snapshot && snapshot.seat_plan;
+        return plan && Array.isArray(plan.seats)
+            ? plan
+            : {seats: [], key_to_no: {}, radio_to_no: {}};
+    }
+
+    /**
+     * 席位下拉的选项：计划里的全部席位号，外加一个空值项（未绑定 = 由服务端自动新建席位）。
+     * 当前值哪怕不在计划里（刚填的新号）也要留着，否则一次重绘就把绑定改没了。
+     */
+    function seatOptions(current) {
+        const value = String(current || '');
+        const numbers = seatPlan().seats.map(seat => String(seat.no));
+        if (value && !numbers.includes(value)) numbers.push(value);
+        const unique = [...new Set(numbers)].sort((a, b) => Number(a) - Number(b));
+        const blank = `<option value=""${value ? '' : ' selected'}>${esc(t('dev.seat.assignAuto'))}</option>`;
+        return blank + unique.map(no =>
+            `<option value="${esc(no)}"${no === value ? ' selected' : ''}>${esc(t('dev.seat.no', {no}))}</option>`).join('');
+    }
+
+    /** 电台当前的席位绑定：优先服务端投影的席位号，其次用户已保存的配置值。 */
+    function seatBindingOf(value) {
+        if (value && value.seat_no !== null && value.seat_no !== undefined && value.seat_no !== '') {
+            return String(value.seat_no);
+        }
+        return String((value && value.config ? value.config.seat : '') || '');
+    }
+
     function seatColors() {
         if (!snapshot || !commandSeat) return null;
         return snapshot.ownership.by_seat[commandSeat] || null;
@@ -1409,6 +1442,9 @@ export function createDevicesPage(ctx) {
         const model = modelSelect.value;
         fillCandidateSelect(computerSelect, candidateComputers(), computer, computerPlaceholder());
         fillCandidateSelect(modelSelect, candidateRadiosFor(computer), model, candidatePlaceholder(computer));
+        // 席位下拉跟着快照里的席位计划走：新绑定的电台可能刚刚多出一个席位号。
+        const seatSelect = form.querySelector('select[name="cfg_seat"]');
+        if (seatSelect) seatSelect.innerHTML = seatOptions(seatSelect.value);
         const note = $('#devCandidateNote');
         if (note) note.textContent = candidateNoteText();
         const hint = $('#devCandidateHint');
@@ -1451,8 +1487,11 @@ export function createDevicesPage(ctx) {
             // 当前配置即使不在候选集里也保留，并在下方提示是否为已知组合。
             const computer = String(config.computer || '');
             const model = String(config.model || '');
+            // 席位归属在电台属性里直接绑定：选项来自服务端派生的席位号，留空交给 seatPlan 新建席位。
+            const seat = seatBindingOf(value);
             return `<label>${t('dev.form.computer')}<select name="cfg_computer">${candidateOptions(candidateComputers(), computer, computerPlaceholder())}</select></label>
                 <label>${t('dev.form.model')}<select name="cfg_model">${candidateOptions(candidateRadiosFor(computer), model, candidatePlaceholder(computer))}</select></label>
+                <label>${t('dev.seat.assign')}<select name="cfg_seat">${seatOptions(seat)}</select></label>
                 <div class="dev-candidate-row">
                     <span class="dev-note" id="devCandidateNote">${esc(candidateNoteText())}</span>
                     <button class="dev-btn" type="button" id="devCandidateRefresh">${esc(t('dev.radio.candidates.refresh'))}</button>
@@ -1717,22 +1756,45 @@ export function createDevicesPage(ctx) {
     function seatsHtml() {
         const view = seatsView();
         const header = `<h3>${t('dev.seat.title')}</h3>`;
-        if (!view.seats.length) return header + `<p class="dev-empty">${t('dev.seat.none')}</p>`;
-        const rows = view.seats.map(seat => {
-            const item = view.by_seat[seat.seat] || {colors: {}, band: '', online: false};
-            const chips = view.antennas.map(antenna => `<span class="dev-chip dev-color-${item.colors[antenna.id]}">${esc(antenna.name)}</span>`).join('');
+        const plan = seatPlan();
+        if (!plan.seats.length) return header + `<p class="dev-empty">${t('dev.seat.none')}</p>`;
+        /* 电台 id → 设备名：席位计划只给 id，表里要显示人认得的名字。 */
+        const radioName = id => {
+            const device = deviceById(id);
+            return device ? (device.name || device.type) : id;
+        };
+        const plannedKeys = new Set();
+        const rows = plan.seats.map(seat => {
+            const keys = (seat.keys || []).filter(Boolean);
+            keys.forEach(key => plannedKeys.add(key));
+            const bound = (seat.radio_ids || []).length
+                ? esc((seat.radio_ids || []).map(radioName).join(' · '))
+                : `<span class="dev-empty">${t('dev.seat.assignAuto')}</span>`;
+            // 三色天线仍按实时席位键读服务端投影；一席多键时取第一个有投影结果的键。
+            const owned = keys.map(key => view.by_seat[key]).find(item => item && item.colors);
+            const colors = owned ? owned.colors : {};
+            const chips = view.antennas
+                .filter(antenna => colors[antenna.id])
+                .map(antenna => `<span class="dev-chip dev-color-${colors[antenna.id]}">${esc(antenna.name)}</span>`)
+                .join('');
             const notes = [];
-            if (item.unassigned) notes.push(t('dev.seat.unassigned'));
+            if (owned && owned.unassigned) notes.push(t('dev.seat.unassigned'));
             return `<tr>
-                <td>${esc(seat.seat)}</td>
-                <td>${esc(seat.band || '—')}</td>
+                <td>${esc(String(seat.no))}</td>
+                <td>${bound}</td>
                 <td><span class="dev-dot dev-dot-${seat.online ? 'online' : 'offline'}"></span>${seat.online ? t('dev.status.online') : t('dev.status.offline')}</td>
+                <td>${esc(seat.band || '—')}</td>
+                <td>${esc(seat.operator || '—')}</td>
                 <td>${chips || '—'}${notes.length ? `<div class="dev-note">${esc(notes.join(' · '))}</div>` : ''}</td>
             </tr>`;
         }).join('');
+        // 席位只由电台设备派生；还有实时席位键没落进计划时给个提示，不凭空给它编一个席位号。
+        const liveSeats = Array.isArray(view.seats) ? view.seats : [];
+        const stray = liveSeats.map(seat => seat.seat).filter(seat => seat && !plannedKeys.has(seat));
+        const strayNote = stray.length ? `<p class="dev-note">${t('dev.seat.unplanned', {seats: stray.join(' · ')})}</p>` : '';
         return header + `<table class="dev-table">
-            <thead><tr><th>${t('dev.seat.current')}</th><th>${t('dev.seat.band')}</th><th>${t('dev.seat.online')}</th><th>${t('dev.seat.antennas')}</th></tr></thead>
-            <tbody>${rows}</tbody></table>
+            <thead><tr><th>${t('dev.seat.number')}</th><th>${t('dev.seat.boundRadios')}</th><th>${t('dev.seat.online')}</th><th>${t('dev.seat.band')}</th><th>${t('dev.seat.operator')}</th><th>${t('dev.seat.antennas')}</th></tr></thead>
+            <tbody>${rows}</tbody></table>${strayNote}
             <p class="dev-note">${t('dev.hint.offset')}</p>`;
     }
 
@@ -2153,6 +2215,8 @@ export function createDevicesPage(ctx) {
         } else if (type === 'radio') {
             config.computer = String(data.get('cfg_computer') || '');
             config.model = String(data.get('cfg_model') || '');
+            // 席位号留空表示未绑定：服务端 normalizeConfig 会删掉该键，seatPlan 再自动新建席位。
+            config.seat = String(data.get('cfg_seat') || '');
         } else if (type === 'amp') {
             config.brand = String(data.get('cfg_brand') || '');
             config.model = String(data.get('cfg_amp_model') || '');

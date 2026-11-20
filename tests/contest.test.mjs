@@ -56,11 +56,9 @@ test('expire clears a finished contest server-side and is idempotent', () => {
     assert.equal(done.changed, true);
     assert.equal(done.settings.contestEnd, '');
     assert.equal(done.settings.contestStart, '');
-    assert.equal(done.settings.contestName, '');
     assert.equal(done.settings.contestModes, '');
     assert.equal(done.settings.wallTimerStart, '');
     assert.equal(done.broadcast.type, 'settings');
-    assert.equal(done.broadcast.settings.contestName, '');
 
     assert.equal(contest.expire(global, Date.parse('2026-12-01T00:00:00Z')).changed, false);
 });

@@ -137,9 +137,25 @@ test('规则缺失时回落到内置配额，未知值不会被当成 0', () => 
     assert.equal(contestRules.describe('OTHER').fallback, 'settings-config');
 });
 
-test('席位数与席位-电台绑定进入决策模块输出', () => {
-    const out = advice({seatCount: 2, seatRadios: '1,2'});
-    assert.equal(out.contest.seatCount, 2);
-    assert.equal(out.contest.seatRadios, '1,2');
+test('席位不再来自设置，而由电台属性的席位编号派生', () => {
+    // 决策模块输出不再携带 seatCount / seatRadios（已迁到电台 config.seat + seatPlan）。
+    const out = advice({});
+    assert.equal(out.contest.seatCount, undefined);
+    assert.equal(out.contest.seatRadios, undefined);
     assert.ok(out.rulesSource || out.contest.rulesSource);
+
+    // seatPlan：同号电台共用一席、未绑定自动 +1、无人占用的空号自动消失。
+    const ownership = require('../lib/devices/ownership.js');
+    const devices = [
+        {id: 'rA', type: 'radio', name: 'A', config: {seat: 2}},
+        {id: 'rB', type: 'radio', name: 'B', config: {seat: 2}},
+        {id: 'rC', type: 'radio', name: 'C', config: {}}
+    ];
+    const plan = ownership.seatPlan({devices, radioStates: {}, now: NOW});
+    assert.deepEqual(plan.seats.map(s => s.no), [1, 2]);
+    assert.deepEqual(plan.seats.find(s => s.no === 2).radio_ids, ['rA', 'rB']);
+    assert.equal(plan.radio_to_no.rC, 1);
+    // 两台都绑 2、无未绑定电台 → 只保留席位 2（空席位自动删除）。
+    const both = ownership.seatPlan({devices: [devices[0], devices[1]], radioStates: {}, now: NOW});
+    assert.deepEqual(both.seats.map(s => s.no), [2]);
 });

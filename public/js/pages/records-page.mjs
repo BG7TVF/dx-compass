@@ -1,6 +1,7 @@
 import {getJson, postJson} from '../../shared/core/transport.mjs';
 import {clearSpots, createSpotStore, fetchSpots} from '../../shared/data/spots.mjs';
 import {createPoller} from '../../shared/monitoring/poller.mjs';
+import {getStationState} from '../../shared/data/station.mjs';
 import {$, $$, escapeHtml, formatTime, modeBadge, showConfirm, showToast, signalClass, snrClass} from '../ui.mjs';
 
 export function dtLocalToMdHm(value) {
@@ -75,6 +76,53 @@ export function createRecordsPage(ctx) {
             refreshTimer = null;
             void refresh();
         }, 2000);
+    }
+
+    /* 操作员记录：名单不再来自设置，由 N1MM 上报在服务端累积成 operator_history。 */
+    const opRec = {seatMap: {}, seatMapAt: 0};
+
+    /**
+     * 实时席位键 → 席位号的映射来自 /api/devices 的 seat_plan.key_to_no。
+     * 席位计划变化不频繁，缓存一分钟，映射不到就退回显示原始席位键。
+     */
+    async function seatNumberMap() {
+        if (Date.now() - opRec.seatMapAt < 60000) return opRec.seatMap;
+        try {
+            const snapshot = await getJson('/api/devices');
+            opRec.seatMap = (snapshot && snapshot.seat_plan && snapshot.seat_plan.key_to_no) || {};
+            opRec.seatMapAt = Date.now();
+        } catch {
+            // 设备快照拉不到不影响历史本身，继续用上一次（或空）映射。
+        }
+        return opRec.seatMap;
+    }
+
+    function renderOperatorHistory(history, seatMap) {
+        const title = $('#opRecTitle'), head = $('#opRecHead'), body = $('#opRecBody');
+        if (!head || !body) return;
+        if (title) title.textContent = ctx.t('records.opRec.title');
+        head.innerHTML = [ctx.t('records.opRec.seat'), ctx.t('records.opRec.operator'), ctx.t('records.opRec.start')]
+            .map(text => `<th>${escapeHtml(text)}</th>`).join('');
+        if (!history.length) {
+            body.innerHTML = `<tr><td colspan="3" class="rec-op-empty">${escapeHtml(ctx.t('records.opRec.none'))}</td></tr>`;
+            return;
+        }
+        body.innerHTML = history.map(item => {
+            const seat = seatMap[String(item.seat)];
+            return `<tr><td>${escapeHtml(seat === undefined ? String(item.seat || '') : String(seat))}</td>` +
+                `<td>${escapeHtml(item.operator || '—')}</td>` +
+                `<td>${escapeHtml(formatTime(item.start_ts, ctx.settings))}</td></tr>`;
+        }).join('');
+    }
+
+    async function refreshOperatorHistory() {
+        try {
+            const station = await getStationState();
+            const history = Array.isArray(station && station.operator_history) ? station.operator_history : [];
+            renderOperatorHistory(history, await seatNumberMap());
+        } catch {
+            // station/state 暂时不可用时保留上一次的历史表，不打断录制控件的刷新。
+        }
     }
 
     function populateCallSelect() {
@@ -207,6 +255,7 @@ export function createRecordsPage(ctx) {
 
     const poller = createPoller(async () => {
         await refreshRecordingStatus();
+        await refreshOperatorHistory();
         if (state.status && state.status.active && state.view === 'rec') await refresh();
     }, {
         intervalMs: () => {
@@ -217,7 +266,10 @@ export function createRecordsPage(ctx) {
     });
 
     function bind() {
-        $('#btnRefreshRecords').addEventListener('click', refresh);
+        $('#btnRefreshRecords').addEventListener('click', () => {
+            void refresh();
+            void refreshOperatorHistory();
+        });
         $('#btnExportCsv').addEventListener('click', exportCsv);
         $('#recordCallSelect').addEventListener('change', refresh);
         $('#btnClearDb').addEventListener('click', clearDatabase);
@@ -236,6 +288,7 @@ export function createRecordsPage(ctx) {
         bind();
         void refreshRecordingStatus(true);
         void refresh();
+        void refreshOperatorHistory();
         poller.start();
     }
 
@@ -243,6 +296,8 @@ export function createRecordsPage(ctx) {
         populateCallSelect();
         void refreshRecordingStatus();
         void refresh();
+        opRec.seatMapAt = 0;
+        void refreshOperatorHistory();
     }
 
     return {state, init, refresh, refreshSoon, populateCallSelect, applyLang, refreshRecordingStatus};

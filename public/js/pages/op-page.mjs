@@ -129,28 +129,28 @@ export function createOpPage(ctx) {
         return radios()[String(key)] || null;
     }
 
-    /* 席位来自服务端 seats DTO；没有实时数据时按设置席位数与
-       seatRadios 绑定生成占位，保证 M2/MM 在 N1MM 接入前也能选席位。 */
+    /* 席位来自服务端 seats DTO；没有实时数据时按设备快照里的席位计划
+       （seat_plan，由电台属性绑定的席位号派生）生成占位，
+       保证 M2/MM 在 N1MM 接入前也能选席位。 */
     function liveSeats() {
         const station = ctx.qso && ctx.qso.state && ctx.qso.state.station;
         return station && Array.isArray(station.seats) ? station.seats : [];
     }
 
     function configuredSeatRadios() {
-        const bound = String(ctx.settings.seatRadios || '')
-            .split(',').map(value => value.trim()).filter(Boolean);
-        const count = Math.max(1, Math.min(12, Number(ctx.settings.seatCount) || 1));
-        /* Nothing bound and a single seat means we have no seat to show yet:
-         * the card must say so instead of inventing "Radio 1". */
-        if (!bound.length && count <= 1) return [];
-        const out = [];
-        for (let i = 0; i < count; i += 1) out.push(bound[i] || String(i + 1));
-        return out;
+        const plan = deviceSnapshot() && deviceSnapshot().seat_plan;
+        const seats = plan && Array.isArray(plan.seats) ? plan.seats : [];
+        /* 占位仍要用实时席位键喂给下游（天线归属、功放、联动都按席位键走）；
+         * 电台还没上报的席位退回按席位号。没有电台就没有席位：席位数由电台派生。 */
+        return seats.map(seat => (Array.isArray(seat.keys) && seat.keys.length)
+            ? String(seat.keys[0])
+            : String(seat.no));
     }
 
     function operatorRoster() {
-        return String(ctx.settings.operators || '')
-            .split(',').map(value => value.trim().toUpperCase()).filter(Boolean);
+        /* 操作员名单不再来自设置：谁在用哪个席位由 N1MM 上报决定，
+         * 上下线历史由 records 页读 operator_history。占位席位因此没有预设操作员。 */
+        return [];
     }
 
     function seatChoices() {
@@ -393,8 +393,8 @@ export function createOpPage(ctx) {
 
     /* opcall-exception:start */
     /* 席位铭牌第二处豁免：本席位的 OP 优先取 N1MM 实时上报的 OpCall；报文里没带
-     * 操作员时退回席位名单（在线实例的 operator，或 settings.field.operators 名册）
-     * 里的操作员。两处都没有就留 "--"，宁缺毋滥，不拿本机 callsign 顶上。 */
+     * 操作员时退回席位名单里带出的 operator（seatChoices 的在线实例或席位计划）。
+     * 两处都没有就留 "--"，宁缺毋滥，不拿本机 callsign 顶上。 */
     function seatOperator(active) {
         if (!active) return '';
         const radio = radioOf(active.value) || {};

@@ -612,6 +612,26 @@ html, body {
 }
 .rec-tab:hover:not(.active) { color: var(--text); }
 
+/* 操作员记录：N1MM 上报累积的席位上下线历史，固定在录制表格下方且不抢表格高度 */
+.rec-op {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    max-height: 40%;
+    margin-top: 8px;
+}
+.rec-op-title {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: .5px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+}
+.rec-op-wrap { flex: 1; }
+.rec-op-empty { color: var(--text-dim); font-size: 11px; }
+
 .table-wrap {
     flex: 1;
     min-height: 0;          /* allow shrinking inside the dock panel */

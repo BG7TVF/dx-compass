@@ -103,7 +103,12 @@ async function start() {
     function refreshCountdown() {
         const box = $('#contestCountdown');
         if (!box) return;
-        const state = contestCountdown(ctx.settings);
+        // 比赛名不再来自设置（已从 schema 删除），改由 N1MM 报文写入站态 contest 字段，
+        // 与 contestStart/End 的窗口设置合并后喂给倒计时；报文未到则退回窗口设置本身。
+        const station = ctx.qso && ctx.qso.state && ctx.qso.state.station;
+        const liveContest = station && station.contest ? String(station.contest).trim() : '';
+        const state = contestCountdown(
+            liveContest ? Object.assign({}, ctx.settings, {contestName: liveContest}) : ctx.settings);
         if (state.phase === 'before' || state.phase === 'running') {
             const text = state.phase === 'before'
                 ? ctx.t('contest.countdown.toStart', {d: state.days, h: state.hours, m: state.minutes})

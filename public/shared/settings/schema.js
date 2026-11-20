@@ -30,7 +30,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
     'use strict';
 
-    const SCHEMA_VERSION = 4;
+    const SCHEMA_VERSION = 5;
 
     const UI_LANGUAGES = ['zh', 'en', 'de', 'fr', 'es', 'pt', 'ru', 'it', 'ar', 'ko', 'ja'];
     const THEMES = ['dark', 'light', 'ocean', 'amber'];
@@ -543,26 +543,9 @@
             values: CONTEST_CATEGORIES, scope: 'both', label: 'Contest category', zh: '比赛类别',
             desc: 'Entry category; decides which tactical rules and station lanes apply.'
         }),
-        field('operators', 'contest', 'string', '', {
-            maxLen: 200, allowEmpty: true, scope: 'both',
-            label: 'Operator list', zh: '操作员名单',
-            desc: 'Comma-separated operator callsigns, in seat order when no live N1MM operator is reported.'
-        }),
-        field('seatCount', 'contest', 'int', 1, {
-            min: 1, max: 12, scope: 'both',
-            label: 'Seat count', zh: '席位数',
-            desc: 'Number of operating seats; each seat is one operator on one radio.'
-        }),
-        field('seatRadios', 'contest', 'string', '', {
-            maxLen: 80, allowEmpty: true, scope: 'both',
-            label: 'Seat-radio binding', zh: '席位-电台绑定',
-            desc: 'RadioNr per seat in order, comma separated (e.g. 1,2). Empty = follow the live radios.'
-        }),
-        field('contestName', 'contest', 'string', '', {
-            maxLen: 120, allowEmpty: true, scope: 'both',
-            label: 'Contest name', zh: '比赛名称',
-            desc: 'Shown in the header countdown and used as the contest label.'
-        }),
+        // v5：席位数、席位-电台绑定、比赛名称、操作员名单都不再手工填写——
+        // 席位由设备电台属性里的 config.seat 派生，比赛名称与操作员由 N1MM 上报，
+        // 故此处删除这四个设置项，旧值由 migrate() 清除。
         field('contestStart', 'contest', 'datetime', '', {
             pattern: /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/, allowEmpty: true, maxLen: 19,
             scope: 'both', label: 'Contest start (UTC)', zh: '比赛开始（UTC）',
@@ -863,6 +846,15 @@
         // v4 引入 multMode；旧配置只有布尔 multPerBand，false 等价于“总计”。
         if (version < 4 && raw.multMode === undefined && raw.multPerBand === false) {
             raw.multMode = 'dxcc-total';
+        }
+        // v5 删除 contestName / seatCount / seatRadios / operators：
+        // 这些改由 N1MM 报文与电台属性派生，旧值连同落入 _ext 的残留一并清除，
+        // 避免 collectExt 把它们当作未知键保留下来。
+        if (version < 5) {
+            for (const dropped of ['contestName', 'seatCount', 'seatRadios', 'operators']) {
+                delete raw[dropped];
+                if (isPlain(raw._ext)) delete raw._ext[dropped];
+            }
         }
         raw.cfgV = SCHEMA_VERSION;
         return raw;
