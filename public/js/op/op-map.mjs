@@ -6,8 +6,7 @@
 import {createMapSurface} from '../../shared/map/surface.mjs';
 import {cssVar} from '../ui.mjs';
 import {
-    bearing, distanceKm, toRadians, toDegrees, clamp, EARTH_RADIUS_KM,
-    normalizeLongitude, relativeLongitude
+    bearing, distanceKm, toRadians, toDegrees, normalizeLongitude, relativeLongitude
 } from '../../shared/geo/coordinates.mjs';
 import {trackPaths} from '../../shared/geo/great-circle.mjs';
 import {addTrackPaths} from '../../shared/map/layers.mjs';
@@ -76,7 +75,7 @@ function destination(lat, lon, headingDeg, arcDeg) {
     return [toDegrees(phi2), normalizeLongitude(toDegrees(lambda2))];
 }
 
-function coverageOutline(home, heading, radius) {
+function coverageOutline(home, heading) {
     const left = heading - COVERAGE_HALF_DEG;
     const right = heading + COVERAGE_HALF_DEG;
     const radialSteps = 12;
@@ -85,14 +84,14 @@ function coverageOutline(home, heading, radius) {
         [clampLat(lat), home.lon + relativeLongitude(lon, home.lon)];
     const outline = [[home.lat, home.lon]];
     for (let i = 1; i <= radialSteps; i += 1) {
-        outline.push(continuous(destination(home.lat, home.lon, left, radius * i / radialSteps)));
+        outline.push(continuous(destination(home.lat, home.lon, left, COVERAGE_RADIUS_DEG * i / radialSteps)));
     }
     for (let i = 1; i <= arcSteps; i += 1) {
         const headingStep = left + (right - left) * i / arcSteps;
-        outline.push(continuous(destination(home.lat, home.lon, headingStep, radius)));
+        outline.push(continuous(destination(home.lat, home.lon, headingStep, COVERAGE_RADIUS_DEG)));
     }
     for (let i = radialSteps; i >= 0; i -= 1) {
-        outline.push(continuous(destination(home.lat, home.lon, right, radius * i / radialSteps)));
+        outline.push(continuous(destination(home.lat, home.lon, right, COVERAGE_RADIUS_DEG * i / radialSteps)));
     }
     return outline;
 }
@@ -140,12 +139,7 @@ export function createOpMap(container, {onBearing, canRotate} = {}) {
     function drawCoverage() {
         coverageLayer.clear();
         if (!home || coverageHeading === null || !isFinite(coverageHeading)) return;
-        /* 半径延伸到目标点的大圆角距离，扇形外弧就正好落在目标上；
-         * 没有点击目标时保持固定 COVERAGE_RADIUS_DEG。 */
-        const radius = target
-            ? clamp(toDegrees(distanceKm(home, target) / EARTH_RADIUS_KM), 5, 175)
-            : COVERAGE_RADIUS_DEG;
-        const outline = coverageOutline(home, (coverageHeading + 360) % 360, radius);
+        const outline = coverageOutline(home, (coverageHeading + 360) % 360);
         const coverage = cssVar('--op-r2', COVERAGE_COLOR);
         [-360, 0, 360].forEach(shift => {
             L.polygon(
