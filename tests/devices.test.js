@@ -4106,6 +4106,13 @@ test('手动设备不建连接、不轮询、不接受上报，切回自动恢�
     }, now);
     assert.equal(report.status, 409);
     assert.equal(report.payload.error, 'device-manual');
+    // 但操作员的指令照常受理：人工确认即生效，不下发、不等回报。
+    const turned = await service.handleCommand(globalCtx, rows, 'rot-m',
+        {command: 'rotate', azimuth: 90}, {'X-DX-Seat': 's1'}, now);
+    assert.equal(turned.status, 202);
+    assert.equal(turned.payload.ok, true);
+    assert.equal(turned.payload.manual, true);
+    assert.equal(turned.payload.dispatched, false);
 
     // 切回自动：地址仍在，链路恢复建立。
     const autoRows = rows.map(row => row.id === 'amp-m'
@@ -4196,18 +4203,90 @@ test('接入方式范围：天线与合路器忽略该字段，手动电台仍�
     assert.equal(view.ownership.by_seat['OP-A'].band, '20m');
 });
 
-test('手动设备的下发指令被拒绝，并说明是设计约束', async () => {
-    fakeTransports();
-    const globalCtx = makeContext();
-    const row = deviceRow({
-        id: 'rot-m', name: 'Rotator', type: 'rotator', bands: '', access_mode: 'manual',
-        config_json: JSON.stringify({brand: 'yaesu', model: 'g-2800dxa', host: '10.0.0.9', port: 4001})
+test('手动设备：操作员的指令按「人工已完成」生效，全员看到同一份状态', async () => {
+    /* 故意装一组必然失败的 transport：手动路径要是误下发，测试立刻就能看出来，
+     * 而不是被 fakeTransports 的 ok:true 掩盖过去。 */
+    commands.resetForTests();
+    const refused = async () => ({ok: false, status: 502, error: 'should-not-dispatch'});
+    commands.setTransports({
+        rotate: refused, stop: refused, select: refused,
+        towerHold: refused, towerRelease: refused, ampSet: refused
     });
-    const result = await service.handleCommand(globalCtx, [row], 'rot-m',
-        {command: 'rotate', azimuth: 90}, {'X-DX-Seat': 'OP-A'}, new Date());
-    assert.equal(result.status, 409);
-    assert.equal(result.payload.error, 'device-manual');
-    assert.equal(result.payload.ok, false);
+    const globalCtx = makeContext();
+    const now = new Date('2026-03-01T12:00:00.000Z');
+    const rows = [
+        deviceRow({
+            id: 'rot-m', name: 'Rotator', type: 'rotator', bands: '', access_mode: 'manual',
+            config_json: JSON.stringify({brand: 'yaesu', model: 'g-2800dxa', host: '10.0.0.9', port: 4001})
+        }),
+        deviceRow({
+            id: 'sw-m', name: 'Switch', type: 'switch', bands: '', access_mode: 'manual',
+            config_json: JSON.stringify({out_count: 2})
+        }),
+        deviceRow({id: 'amp-m', name: 'PA', type: 'amp', bands: '', access_mode: 'manual'}),
+        deviceRow({id: 'tw-m', name: 'Tower', type: 'tower', bands: '', access_mode: 'manual'})
+    ];
+    const headers = {'X-DX-Seat': 'OP-A'};
+
+    // 旋转器：设了方位就是转到位了，物理角与目标角同一份，没有「运动中」。
+    const rotate = await service.handleCommand(globalCtx, rows, 'rot-m',
+        {command: 'rotate', azimuth: 123}, headers, now);
+    assert.equal(rotate.status, 202);
+    assert.equal(rotate.payload.ok, true);
+    assert.equal(rotate.payload.manual, true);
+    assert.equal(rotate.payload.dispatched, false);
+    assert.equal(rotate.broadcast.action, 'accepted');
+    assert.equal(rotate.broadcast.manual, true);
+    assert.equal(rotate.broadcast.seat, 'OP-A');
+    // 没有桅杆刹车，也就不存在静默期：紧接着改方向照样受理。
+    const again = await service.handleCommand(globalCtx, rows, 'rot-m',
+        {command: 'rotate', azimuth: 200}, headers, new Date(now.getTime() + 300));
+    assert.equal(again.status, 202);
+    assert.equal(again.payload.target_azimuth, 200);
+
+    // 切换器：点了就算切过去了，通路按「已确认」写，别的席位读到同一条链路。
+    const select = await service.handleCommand(globalCtx, rows, 'sw-m',
+        {command: 'select', port: 'in', outlet: 'ant2'}, headers, now);
+    assert.equal(select.status, 202);
+    assert.equal(select.payload.manual, true);
+    assert.equal(select.payload.verified, true);
+    const switchEntry = runtime.stateOf(globalCtx, 'sw-m');
+    assert.deepEqual(switchEntry.ports, {in: 'ant2'});
+    assert.equal(switchEntry.switch.state, 'verified');
+    assert.deepEqual(switchEntry.switch.commanded, {in: 'ant2'});
+
+    // 功放与升降塔：同样只登记人工动作，不产生任何物理输出。
+    const ampSet = await service.handleCommand(globalCtx, rows, 'amp-m',
+        {command: 'amp_set', pa_switch: 1}, headers, now);
+    assert.equal(ampSet.status, 202);
+    assert.equal(ampSet.payload.manual, true);
+    assert.deepEqual(ampSet.payload.delta, {pa_switch: 1});
+    const hold = await service.handleCommand(globalCtx, rows, 'tw-m',
+        {command: 'tower_hold', direction: 'up'}, headers, now);
+    assert.equal(hold.status, 202);
+    assert.equal(hold.payload.manual, true);
+    assert.equal(hold.payload.direction, 'up');
+    const release = await service.handleCommand(globalCtx, rows, 'tw-m',
+        {command: 'tower_release'}, headers, new Date(now.getTime() + 600));
+    assert.equal(release.status, 202);
+    assert.equal(release.payload.manual, true);
+
+    // 快照口径：state 仍标 manual，但角度与通路按操作员确认的值给出。
+    const view = service.snapshot(globalCtx, rows, new Date(now.getTime() + 1000));
+    assert.equal(view.rotators['rot-m'].state, 'manual');
+    assert.equal(view.rotators['rot-m'].physical_azimuth, 200);
+    assert.equal(view.rotators['rot-m'].target_azimuth, 200);
+    assert.equal(view.switches['sw-m'].state, 'manual');
+    assert.equal(view.switches['sw-m'].verified, true);
+    assert.deepEqual(view.controls['sw-m'].ports, {in: 'ant2'});
+    assert.equal(view.controls['rot-m'].target_azimuth, 200);
+
+    // 合法性照旧校验：手动不等于什么都能写。
+    const bad = await service.handleCommand(globalCtx, rows, 'sw-m',
+        {command: 'select', port: 'in', outlet: 'ant9'}, headers, now);
+    assert.equal(bad.status, 400);
+    assert.equal(bad.payload.error, 'unknown-port');
+    commands.resetForTests();
 });
 
 /* 频率联动的天线形状：只用 pickAntenna 需要的字段，
@@ -4518,4 +4597,32 @@ test('频率联动：API 动作、快照字段与轮询入口', async () => {
     assert.equal(switched.actions.length, 1);
     assert.equal(switched.actions[0].antenna_id, 'ant-80');
     assert.equal(switched.actions[0].status, 202, JSON.stringify(switched.actions[0]));
+});
+
+test('频率联动不替人工确认：链路上是手动切换器时联动不动手，OP 自己点照样生效', async () => {
+    const fx = antSwitchFixture();
+    // 矩阵改成手动接入：这一档要靠人去拨，系统不能凭空替全组确认。
+    const rows = fx.rows.map(row => row.id === 'matrix-1'
+        ? Object.assign({}, row, {access_mode: 'manual'}) : row);
+    const globalCtx = makeContext({radioStates: fx.radioStates});
+    fakeTransports();
+
+    service.handle(globalCtx, rows,
+        {action: 'band-link', seat: 'OP-A', enabled: true, operator: 'BG7TV'}, fx.now);
+    const ticked = await service.bandLinkTick(globalCtx, rows, fx.now);
+    assert.equal(ticked.actions.length, 1);
+    assert.equal(ticked.actions[0].status, 409, JSON.stringify(ticked.actions[0]));
+    assert.equal(ticked.actions[0].error, 'device-manual');
+    assert.equal(ticked.actions[0].executed, true);
+    const waiting = service.snapshot(globalCtx, rows, fx.now);
+    assert.deepEqual((waiting.ownership.by_seat['OP-A'].ant_switch || {}).routed || [], [],
+        '联动失败不能把天线记成已接通');
+
+    // 同一份配置，OP 点天线是人工动作：按“已完成”生效，全员看到同一条链路。
+    const clicked = await service.handleCommand(globalCtx, rows, 'ant-40',
+        {command: 'route', device_id: 'ant-40'}, {'X-DX-Seat': 'OP-A'}, fx.now);
+    assert.equal(clicked.status, 202, JSON.stringify(clicked.payload));
+    const routed = service.snapshot(globalCtx, rows, fx.now);
+    assert.deepEqual(routed.ownership.by_seat['OP-A'].ant_switch.routed, ['ant-40']);
+    commands.resetForTests();
 });

@@ -613,15 +613,14 @@ export function createOpPage(ctx) {
         return latest ? bandKey(latest.band || bandLabel(latest.freqKhz)).toLowerCase() : '';
     }
 
-    /* A switcher/matrix that is actually wired up (not disabled, not manual)
-     * is the only thing that can move an antenna to a band the radio is not
-     * on, so the strip only shows pre-emption when one exists. */
+    /* A switcher/matrix that is actually wired up is the only thing that can
+     * move an antenna to a band the radio is not on, so the strip only shows
+     * pre-emption when one exists. A manual switcher still counts: the operator
+     * throws it by hand and the system records that as done for every seat. */
     function hasActiveSwitcher() {
         const snapshot = deviceSnapshot();
         if (!snapshot || !Array.isArray(snapshot.devices)) return false;
-        return snapshot.devices.some(device =>
-            (device.type === 'switch' || device.type === 'matrix') &&
-            device.access_mode !== 'manual');
+        return snapshot.devices.some(device => device.type === 'switch' || device.type === 'matrix');
     }
 
     /* Band-occupancy strip: one cell per HF band.
@@ -2218,8 +2217,11 @@ export function createOpPage(ctx) {
         try {
             const result = await sendDeviceCommand(device.id, body, {seat: commandSeat()});
             const ok = !!result && result.ok !== false;
-            deviceFeedback(card, ok, (ok ? t('op.device.commandSent') : t('op.device.commandFailed')) +
-                (ok ? '' : errorNote(result)));
+            /* 手动设备的回执里没有“已下发”，只有“人工已确认生效”。
+             * 文案必须分开，否则操作员会一直盯着界面等设备回报。 */
+            const done = !ok ? t('op.device.commandFailed')
+                : t(result.manual ? 'op.device.manualDone' : 'op.device.commandSent');
+            deviceFeedback(card, ok, done + (ok ? '' : errorNote(result)));
             if (ok) {
                 if (body.command === 'rotate') state.rotorTarget = body.azimuth;
                 await loadDevices();

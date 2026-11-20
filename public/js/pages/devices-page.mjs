@@ -1795,24 +1795,25 @@ export function createDevicesPage(ctx) {
         const status = '<p class="dev-ctrl-status" id="devCtrlStatus"></p>';
         const error = '<p class="dev-form-error hidden" id="devCtrlError"></p>';
         const seat = `<label>${t('dev.control.seat')}<select id="devCtrlSeat">${seatOptions()}</select></label>`;
-        // 手动设备把按钮置灰并说明原因，而不是让人点了没反应。
+        /* 手动设备的按钮照常可点：点下去不是“下发给设备”，而是把人工操作
+         * 登记为已生效，服务端直接写状态并广播给所有席位，所以不置灰。 */
         const manual = device.access_mode === 'manual';
-        const off = manual ? ' disabled' : '';
         const manualHint = manual
             ? `<p class="dev-note dev-warn">${esc(t('dev.control.manualHint'))}</p>` : '';
         if (device.type === 'rotator') {
             return `<h3>${t('dev.control.title')}</h3>${status}
                 <div class="dev-ctrl-row">
                     <label>${t('dev.control.target')}<input id="devCtrlAzimuth" type="number" min="0" max="360" step="1" inputmode="numeric"></label>
-                    <button class="dev-btn primary" type="button" data-cmd="rotate"${off}>${t('dev.control.rotate')}</button>
-                    <button class="dev-btn" type="button" data-cmd="stop"${off}>${t('dev.control.stop')}</button>
+                    <button class="dev-btn primary" type="button" data-cmd="rotate">${t('dev.control.rotate')}</button>
+                    <button class="dev-btn" type="button" data-cmd="stop">${t('dev.control.stop')}</button>
                 </div>
                 <div class="dev-ctrl-row">${seat}</div>${manualHint}${error}`;
         }
         if (device.type === 'matrix' || device.type === 'switch') {
             const definition = switchDefinitionFor(device.type, device.config);
-            const readback = !!(definition && definition.readback);
-            const controllable = (!definition || definition.control !== false) && !manual;
+            // 手动切换器的通路以人的确认为准，界面上就是“已确认”那一份，不再标成只写。
+            const readback = manual || !!(definition && definition.readback);
+            const controllable = manual || !definition || definition.control !== false;
             const portHint = device.type === 'switch' ? t('dev.control.switchHint') : t('dev.control.matrixHint');
             const stateHint = !controllable ? t('dev.switch.readOnlyHint')
                 : readback ? t('dev.switch.readbackHint') : t('dev.switch.writeOnlyHint');
@@ -1833,7 +1834,7 @@ export function createDevicesPage(ctx) {
             const definition = ampDefinitionFor(device.config);
             // 可控制项由型号描述表给出；未选型号时用通用定义（常规操作，不含校准）。
             const buttons = ((definition && definition.controls) || []).map(control =>
-                `<button class="dev-btn${control.primary ? ' primary' : ''}" type="button" data-cmd="amp_set"${off}
+                `<button class="dev-btn${control.primary ? ' primary' : ''}" type="button" data-cmd="amp_set"
                     data-amp="${esc(control.action)}" data-amp-delta="${esc(JSON.stringify(control.delta || {}))}">${esc(t(control.label))}</button>`).join('');
             return `<h3>${t('dev.control.title')}</h3>${status}
                 <div class="dev-ctrl-row">${buttons}</div>
@@ -1842,8 +1843,8 @@ export function createDevicesPage(ctx) {
         }
         return `<h3>${t('dev.control.title')}</h3>${status}
             <div class="dev-ctrl-row">
-                <button class="dev-btn" type="button" data-tower="up"${off}>${t('dev.control.up')}</button>
-                <button class="dev-btn" type="button" data-tower="down"${off}>${t('dev.control.down')}</button>
+                <button class="dev-btn" type="button" data-tower="up">${t('dev.control.up')}</button>
+                <button class="dev-btn" type="button" data-tower="down">${t('dev.control.down')}</button>
             </div>
             <div class="dev-ctrl-row">${seat}</div>
             <p class="dev-note">${t('dev.control.holdHint')}</p>${manualHint}${error}`;
