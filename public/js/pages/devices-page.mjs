@@ -1842,7 +1842,7 @@ export function createDevicesPage(ctx) {
         return head + rows;
     }
 
-    function seatOptions() {
+    function commandSeatOptions() {
         const seats = seatsView().seats;
         if (!seats.length) return '<option value="">—</option>';
         if (!commandSeat || !seats.some(seat => seat.seat === commandSeat)) {
@@ -1856,7 +1856,7 @@ export function createDevicesPage(ctx) {
         if (!device || !['rotator', 'matrix', 'switch', 'tower', 'amp'].includes(device.type)) return '';
         const status = '<p class="dev-ctrl-status" id="devCtrlStatus"></p>';
         const error = '<p class="dev-form-error hidden" id="devCtrlError"></p>';
-        const seat = `<label>${t('dev.control.seat')}<select id="devCtrlSeat">${seatOptions()}</select></label>`;
+        const seat = `<label>${t('dev.control.seat')}<select id="devCtrlSeat">${commandSeatOptions()}</select></label>`;
         /* 手动设备的按钮照常可点：点下去不是“下发给设备”，而是把人工操作
          * 登记为已生效，服务端直接写状态并广播给所有席位，所以不置灰。 */
         const manual = device.access_mode === 'manual';

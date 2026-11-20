@@ -10,11 +10,61 @@ import {
     validateSettingsPatch, writeLocalExtras
 } from '../settings-model.mjs';
 import {$, $$, showConfirm, showToast} from '../ui.mjs';
-import {changeSeatIdentity, getSeatIdentities} from '../../shared/data/station.mjs';
 
-const FIELD_CONTAINERS = {
-    ui: '#globalAdvanced', map: '#spotAdvanced', qso: '#qsoAdvanced',
-    contest: '#contestFields', wall: '#wallAdvanced', data: '#dataFields', prop: '#propFields'
+/* Settings are grouped by FUNCTION, not by view. SCHEMA_GROUPS points each
+ * functional group at the .set-grid container rendered into it; FIELD_FUNC
+ * assigns every non-legacy, non-external schema key to exactly one group. The
+ * storage `domain` is left untouched, so reset/defaults/migration still work —
+ * only the presentation grouping changes. */
+const SCHEMA_GROUPS = {
+    appearance: '#fnAppearance',
+    map: '#fnMap',
+    source: '#fnSource', network: '#fnNetwork',
+    alerts: '#fnAlerts', voice: '#fnVoice', notify: '#fnNotify',
+    contest: '#contestFields',
+    wall: '#fnWall',
+    prop: '#fnProp',
+    retention: '#fnRetention', diag: '#fnDiag'
+};
+
+const FIELD_FUNC = {
+    // 界面外观：时钟与发射（语言/主题/底图/呼号/网格为手写控件）
+    txPowerW: 'appearance', timeZone: 'appearance', showSeconds: 'appearance', clockSec: 'appearance',
+    // 地图渲染：标记、密度、叠加图层
+    autoFitMaxZoom: 'map', fitPad: 'map', terminatorShow: 'map', terminatorSec: 'map',
+    heatShow: 'map', heatRadius: 'map', heatBlur: 'map', heatOpacity: 'map',
+    gcShow: 'map', gcSamples: 'map', spotterSize: 'map', monitoredSize: 'map',
+    historyLimit: 'map', markerMax: 'map', fadeSec: 'map', pruneSec: 'map',
+    // 数据源与采集
+    sourceDxwatch: 'source', sourceRbn: 'source', sourcePskr: 'source',
+    pollDxwatchSec: 'source', pollRbnSec: 'source', pollPskrSyncSec: 'source',
+    freshSec: 'source', propPollSec: 'source', maxCallsigns: 'source', pskWindowMin: 'source',
+    httpProxy: 'network', fetchTimeoutMs: 'network', upstreamBase: 'network',
+    // 告警判定
+    alertPopupMs: 'alerts', alertSnrMin: 'alerts', alertDistanceKmMin: 'alerts', freqDeltaKhz: 'alerts',
+    alertSound: 'alerts', alertSoundVolume: 'alerts',
+    opSuspiciousCheck: 'alerts', opScpCheck: 'alerts', opSuspiciousQrz: 'alerts', opRunIdleMin: 'alerts',
+    voiceRate: 'voice', voiceVolume: 'voice', quietFrom: 'voice', quietTo: 'voice',
+    alertsEnabled: 'notify', alertMinIntervalSec: 'notify', alertDedupeMin: 'notify',
+    alertPopup: 'notify', diskAlert: 'notify',
+    // 比赛规则（category 为手写控件）
+    contestStart: 'contest', contestEnd: 'contest', contestModes: 'contest', contestBands: 'contest',
+    contestRulesUrl: 'contest', contestType: 'contest', powerClass: 'contest', contestSingleBand: 'contest',
+    multMode: 'contest', bandChangeRule: 'contest', bandChangeLimit: 'contest', msRole: 'contest',
+    adviceEnabled: 'contest', adviceRefreshSec: 'contest', adviceMinConfidence: 'contest', adviceConfig: 'contest',
+    // 大屏墙（标题/模式/图层/倒计时为手写控件）
+    cycleSec: 'wall', spaceDwellSec: 'wall', syncSec: 'wall', wallSpotSec: 'wall', wallQsoSec: 'wall',
+    wallStationSec: 'wall', topLat: 'wall', bottomLat: 'wall', opponentWindowMin: 'wall',
+    opponentCompactMin: 'wall', opponentBandsMax: 'wall', concentrationMin: 'wall',
+    // 传播预测
+    collectSec: 'prop', condClosed: 'prop', condGood: 'prop', condFair: 'prop',
+    mufOpacity: 'prop', nightOpacity: 'prop',
+    // 系统与备份
+    retentionSpotsDays: 'retention', retentionRecordingMonths: 'retention', retentionQsoDays: 'retention',
+    retentionActivityDays: 'retention', autoPurge: 'retention', recordsRefreshSec: 'retention',
+    recordingRepeat: 'retention',
+    logLevel: 'diag', diskWarnPct: 'diag', diskCheckSec: 'diag',
+    rateBucketMin: 'diag', minBuckets: 'diag', qsoHistoryLimit: 'diag'
 };
 
 /* Keys with a hand-written control in index.html; generated schema fields
@@ -369,11 +419,11 @@ export function createSettingsPage(ctx) {
     }
 
     function renderSchemaFields() {
-        for (const [domain, selector] of Object.entries(FIELD_CONTAINERS)) {
+        for (const [group, selector] of Object.entries(SCHEMA_GROUPS)) {
             const wrap = $(selector);
             if (!wrap) continue;
             wrap.innerHTML = SETTINGS_FIELDS
-                .filter(field => field.domain === domain &&
+                .filter(field => FIELD_FUNC[field.key] === group &&
                     !LEGACY_FIELD_KEYS.has(field.key) && !EXTERNAL_CONTROL_KEYS.has(field.key))
                 .map(fieldHtml).join('');
         }
@@ -683,7 +733,6 @@ export function createSettingsPage(ctx) {
     function applyLang() {
         const t = ctx.t;
         ctx.i18n.setLanguage(ctx.settings.lang);
-        renderSeatIdentities();
         document.documentElement.lang = ctx.settings.lang;
         /* Keep the map dashboard LTR (Leaflet is not mirrored) but render the
          * settings pane right-to-left for Arabic. */
@@ -706,8 +755,8 @@ export function createSettingsPage(ctx) {
             '#mySpotTtlLabel': 'mySpotTtl', '#mySpotMaxLabel': 'mySpotMax',
             '#mySpotPopupLabel': 'mySpotPopup', '#mySpotVoiceLabel': 'mySpotVoice',
             '#ttlTitle': 'ttlTitle', '#bandTitle': 'bandTitle', '#gridLabel': 'myGrid',
-            '#qrzUserLabel': 'qrzUser', '#qrzPassLabel': 'qrzPass', '#tabGlobal': 'setGlobal',
-            '#tabSpot': 'setSpot', '#tabQso': 'setQso', '#spotSectionTitle': 'setSpot',
+            '#qrzUserLabel': 'qrzUser', '#qrzPassLabel': 'qrzPass',
+            '#spotSectionTitle': 'setSpot',
             '#qsoSectionTitle': 'setQso', '#catLabel': 'contestCat', '#qsoAutoFitLabel': 'qsoAutoFit',
             '#qsoLinesLabel': 'qsoLines', '#qsoDoubleLabel': 'qsoMaxMarkers', '#tabWall': 'setWall',
             '#wallSectionTitle': 'setWall', '#wallTitleLabel': 'wallTitle', '#wallLayer1Label': 'wallLayer1',
@@ -756,15 +805,26 @@ export function createSettingsPage(ctx) {
         const search = document.querySelector('#cfgSearch');
         if (search) search.placeholder = t('settings.action.search');
 
-        setText('#tabData', t('settings.tab.data'));
+        setText('#tabAppearance', t('settings.tab.appearance'));
+        setText('#tabMap', t('settings.tab.map'));
+        setText('#tabSource', t('settings.tab.source'));
+        setText('#tabAlerts', t('settings.tab.alerts'));
+        setText('#tabSystem', t('settings.tab.system'));
         setText('#tabProp', t('settings.tab.prop'));
         setText('#tabContest', t('settings.tab.contest'));
-        setText('#globalAdvancedTitle', t('settings.section.advanced'));
         setText('#basicSectionTitle', t('settings.section.basic'));
+        setText('#identityTitle', t('settings.section.identity'));
+        setText('#clockTitle', t('settings.section.clock'));
+        setText('#sourcesTitle', t('settings.section.sources'));
+        setText('#qrzSectionTitle', t('settings.section.credentials'));
+        setText('#networkTitle', t('settings.section.network'));
+        setText('#alertsTitle', t('settings.section.alerts'));
+        setText('#voiceTitle', t('settings.section.voice'));
+        setText('#notifyTitle', t('settings.section.notify'));
         setText('#spotAdvancedTitle', t('settings.section.display'));
-        setText('#qsoAdvancedTitle', t('settings.section.displayAlerts'));
         setText('#wallAdvancedTitle', t('settings.section.advanced'));
-        setText('#dataTitle', t('settings.section.data'));
+        setText('#retentionTitle', t('settings.section.retention'));
+        setText('#diagTitle', t('settings.section.diagnostics'));
         setText('#propTitle', t('settings.section.prop'));
         setText('#contestWindowTitle', t('settings.section.contestWindow'));
         setText('#contestResetLabel', t('settings.reset.contest'));
@@ -907,7 +967,6 @@ export function createSettingsPage(ctx) {
         closeAppMenu();
         $('#configPanel').classList.remove('hidden');
         void loadConfig();
-        void loadSeatIdentities();
     }
 
     function closeConfig() {
@@ -1056,7 +1115,6 @@ export function createSettingsPage(ctx) {
                 pane.id === `pane${button.dataset.pane.charAt(0).toUpperCase()}${button.dataset.pane.slice(1)}`));
         }));
         // Section headers collapse their card; keyboard and pointer share one path.
-        ensureSeatSection();
         $$('.form-section').forEach(section => {
             const title = section.querySelector('.section-title');
             if (!title) return;
@@ -1187,151 +1245,6 @@ export function createSettingsPage(ctx) {
         }
         buildBandColorInputs();
         renderSchemaFields();
-    }
-
-    // ------------------------------------------------ seat auto identification
-    let seatData = null;
-    let seatBusy = false;
-
-    function ensureSeatSection() {
-        const pane = $('#paneContest');
-        if (!pane) return null;
-        const existing = $('#seatIdentitiesSection');
-        if (existing) return existing;
-        const section = document.createElement('div');
-        section.className = 'form-section';
-        section.id = 'seatIdentitiesSection';
-        section.innerHTML =
-            '<div class="section-title" id="seatIdentitiesTitle"></div>' +
-            '<p class="hint" id="seatIdentitiesHint"></p>' +
-            '<div id="seatIdentityRows"></div>' +
-            '<div class="form-row"><button type="button" class="mini-btn" id="btnSeatRefresh"></button></div>' +
-            '<p class="hint" id="seatUnidentifiedHint"></p>' +
-            '<p class="hint" id="seatHistoryHint"></p>';
-        const reset = pane.querySelector('.reset-row');
-        pane.insertBefore(section, reset || null);
-        $('#btnSeatRefresh').addEventListener('click', () => void loadSeatIdentities(true));
-        section.addEventListener('click', event => {
-            const button = event.target.closest('button[data-seat-action]');
-            if (!button) return;
-            const row = button.closest('[data-seat-identity]');
-            if (row) void applySeatAction(row, button.dataset.seatAction);
-        });
-        return section;
-    }
-
-    function seatEvidence(labelKey, value) {
-        return '<div class="hint">' + escapeHtml(t(labelKey)) + ': ' +
-            escapeHtml(value || t('settings.seat.none')) + '</div>';
-    }
-
-    // 席位键里的 CN: 段是 N1MM 计算机名；界面只显示掩码，完整值仍保留在 data 属性里供保存使用。
-    function maskSeatKey(key) {
-        return String(key || '').replace(/(^|\|)CN:[^|]*/g, '$1CN:***');
-    }
-
-    function renderSeatIdentities() {
-        const section = ensureSeatSection();
-        if (!section) return;
-        setText('#seatIdentitiesTitle', t('settings.seat.title'));
-        setText('#seatIdentitiesHint', t('settings.seat.hint'));
-        setText('#btnSeatRefresh', t('settings.seat.refresh'));
-        const rows = $('#seatIdentityRows');
-        if (!rows) return;
-        const seats = seatData && Array.isArray(seatData.seats) ? seatData.seats : [];
-        if (!seats.length) {
-            rows.innerHTML = '<p class="hint">' + escapeHtml(t('settings.seat.empty')) + '</p>';
-        } else {
-            rows.innerHTML = seats.map(record => {
-                const ruleKey = 'settings.seat.rule.' + (record.rule || 'unknown');
-                const ruleLabel = t(ruleKey) === ruleKey ? t('settings.seat.rule.unknown') : t(ruleKey);
-                const badge = (record.unbound ? t('settings.seat.unbound') + ' · ' : '') + ruleLabel;
-                const fullKey = record.seatKey || '';
-                return '<div class="form-row" data-seat-identity="' + escapeHtml(record.identity) + '">' +
-                    '<div style="flex:1;min-width:0">' +
-                        '<div><b>' + escapeHtml(maskSeatKey(fullKey)) + '</b> · ' + escapeHtml(badge) + '</div>' +
-                        '<input class="set-input seat-name" maxlength="40" value="' + escapeHtml(record.displayName || '') +
-                            '" placeholder="' + escapeHtml(t('settings.seat.namePlaceholder')) + '">' +
-                        '<input class="set-input seat-key" maxlength="80" data-full-key="' + escapeHtml(fullKey) +
-                            '" value="' + escapeHtml(maskSeatKey(fullKey)) +
-                            '" placeholder="' + escapeHtml(t('settings.seat.keyPlaceholder')) + '">' +
-                        seatEvidence('settings.seat.radioName', record.radioName) +
-                        seatEvidence('settings.seat.radioNr', record.radioNr) +
-                        seatEvidence('settings.seat.source', record.source) +
-                        seatEvidence('settings.seat.lastSeen', record.lastSeen) +
-                        '<div class="form-row">' +
-                            '<button type="button" class="mini-btn" data-seat-action="save">' +
-                                escapeHtml(t('settings.seat.save')) + '</button>' +
-                            '<button type="button" class="mini-btn" data-seat-action="' +
-                                (record.unbound ? 'bind' : 'unbind') + '">' +
-                                escapeHtml(t(record.unbound ? 'settings.seat.bind' : 'settings.seat.unbind')) + '</button>' +
-                        '</div>' +
-                    '</div>' +
-                '</div>';
-            }).join('');
-        }
-        const bucket = seatData && seatData.unidentified ? seatData.unidentified : null;
-        const bucketHint = $('#seatUnidentifiedHint');
-        if (bucketHint) {
-            bucketHint.textContent = bucket && Number(bucket.count)
-                ? t('settings.seat.unidentified', {n: Number(bucket.count), at: bucket.lastSeen || '-'})
-                : t('settings.seat.unidentifiedNone');
-        }
-        const historyHint = $('#seatHistoryHint');
-        if (historyHint) {
-            const history = seatData && Array.isArray(seatData.history) ? seatData.history.slice(0, 5) : [];
-            historyHint.textContent = history.length
-                ? t('settings.seat.history', {n: history.length}) + ' ' +
-                    history.map(item => `${item.at || ''} ${item.action || ''} ${maskSeatKey(item.seatKey)}`.trim()).join(' | ')
-                : '';
-        }
-    }
-
-    async function loadSeatIdentities(manual) {
-        try {
-            seatData = await getSeatIdentities();
-            renderSeatIdentities();
-            if (manual) showToast(t('settings.seat.refreshed'));
-        } catch {
-            if (manual) showToast(t('settings.seat.failed'));
-        }
-    }
-
-    async function applySeatAction(row, action) {
-        if (seatBusy) return;
-        const identity = row.dataset.seatIdentity;
-        if (!identity) return;
-        const nameInput = row.querySelector('.seat-name');
-        const keyInput = row.querySelector('.seat-key');
-        const current = seatData && Array.isArray(seatData.seats)
-            ? seatData.seats.find(item => item.identity === identity) : null;
-        seatBusy = true;
-        try {
-            if (action === 'save') {
-                const displayName = nameInput ? nameInput.value.trim() : '';
-                const rawKey = keyInput ? keyInput.value.trim() : '';
-                const fullKey = keyInput ? (keyInput.dataset.fullKey || '') : '';
-                // 输入框显示的是掩码；用户没改时仍提交完整键，避免把 CN:*** 存回去。
-                const seatKey = rawKey === maskSeatKey(fullKey) ? fullKey : rawKey;
-                if (displayName !== ((current && current.displayName) || '')) {
-                    await changeSeatIdentity({identity, action: 'rename', displayName});
-                }
-                if (seatKey && seatKey !== ((current && current.seatKey) || '')) {
-                    await changeSeatIdentity({identity, action: 'override', seatKey});
-                }
-            } else if (action === 'unbind') {
-                await changeSeatIdentity({identity, action: 'unbind'});
-            } else if (action === 'bind') {
-                const seatKey = keyInput ? keyInput.value.trim() : '';
-                await changeSeatIdentity({identity, action: 'bind', seatKey});
-            }
-            await loadSeatIdentities();
-            showToast(t('settings.seat.saved'));
-        } catch {
-            showToast(t('settings.seat.failed'));
-        } finally {
-            seatBusy = false;
-        }
     }
 
     return {

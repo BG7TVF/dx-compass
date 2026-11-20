@@ -679,7 +679,8 @@ tbody tr:nth-child(even) { background: var(--row-alt); }
  * from surface tone and spacing; borders are limited to hairline row
  * separators, and there are no gradients or elevation shadows. */
 .settings-page {
-    --st-max: 980px;
+    --st-max: 1440px;
+    --cfg-nav: 216px;
     --st-radius: 12px;
     --st-ctl-h: 34px;
     --st-hair: color-mix(in srgb, var(--text) 8%, transparent);
@@ -706,32 +707,43 @@ tbody tr:nth-child(even) { background: var(--row-alt); }
 }
 .settings-page .panel-close:hover { background: var(--st-row-hover); color: var(--text); }
 
-.cfg-topbar { flex: none; background: var(--bg); border-bottom: 1px solid var(--st-hair); }
-.cfg-topbar-inner { width: 100%; max-width: var(--st-max); margin: 0 auto; padding: 0 24px; }
-.cfg-tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; }
-.cfg-tabs::-webkit-scrollbar { display: none; }
+/* Left vertical navigation + right content grid (full-width layout) */
+.cfg-layout { flex: 1; display: flex; min-height: 0; }
+.cfg-nav {
+    flex: 0 0 var(--cfg-nav);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 12px 10px;
+    overflow-y: auto;
+    border-right: 1px solid var(--st-hair);
+    background: var(--bg);
+}
+.cfg-main { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
 .cfg-tab {
-    flex: 0 0 auto;
+    display: block;
+    width: 100%;
+    text-align: left;
     background: none;
     border: 0;
-    border-bottom: 2px solid transparent;
+    border-left: 3px solid transparent;
     color: var(--text-dim);
-    padding: 12px 14px 10px;
+    padding: 9px 12px;
     font-size: 13px;
     font-family: inherit;
     cursor: pointer;
-    border-radius: 0;
+    border-radius: 0 8px 8px 0;
     white-space: nowrap;
-    transition: color .15s, border-color .15s;
+    transition: color .15s, background .15s, border-color .15s;
 }
-.cfg-tab:hover { color: var(--text); }
-.cfg-tab.active {
-    background: none;
+.cfg-nav .cfg-tab:hover { color: var(--text); background: var(--st-row-hover); }
+.cfg-nav .cfg-tab.active {
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
     color: var(--accent);
-    border-bottom-color: var(--accent);
+    border-left-color: var(--accent);
     font-weight: 600;
 }
-.cfg-tab:focus-visible { outline: 2px solid var(--st-focus); outline-offset: -2px; border-radius: 6px; }
+.cfg-tab:focus-visible { outline: 2px solid var(--st-focus); outline-offset: -2px; border-radius: 8px; }
 .cfg-search-row { position: relative; display: flex; align-items: center; gap: 10px; padding: 10px 0 12px; }
 .cfg-search-row .set-input {
     flex: 1 1 auto;
@@ -754,17 +766,21 @@ tbody tr:nth-child(even) { background: var(--row-alt); }
     pointer-events: none;
 }
 
+.settings-page .panel-header { gap: 16px; flex-wrap: wrap; }
+.settings-page .panel-header .cfg-search-row { padding: 0; flex: 1 1 240px; max-width: 520px; }
 .settings-page .panel-body {
     width: 100%;
-    max-width: var(--st-max);
-    margin: 0 auto;
+    max-width: none;
+    margin: 0;
     padding: 18px 24px 48px;
     overflow-y: auto;
     overflow-x: hidden;
+    flex: 1;
 }
 .config-form { display: flex; flex-direction: column; gap: 16px; }
-.cfg-pane { display: none; flex-direction: column; gap: 14px; }
+.cfg-pane { display: none; flex-direction: column; gap: 16px; }
 .cfg-pane.active { display: flex; }
+.cfg-cols { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 16px; align-items: start; }
 
 /* Collapsible section card */
 .form-section {
@@ -1076,7 +1092,25 @@ select.set-input {
 
 /* Narrow screens: rows stack naturally, controls go full width */
 @media (max-width: 720px) {
-    .cfg-topbar-inner { padding: 0 16px; }
+    .cfg-layout { flex-direction: column; }
+    .cfg-nav {
+        flex: 0 0 auto;
+        flex-direction: row;
+        gap: 4px;
+        padding: 8px 10px;
+        border-right: 0;
+        border-bottom: 1px solid var(--st-hair);
+        overflow-x: auto;
+        overflow-y: hidden;
+    }
+    .cfg-nav .cfg-tab {
+        width: auto;
+        border-left: 0;
+        border-bottom: 2px solid transparent;
+        border-radius: 8px;
+        padding: 8px 12px;
+    }
+    .cfg-nav .cfg-tab.active { border-left: 0; border-bottom-color: var(--accent); }
     .settings-page .panel-header { padding: 12px 16px; }
     .settings-page .panel-body { padding: 12px; }
     .form-row, .set-row { flex-wrap: wrap; gap: 8px; }
@@ -1664,6 +1698,15 @@ body.lang-ar .rec-tz { text-align: right; }
 #configPanel #setQrzPass,
 #configPanel input[type="number"] { direction: ltr; }
 #configPanel[dir="rtl"] .cfg-call { text-align: left; }
+/* Mirror the vertical navigation rail for RTL. */
+#configPanel[dir="rtl"] .cfg-nav { border-right: 0; border-left: 1px solid var(--st-hair); }
+#configPanel[dir="rtl"] .cfg-tab {
+    text-align: right;
+    border-left: 0;
+    border-right: 3px solid transparent;
+    border-radius: 8px 0 0 8px;
+}
+#configPanel[dir="rtl"] .cfg-tab.active { border-right-color: var(--accent); }
 
 
 /* One-click factory reset row (Global settings) */
