@@ -57,6 +57,51 @@ err()   { echo -e "${_c_red}[FAIL]${_c_reset}  $*" >&2; }
 die()   { err "$*"; exit 1; }
 
 # --------------------------------------------------------------------------- #
+# apt lock handling
+#   Ubuntu runs apt-daily / unattended-upgrades in the background and they grab
+#   the dpkg frontend lock. Installing without waiting for it aborts with
+#   "Could not get lock /var/lib/dpkg/lock-frontend" (the exact failure seen on
+#   Lite28320128). Before any apt-get below we stop those upgraders and wait
+#   until the lock is actually released. The lock is an advisory fcntl lock, so
+#   it frees itself once the holding process exits - we NEVER delete the lock
+#   files, which would risk corrupting dpkg's state.
+# --------------------------------------------------------------------------- #
+apt_lock_busy() {
+    if command -v fuser >/dev/null 2>&1 \
+        && fuser -s /var/lib/dpkg/lock-frontend 2>/dev/null; then
+        return 0
+    fi
+    local p
+    for p in apt apt-get dpkg unattended-upgr; do
+        pgrep -x "${p}" >/dev/null 2>&1 && return 0
+    done
+    return 1
+}
+
+wait_for_apt_lock() {
+    [[ ${EUID} -eq 0 ]] || return 0
+    for svc in apt-daily.timer apt-daily-upgrade.timer \
+               apt-daily.service apt-daily-upgrade.service \
+               unattended-upgrades.service; do
+        systemctl stop "${svc}" 2>/dev/null || true
+    done
+    local waited=0 timeout=300
+    while apt_lock_busy; do
+        if [[ ${waited} -ge ${timeout} ]]; then
+            warn "Package lock still held after ${timeout}s (another install/upgrade is running)."
+            echo "    Wait for it to finish, or abort it, then re-run this installer:"
+            echo "      sudo systemctl stop apt-daily apt-daily-upgrade unattended-upgrades"
+            echo "      sudo fuser -v /var/lib/dpkg/lock-frontend   # shows the holding pid to kill"
+            die "The package manager is busy."
+        fi
+        info "Waiting for the package manager to release its lock ..."
+        sleep 5
+        waited=$((waited + 5))
+    done
+    ok "Package manager lock free"
+}
+
+# --------------------------------------------------------------------------- #
 # Privilege / user handling
 # --------------------------------------------------------------------------- #
 if [[ ${EUID} -eq 0 ]]; then
@@ -165,6 +210,7 @@ ok "Disk space OK ($(( FREE_KB / 1024 )) MB available)"
 # --------------------------------------------------------------------------- #
 info "Installing system packages (ca-certificates, curl, build tools, ffmpeg)..."
 if [[ ${MODE} == "system" ]]; then
+    wait_for_apt_lock
     ${SUDO} apt-get update -qq
     # ffmpeg 是 RTSP 摄像头唯一的取流手段：lib/cameras/ingest-rtsp.js 直接 spawn 它。
     ${SUDO} env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
