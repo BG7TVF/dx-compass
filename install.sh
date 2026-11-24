@@ -247,23 +247,31 @@ node_major() { node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo
 if command -v node >/dev/null 2>&1 && [[ "$(node_major)" -ge ${REQUIRED_NODE_MAJOR} ]]; then
     ok "Node.js $(node -v) already installed - using it"
 elif [[ ${MODE} == "system" ]]; then
-    info "Node.js >= ${REQUIRED_NODE_MAJOR} not found. Trying Ubuntu repository..."
-    ${SUDO} env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq nodejs npm >/dev/null || true
+    # Ubuntu 22.04 only ships nodejs 12.x, and its `npm` pulls in a distro
+    # nodejs that conflicts with the NodeSource package. Installing that distro
+    # pair can leave dpkg half-configured, which then makes the NodeSource
+    # install abort with "Sub-process /usr/bin/dpkg returned an error code (1)".
+    # So: skip the distro package, repair any interrupted dpkg state, purge
+    # leftover nodejs/npm one-by-one, then install the LTS from NodeSource.
+    info "Node.js >= ${REQUIRED_NODE_MAJOR} not found. Installing Node.js 20 LTS from NodeSource..."
+    wait_for_apt_lock
+    ${SUDO} dpkg --configure -a >/dev/null 2>&1 || true
+    ${SUDO} env DEBIAN_FRONTEND=noninteractive apt-get -f -y install >/dev/null 2>&1 || true
+    for pkg in nodejs npm libnode-dev libnode72; do
+        ${SUDO} env DEBIAN_FRONTEND=noninteractive apt-get remove -y --purge "${pkg}" >/dev/null 2>&1 || true
+    done
+    curl -fsSL "https://deb.nodesource.com/setup_20.x" \
+        | ${SUDO} env DEBIAN_FRONTEND=noninteractive bash - >/dev/null
+    ${SUDO} env DEBIAN_FRONTEND=noninteractive apt-get install -y nodejs >/dev/null
 else
     warn "Node.js >= ${REQUIRED_NODE_MAJOR} not found (per-user mode cannot install it)."
-fi
-
-if [[ ${MODE} == "system" ]] && { ! command -v node >/dev/null 2>&1 || [[ "$(node_major)" -lt ${REQUIRED_NODE_MAJOR} ]]; }; then
-    warn "apt Node.js is too old/missing. Installing Node.js 20 LTS from NodeSource..."
-    curl -fsSL "https://deb.nodesource.com/setup_20.x" | ${SUDO} bash - >/dev/null
-    ${SUDO} env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq nodejs >/dev/null
 fi
 
 if ! command -v node >/dev/null 2>&1 || [[ "$(node_major)" -lt ${REQUIRED_NODE_MAJOR} ]]; then
     if [[ ${MODE} == "user" ]]; then
         die "Node.js >= ${REQUIRED_NODE_MAJOR} is required. Install it in your home directory with nvm/fnm, or ask an administrator, then re-run this installer."
     fi
-    die "Node.js installation failed."
+    die "Node.js installation failed. On the server repair dpkg then re-run:  sudo dpkg --configure -a && sudo apt-get -f install"
 fi
 ok "Node.js $(node -v), npm $(npm -v)"
 NODE_BIN="$(command -v node)"
