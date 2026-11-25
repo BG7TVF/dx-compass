@@ -380,6 +380,15 @@ export function createQsoPage(ctx) {
         state.all.delete(message.n1mmId);
         const index = state.qsos.findIndex(qso => qso.n1mmId === message.n1mmId);
         if (index >= 0) state.qsos.splice(index, 1);
+        // 顶栏正显示的那条被删了：退到剩下最新的一条，一条不剩就整条隐藏。
+        if (state.lastQso && state.lastQso.n1mmId === message.n1mmId) {
+            let newest = null, newestAt = -1;
+            for (const item of state.qsos) {
+                const at = new Date(item.ts).getTime();
+                if (Number.isFinite(at) && at > newestAt) { newest = item; newestAt = at; }
+            }
+            state.lastQso = newest;
+        }
         renderQsoPanel();
     }
 
@@ -561,29 +570,53 @@ export function createQsoPage(ctx) {
             ? formatDuration(Date.now() - timestamp.getTime()) : '--:--:--';
     }
 
+    /**
+     * 这条 QSO 是哪部电台打的：按 N1MM 席位名优先、RadioNr 次之回到本台席位列表。
+     * 只有单席位时不必区分；RadioNr 撞号且席位名也对不上就不硬认，避免把
+     * 另一台电台的 RUN/S&P 贴到这条 QSO 上（那正是顶栏来回跳的来源）。
+     */
+    function qsoRadio(qso) {
+        const seats = liveRadios();
+        if (seats.length === 1) return seats[0];
+        const name = String(qso.stationName || '').trim().toUpperCase();
+        if (name) {
+            const hit = seats.find(item =>
+                String(item.stationName || '').trim().toUpperCase() === name);
+            if (hit) return hit;
+        }
+        const nr = String(qso.radioNr || '').trim();
+        if (nr) {
+            const hits = seats.filter(item => String(item.radioNr || '').trim() === nr);
+            if (hits.length === 1) return hits[0];
+        }
+        return null;
+    }
+
+    /* 顶栏只讲「上一个 QSO」这一件事：来源(RUN/S&P)、频率、频段、模式、交换、
+     * 打了它的操作员、距今多久。绝不回落到当前 VFO，也不再罗列两部电台现在的
+     * 频率——那是主面板的活，放在这里只会随报文交替而跳。没有 QSO 整条隐藏。 */
     function renderQsoTopbar() {
-        const qso = state.lastQso, radio = state.radio;
+        const bar = $('#qsoTopbar');
+        const qso = state.lastQso;
+        if (bar) bar.classList.toggle('hidden', !qso);
+        if (!qso) return;
+        const radio = qsoRadio(qso);
         const running = radio && typeof radio.isRunning === 'boolean' ? radio.isRunning : null;
         const badge = $('#qtRun');
         badge.textContent = running === null ? '—' : running ? 'RUN' : 'S&P';
         badge.className = `qt-run${running === null ? '' : running ? ' is-run' : ' is-sp'}`;
-        const frequency = qso && typeof qso.freqKhz === 'number' ? qso.freqKhz :
-            radio && typeof radio.freqKhz === 'number' ? radio.freqKhz : null;
-        $('#qtFreq').textContent = frequency === null ? '--.--' : frequency.toFixed(2);
-        $('#qtCall').textContent = qso && qso.call || '—';
-        $('#qtRst').textContent = qso ? `${qso.rstSnt || '--'}/${qso.rstRcv || '--'}` : '--/--';
-        $('#qtExch').textContent = qso && qso.exchange || '—';
-        $('#qtBand').textContent = bandLabel(qso && qso.band, qso && qso.freqKhz) || '—';
-        $('#qtMode').textContent = qso && qso.mode || radio && radio.mode || '—';
-        let text = '';
-        if (ctx.settings.category !== 'SO1R') {
-            text = liveRadios()
-                .filter(item => Number.isFinite(item.freqKhz))
-                .map(item => `R${item.radioNr || '?'} ${item.freqKhz.toFixed(2)}`)
-                .join(' / ');
-            if (text) text = `${ctx.settings.category} · ${text}`;
-        }
-        $('#qtRadios').textContent = text;
+        $('#qtFreq').textContent = Number.isFinite(qso.freqKhz) ? qso.freqKhz.toFixed(2) : '--.--';
+        $('#qtCall').textContent = qso.call || '—';
+        $('#qtRst').textContent = `${qso.rstSnt || '--'}/${qso.rstRcv || '--'}`;
+        $('#qtExch').textContent = qso.exchange || '—';
+        $('#qtBand').textContent = bandLabel(qso.band, qso.freqKhz) || '—';
+        $('#qtMode').textContent = qso.mode || '—';
+        // 右侧静态归属：哪部电台、哪个 OP 打的（空字符串时 .qt-meta span:empty 自动隐藏）。
+        $('#qtRadios').textContent = radio && (radio.radioNr || radio.stationName)
+            ? `R${radio.radioNr || '?'}${radio.stationName ? ' ' + radio.stationName : ''}` : '';
+        // 打这条 QSO 的操作员取 N1MM ContactInfo 的 <operator>，缺失才退回该席位当前操作员。
+        const opNode = $('#qtOp');
+        if (opNode) opNode.textContent = String(qso.operator || (radio && radio.operator) || '').trim();
         updateQsoAge();
     }
 

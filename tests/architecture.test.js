@@ -335,9 +335,10 @@ test('operational UI does not render operator callsigns', () => {
         path.join(ROOT, 'public/js/pages/qso-page.mjs'),
         path.join(ROOT, 'public/bigscreen/wall-cards.mjs')
     ], /opCall/, 'operational UI must not render OpCall');
-    // 只有两处豁免允许显示操作员呼号，各自用 opcall-exception 标记圈住：
+    // 只有三处豁免允许显示操作员呼号，各自用 opcall-exception 标记圈住：
     // 一是波段占用横条，否则 OP 无法判断是谁占用了某段；
-    // 二是席位铭牌，本席位的 OP 必须显示出来。
+    // 二是席位铭牌，本席位的 OP 必须显示出来；
+    // 三是 QSO 顶栏，它只讲「上一条 QSO」，必须说清是哪位 OP 打的。
     // 剔除标记内的代码后，其余 op-page.mjs 仍禁止出现 opCall。
     const opSource = read('public', 'js', 'pages', 'op-page.mjs');
     assert.match(opSource, /\/\* opcall-exception:start \*\/[\s\S]*?opCall[\s\S]*?\/\* opcall-exception:end \*\//,
@@ -345,7 +346,11 @@ test('operational UI does not render operator callsigns', () => {
     assert.doesNotMatch(
         opSource.replace(/\/\* opcall-exception:start \*\/[\s\S]*?\/\* opcall-exception:end \*\//g, ''),
         /opCall/, 'op-page must not render OpCall outside the band-occupancy strip and the seat nameplate');
-    assert.doesNotMatch(read('public', 'index.html'), /id="qtOp"|id="qOpDist"/);
+    assert.doesNotMatch(read('public', 'index.html'), /id="qOpDist"/);
+    // QSO 顶栏的操作员位是第三处豁免：必须存在，且只由上一条 QSO 的 operator 填充。
+    const qsoIndex = read('public', 'index.html');
+    assert.match(qsoIndex, /<span id="qtOp"><\/span>/, 'the QSO topbar keeps its operator slot');
+    assert.match(qsoIndex, /class="qso-topbar hidden" id="qsoTopbar"/, 'the QSO topbar starts hidden until a QSO exists');
     assert.doesNotMatch(read('public', 'bigscreen', 'index.html'), /id="opList"/);
 });
 
@@ -406,6 +411,47 @@ test('OP 天线切换容器：按钮来自拓扑投影，配色沿用波段占�
     // 点击走既有下发通道：命令交给天线设备，端口由服务端反推
     assert.match(op, /\$\('#opAntSwitch'\)\?\.addEventListener\('click'/);
     assert.match(op, /\{command: 'route', device_id: antennaId\}/);
+});
+
+test('OP 旋转器面板跟随已接通天线：切换天线后自动换到该天线所属的旋转器', () => {
+    const op = read('public', 'js', 'pages', 'op-page.mjs');
+    const pick = (/    function rotatorDevice\(\) \{[\s\S]*?\n    \}/.exec(op) || [''])[0];
+    assert.ok(pick, '旋转器必须由 OP 页按投影自动派生');
+    // 取数口径与摄像头卡片同一套：本席位「已接通」的天线优先，而不是按波段猜。
+    assert.match(pick, /const routed = \(view\.ant_switch \|\| \{\}\)\.routed;/);
+    assert.match(pick, /rotatorForAntennas\(Array\.isArray\(routed\) \? routed : \[\]\)[\s\S]{0,220}view\.assigned[\s\S]{0,120}view\.candidates/);
+    // 天线→旋转器只查服务端父链投影，前端不重算机械关系。
+    assert.match(pick, /antenna\.rotator_id/);
+    // 派生结果变了就要重建面板（重建键含旋转器 id），否则旧天线的罗盘一直留着。
+    assert.match(op, /String\(rotator\.id\) \+ '\|' \+ String\(currentSeat\(\)\)/);
+    // 换到另一台旋转器时作废旧目标角：activeAzimuth/jogBaseValue 都优先读它。
+    assert.match(op, /if \(focusId !== rotorFocusId\) \{[\s\S]*?state\.rotorTarget = null;/);
+});
+
+test('QSO 顶栏只讲上一个 QSO：没 QSO 就隐藏，不回落实时 VFO，也不罗列电台当前频率', () => {
+    const qso = read('public', 'js', 'pages', 'qso-page.mjs');
+    const top = (/    function renderQsoTopbar\(\) \{[\s\S]*?\n    \}/.exec(qso) || [''])[0];
+    assert.ok(top, '顶栏渲染必须集中在一个函数里');
+    // 没有上一个 QSO：整条隐藏，不摆一排占位符。
+    assert.match(top, /bar\.classList\.toggle\('hidden', !qso\)/);
+    assert.match(top, /if \(!qso\) return;/);
+    // 初始 HTML 就是隐藏态，等第一条 QSO 再显示。
+    assert.match(read('public', 'index.html'), /<div class="qso-topbar hidden" id="qsoTopbar">/);
+    // 频率/模式/来源只认这条 QSO 与打它的那部电台；不再读 state.radio——
+    // 那是「最后上报的电台」，多部电台交替到达时顶栏就会来回跳。
+    assert.doesNotMatch(top, /state\.radio\b/);
+    assert.match(top, /Number\.isFinite\(qso\.freqKhz\)/);
+    assert.match(top, /qso\.mode \|\| '—'/);
+    // RUN/S&P 按这条 QSO 所属电台判定（席位名优先、RadioNr 次之，认不出就不显示）。
+    const pick = (/    function qsoRadio\(qso\) \{[\s\S]*?\n    \}/.exec(qso) || [''])[0];
+    assert.match(pick, /qso\.stationName/);
+    assert.match(pick, /qso\.radioNr/);
+    assert.match(top, /radio && typeof radio\.isRunning === 'boolean'/);
+    // 右侧只留归属信息：哪部电台、哪个 OP 打的；电台的实时频率归主面板管。
+    assert.match(top, /qso\.operator/);
+    assert.match(read('public', 'index.html'), /<span id="qtOp"><\/span>/);
+    // 顶栏不再枚举各电台的当前频率（那正是「跳来跳去」的来源）。
+    assert.doesNotMatch(top, /liveRadios\(\)/);
 });
 
 test('OP 视频监控卡片：与地图同一行轨道，画面按接通天线绑定的摄像头换源', () => {
