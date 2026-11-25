@@ -218,6 +218,10 @@
             min: 200, max: 4000, label: 'QSO markers limit', zh: 'QSO 标记上限',
             desc: 'Oldest QSO markers are dropped beyond this count.'
         }),
+        field('qsoTtl', 'qso', 'int', 0, {
+            min: 0, max: 1440, wired: true, label: 'QSO marker lifetime (min)', zh: 'QSO 标记存活（分钟）',
+            desc: 'Age after which a QSO marker fades and leaves the map, counted from the QSO time. 0 keeps markers until the count limit.'
+        }),
         field('n1mmToken', 'qso', 'string', '', {
             allowEmpty: true, maxLen: 200,
             label: 'N1MM HTTP ingest token', zh: 'N1MM HTTP 接入令牌',

@@ -39,6 +39,20 @@ export function createQsoPage(ctx) {
     let mySpotLatest = null;
     const home = () => gridToLatLon(ctx.settings.grid);
     const color = band => bandColorOf(ctx.settings, band);
+    /* QSO 标记存活时间：0/非法值 = 永久（仅受 qsoMax 数量上限约束）；>0 = 自该 QSO
+     * 时间(ts)起多少分钟后淡出移除。仅影响地图显示层，日志数据仍完整持久化。 */
+    function qsoTtlMs() {
+        const raw = Number(ctx.settings.qsoTtl);
+        return Number.isFinite(raw) && raw > 0 ? raw * 60000 : 0;
+    }
+    function qsoBornAt(qso) {
+        const ts = new Date(qso && qso.ts).getTime();
+        return Number.isFinite(ts) ? ts : Date.now();
+    }
+    function qsoDieAt(bornAt) {
+        const ttl = qsoTtlMs();
+        return ttl > 0 ? bornAt + ttl : Infinity;
+    }
     const settingNumber = (key, fallback, min, max) => {
         const value = Number(ctx.settings && ctx.settings[key]);
         if (!Number.isFinite(value)) return fallback;
@@ -165,6 +179,11 @@ export function createQsoPage(ctx) {
     function addQsoMarker(qso) {
         if (!state.map || qso.lat === null || qso.lat === undefined ||
             qso.lon === null || qso.lon === undefined) return;
+        const bornAt = qsoBornAt(qso), dieAt = qsoDieAt(bornAt);
+        if (Number.isFinite(dieAt) && Date.now() >= dieAt) {
+            removeQsoMarker(qso.n1mmId);
+            return;
+        }
         removeQsoMarker(qso.n1mmId);
         state.qsos = state.qsos.filter(item => item.n1mmId !== qso.n1mmId);
         const hex = color(qso.band), layers = [], lines = [];
@@ -186,7 +205,9 @@ export function createQsoPage(ctx) {
         }).addTo(state.map);
         marker.bindTooltip(qsoTooltip(qso), {direction: 'top'});
         layers.push(marker);
-        state.byId.set(qso.n1mmId, {layers, lines, color: hex});
+        const entry = {layers, lines, color: hex, _bornAt: bornAt, _dieAt: dieAt};
+        state.byId.set(qso.n1mmId, entry);
+        if (Number.isFinite(dieAt)) ctx.spot.applyMarkerFade(entry, Date.now());
         state.qsos.push(qso);
         while (state.qsos.length > ctx.settings.qsoMax) removeQsoMarker(state.qsos.shift().n1mmId);
         scheduleQsoFit();
@@ -284,6 +305,31 @@ export function createQsoPage(ctx) {
                 state.mySpots.delete(key);
             } else ctx.spot.applyMarkerFade(entry, now);
         });
+    }
+
+    function fadeQsoMarkers(now) {
+        if (!state.map) return;
+        for (const [id, entry] of [...state.byId]) {
+            if (!Number.isFinite(entry._dieAt)) continue;
+            if (now >= entry._dieAt) removeQsoMarker(id);
+            else ctx.spot.applyMarkerFade(entry, now);
+        }
+    }
+
+    /* 设置变更后重算所有 QSO 标记的存活截止点：立即移除过期项，其余重新淡出。 */
+    function applyQsoTtl() {
+        const ttl = qsoTtlMs(), now = Date.now();
+        for (const [id, entry] of [...state.byId]) {
+            const bornAt = Number.isFinite(entry._bornAt) ? entry._bornAt : now;
+            entry._bornAt = bornAt;
+            entry._dieAt = ttl > 0 ? bornAt + ttl : Infinity;
+            if (Number.isFinite(entry._dieAt) && now >= entry._dieAt) {
+                removeQsoMarker(id);
+                continue;
+            }
+            ctx.spot.applyMarkerFade(entry, now);
+        }
+        scheduleQsoFit();
     }
 
     function rebuildQsoMap() {
@@ -836,6 +882,7 @@ export function createQsoPage(ctx) {
 
     function tick(now = Date.now()) {
         fadeMySpots(now);
+        fadeQsoMarkers(now);
         if (state.lastQso) {
             renderLastQso();
             if (state.view === 'qso') renderQsoPanel();
@@ -846,7 +893,7 @@ export function createQsoPage(ctx) {
         state, store, init, loadStation, handleQso, handleQsoDelete, handleStationMessage,
         renderQsoPanel, renderLastQso, updateQsoAge, rebuildQsoMap, rebuildHome,
         fitQsoMap, refreshMap, setViewMode, setTileProvider: key => state.base.setTileProvider(key),
-        addMySpot, clearMySpots, applyMySpotLimits, showSpotAlert, showRuleAlert, applyDisplaySettings,
+        addMySpot, clearMySpots, applyMySpotLimits, applyQsoTtl, showSpotAlert, showRuleAlert, applyDisplaySettings,
         hideSpotAlert, hideSpotAlertAndVoice, tick
     };
 }

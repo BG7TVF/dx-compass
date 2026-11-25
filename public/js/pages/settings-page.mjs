@@ -71,7 +71,7 @@ const FIELD_FUNC = {
  * skip them to avoid duplicate inputs. */
 const LEGACY_FIELD_KEYS = new Set([
     'lang', 'theme', 'tiles', 'myCall', 'grid', 'layout', 'rotationSec',
-    'category', 'qsoMax', 'qsoLines', 'qsoAutoFit', 'qsoVoiceAlert',
+    'category', 'qsoMax', 'qsoTtl', 'qsoLines', 'qsoAutoFit', 'qsoVoiceAlert',
     'mySpotTtl', 'mySpotMax', 'mySpotPopup', 'mySpotVoice',
     'wallTitle', 'wallLayers', 'wallMode', 'wallTimerOn', 'wallTimerStart', 'wallTimerEnd',
     'multPerBand',
@@ -93,7 +93,7 @@ const EXTERNAL_CONTROL_KEYS = new Set(
  * and unit logic applies to legacy markup and generated rows. */
 const LEGACY_ROW_KEYS = {
     setLang: 'lang', setTheme: 'theme', setTiles: 'tiles', setMyCall: 'myCall', setGrid: 'grid',
-    setCategory: 'category', setQsoMax: 'qsoMax', setQsoAutoFit: 'qsoAutoFit',
+    setCategory: 'category', setQsoMax: 'qsoMax', setQsoTtl: 'qsoTtl', setQsoAutoFit: 'qsoAutoFit',
     setQsoLines: 'qsoLines', setQsoVoice: 'qsoVoiceAlert',
     setMySpotTtl: 'mySpotTtl', setMySpotMax: 'mySpotMax', setMySpotPopup: 'mySpotPopup',
     setMySpotVoice: 'mySpotVoice', setWallTitle: 'wallTitle', setWallMode: 'wallMode',
@@ -758,7 +758,8 @@ export function createSettingsPage(ctx) {
             '#qrzUserLabel': 'qrzUser', '#qrzPassLabel': 'qrzPass',
             '#spotSectionTitle': 'setSpot',
             '#qsoSectionTitle': 'setQso', '#catLabel': 'contestCat', '#qsoAutoFitLabel': 'qsoAutoFit',
-            '#qsoLinesLabel': 'qsoLines', '#qsoDoubleLabel': 'qsoMaxMarkers', '#tabWall': 'setWall',
+            '#qsoLinesLabel': 'qsoLines', '#qsoDoubleLabel': 'qsoMaxMarkers',
+            '#qsoTtlLabel': 'settings.field.qsoTtl.label', '#tabWall': 'setWall',
             '#wallSectionTitle': 'setWall', '#wallTitleLabel': 'wallTitle', '#wallLayer1Label': 'wallLayer1',
             '#wallLayer2Label': 'wallLayer2', '#wallPropLabel': 'wallProp', '#wallAuroraLabel': 'wallAurora',
             '#wallWeatherLabel': 'wallWeather', '#wallQsoLabel': 'wallQso', '#wallMySpotLabel': 'wallMySpot',
@@ -894,6 +895,7 @@ export function createSettingsPage(ctx) {
             setValue('#setMyCall', ctx.settings.myCall);
             setValue('#setCategory', ctx.settings.category);
             setValue('#setQsoMax', ctx.settings.qsoMax);
+            setValue('#setQsoTtl', ctx.settings.qsoTtl);
             for (const [selector, key] of [
                 ['#setQsoLines', 'qsoLines'], ['#setQsoAutoFit', 'qsoAutoFit'],
                 ['#setQsoVoice', 'qsoVoiceAlert'],
@@ -932,6 +934,7 @@ export function createSettingsPage(ctx) {
             if (ctx.settings.mySpotTtl !== previous.mySpotTtl || ctx.settings.mySpotMax !== previous.mySpotMax) {
                 ctx.qso.applyMySpotLimits();
             }
+            if (ctx.settings.qsoTtl !== previous.qsoTtl) ctx.qso.applyQsoTtl();
             ctx.prop.applySettings();
             const changedDisplay = [...LIVE_SETTING_KEYS]
                 .filter(key => displayBefore[key] !== JSON.stringify(ctx.settings[key]));
@@ -1141,6 +1144,7 @@ export function createSettingsPage(ctx) {
             ctx.qso.renderQsoPanel();
         });
         bindNumberSetting('#setQsoMax', 'qsoMax', 200, 4000, 1500);
+        bindNumberSetting('#setQsoTtl', 'qsoTtl', 0, 1440, ctx.settings.qsoTtl, () => ctx.qso.applyQsoTtl());
         bindCheckedSetting('#setQsoLines', 'qsoLines', () => ctx.qso.rebuildQsoMap());
         bindCheckedSetting('#setQsoAutoFit', 'qsoAutoFit', () => ctx.qso.fitQsoMap());
         bindCheckedSetting('#setQsoVoice', 'qsoVoiceAlert', enabled => {
