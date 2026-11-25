@@ -81,7 +81,7 @@ async function start() {
                     ctx.op.showRuleAlert(message);
                     break;
                 case 'devices':
-                    if (ctx.qso.state.view === 'dev') void ctx.devices.refresh();
+                    if (ctx.qso.state.view === 'dev') void ctx.devices.refresh({force: true});
                     ctx.op.handleDevices();
                     break;
                 default:

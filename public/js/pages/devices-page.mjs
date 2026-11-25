@@ -31,6 +31,10 @@ import {
 import {getSeatIdentities} from '../../shared/data/station.mjs';
 
 const POLL_MS = 2000;
+// 弱网优化：轮询读超时收紧（默认 15s 会让 busy 卡死太久、连接被占满），失败后指数退避，
+// 但设备配置变更仍由 WS 的 devices 事件即时推送（refresh(true) 绕过退避），实时性不受影响。
+const POLL_TIMEOUT_MS = 8000;
+const POLL_MAX_BACKOFF_MS = 8000;
 const NODE_W = 210;
 const NODE_H = 84;
 const CANVAS_MIN_W = 1600;
@@ -186,6 +190,11 @@ export function createDevicesPage(ctx) {
     let formSignature = null;
     let ctrlSignature = null;
     let timer = null;
+    // 弱网降级状态：连续失败计数、是否处于降级（仅影响提示，不清空画布）、下次允许轮询的时间戳。
+    let pollFailures = 0;
+    let stale = false;
+    let nextPollAt = 0;
+    let pendingForce = false;
     let towerTimer = null;
     let towerHoldDevice = null;
     let towerDirection = null;
@@ -2035,7 +2044,7 @@ export function createDevicesPage(ctx) {
                 showCtrlError(errorText(result && result.error ? result.error : 'generic'));
                 return;
             }
-            await refresh();
+            await refresh({force: true});
         } catch (error) {
             const body = error && error.body;
             showCtrlError(errorText(body && body.error ? body.error : 'generic', {owner: body && body.owner}));
@@ -2129,6 +2138,8 @@ export function createDevicesPage(ctx) {
             antennas: snapshot.ownership.antennas.length
         }) + ' · ' + t('dev.hint.canvas');
         const warnings = (rfView().warnings || []).map(rfWarningText).filter(Boolean);
+        // 弱网降级:仍展示上一份快照,但明确告知"非实时",而不是假装一切正常。
+        if (stale && snapshot) warnings.unshift(t('dev.hint.stale'));
         $('#devHint').textContent = warnings.length ? warnings.join(' · ') : t('dev.hint.server');
         renderPalette();
         renderCanvas();
@@ -2157,11 +2168,20 @@ export function createDevicesPage(ctx) {
         if (!Object.keys(localLayout).length) localLayout = null;
     }
 
-    async function refresh() {
-        if (busy || dragging || wiring || rfWiring || ctlWiring || marquee) return;
+    // options.scheduled：来自定时器轮询,受失败退避约束;其它调用(写入后/WS/手动/进页)总是尝试。
+    // options.force：连接被卡住(busy)时也记待补刷新,结算后立即再取一次,保证 WS 通知的实时性。
+    async function refresh(options) {
+        const scheduled = !!options && options.scheduled === true;
+        const force = !!options && options.force === true;
+        if (dragging || wiring || rfWiring || ctlWiring || marquee) return;
+        if (busy) {
+            if (force) pendingForce = true;
+            return;
+        }
+        if (scheduled && nextPollAt > Date.now()) return;
         busy = true;
         try {
-            const data = await getDevicesSnapshot();
+            const data = await getDevicesSnapshot({timeoutMs: POLL_TIMEOUT_MS});
             const next = data && data.ok ? data : null;
             if (!next) throw new Error('invalid snapshot');
             snapshot = next;
@@ -2172,13 +2192,24 @@ export function createDevicesPage(ctx) {
                 if (!isDraftKey(key) && !deviceById(key)) selectedKeys.delete(key);
             }
             pruneDraftLinks();
+            if (stale || pollFailures) { stale = false; pollFailures = 0; }
+            nextPollAt = 0;
             render();
         } catch (error) {
-            // 读取失败不沿用旧值：整页回落到 unknown。
-            snapshot = null;
+            // 读取失败/超时:保留上一份快照,只把页面标记为降级,绝不清空画布——
+            // 否则一次弱网抖动就会让已保存设备与刚拖出的草稿一起闪没。
+            // 定时轮询按连续失败次数指数退避(封顶 POLL_MAX_BACKOFF_MS),降低连接占用;
+            // 设备配置变更仍由 WS 的 devices 事件以 refresh({force:true}) 即时补刷,实时性不受影响。
+            pollFailures += 1;
+            stale = true;
+            nextPollAt = Date.now() + Math.min(POLL_MAX_BACKOFF_MS, POLL_MS * (2 ** Math.min(pollFailures, 3)));
             render();
         } finally {
             busy = false;
+            if (pendingForce) {
+                pendingForce = false;
+                void refresh({force: true});
+            }
         }
     }
 
@@ -2393,7 +2424,7 @@ export function createDevicesPage(ctx) {
                 formSignature = null;
                 ctrlSignature = null;
                 render();
-                await refresh();
+                await refresh({force: true});
                 await refreshDraftPreview();
                 return;
             }
@@ -2425,7 +2456,7 @@ export function createDevicesPage(ctx) {
             formDirty = false;
             formSignature = null;
             ctrlSignature = null;
-            await refresh();
+            await refresh({force: true});
         } catch (error) {
             if (errorBox) {
                 errorBox.textContent = error && ERROR_KEYS[error.message] ? errorText(error.message) : apiError(error);
@@ -2473,7 +2504,7 @@ export function createDevicesPage(ctx) {
             formSignature = null;
             ctrlSignature = null;
             render();
-            await refresh();
+            await refresh({force: true});
         } catch (error) {
             showToast(apiError(error));
         }
@@ -2504,7 +2535,7 @@ export function createDevicesPage(ctx) {
         formDirty = false;
         formSignature = null;
         ctrlSignature = null;
-        await refresh();
+        await refresh({force: true});
         await refreshDraftPreview();
     }
 
@@ -2535,7 +2566,7 @@ export function createDevicesPage(ctx) {
                 showToast(errorText(result && result.error));
                 return;
             }
-            await refresh();
+            await refresh({force: true});
         } catch (error) {
             showToast(apiError(error));
         }
@@ -2571,7 +2602,7 @@ export function createDevicesPage(ctx) {
                 showToast(errorText(result && result.error));
                 return;
             }
-            await refresh();
+            await refresh({force: true});
         } catch (error) {
             showToast(apiError(error));
         }
@@ -2587,7 +2618,7 @@ export function createDevicesPage(ctx) {
                 showToast(errorText(result && result.error));
                 return;
             }
-            await refresh();
+            await refresh({force: true});
         } catch (error) {
             showToast(apiError(error));
         }
@@ -2603,7 +2634,7 @@ export function createDevicesPage(ctx) {
                 showToast(errorText(result && result.error));
                 return;
             }
-            await refresh();
+            await refresh({force: true});
         } catch (error) {
             showToast(apiError(error));
         }
@@ -2628,7 +2659,7 @@ export function createDevicesPage(ctx) {
                 showToast(errorText(result && result.error));
                 return;
             }
-            await refresh();
+            await refresh({force: true});
         } catch (error) {
             showToast(apiError(error));
         }
@@ -2865,7 +2896,7 @@ export function createDevicesPage(ctx) {
                 showToast(errorText(result && result.error));
                 return;
             }
-            await refresh();
+            await refresh({force: true});
         } catch (error) {
             showToast(apiError(error));
         }
@@ -3051,7 +3082,7 @@ export function createDevicesPage(ctx) {
 
     function init() {
         applyLabels();
-        $('#devRefresh').addEventListener('click', () => { void refresh(); });
+        $('#devRefresh').addEventListener('click', () => { void refresh({force: true}); });
         $('#devNew').addEventListener('click', () => createDraft('antenna'));
         $('#devSaveAll').addEventListener('click', () => { void saveAllDrafts(); });
         $('#devSelectAll').addEventListener('click', () => selectAllNodes());
@@ -3341,12 +3372,12 @@ export function createDevicesPage(ctx) {
     function show() {
         active = true;
         applyLabels();
-        void refresh();
+        void refresh({force: true});
         // 提前拉一次 N1MM 候选，选中电台时下拉已就绪。
         void loadCandidates(false);
         if (timer) clearInterval(timer);
         timer = setInterval(() => {
-            if (active && !document.hidden) void refresh();
+            if (active && !document.hidden) void refresh({scheduled: true});
         }, POLL_MS);
     }
 
