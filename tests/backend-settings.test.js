@@ -79,6 +79,16 @@ test('resetDomain restores only the requested group and keeps other groups', () 
     assert.equal(settings.resetDomain(ctx, 'nope').statusCode, 400);
 });
 
+test('reset clears the operator history so the records page shows nothing', () => {
+    const ctx = new Context({
+        operatorSessions: {'OP-A': {operator: 'N0CALL'}},
+        operatorHistory: [{seat: 'OP-A', operator: 'N0CALL', start_ts: '2026-01-01T00:00:00Z'}]
+    });
+    settings.reset(ctx, ctx);
+    assert.deepEqual(ctx.get('operatorSessions'), {});
+    assert.deepEqual(ctx.get('operatorHistory'), []);
+});
+
 test('migration moves legacy Mercator data to Robinson exactly once', () => {
     const ctx = new Context({uiSettings: {cfgV: 1, propProj: 'mercator'}});
     assert.equal(settings.get(ctx).settings.propProj, 'robinson');
