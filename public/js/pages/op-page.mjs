@@ -1194,6 +1194,8 @@ export function createOpPage(ctx) {
     const PRESET_KEY = 'dxcompass-op-rotor-presets';
     const PRESET_COUNT = 8;
     let antennaDirty = false;
+    // 当前天线控制面板所聚焦的旋转器 id，用于识别「换了一台旋转器」。
+    let rotorFocusId = '';
     let presetEditing = null;
     let pressTimer = null;
     let pressLongFired = false;
@@ -1410,11 +1412,13 @@ export function createOpPage(ctx) {
     }
 
     /* Antenna control auto-picks the rotator that steers the antenna this seat
-     * is actually using. The server's ownership projection already links every
+     * is actually routed to. The server's ownership projection links every
      * antenna to its rotator (`antennas[].rotator_id`, found by walking the
-     * mechanical parent chain) and marks the antennas a seat has reached
-     * (`by_seat[seat].assigned`, red / reachable). No local wiring math: read
-     * the projection, and only fall back when it has nothing to say. */
+     * mechanical parent chain) and records which antennas this seat currently
+     * has switched in (`by_seat[seat].ant_switch.routed`). Follow that routed
+     * set FIRST: it is exactly what the 「切换天线」 button just changed, so the
+     * rotor panel tracks the antenna the operator selected instead of staying
+     * on the band-reachable `assigned` / `candidates` guess. */
     function rotatorDevice() {
         const snap = deviceSnapshot();
         if (!snap) return null;
@@ -1444,7 +1448,11 @@ export function createOpPage(ctx) {
                 keys.map(key => bySeat[key]).find(item => item && item.online) || null;
         }
         if (view) {
-            const chosen = rotatorForAntennas(view.assigned || []) ||
+            // 「切换天线」写入的是 ant_switch.routed（含尚未回读证实的命令意图），
+            // 它与波段无关：切到哪副天线就该控制那副天线底下的旋转器。
+            const routed = (view.ant_switch || {}).routed;
+            const chosen = rotatorForAntennas(Array.isArray(routed) ? routed : []) ||
+                rotatorForAntennas(view.assigned || []) ||
                 rotatorForAntennas(view.candidates || []);
             if (chosen) return chosen;
         }
@@ -1490,6 +1498,13 @@ export function createOpPage(ctx) {
         if (!host) return;
         const note = $('#opBottomNote');
         const rotator = rotatorDevice();
+        const focusId = rotator ? String(rotator.id) : '';
+        if (focusId !== rotorFocusId) {
+            rotorFocusId = focusId;
+            /* 焦点换到另一台旋转器：上一台的目标方位角必须作废，否则 activeAzimuth()
+             * 与 jogBaseValue() 都优先读 rotorTarget，会把旧天线的指向带到新天线上。 */
+            state.rotorTarget = null;
+        }
         if (rotator) {
             if (note) note.textContent = rotator.name || '';
             const view = ((deviceSnapshot() || {}).rotators || {})[rotator.id] || {};
