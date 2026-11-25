@@ -58,6 +58,6 @@ test('呼号白名单是服务端设置，不进设置表单，只由全部重�
     assert.match(schema, /field\('opConfirmedCalls', 'qso', 'string', ''/);
     const settings = read('public', 'js', 'pages', 'settings-page.mjs');
     assert.match(settings, /const EXTERNAL_CONTROL_KEYS = new Set\(\s*\[[^\]]*'opConfirmedCalls'/);
-    // 全部重置清掉本机的旧复核记忆与旋转器预设角；服务端那一份由 settings.reset 恢复默认。
-    assert.match(settings, /\['dxcompass-settings', 'dxcompass-rot-sec', 'dxcompass-op-call-review',\s*\n\s*'dxcompass-op-rotor-presets'\]/);
+    // 全部重置清掉本机的旧复核记忆、旋转器预设角与席位选择；服务端那一份由 settings.reset 恢复默认。
+    assert.match(settings, /\['dxcompass-settings', 'dxcompass-rot-sec', 'dxcompass-op-call-review',\s*\n\s*'dxcompass-op-rotor-presets',\s*'dxcompass-op-seat'\]/);
 });

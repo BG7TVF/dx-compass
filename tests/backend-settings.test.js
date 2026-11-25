@@ -89,6 +89,43 @@ test('reset clears the operator history so the records page shows nothing', () =
     assert.deepEqual(ctx.get('operatorHistory'), []);
 });
 
+test('reset clears the seat identity, device runtime and advice state left over from a contest', () => {
+    const ctx = new Context({
+        seatRegistry: {'CN:BG7TVF': {seatKey: 'BG7TVF-2:1', computerName: 'BG7TVF-2', radioName: 'IC-7300'}},
+        seatSources: {'10.0.0.5:1': {computerName: 'BG7TVF-2'}},
+        seatHistory: [{at: '2026-01-01T00:00:00Z', action: 'identified'}],
+        seatUnidentified: {count: 3},
+        deviceRuntime: {rotor: {azimuth: 123}},
+        deviceLeases: {rotor: {seat: 'OP-A'}},
+        txRuntime: {s1: {tx_active: true}},
+        deviceTowerHolds: {tower: {direction: 'up'}},
+        frequencyClaims: {'14000.000': {seat: 'OP-A', freqKhz: 14000}},
+        bandLink: {version: 1, seats: {'OP-A': {enabled: true}}},
+        lastContest: 'CQ WW DX',
+        pendingMyCallBackfill: {call: 'N0CALL', attempts: 2, next_ms: 1},
+        adviceCooldown: {R2: 123}
+    });
+    const flow = new Context({qrzkeyexpire: 999});
+    settings.reset(ctx, flow);
+    // 计算机名称/电台型号残留的根因：席位识别表必须清空。
+    assert.deepEqual(ctx.get('seatRegistry'), {});
+    assert.deepEqual(ctx.get('seatSources'), {});
+    assert.deepEqual(ctx.get('seatHistory'), []);
+    assert.deepEqual(ctx.get('seatUnidentified'), {});
+    // 设备/链路运行态回到空态。
+    assert.deepEqual(ctx.get('deviceRuntime'), {});
+    assert.deepEqual(ctx.get('deviceLeases'), {});
+    assert.deepEqual(ctx.get('txRuntime'), {});
+    assert.deepEqual(ctx.get('deviceTowerHolds'), {});
+    assert.deepEqual(ctx.get('frequencyClaims'), {});
+    assert.deepEqual(ctx.get('bandLink'), {version: 1, seats: {}});
+    // 比赛名与待回填、建议冷却、QRZ 过期。
+    assert.equal(ctx.get('lastContest'), '');
+    assert.equal(ctx.get('pendingMyCallBackfill'), null);
+    assert.deepEqual(ctx.get('adviceCooldown'), {});
+    assert.equal(flow.get('qrzkeyexpire'), null);
+});
+
 test('migration moves legacy Mercator data to Robinson exactly once', () => {
     const ctx = new Context({uiSettings: {cfgV: 1, propProj: 'mercator'}});
     assert.equal(settings.get(ctx).settings.propProj, 'robinson');

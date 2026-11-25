@@ -2546,6 +2546,42 @@
         "y": 1160,
         "wires": [
             [
+                "dxc00000000000e9"
+            ]
+        ]
+    },
+    {
+        "id": "dxc00000000000e9",
+        "type": "function",
+        "z": "dxc0000000000001",
+        "name": "Reset: state/devices",
+        "func": "const dx = global.get('dx');\nmsg.topic = dx.storage.n1mm.clearState() + dx.storage.devices.clearAll() + dx.storage.activity.clearSql() + dx.storage.neighbors.clear();\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 380,
+        "y": 1190,
+        "wires": [
+            [
+                "dxc00000000000eA"
+            ]
+        ]
+    },
+    {
+        "id": "dxc00000000000eA",
+        "type": "sqlite",
+        "z": "dxc0000000000001",
+        "mydb": "dxc0000000000027",
+        "sqlquery": "batch",
+        "sql": "",
+        "name": "Reset state/devices",
+        "x": 570,
+        "y": 1190,
+        "wires": [
+            [
                 "dxc00000000000e7"
             ]
         ]
