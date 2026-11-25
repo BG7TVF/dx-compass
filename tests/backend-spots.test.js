@@ -148,7 +148,10 @@ test('PSKR intake accepts local-neighbour spots and rejects unrelated pairs', ()
         t: Math.floor(NOW / 1000) - 60, sc: 'K9NEI', sl: 'OL42AA', rc: 'DE.9', rl: 'JO22'};
     const kept = spots.ingest('pskr', neighbour, e);
     assert.equal(kept.records.length, 1);
-    assert.equal(kept.records[0].monitored_call, 'DE/9');
+    // 纯地域邻台：发送方 K9NEI 与接收方 DE/9 都不在监控名单，monitored_call 置空，
+    // 不再把陌生监听台冒充成「被监听」（展示层按 spot_call 回退到 DX 本身）。
+    assert.equal(kept.records[0].monitored_call, '');
+    assert.equal(kept.records[0].spot_call, 'K9NEI');
 
     // 两端都既不在监控列表，也不在 OL42 大网格内 → 拒收。
     const unrelated = {sq: 202, f: 14074000, md: 'FT8', rp: -10,
