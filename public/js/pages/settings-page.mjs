@@ -1209,7 +1209,9 @@ export function createSettingsPage(ctx) {
             if (!confirmed) return;
             try {
                 await Promise.all([postJson('/api/reset'), postJson('/api/callsigns', [])]);
-                ['dxcompass-settings', 'dxcompass-rot-sec', 'dxcompass-op-call-review']
+                // 连同旋转器预设方位角一并清除，否则重置后 OP 页仍留有旧的角度快捷位。
+                ['dxcompass-settings', 'dxcompass-rot-sec', 'dxcompass-op-call-review',
+                    'dxcompass-op-rotor-presets']
                     .forEach(key => localStorage.removeItem(key));
                 location.reload();
             } catch {
