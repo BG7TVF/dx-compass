@@ -1,10 +1,15 @@
 /* ============================================================
  * DX-Compass - wall display (port 5859, read-only)
  *
- * One Mercator map using the propagation page's base (dark ocean,
- * Natural Earth coastline outlines) plus a data rail: space weather,
- * band conditions, radio cards, QSO rate, per-operator / per-band
- * counts and the opponent table. No interactive controls.
+ * A single operations dashboard laid out as a U around one Mercator map:
+ * the left rail carries propagation (space weather, band conditions) and the
+ * station rig (rotor compasses, antenna routing matrix, band-occupancy matrix),
+ * the right rail carries results (per-operator, per-band) and opponent
+ * monitoring, and the strip under the map closes it with the seat nameplates,
+ * the cumulative score/QSO curve, the live rate and the minute-level trends.
+ * Total score, QSO count, multipliers and rate sit in the header so they read
+ * from the back of the room. Big-circle lines draw every worked station on the
+ * map. No interactive controls, no text inputs.
  * ============================================================ */
 
 :root {
@@ -25,6 +30,17 @@
     --my: #4cc9f0;
     --dx: #ff6b6b;
     --r: 8px;
+
+    /* Readouts are instrument figures: a monospaced face keeps the columns of
+     * frequencies, headings and counters from jittering as the values change. */
+    --mono: "JetBrains Mono", "Cascadia Mono", "SFMono-Regular", Consolas,
+        "Liberation Mono", "DejaVu Sans Mono", monospace;
+    --amber: #ffb347;
+    --mint: #35d6a4;
+    --cyan: #4cc9f0;
+    --violet: #a78bfa;
+    --red: #ff6b6b;
+    --yellow: #e8c547;
 
     /* Wall type scale. Every step is anchored to viewport height, so a 24/27
      * inch or 2K/4K wall screen grows the text instead of keeping the preview
@@ -56,7 +72,7 @@ html, body {
     height: 100vh;
     /* Header and footer grow with the type scale; the body row takes the rest. */
     display: grid;
-    grid-template-rows: clamp(56px, 6.2vh, 128px) minmax(0, 1fr) clamp(28px, 3vh, 56px);
+    grid-template-rows: clamp(60px, 7vh, 136px) minmax(0, 1fr) clamp(28px, 3vh, 56px);
     gap: 8px;
     padding: 8px;
 }
@@ -103,6 +119,59 @@ html, body {
 .timer.ended b { color: var(--poor); }
 .timer.ended label { color: var(--poor); }
 
+/* ---------- headline KPI strip ----------
+ * Four instrument figures pinned between the station name and the countdown.
+ * They sit in the header so the score is readable from the back of the room;
+ * each cell carries its own accent so an operator can say "amber dropped". */
+.kpi-strip {
+    display: flex;
+    align-items: stretch;
+    gap: clamp(4px, 0.55vh, 10px);
+    margin-inline: auto;
+    padding-inline: clamp(10px, 1.6vw, 40px);
+}
+.kpi {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 1px;
+    min-width: clamp(74px, 8.4vw, 190px);
+    padding: clamp(3px, 0.5vh, 8px) clamp(9px, 1vw, 20px);
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    border-inline-start: 3px solid var(--c, var(--accent));
+    box-shadow: inset 0 -14px 22px -18px var(--c, var(--accent));
+}
+.kpi span {
+    font-size: var(--fs-micro);
+    letter-spacing: 1.6px;
+    color: var(--dim);
+    white-space: nowrap;
+}
+.kpi b {
+    font-family: var(--mono);
+    font-size: clamp(24px, 3.3vh, 62px);
+    font-weight: 700;
+    line-height: 1.02;
+    letter-spacing: -.5px;
+    color: var(--c, var(--accent));
+    text-shadow: 0 0 18px var(--glow, rgba(53, 214, 164, .3));
+    white-space: nowrap;
+}
+.kpi b i {
+    font-style: normal;
+    font-size: .42em;
+    font-weight: 600;
+    letter-spacing: 0;
+    color: var(--dim);
+    margin-left: 2px;
+}
+.kpi.amber { --c: var(--amber); --glow: rgba(255, 179, 71, .34); }
+.kpi.mint { --c: var(--mint); --glow: rgba(53, 214, 164, .34); }
+.kpi.cyan { --c: var(--cyan); --glow: rgba(76, 201, 240, .34); }
+.kpi.violet { --c: var(--violet); --glow: rgba(167, 139, 250, .34); }
+
 /* ---------- body: U layout, map in the middle ---------- */
 /* Two full-height rails hug the map and the trend strip closes the U along
  * the bottom of the centre column, so every card wraps the map on three
@@ -118,7 +187,7 @@ html, body {
     grid-template-columns: minmax(240px, 1fr) auto minmax(240px, 1fr);
     /* The trend strip scales with the type scale so the larger radio/rate
      * text still fits; the map row keeps every remaining pixel. */
-    grid-template-rows: minmax(0, 1fr) clamp(140px, 15vh, 320px);
+    grid-template-rows: minmax(0, 1fr) clamp(156px, 19vh, 400px);
     grid-template-areas:
         "left map right"
         "left trend right";
@@ -214,6 +283,10 @@ html, body {
     gap: 8px;
     min-height: 0;
     min-width: 0;
+    /* Never paint over the trend strip: a short viewport trims rows instead
+     * (see trimRows), and anything left over is clipped here rather than
+     * drawn on top of the score curve. */
+    overflow: hidden;
 }
 .rail-left { grid-area: left; }
 .rail-right { grid-area: right; }
@@ -243,19 +316,22 @@ html, body {
 }
 .group-head span { font-size: var(--fs-micro); letter-spacing: 1.5px; color: rgba(124, 140, 163, .45); }
 
-/* Trend strip: the base of the U, four cards under the map (station, rate,
- * QSO and spot trends). The row is a fixed content strip, so the map row
- * above it absorbs every remaining pixel of the screen. Inline-size
- * containment keeps the four cards from widening the shared column: the
- * column must be exactly as wide as the map pane, otherwise the strip's
- * content would push the column wider and leave a gap beside the map. */
+/* Trend strip: the base of the U, five cards under the map (station nameplates,
+ * the cumulative score curve, the live rate and the two minute-level charts).
+ * The row is a fixed content strip, so the map row above it absorbs every
+ * remaining pixel of the screen. Inline-size containment keeps the cards from
+ * widening the shared column: the column must be exactly as wide as the map
+ * pane, otherwise the strip's content would push the column wider and leave a
+ * gap beside the map. */
 .trend {
     grid-area: trend;
     display: grid;
-    /* The station card needs the most width for four radio cells, the rate
-     * card keeps enough for its title on one line, and the two trend charts
-     * stay narrow. */
-    grid-template-columns: 1.7fr .94fr .93fr .93fr;
+    /* The station card and the score curve carry the most information and get
+     * the widest slots; the rate card keeps enough for its headline number and
+     * the two minute charts stay narrow. The station slot has to hold two
+     * columns of nameplates — band, frequency, mode and operator on every one —
+     * so it gets the largest share or the figures start ellipsizing. */
+    grid-template-columns: 2.5fr 1.35fr .95fr .8fr .8fr;
     gap: 8px;
     min-height: 0;
     contain: inline-size;
@@ -278,11 +354,20 @@ html, body {
 }
 .card h3 span { margin-left: 4px; font-size: var(--fs-micro); letter-spacing: 0; color: rgba(124, 140, 163, .55); }
 
-/* space weather */
+/* space weather: the card is a fixed slice of the rail, so the eight cells are
+ * single-line (label left, figure right) instead of stacked. That halves the
+ * grid height and leaves the rest of the card to the SFI trend canvas. */
+.card.sw-card {
+    flex: 1 1 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
 .sw-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 1px;
+    flex: 0 0 auto;
     background: var(--line);
     border: 1px solid var(--line);
     border-radius: 5px;
@@ -290,51 +375,68 @@ html, body {
 }
 .sw-grid div {
     display: flex;
-    flex-direction: column;
-    padding: clamp(4px, 0.5vh, 8px) clamp(6px, 0.7vh, 10px);
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 4px;
+    padding: clamp(2px, 0.30vh, 6px) clamp(5px, 0.55vh, 10px);
     background: var(--panel-2);
+    min-width: 0;
 }
 .sw-grid label { font-size: var(--fs-micro); letter-spacing: 1px; color: var(--dim); }
-.sw-grid b { font-size: var(--fs-num); font-weight: 600; line-height: 1.15; }
+.sw-grid b {
+    font-family: var(--mono);
+    font-size: clamp(13px, 1.75vh, 34px);
+    font-weight: 600;
+    line-height: 1.12;
+}
 .sw-grid b.warn { color: var(--fair); }
 .sw-grid b.bad { color: var(--poor); }
 
-/* band conditions: the card takes half the left rail, so the eight bands
- * are laid out as two wide columns by four rows and the tiles stretch to
- * fill the card instead of hugging a couple of text lines. Each tile also
- * carries a three-step condition meter, which reads at a glance far better
- * than the bare good/fair/poor word. */
-.card.bandcard { flex: 1.12; overflow: hidden; }
+/* band conditions: eight bands as four columns by two rows, and every tile is
+ * two lines — "band + condition" on the first line, a three-step condition meter
+ * underneath. The stacked variant needed four rows and pushed the whole
+ * environment group past the bottom of the rail on a short viewport. */
+.card.bandcard { flex: 1 1 0; overflow: hidden; }
 .band-bar {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     grid-auto-rows: minmax(0, 1fr);
-    gap: 5px;
+    gap: clamp(3px, 0.4vh, 6px);
     flex: 1 1 0;
     min-height: 0;
 }
 .band {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    gap: 1px;
-    padding: clamp(5px, 0.65vh, 10px) clamp(9px, 1vh, 14px);
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    column-gap: 4px;
+    row-gap: 0;
+    padding: clamp(2px, 0.35vh, 7px) clamp(4px, 0.5vh, 9px);
     border: 1px solid var(--line);
     border-radius: 5px;
     background: var(--panel-2);
     min-width: 0;
+    min-height: 0;
     overflow: hidden;
 }
-.band b { font-size: clamp(15px, 1.75vh, 34px); font-weight: 600; line-height: 1.1; }
-.band > span { font-size: var(--fs-small); letter-spacing: .5px; }
+.band b { font-size: clamp(13px, 1.6vh, 30px); font-weight: 600; line-height: 1.1; }
+.band > span {
+    font-size: var(--fs-micro);
+    letter-spacing: .3px;
+    text-align: right;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
 .band .meter {
+    grid-column: 1 / -1;
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 3px;
-    margin-top: clamp(3px, 0.4vh, 6px);
+    margin-top: clamp(2px, 0.28vh, 5px);
 }
 .band .meter u {
-    height: clamp(5px, 0.6vh, 8px);
+    height: clamp(4px, 0.45vh, 8px);
     border-radius: 3px;
     background: rgba(122, 168, 255, .13);
 }
@@ -353,11 +455,16 @@ html, body {
 .radios {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    grid-auto-rows: minmax(0, 1fr);
+    /* auto（而不是 1fr）：行高由内容决定，空间富余时 align-content 的 stretch
+     * 会把多余高度均摊给各行，空间不足时铭牌会溢出容器而不是被压扁，
+     * 由 trimRows 删掉放不下的席位并标 "+N"。 */
+    grid-auto-rows: auto;
     gap: 5px;
     flex: 1 1 0;
     min-height: 0;
+    overflow: hidden;
 }
+.radios .rows-more { grid-column: 1 / -1; }
 .radio {
     display: flex;
     flex-direction: column;
@@ -398,24 +505,45 @@ html, body {
 /* Horizontal bars instead of a number per row: the track gives a sense of
  * ratio between operators (and bands keep their own colour). */
 .list h3 { margin-bottom: clamp(4px, 0.5vh, 8px); }
-.rows { display: flex; flex-direction: column; gap: clamp(3px, 0.4vh, 6px); }
+/* The list fills the card and its rows are allowed to compress: a short
+ * viewport thins the bars instead of pushing the last band out of the card. */
+.rows {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(2px, 0.34vh, 6px);
+    flex: 1 1 0;
+    min-height: 0;
+    overflow: hidden;
+}
+/* 行高由字号决定，不允许被压扁；放不下由 trimRows 删行并标 "+N"。 */
 .hbar {
+    flex: 0 0 auto;
     display: grid;
-    grid-template-columns: clamp(58px, 6.4vh, 120px) minmax(0, 1fr) clamp(34px, 3.7vh, 66px);
+    grid-template-columns: clamp(52px, 6.0vh, 120px) minmax(0, 1fr) clamp(30px, 3.5vh, 66px);
     align-items: center;
-    gap: clamp(5px, 0.6vh, 12px);
+    gap: clamp(4px, 0.5vh, 12px);
     font-size: var(--fs-small);
 }
 .hbar .k { color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hbar .track {
     display: block;
-    height: clamp(7px, 0.8vh, 15px);
+    height: clamp(6px, 0.75vh, 15px);
     border-radius: 4px;
     background: rgba(122, 168, 255, .12);
     overflow: hidden;
 }
 .hbar .track > i { display: block; height: 100%; border-radius: 4px; background: var(--accent); }
 .hbar em { font-style: normal; text-align: right; font-size: var(--fs-body); font-weight: 600; color: var(--text); }
+/* 被裁掉的行数标记：一屏放不下的行不是消失，而是明确标出还剩多少。 */
+.rows-more {
+    flex: 0 0 auto;
+    font-family: var(--mono);
+    font-size: var(--fs-micro);
+    letter-spacing: .5px;
+    color: var(--dim);
+    text-align: center;
+}
+.rows-more[hidden] { display: none; }
 
 /* ---------- trend charts ---------- */
 .chart-head {
@@ -456,6 +584,11 @@ html, body {
     transition: opacity .22s ease;
 }
 .spark canvas.switching { opacity: .12; }
+/* The space-weather card shares its rail slice with the band grid, so its
+ * canvas only needs a readable trend line, not a full-size chart. */
+.card.sw-card .spark { margin-top: clamp(3px, 0.4vh, 7px); }
+.card.sw-card .spark canvas { min-height: 18px; }
+.card.sw-card .sw-dots { height: 8px; margin: 2px 0 0; }
 
 /* space-weather carousel ticks: eight fixed slots, the active one advances a
  * light bar over the JS dwell time (--sw-dwell is set by wall-charts.mjs) */
@@ -488,6 +621,396 @@ html, body {
 @keyframes swDwell {
     from { transform: scaleX(0); }
     to { transform: scaleX(1); }
+}
+
+/* ============================================================
+ * 台站设备组：天线指向罗盘 / 天线使用矩阵 / 波段占用矩阵
+ * ============================================================ */
+.card.rotor-card { flex: 1.2 1 0; display: flex; flex-direction: column; overflow: hidden; }
+.card.matrix-card,
+.card.occ-card { display: flex; flex-direction: column; overflow: hidden; }
+.card.matrix-card { flex: 1.45 1 0; }
+.card.occ-card { flex: .95 1 0; }
+
+/* ---------- 天线指向：一圈刻度 + 一根实心指针 ---------- */
+/* 罗盘用 SVG 画，刻度、方位字母和指针都跟着 --c 走，转动中的天线指针发烫。 */
+/* 一列一行放不下就换成两行，两行会把罗盘压扁，所以固定单行：
+ * 席位多的时候每个表盘变窄，刻度环自适应，读数仍在同一水平线上。 */
+.dials {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    gap: clamp(3px, 0.45vh, 8px);
+    flex: 1 1 0;
+    min-height: 0;
+    overflow: hidden;
+}
+.dial {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1px;
+    min-width: 0;
+    min-height: 0;
+    padding: clamp(2px, 0.3vh, 5px) 2px;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    overflow: hidden;
+}
+.dial svg {
+    width: 100%;
+    height: auto;
+    max-height: 100%;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+.dial .ring { fill: rgba(122, 168, 255, .05); stroke: rgba(122, 168, 255, .22); stroke-width: 1; }
+.dial line.maj { stroke: rgba(196, 216, 244, .55); stroke-width: 1.6; stroke-linecap: round; }
+.dial line.min { stroke: rgba(122, 168, 255, .26); stroke-width: 1; stroke-linecap: round; }
+.dial text.cardinal {
+    fill: rgba(124, 140, 163, .8);
+    font-size: 9px;
+    font-family: var(--mono);
+    text-anchor: middle;
+}
+.dial .hub { fill: rgba(196, 216, 244, .7); }
+.dial .needle path { fill: var(--c); stroke: rgba(5, 8, 15, .6); stroke-width: .8; }
+.dial .needle.cold { --c: rgba(122, 168, 255, .42); }
+.dial .needle.hot { --c: var(--amber); filter: drop-shadow(0 0 3px rgba(255, 179, 71, .8)); }
+.dial .target { stroke-width: 2; stroke-linecap: round; opacity: .8; }
+.dial .nodata circle {
+    fill: none;
+    stroke: rgba(122, 168, 255, .2);
+    stroke-width: 1.4;
+    stroke-dasharray: 4 5;
+}
+.dial b {
+    font-family: var(--mono);
+    font-size: var(--fs-small);
+    font-weight: 700;
+    line-height: 1;
+    color: var(--text);
+    text-align: center;
+    flex: 0 0 auto;
+}
+.dial .dial-name,
+.dial .dial-seat {
+    font-style: normal;
+    font-size: var(--fs-micro);
+    line-height: 1.15;
+    max-width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: center;
+    flex: 0 0 auto;
+}
+.dial .dial-name { color: var(--dim); }
+.dial .dial-seat { color: rgba(122, 168, 255, .6); letter-spacing: .5px; }
+.dial.owned { border-color: rgba(255, 179, 71, .42); background: rgba(255, 179, 71, .06); }
+.dial.owned .dial-seat { color: var(--amber); }
+.dial.moving svg { animation: dialSweep 1.8s ease-in-out infinite; }
+.dial.settled .dial-seat { color: var(--mint); }
+@keyframes dialSweep {
+    0%, 100% { filter: none; }
+    50% { filter: drop-shadow(0 0 6px rgba(255, 179, 71, .55)); }
+}
+
+/* ---------- 占用矩阵（波段 / 天线共用一套栅格） ---------- */
+/* 两张矩阵卡共用一套栅格。行高由字号决定、不参与收缩，一屏放不下的行由
+ * trimRows 删掉并在页脚标出剩余数量；名称列宽度用变量分开，天线名比波段
+ * 标签需要长得多的列。 */
+.matrix {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(2px, 0.26vh, 5px);
+    flex: 1 1 0;
+    min-height: 0;
+    overflow: hidden;
+}
+.occ-row {
+    display: grid;
+    grid-template-columns: var(--label-w, clamp(30px, 3.6vh, 60px)) repeat(var(--cols, 1), minmax(0, 1fr));
+    align-items: stretch;
+    gap: 3px;
+    /* 行高由内容决定：被 flex 压扁会让上下两行的文字叠在一起。 */
+    flex: 0 0 auto;
+}
+.occ-row.occ-head,
+.occ-row.ant-head { flex: 0 0 auto; }
+.occ-row.occ-head b,
+.occ-row.ant-head b {
+    font-family: var(--mono);
+    font-size: var(--fs-micro);
+    font-weight: 600;
+    letter-spacing: .5px;
+    text-align: center;
+    color: rgba(124, 140, 163, .85);
+    min-width: 0;
+    overflow: hidden;
+}
+.occ-tag { display: block; min-width: 0; }
+b.occ-tag {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    font-family: var(--mono);
+    font-size: var(--fs-micro);
+    font-weight: 700;
+    letter-spacing: .3px;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+}
+b.occ-tag::before {
+    content: '';
+    flex: 0 0 auto;
+    width: 4px;
+    height: clamp(7px, 1.0vh, 18px);
+    border-radius: 2px;
+    background: var(--c, var(--accent));
+}
+.occ-cell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+    min-height: 0;
+    border-radius: 4px;
+    background: rgba(122, 168, 255, .07);
+    border: 1px solid rgba(122, 168, 255, .08);
+}
+.occ-cell u {
+    font-size: var(--fs-micro);
+    text-decoration: none;
+    letter-spacing: .3px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+.occ-cell.on {
+    background: var(--c, var(--accent));
+    border-color: transparent;
+    color: #050c14;
+}
+.occ-cell.on u { font-weight: 700; }
+.occ-cell.on.tx {
+    border-color: #fff;
+    animation: txFlash 1.5s ease-in-out infinite;
+}
+@keyframes txFlash {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, .0); }
+    50% { box-shadow: 0 0 0 2px rgba(255, 255, 255, .55), 0 0 12px rgba(255, 255, 255, .35); }
+}
+.occ-legend {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 3px 7px;
+    margin-top: auto;
+    flex: 0 0 auto;
+    line-height: 1.1;
+    font-size: var(--fs-micro);
+    letter-spacing: .5px;
+    color: var(--dim);
+}
+.occ-legend .lg {
+    display: inline-block;
+    width: clamp(9px, 1.1vh, 16px);
+    height: clamp(6px, 0.7vh, 10px);
+    border-radius: 2px;
+    margin-right: 3px;
+    vertical-align: middle;
+}
+.occ-legend .lg.mine { background: var(--red); }
+.occ-legend .lg.other { background: var(--yellow); }
+.occ-legend .lg.idle { background: rgba(53, 214, 164, .28); border: 1px solid rgba(53, 214, 164, .55); }
+.occ-legend .lg.on { background: var(--accent); }
+.occ-legend .lg.tx { background: var(--accent); border: 1px solid #fff; }
+.occ-legend .more { font-style: normal; margin-left: auto; color: rgba(124, 140, 163, .6); }
+
+/* 天线行：名称列宽、色块列等宽，色块即「这副天线此刻归谁」。
+ * 支持的波段只留在 title 里——单独一行的波段徽章会让每行变成两行高度，
+ * 七副天线就把整张卡撑出栏外。 */
+/* 天线名是矩阵唯一可索引的列，「40M 八木 2 单元 ★」这类长名要完整读得出来。 */
+.card.matrix-card .occ-row { --label-w: clamp(104px, 12vh, 220px); }
+.card.occ-card .occ-row { --label-w: clamp(40px, 4.6vh, 74px); }
+.ant-row { align-items: center; }
+.ant-name {
+    font-size: var(--fs-micro);
+    font-weight: 600;
+    line-height: 1.1;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+}
+.ant-cell {
+    height: clamp(8px, 1.15vh, 22px);
+    min-height: 0;
+    border-radius: 3px;
+    background: rgba(53, 214, 164, .16);
+    border: 1px solid rgba(53, 214, 164, .4);
+}
+.ant-cell.mine { background: var(--red); border-color: rgba(255, 107, 107, .8); }
+.ant-cell.other { background: var(--yellow); border-color: rgba(232, 197, 71, .8); }
+
+/* ---------- 各操作员：呼号 + 占比条 + 分数 + 静默时长 ---------- */
+.oprows { gap: clamp(3px, 0.45vh, 9px); justify-content: flex-start; }
+.opbar {
+    display: grid;
+    /* The callsign column gets the width the silent-forget column can spare:
+     * an operator reads names first, and "5m" is legible in 30 px. */
+    grid-template-columns: clamp(66px, 7vh, 140px) minmax(0, 1fr) clamp(26px, 3vh, 52px)
+        clamp(34px, 4.2vh, 72px) clamp(24px, 2.8vh, 46px);
+    align-items: center;
+    gap: clamp(3px, 0.42vh, 10px);
+    font-size: var(--fs-small);
+    flex: 0 0 auto;
+}
+.opbar .k {
+    font-family: var(--mono);
+    font-weight: 700;
+    letter-spacing: .4px;
+    color: var(--c);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.opbar .track {
+    display: block;
+    height: clamp(8px, 0.95vh, 18px);
+    border-radius: 4px;
+    background: rgba(122, 168, 255, .12);
+    overflow: hidden;
+}
+.opbar .track > i {
+    display: block;
+    height: 100%;
+    border-radius: 4px;
+    box-shadow: 0 0 8px -1px currentColor;
+}
+.opbar em { font-style: normal; text-align: right; font-family: var(--mono); font-weight: 600; }
+.opbar .pts {
+    text-align: right;
+    font-family: var(--mono);
+    font-size: var(--fs-tiny);
+    font-weight: 600;
+    color: var(--amber);
+    white-space: nowrap;
+}
+.opbar .ago {
+    text-align: right;
+    font-style: normal;
+    text-decoration: none;
+    font-family: var(--mono);
+    font-size: var(--fs-micro);
+    color: rgba(124, 140, 163, .75);
+    white-space: nowrap;
+}
+
+/* ---------- 分数曲线 ---------- */
+.card.score-card .chart-head { flex-wrap: wrap; gap: 3px 10px; }
+.card.score-card .chart-head label { display: flex; align-items: baseline; gap: 4px; }
+.card.score-card .chart-head b {
+    margin-left: 2px;
+    font-family: var(--mono);
+    font-size: clamp(15px, 1.8vh, 34px);
+    font-weight: 700;
+}
+.chart-head .dot {
+    display: inline-block;
+    width: clamp(7px, 0.8vh, 13px);
+    height: clamp(7px, 0.8vh, 13px);
+    border-radius: 50%;
+    align-self: center;
+}
+.chart-head .dot.score { background: var(--amber); box-shadow: 0 0 8px rgba(255, 179, 71, .6); }
+.chart-head .dot.qso { background: var(--mint); box-shadow: 0 0 8px rgba(53, 214, 164, .6); }
+
+/* ---------- 席位铭牌 ----------
+ * 底部横带的电台格改成铭牌：两行读完「哪台机、什么波段、多少频率、什么模式、
+ * 谁在打」。左侧色条就是当前波段色，发射时整块点亮，停机的席位压暗。 */
+.radio.plate {
+    gap: 0;
+    border-inline-start: 3px solid var(--c, var(--accent));
+    background: linear-gradient(180deg, rgba(122, 168, 255, .07), rgba(122, 168, 255, 0)), var(--panel-2);
+}
+.radio.plate label {
+    display: flex;
+    align-items: baseline;
+    gap: 5px;
+}
+.radio.plate label em {
+    margin-inline-start: auto;
+    font-style: normal;
+    font-family: var(--mono);
+    font-weight: 700;
+    font-size: var(--fs-micro);
+    line-height: 1.25;
+    padding: 0 4px;
+    border-radius: 3px;
+    color: var(--c, var(--accent));
+    border: 1px solid currentColor;
+    white-space: nowrap;
+    flex: 0 0 auto;
+}
+.radio.plate.tx {
+    border-inline-start-color: var(--poor);
+    background: linear-gradient(180deg, rgba(228, 87, 46, .22), rgba(228, 87, 46, 0)), var(--panel-2);
+}
+.radio.plate.tx label em { color: var(--poor); }
+.radio.plate.idle { opacity: .42; }
+.plate-freq {
+    display: flex;
+    align-items: baseline;
+    gap: 3px;
+    min-width: 0;
+}
+.plate-freq b {
+    font-family: var(--mono);
+    font-size: clamp(13px, 1.8vh, 34px);
+    font-weight: 700;
+    line-height: 1.06;
+    letter-spacing: -.5px;
+    color: var(--text);
+    white-space: nowrap;
+    /* 频率是铭牌上最要紧的数字，绝不参与收缩——收缩只留给操作员呼号。 */
+    flex: 0 0 auto;
+}
+.plate-freq span {
+    font-size: var(--fs-micro);
+    color: var(--dim);
+    white-space: nowrap;
+    flex: 0 0 auto;
+}
+.plate-freq .mode {
+    margin-inline-start: auto;
+    font-style: normal;
+    font-size: var(--fs-micro);
+    font-weight: 600;
+    letter-spacing: .5px;
+    color: var(--dim);
+    white-space: nowrap;
+    flex: 0 0 auto;
+}
+.plate-freq .op {
+    font-style: normal;
+    font-family: var(--mono);
+    font-weight: 700;
+    font-size: var(--fs-tiny);
+    letter-spacing: .4px;
+    color: var(--accent);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+    flex: 0 1 auto;
 }
 
 /* opponents: one big card per rival, one small cell per active band.
@@ -523,10 +1046,47 @@ html, body {
 }
 .leaflet-control-attribution, .leaflet-control-zoom { display: none; }
 
+/* ---------- short viewports ----------
+ * A 1080p wall is the design target. Below ~900 px of usable height (a laptop
+ * preview, a browser with toolbars) the rails stop making room for decoration:
+ * the band badge already names the band, so the "MHz" unit, the redundant seat
+ * caption on unclaimed dials and the occupancy legend hand their pixels back to
+ * the figures. Nothing is clipped — the elements are simply dropped. The
+ * nameplates keep every field, so they collapse to a single-line list instead
+ * of two stacked lines, and the trend strip tightens its titles and headline. */
+@media (max-height: 900px) {
+    .wall-body { grid-template-rows: minmax(0, 1fr) clamp(132px, 16.5vh, 400px); }
+    .plate-freq span { display: none; }
+    /* 席位铭牌：两列网格在这里放不下「名称+波段」与「频率+模式+操作员」两行
+     * （每行需要 ~33 px，只有 ~26 px），改成单列一行读完，五个席位全留得下。 */
+    .radios {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 2px;
+    }
+    .radio.plate {
+        flex-direction: row;
+        align-items: baseline;
+        gap: 8px;
+        padding-block: 0;
+    }
+    .radio.plate label { flex: 0 1 auto; min-width: 0; gap: 4px; line-height: 1.3; }
+    .radio.plate label em { line-height: 1; padding: 0 3px; }
+    .plate-freq { flex: 1 1 auto; }
+    .plate-freq b { line-height: 1; }
+    .dial .dial-seat { display: none; }
+    .card.sw-card .sw-dots { display: none; }
+    .card.sw-card .spark .chart-head { display: none; }
+    /* 速率卡放不下 7 px：把趋势带的小标题与主数字收紧，迷你图才有整条高度。 */
+    .trend .card h3 { font-size: var(--fs-small); line-height: 1.2; margin-bottom: 3px; }
+    .rate-nums b { font-size: clamp(26px, 3.1vh, 60px); }
+    .card.rate canvas { min-height: 14px; }
+}
+
 /* ---------- small screens ---------- */
 @media (max-width: 1200px) {
     html, body { overflow: auto; }
-    .wall { height: auto; min-height: 100vh; grid-template-rows: 56px auto 28px; }
+    .wall { height: auto; min-height: 100vh; grid-template-rows: auto auto 28px; }
+    .kpi-strip { padding-inline: 12px; flex-wrap: wrap; }
     .wall-body {
         grid-template-columns: 1fr;
         grid-template-rows: auto auto auto minmax(200px, auto);
@@ -541,8 +1101,9 @@ html, body {
     .rail .group .group-head { flex: 1 1 100%; }
     .rail .group .card { flex: 1 1 240px; }
     .rail .group .card.grow { flex-basis: 100%; min-height: 220px; }
+    .card.rotor-card { flex: 1 1 100%; min-height: 190px; }
     .trend { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: minmax(150px, auto); }
-    .card.radios-card, .card.rate { min-height: 150px; }
+    .card.radios-card, .card.rate, .card.score-card { min-height: 150px; }
 }
 
 /* ---------- Arabic (dir="rtl") ----------
@@ -554,5 +1115,10 @@ html[dir="rtl"] .map-panel,
 html[dir="rtl"] .layer-tag,
 html[dir="rtl"] .map-legend,
 html[dir="rtl"] .clock,
+html[dir="rtl"] .kpi-strip,
+html[dir="rtl"] .matrix,
+html[dir="rtl"] .dials,
+html[dir="rtl"] .opbar,
+html[dir="rtl"] .radio.plate,
 html[dir="rtl"] .wall-foot { direction: ltr; }
 html[dir="rtl"] .wall-foot { text-align: left; }

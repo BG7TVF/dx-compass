@@ -12,11 +12,14 @@
 <body>
 <div class="wall">
 
+    <!-- 头栏：台名 + 总成绩 KPI + 竞赛倒计时 + UTC 时钟。KPI 常驻，
+         远距离一眼就能读到「现在多少分、打得快不快」。 -->
     <header class="wall-head">
         <div class="brand">
             <b id="wallName">DX-COMPASS</b>
             <span data-i18n="wall.brand">GLOBAL OPERATIONS WALL</span>
         </div>
+        <div class="kpi-strip" id="kpiStrip"></div>
         <div class="timer" id="wallTimer" hidden>
             <label id="timerLabel" data-i18n="wall.timer.toEnd">距结束</label>
             <b id="timerValue">--:--:--</b>
@@ -29,24 +32,13 @@
     </header>
 
     <main class="wall-body">
-        <!-- Single map, Mercator only, propagation-page base (dark ocean,
-             coastline outlines from public/data, MUF heat, gray line). -->
-        <section class="map-panel">
-            <div id="map"></div>
-            <div class="layer-tag" id="layerTag"></div>
-            <div class="map-legend" id="mapLegend"></div>
-        </section>
-
-        <!-- U layout: two full-height rails hug the map, and the station /
-             rate / trend strip closes the U along the bottom of the centre
-             column. The left rail carries only the environment (space
-             weather and the enlarged band conditions card); the right rail
-             carries the score bars and the opponent table. -->
+        <!-- 地图居中，左右两条栏夹住它，趋势带在底部收口成 U 型。
+             左栏=环境 + 台站设备，右栏=成绩 + 对手监测。 -->
         <aside class="rail rail-left">
-            <div class="group grow">
+            <div class="group grow env-group">
                 <h4 class="group-head"><span data-i18n="wall.group.environment">环境</span> <span data-lang-sub>ENVIRONMENT</span></h4>
 
-                <section class="card grow">
+                <section class="card sw-card">
                     <h3><span data-i18n="wall.card.spaceWx">空间天气</span> <span data-lang-sub>SPACE WEATHER</span></h3>
                     <div class="sw-grid" id="swGrid"></div>
                     <div class="spark">
@@ -56,18 +48,51 @@
                     </div>
                 </section>
 
-                <section class="card grow bandcard">
+                <section class="card bandcard">
                     <h3><span data-i18n="wall.card.bandConditions">频段条件</span> <span data-lang-sub>BAND CONDITIONS</span></h3>
                     <div class="band-bar" id="bandBar"></div>
                 </section>
             </div>
+
+            <div class="group grow rig-group">
+                <h4 class="group-head"><span data-i18n="wall.group.rig">台站设备</span> <span data-lang-sub>STATION RIG</span></h4>
+
+                <section class="card rotor-card">
+                    <h3><span data-i18n="wall.card.rotors">天线指向</span> <span data-lang-sub>HEADING</span></h3>
+                    <div class="dials" id="rotorDials"></div>
+                </section>
+
+                <section class="card grow matrix-card">
+                    <h3><span data-i18n="wall.card.antennaUse">天线使用</span> <span data-lang-sub>ANTENNA USE</span></h3>
+                    <div class="matrix" id="antMatrix"></div>
+                </section>
+
+                <section class="card grow occ-card">
+                    <h3><span data-i18n="wall.card.bandOccupancy">波段占用</span> <span data-lang-sub>BAND MAP</span></h3>
+                    <div class="matrix" id="bandOcc"></div>
+                </section>
+            </div>
         </aside>
 
+        <section class="map-panel">
+            <div id="map"></div>
+            <div class="layer-tag" id="layerTag"></div>
+            <div class="map-legend" id="mapLegend"></div>
+        </section>
+
         <aside class="rail rail-right">
-            <div class="group">
+            <div class="group grow">
                 <h4 class="group-head"><span data-i18n="wall.group.score">成绩</span> <span data-lang-sub>SCORE</span></h4>
 
-                <section class="card list"><h3><span data-i18n="wall.card.byBand">各频段</span> <span data-lang-sub>BY BAND</span></h3><div class="rows" id="bandList"></div></section>
+                <section class="card list grow">
+                    <h3><span data-i18n="wall.card.byOp">各操作员</span> <span data-lang-sub>BY OPERATOR</span></h3>
+                    <div class="rows oprows" id="opBars"></div>
+                </section>
+
+                <section class="card list grow">
+                    <h3><span data-i18n="wall.card.byBand">各频段</span> <span data-lang-sub>BY BAND</span></h3>
+                    <div class="rows" id="bandList"></div>
+                </section>
             </div>
 
             <div class="group grow opp-group">
@@ -83,6 +108,15 @@
             <section class="card radios-card">
                 <h3><span data-i18n="wall.card.station">电台</span> <span data-lang-sub>STATION</span></h3>
                 <div class="radios" id="radioCards"></div>
+            </section>
+
+            <section class="card chart score-card">
+                <h3><span data-i18n="wall.card.scoreCurve">分数曲线</span> <span data-lang-sub>CUMULATIVE</span></h3>
+                <div class="chart-head">
+                    <label><i class="dot score"></i><span data-i18n="wall.chart.cumulativeScore">累计分数</span> <b id="scoreNow">0</b></label>
+                    <label><i class="dot qso"></i><span data-i18n="wall.chart.cumulativeQso">累计 QSO</span> <b id="scoreQso">0</b></label>
+                </div>
+                <canvas id="scoreCurve"></canvas>
             </section>
 
             <section class="card rate">

@@ -14,6 +14,7 @@ const MODULE_PATHS = [
     '/wall-map.mjs',
     '/wall-cards.mjs',
     '/wall-charts.mjs',
+    '/wall-rig.mjs',
     '/wall-i18n.mjs',
     '/shared/opponents/opponents.mjs',
     '/js/i18n.js',
@@ -24,6 +25,7 @@ const MODULE_PATHS = [
     '/shared/data/propagation.mjs',
     '/shared/data/spots.mjs',
     '/shared/data/qsos.mjs',
+    '/shared/data/devices.mjs',
     '/shared/data/station.mjs',
     '/shared/data/callsigns.mjs',
     '/shared/geo/coordinates.mjs',
@@ -89,9 +91,10 @@ test('wall serves every local browser module with JavaScript MIME', async t => {
     }
 });
 
-test('wall keeps only the six read API routes', () => {
+test('wall keeps only the seven read API routes', () => {
     assert.deepEqual([...READ_API].sort(), [
         '/api/callsigns',
+        '/api/devices',
         '/api/prop',
         '/api/qsos',
         '/api/settings',

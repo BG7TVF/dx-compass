@@ -4,12 +4,14 @@ import {fetchSpots} from '../shared/data/spots.mjs';
 import {fetchCallsigns} from '../shared/data/callsigns.mjs';
 import {fetchQsos} from '../shared/data/qsos.mjs';
 import {getStationState} from '../shared/data/station.mjs';
+import {getDevicesSnapshot} from '../shared/data/devices.mjs';
 import {bearing} from '../shared/geo/coordinates.mjs';
 import {getJson} from '../shared/core/transport.mjs';
 import {createPoller} from '../shared/monitoring/poller.mjs';
 import {
     renderQsoTrend,
     renderRateTrend,
+    renderScoreCurve,
     renderSpaceTrend,
     renderSpotTrend,
     setSpaceDwell
@@ -17,11 +19,14 @@ import {
 import {createOpponentRenderer, opponentColorGradient} from '../shared/opponents/opponents.mjs';
 import {
     renderBands,
+    renderKpi,
+    renderOperators,
     renderQsoStats,
     renderRadios,
     renderSpaceWeather,
     tickClock
 } from './wall-cards.mjs';
+import {renderAntennaUse, renderBandOccupancy, renderRotors} from './wall-rig.mjs';
 import {createWallMap} from './wall-map.mjs';
 import {applyStatic, getLanguage, setLanguage, t} from './wall-i18n.mjs';
 
@@ -44,6 +49,7 @@ export async function startWallPage() {
         watchedRows: [],
         qsoRows: [],
         station: null,
+        devices: null,
         settingsKey: '',
         build: ''
     };
@@ -181,6 +187,9 @@ export async function startWallPage() {
             if (langChanged) {
                 tickClock(state.settings);
                 renderRadios(state.station);
+                renderRig();
+                renderKpi(state.station, state.qsoRows);
+                renderOperators(state.qsoRows);
                 renderSpaceTrend(state.prop || {});
                 opponents.render(state.watchedRows, state.settings.myCall, state.watched);
             }
@@ -235,6 +244,23 @@ export async function startWallPage() {
         opponents.render(state.watchedRows, state.settings.myCall, state.watched);
     }
 
+    /* 台站设备三卡：天线指向、天线使用、波段占用。取不到快照时保留上一次
+     * 的画面，大屏不应该因为一次超时就把 RF 链路图清空。 */
+    function renderRig() {
+        renderBandOccupancy(state.station);
+        renderAntennaUse(state.devices);
+        renderRotors(state.devices);
+    }
+
+    async function refreshDevices() {
+        try {
+            state.devices = await getDevicesSnapshot();
+        } catch (error) {
+            /* Keep the previous device snapshot. */
+        }
+        renderRig();
+    }
+
     async function refreshQso() {
         try {
             state.qsoRows = await fetchQsos({limit: 2000});
@@ -245,6 +271,9 @@ export async function startWallPage() {
         renderQsoStats(state.qsoRows);
         renderQsoTrend(state.qsoRows);
         renderRateTrend(state.qsoRows);
+        renderOperators(state.qsoRows);
+        renderScoreCurve(state.qsoRows);
+        renderKpi(state.station, state.qsoRows);
     }
 
     async function refreshStation() {
@@ -254,6 +283,8 @@ export async function startWallPage() {
             /* Keep the previous radios. */
         }
         renderRadios(state.station);
+        renderBandOccupancy(state.station);
+        renderKpi(state.station, state.qsoRows);
     }
 
     /* A wall tab stays open for days; when the deployed modules change this
@@ -282,6 +313,9 @@ export async function startWallPage() {
         createPoller(refreshSpots, {intervalMs: () => secSetting('wallSpotSec', 30, 5, 300), immediate: false}),
         createPoller(refreshQso, {intervalMs: () => secSetting('wallQsoSec', 30, 5, 300), immediate: false}),
         createPoller(refreshStation, {intervalMs: () => secSetting('wallStationSec', 15, 5, 120), immediate: false}),
+        /* 天线指向与切换器配色变化快（转一次天线的过程中就该看到），
+         * 因此设备快照比席位状态更勤；这个 GET 只读，不会下发任何指令。 */
+        createPoller(refreshDevices, {intervalMs: () => secSetting('wallDevicesSec', 6, 3, 120), immediate: false}),
         /* Capped at 15 s so a language switch on the settings page reaches the
          * wall promptly, even when the configured sync interval is longer. */
         createPoller(refreshSettings, {intervalMs: () => Math.min(secSetting('syncSec', 60, 10, 300), 15000), immediate: false}),
@@ -289,7 +323,7 @@ export async function startWallPage() {
         createPoller(refreshBuild, {intervalMs: () => 60000, immediate: false})
     ];
     const [propPoller, callsignPoller, spotPoller, qsoPoller, stationPoller,
-        settingsPoller] = pollers;
+        devicesPoller, settingsPoller] = pollers;
 
     let resizeTimer = null;
     window.addEventListener('resize', () => {
@@ -298,6 +332,7 @@ export async function startWallPage() {
             resizeTimer = null;
             renderQsoTrend(state.qsoRows);
             renderRateTrend(state.qsoRows);
+            renderScoreCurve(state.qsoRows);
             renderSpotTrend(state.spotRows);
             renderSpaceTrend(state.prop || {});
         }, 200);
@@ -323,7 +358,8 @@ export async function startWallPage() {
         propPoller.run(),
         spotPoller.run(),
         qsoPoller.run(),
-        stationPoller.run()
+        stationPoller.run(),
+        devicesPoller.run()
     ]);
     pollers.forEach(poller => poller.start());
 }

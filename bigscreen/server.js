@@ -9,13 +9,16 @@
  *
  * The wall screen is a viewer, never a console:
  *   - only GET/HEAD are accepted, every other method is answered 405;
- *   - only the six read endpoints below are proxied, everything else 404s
+ *   - only the seven read endpoints below are proxied, everything else 404s
  *     here instead of reaching Node-RED;
  *   - only explicitly whitelisted static files are served, so no path can
  *     escape their configured roots;
  *   - /wall-build.json exposes only a fingerprint of the served asset files,
  *     so a long-running wall tab can reload itself after a deploy;
- *   - nothing writes to the database, the flow or the global context.
+ *   - nothing writes to the database, the flow or the global context. The
+ *     device snapshot is read-only from the wall side: it never issues a
+ *     rotator or switch command, it only mirrors what the main dashboard
+ *     already keeps in the devices table.
  *
  * Start it next to Node-RED:
  *     node bigscreen/server.js
@@ -39,7 +42,8 @@ const READ_API = new Set([
     '/api/qsos',
     '/api/station/state',
     '/api/settings',
-    '/api/callsigns'
+    '/api/callsigns',
+    '/api/devices'
 ]);
 
 /* Static whitelist: name -> [file, content type, base]. "data" points at the
@@ -55,6 +59,7 @@ const STATIC = {
     '/wall-page.mjs': ['wall-page.mjs', JS],
     '/wall-map.mjs': ['wall-map.mjs', JS],
     '/wall-cards.mjs': ['wall-cards.mjs', JS],
+    '/wall-rig.mjs': ['wall-rig.mjs', JS],
     '/wall-charts.mjs': ['wall-charts.mjs', JS],
     '/wall-i18n.mjs': ['wall-i18n.mjs', JS],
     '/js/i18n.js': ['js/i18n.js', JS, 'public'],
@@ -66,6 +71,7 @@ const STATIC = {
     '/shared/data/spots.mjs': ['data/spots.mjs', JS, 'shared'],
     '/shared/data/qsos.mjs': ['data/qsos.mjs', JS, 'shared'],
     '/shared/data/station.mjs': ['data/station.mjs', JS, 'shared'],
+    '/shared/data/devices.mjs': ['data/devices.mjs', JS, 'shared'],
     '/shared/data/callsigns.mjs': ['data/callsigns.mjs', JS, 'shared'],
     '/shared/geo/coordinates.mjs': ['geo/coordinates.mjs', JS, 'shared'],
     '/shared/geo/great-circle.mjs': ['geo/great-circle.mjs', JS, 'shared'],

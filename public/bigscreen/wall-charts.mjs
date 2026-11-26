@@ -4,7 +4,7 @@
 import {t} from './wall-i18n.mjs';
 
 const $ = selector => document.querySelector(selector);
-const COLORS = {qso: '#35d6a4', myspot: '#4cc9f0'};
+const COLORS = {qso: '#35d6a4', myspot: '#4cc9f0', score: '#ffb347'};
 
 /* Space-weather carousel: one canvas cycles through the same series the
  * readout table shows. Dwell time is mirrored into CSS through --sw-dwell so
@@ -143,6 +143,136 @@ export function renderRateTrend(rows) {
 
 export function renderSpotTrend(rows) {
     $('#spotPeak').textContent = drawBars('#spotTrend', perMinute(rows, 60), COLORS.myspot);
+}
+
+/* 分数曲线：把日志按时间累加成「累计分数」与「累计 QSO」两条曲线，
+ * 各自归一到自己的最大值——竞赛大屏看的是势头（曲线凹凸）而不是绝对刻度，
+ * 因此末端直接标出真实数值，另画一条从原点到终点的虚线作为均速参照。 */
+export function renderScoreCurve(rows) {
+    const cv = $('#scoreCurve');
+    if (!cv) return;
+    const box = canvasBox(cv);
+    if (!box) return;
+    const {ctx, w, h} = box;
+    ctx.clearRect(0, 0, w, h);
+    const now = Date.now();
+    const log = rows.map(qso => {
+        const time = new Date(qso.timestamp).getTime();
+        return {time, points: Number(qso.points) || 0};
+    }).filter(qso => isFinite(qso.time) && qso.time <= now + 60000)
+        .sort((a, b) => a.time - b.time);
+    if (log.length < 2) {
+        ctx.font = '11px "JetBrains Mono", monospace';
+        ctx.fillStyle = 'rgba(119,143,176,.5)';
+        ctx.textAlign = 'center';
+        ctx.fillText('—', w / 2, h / 2);
+        return;
+    }
+    const start = log[0].time;
+    const span = Math.max(3600000, now - start);
+    const buckets = Math.max(16, Math.min(80, Math.round(span / 300000)));
+    const step = span / buckets;
+    const scoreLine = [];
+    const qsoLine = [];
+    let index = 0;
+    let score = 0;
+    for (let bucket = 1; bucket <= buckets; bucket += 1) {
+        const edge = start + bucket * step;
+        while (index < log.length && log[index].time <= edge) {
+            score += log[index].points;
+            index += 1;
+        }
+        scoreLine.push(score);
+        qsoLine.push(index);
+    }
+    if (index < log.length) {
+        scoreLine[buckets - 1] = score + log.slice(index).reduce((total, qso) => total + qso.points, 0);
+        qsoLine[buckets - 1] = log.length;
+    }
+    const maxScore = Math.max(1, scoreLine[buckets - 1]);
+    const maxQso = Math.max(1, qsoLine[buckets - 1]);
+    const padX = 3;
+    const padTop = 7;
+    const padBottom = 11;
+    const plot = height => padTop + (1 - height) * (h - padTop - padBottom);
+    const plotX = position => padX + position / (buckets - 1) * (w - padX * 2);
+
+    ctx.strokeStyle = 'rgba(24,44,72,.9)';
+    ctx.lineWidth = 1;
+    for (let line = 0; line <= 3; line += 1) {
+        const y = Math.round(padTop + line / 3 * (h - padTop - padBottom)) + 0.5;
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(w, y);
+        ctx.stroke();
+    }
+    /* 均速虚线：真实曲线跑在它上面就是超前，跑在下面就是落后。 */
+    ctx.setLineDash([3, 3]);
+    ctx.strokeStyle = 'rgba(255,179,71,.32)';
+    ctx.beginPath();
+    ctx.moveTo(padX, plot(0));
+    ctx.lineTo(w - padX, plot(1));
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    const trace = (values, max) => {
+        ctx.beginPath();
+        values.forEach((value, position) => {
+            const x = plotX(position);
+            const y = plot(value / max);
+            if (position) ctx.lineTo(x, y);
+            else ctx.moveTo(x, y);
+        });
+    };
+    trace(scoreLine, maxScore);
+    ctx.lineTo(w - padX, h - padBottom);
+    ctx.lineTo(padX, h - padBottom);
+    ctx.closePath();
+    const fade = ctx.createLinearGradient(0, padTop, 0, h - padBottom);
+    fade.addColorStop(0, 'rgba(255,179,71,.34)');
+    fade.addColorStop(1, 'rgba(255,179,71,0)');
+    ctx.fillStyle = fade;
+    ctx.fill();
+
+    trace(scoreLine, maxScore);
+    ctx.strokeStyle = COLORS.score;
+    ctx.lineWidth = 2;
+    ctx.shadowColor = COLORS.score;
+    ctx.shadowBlur = 6;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    trace(qsoLine, maxQso);
+    ctx.strokeStyle = COLORS.qso;
+    ctx.lineWidth = 1.6;
+    ctx.stroke();
+
+    ctx.font = '9px "JetBrains Mono", monospace';
+    ctx.fillStyle = 'rgba(119,143,176,.78)';
+    ctx.textAlign = 'left';
+    ctx.fillText(utcLabel(start, now), padX, h - 2);
+    ctx.textAlign = 'center';
+    ctx.fillText(utcLabel(start + span / 2, now), w / 2, h - 2);
+    ctx.textAlign = 'right';
+    ctx.fillText(utcLabel(now, now), w - padX, h - 2);
+    [['#scoreNow', scoreLine[buckets - 1], COLORS.score],
+        ['#scoreQso', qsoLine[buckets - 1], COLORS.qso]].forEach(([selector, value, color]) => {
+        const label = $(selector);
+        if (label) {
+            label.textContent = value;
+            label.style.color = color;
+        }
+    });
+}
+
+/* 时间刻度：跨天竞赛要带上日期，否则大屏上看不出这是哪一天的分数。 */
+function utcLabel(time, now) {
+    const date = new Date(time);
+    const clock = String(date.getUTCHours()).padStart(2, '0') + ':' +
+        String(date.getUTCMinutes()).padStart(2, '0');
+    const sameDay = new Date(now).getUTCDate() === date.getUTCDate();
+    return sameDay ? clock : String(date.getUTCMonth() + 1).padStart(2, '0') + '-' +
+        String(date.getUTCDate()).padStart(2, '0') + ' ' + clock;
 }
 
 function spaceAvailable() {

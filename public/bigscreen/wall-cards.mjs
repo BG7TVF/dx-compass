@@ -170,26 +170,135 @@ export function bandOf(freqKhz) {
     return 'VHF';
 }
 
+/* 席位铭牌：优先用服务端已经剔除离线席位的 seats（带操作员与电台名），
+ * 没有席位数据时退回原始 radioStates，保证大屏永远有东西可看。 */
 export function renderRadios(station) {
+    const box = $('#radioCards');
+    if (!box) return;
+    const seats = (station && Array.isArray(station.seats) ? station.seats : [])
+        .filter(seat => seat && seat.seat);
     const radios = station && station.radios || {};
-    const ids = Object.keys(radios);
-    if (!ids.length) {
-        $('#radioCards').innerHTML = '<div class="opp-empty">' +
-            esc(t('wall.empty.waitingStation')) + '</div>';
+    if (!seats.length && !Object.keys(radios).length) {
+        box.innerHTML = '<div class="opp-empty">' + esc(t('wall.empty.waitingStation')) + '</div>';
         return;
     }
-    $('#radioCards').innerHTML = ids.map(id => {
-        const radio = radios[id] || {};
-        const tx = radio.isTransmitting ? ' tx' : '';
-        const mhz = radio.freqKhz ? num(radio.freqKhz / 1000, 3) + ' MHz' : '—';
-        const bandKey = bandOf(radio.freqKhz);
-        const band = bandKey === 'VHF' ? t('wall.band.vhf') : bandKey;
-        const name = radio.radioName || t('wall.station.radio', {n: id});
-        return '<div class="radio' + tx + '"><label>' + esc(name) +
-            (tx ? ' · TX' : '') + '</label><b>' + esc(mhz) + '</b><span>' +
-            esc(band + (radio.mode ? ' · ' + radio.mode : '')) + '</span></div>';
-    }).join('');
+    if (!seats.length) {
+        box.innerHTML = Object.keys(radios).map(id => {
+            const radio = radios[id] || {};
+            const tx = radio.isTransmitting ? ' tx' : '';
+            const mhz = radio.freqKhz ? num(radio.freqKhz / 1000, 3) + ' MHz' : '—';
+            const bandKey = bandOf(radio.freqKhz);
+            const band = bandKey === 'VHF' ? t('wall.band.vhf') : bandKey;
+            const name = radio.radioName || t('wall.station.radio', {n: id});
+            return '<div class="radio' + tx + '"><label>' + esc(name) +
+                (tx ? ' · TX' : '') + '</label><b>' + esc(mhz) + '</b><span>' +
+                esc(band + (radio.mode ? ' · ' + radio.mode : '')) + '</span></div>';
+        }).join('');
+        return;
+    }
+    const number = seat => Number(String(seat).replace(/\D/g, '')) || 0;
+    const plates = [...seats]
+        .sort((a, b) => number(a.seat) - number(b.seat))
+        .map(seat => {
+            const index = number(seat.seat) || seat.seat;
+            const tx = seat.isTransmitting ? ' tx' : '';
+            const idle = seat.isRunning === false ? ' idle' : '';
+            const mhz = seat.freqKhz ? num(seat.freqKhz / 1000, 3) : '—';
+            const bandKey = bandOf(seat.freqKhz);
+            const band = bandKey === 'VHF' ? t('wall.band.vhf') : bandKey;
+            const color = WALL_BAND_COLORS[bandKey] || COLORS.qso;
+            const title = seat.stationName || seat.radioName || t('wall.station.radio', {n: index});
+            const operator = String(seat.operator || '').trim();
+            return '<div class="radio plate' + tx + idle + '" style="--c:' + color + '">' +
+                '<label>' + esc(title) + '<em>' + esc(band) + '</em></label>' +
+                '<div class="plate-freq"><b>' + esc(mhz) + '</b><span>MHz</span>' +
+                '<i class="mode">' + esc(seat.mode || '—') + '</i>' +
+                '<i class="op">' + esc(operator || '—') + '</i></div>' +
+                '</div>';
+        }).join('');
+    box.innerHTML = plates + '<div class="rows-more" hidden></div>';
+    // 铭牌行高一律按内容给（见 .radios），装不下就删掉最后几台并标 "+N"，
+    // 而不是把两行文字压成半截。
+    trimRows(box, {rowClass: 'radio', marker: box.querySelector('.rows-more')});
 }
+
+/* 头部 KPI 条：总分优先取 N1MM 的 Score 报文，缺报文时用日志自行累加，
+ * 保证大屏在 N1MM 没发分数的竞赛里也不会空着。 */
+export function renderKpi(station, rows) {
+    const box = $('#kpiStrip');
+    if (!box) return;
+    const score = station && station.score || {};
+    const logged = rows.reduce((total, qso) => total + (Number(qso.points) || 0), 0);
+    const mults = rows.reduce((total, qso) => total + (qso.is_mult ? 1 : 0), 0);
+    const now = Date.now();
+    const hour = rows.filter(qso => {
+        const time = new Date(qso.timestamp).getTime();
+        return isFinite(time) && now - time <= 60 * 60 * 1000;
+    }).length;
+    const pick = (value, fallback) => {
+        const number = Number(value);
+        return Number.isFinite(number) && number >= 0 ? number : fallback;
+    };
+    const cells = [
+        {key: 'score', label: t('wall.kpi.score'), value: pick(score.points, logged), tone: 'amber'},
+        {key: 'qsos', label: t('wall.kpi.qsos'), value: pick(score.qsos, rows.length), tone: 'mint'},
+        {key: 'mults', label: t('wall.kpi.mults'), value: pick(score.mults, mults), tone: 'cyan'},
+        {key: 'rate', label: t('wall.kpi.rate'), value: hour, tone: 'violet', suffix: '/h'}
+    ];
+    box.innerHTML = cells.map(cell => '<div class="kpi ' + cell.tone + '"><span>' +
+        esc(cell.label) + '</span><b>' + cell.value +
+        (cell.suffix ? '<i>' + esc(cell.suffix) + '</i>' : '') + '</b></div>').join('');
+}
+
+/* 各 OP 数据：按日志里的 operator 汇总 QSO 数与分数，同一呼号配色稳定。 */
+const OP_COLORS = ['#35d6a4', '#ffb347', '#4cc9f0', '#ff6b6b', '#a78bfa',
+    '#f472b6', '#5ce68a', '#facc15', '#60a5fa'];
+const opColor = name => {
+    let hash = 0;
+    for (let i = 0; i < name.length; i += 1) hash = (hash * 31 + name.charCodeAt(i)) & 0xffff;
+    return OP_COLORS[hash % OP_COLORS.length];
+};
+
+export function renderOperators(rows) {
+    const box = $('#opBars');
+    if (!box) return;
+    const stats = new Map();
+    rows.forEach(qso => {
+        const name = String(qso.operator || '').trim() || '—';
+        const entry = stats.get(name) || {qsos: 0, points: 0, mults: 0, last: 0};
+        entry.qsos += 1;
+        entry.points += Number(qso.points) || 0;
+        if (qso.is_mult) entry.mults += 1;
+        const time = new Date(qso.timestamp).getTime();
+        if (isFinite(time) && time > entry.last) entry.last = time;
+        stats.set(name, entry);
+    });
+    stats.delete('—');
+    const list = [...stats.entries()].sort((a, b) => b[1].qsos - a[1].qsos).slice(0, 7);
+    if (!list.length) {
+        box.innerHTML = '<div class="opp-empty">' + esc(t('wall.op.empty')) + '</div>';
+        return;
+    }
+    const max = list[0][1].qsos || 1;
+    const minutes = since => {
+        if (!since) return '—';
+        const gap = Math.max(0, Date.now() - since) / 60000;
+        return gap < 60 ? Math.round(gap) + '′' : (gap / 60).toFixed(1) + 'h';
+    };
+    box.innerHTML = list.map(([name, entry]) => {
+        const color = opColor(name);
+        return '<div class="opbar" style="--c:' + color + '">' +
+            '<span class="k">' + esc(name) + '</span>' +
+            '<i class="track"><i style="width:' + Math.round(entry.qsos / max * 100) +
+            '%;background:' + color + '"></i></i>' +
+            '<em>' + entry.qsos + '</em>' +
+            '<b class="pts">+' + entry.points + '</b>' +
+            '<u class="ago">' + esc(minutes(entry.last)) + '</u>' +
+            '</div>';
+    }).join('') + '<div class="rows-more" hidden></div>';
+    trimRows(box, {rowClass: 'opbar', extra: stats.size - list.length});
+}
+
 
 export function renderQsoStats(rows) {
     const now = Date.now();
@@ -210,13 +319,58 @@ export function renderQsoStats(rows) {
     renderRank('#bandList', byBand, 8, true);
 }
 
+/**
+ * 行数自适应：大屏的行高由字号决定，不参与压缩，所以一屏放不下的行必须显式
+ * 删掉，并在容器里标出还剩多少条。矮视口（笔记本预览、带工具栏的浏览器）靠
+ * 这一步保证不会出现两行文字叠在一起；4K 墙上则一行都不少。
+ *
+ * @param {HTMLElement} box 行容器
+ * @param {object} options rowClass 行类名；marker 显示 "+N" 的元素（缺省在容器
+ *   内建一个 .rows-more）；extra 渲染前已经被截掉的条数；min 至少保留的行数
+ */
+export function trimRows(box, options) {
+    if (!box) return;
+    const opts = options || {};
+    const min = Math.max(1, opts.min === undefined ? 1 : opts.min);
+    const rows = [...box.children].filter(child =>
+        child.classList && child.classList.contains(opts.rowClass || 'trim-row'));
+    let marker = opts.marker;
+    if (!marker) {
+        marker = box.querySelector('.rows-more');
+        if (!marker) {
+            marker = document.createElement('div');
+            marker.className = 'rows-more';
+            box.appendChild(marker);
+        }
+    }
+    const extra = Number(opts.extra) || 0;
+    let dropped = 0;
+    marker.hidden = true;
+    const spill = () => box.scrollHeight > box.clientHeight + 1;
+    while (rows.length > min && spill()) {
+        rows.pop().remove();
+        dropped += 1;
+    }
+    if (!extra && !dropped) return;
+    marker.textContent = '+' + (extra + dropped);
+    marker.hidden = false;
+    while (rows.length > min && spill()) {
+        rows.pop().remove();
+        dropped += 1;
+        marker.textContent = '+' + (extra + dropped);
+    }
+}
+
 function renderRank(selector, values, limit, bandColor) {
+    const box = $(selector);
     const list = [...values.entries()].sort((a, b) => b[1] - a[1]).slice(0, limit);
     const max = list.length ? list[0][1] : 0;
-    $(selector).innerHTML = list.length ? list.map(([key, value]) => {
+    box.innerHTML = list.length ? list.map(([key, value]) => {
         const color = bandColor ? (WALL_BAND_COLORS[key] || '#35d6a4') : COLORS.qso;
         return '<div class="hbar"><span class="k">' + esc(key) + '</span>' +
             '<i class="track"><i style="width:' + Math.round(value / (max || 1) * 100) +
             '%;background:' + color + '"></i></i><em>' + value + '</em></div>';
-    }).join('') : '<div class="opp-empty">—</div>';
+    }).join('') + '<div class="rows-more" hidden></div>'
+        : '<div class="opp-empty">—</div>';
+    if (list.length) trimRows(box, {rowClass: 'hbar', extra: values.size - list.length});
 }
