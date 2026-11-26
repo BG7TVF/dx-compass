@@ -1,16 +1,33 @@
 /* ============================================================
  * DX-Compass - wall display (port 5859, read-only)
  *
- * A single operations dashboard laid out as a U around one Mercator map:
- * the left rail carries propagation (space weather, band conditions) and the
- * station rig (rotor compasses, antenna routing matrix, band-occupancy matrix),
- * the right rail carries results (per-operator, per-band) and opponent
- * monitoring, and the strip under the map closes it with the seat nameplates,
- * the cumulative score/QSO curve, the live rate and the minute-level trends.
- * Total score, QSO count, multipliers and rate sit in the header so they read
- * from the back of the room. Big-circle lines draw every worked station on the
- * map. No interactive controls, no text inputs.
- * ============================================================ */
+ * A read-only wall for people who are NOT operating the station: support
+ * volunteers, helpers and visiting spectators. The wall answers six questions
+ * at a glance — who is on which microphone (seats), what the rig is doing
+ * (antennas and band occupancy), what propagation is doing (map, space
+ * weather, band conditions), what the score is doing (curve, rate, trends),
+ * what every single QSO was (the ledger) and what the rivals are doing
+ * (opponent monitor).
+ *
+ * 版面：趋势带之上是五栏，从左到右依次回答「谁在打 / 台子怎么接的 / 信号到了
+ * 哪里、传播好不好 / 战果与对手 / 刚刚通了谁」。
+ *   第一栏 = 席位铭牌 + 各操作员战果；
+ *   第二栏 = 天线归属 + 天线指向；
+ *   第三栏 = 覆盖地图（刻意做小：它只要证明流水表里的呼号是真实存在的地点）
+ *            + 空间天气轮播 + 波段预测条件；
+ *   第四栏 = 波段占用 + 对手监视；
+ *   第五栏也是最宽的一栏 = 实时 QSO 流水表，一条通联一行、字段全给。
+ * 底下那条横带放累计分数/QSO 曲线、实时速率和分钟级趋势。
+ *
+ * House rules for this wall:
+ *   - no station jargon: a seat is "席位 N" with a fixed colour that repeats
+ *     everywhere that seat appears, never an internal key like MM1:3;
+ *   - no own-seat / other-seat colours: a visitor has no "my" seat, so colour
+ *     always means "which seat", never "who owns it";
+ *   - nothing is ever truncated. Columns are measured in pixels and rows are
+ *     dropped in whole units when the box is too short (see trimRows / the
+ *     measured ledger), because half a callsign is worse than no callsign.
+* ============================================================ */
 
 :root {
     --bg: #05080f;
@@ -70,8 +87,11 @@ html, body {
 
 .wall {
     height: 100vh;
-    /* Header and footer grow with the type scale; the body row takes the rest. */
+    /* Header and footer grow with the type scale; the body row takes the rest.
+     * The single column is pinned to the viewport: an unbounded auto track lets
+     * the widest panel (the ledger) widen the whole wall and scroll sideways. */
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
     grid-template-rows: clamp(60px, 7vh, 136px) minmax(0, 1fr) clamp(28px, 3vh, 56px);
     gap: 8px;
     padding: 8px;
@@ -171,48 +191,52 @@ html, body {
 .kpi.mint { --c: var(--mint); --glow: rgba(53, 214, 164, .34); }
 .kpi.cyan { --c: var(--cyan); --glow: rgba(76, 201, 240, .34); }
 .kpi.violet { --c: var(--violet); --glow: rgba(167, 139, 250, .34); }
+.kpi.pink { --c: #f472b6; --glow: rgba(244, 114, 182, .34); }
 
-/* ---------- body: U layout, map in the middle ---------- */
-/* Two full-height rails hug the map and the trend strip closes the U along
- * the bottom of the centre column, so every card wraps the map on three
- * sides. The rails match in width so the map stays centred on screen.
+/* ---------- 主体：五栏，QSO 流水表是视觉焦点 ----------
+ * 给不在打字的人看的：辅助志愿者或参观观众从左往右读——台子正在怎么打
+ * （设备）、信号打到了哪里（地图 + 传播）、谁在话筒前、对手在干什么，
+ * 最后是最宽的流水表，一条已通呼号一行。
  *
- * The map column is content-sized by the pane's own aspect ratio (see
- * .map-panel) and the two rails split whatever width is left, so the pane
- * always fills its cell exactly. The old viewport cap (max-height:
- * 100vh - 220px) shrank the pane on shorter-but-wider windows (1080p with
- * browser chrome, ultrawides) and left a dark band between map and rail. */
+ * 各栏用 fr 配硬下限：1920 px 下流水表能拿到约 740 px，按基准字号量出来
+ * 十二列不用一个省略号；再窄就整列丢掉可选列，而不是把字裁掉（见 renderQsoLog）。 */
 .wall-body {
     display: grid;
-    grid-template-columns: minmax(240px, 1fr) auto minmax(240px, 1fr);
-    /* The trend strip scales with the type scale so the larger radio/rate
-     * text still fits; the map row keeps every remaining pixel. */
-    grid-template-rows: minmax(0, 1fr) clamp(156px, 19vh, 400px);
+    grid-template-columns: minmax(300px, 1.02fr) minmax(272px, .92fr) minmax(286px, .98fr) minmax(272px, .92fr) minmax(560px, 2fr);
+    /* 趋势带压到一屏的 13.5%：四条曲线要的是能看出斜率，不是占掉两成高度。
+     * 省下来的高度全部还给上面五栏的列表，那里每一行都是实打实的席位。 */
+    grid-template-rows: minmax(0, 1fr) clamp(118px, 13.5vh, 300px);
     grid-template-areas:
-        "left map right"
-        "left trend right";
+        "people rig map score log"
+        "trend trend trend trend trend";
     gap: 8px;
     min-height: 0;
-    container-type: inline-size;
 }
+.col {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-height: 0;
+    min-width: 0;
+    /* Never paint over the trend strip: a short viewport trims rows instead
+     * (see trimRows), and anything left over is clipped here rather than
+     * drawn on top of the score curve. */
+    overflow: hidden;
+}
+.col-people { grid-area: people; }
+.col-rig { grid-area: rig; }
+.col-map { grid-area: map; }
+.col-score { grid-area: score; }
+.col-log { grid-area: log; }
 
 .map-panel {
-    grid-area: map;
     position: relative;
-    justify-self: start;
-    /* Height comes from the row the layout hands out, width follows the
-     * ratio, so the pane is never wider than the space it was given: one
-     * world fitted to the width needs height >= 0.687 x width to keep every
-     * coastline and part of Antarctica in view. 1.40 leaves ~13 px of the
-     * Antarctic peninsula visible instead of the ~4 px a 1.44 ratio gives.
-     * max-width keeps both rails at their 240 px minimum on tall, narrow
-     * windows. */
-    height: 100%;
-    width: auto;
-    aspect-ratio: 1.40 / 1;
-    max-width: calc(100cqw - 496px);
-    min-width: 0;
-    min-height: 0;
+    /* The coverage map is deliberately demoted to a supporting panel: it has
+     * to prove that the calls in the ledger land on real places, and nothing
+     * else. It takes barely a quarter of the column; the propagation
+     * readouts below it get the rest of the height. */
+    flex: 1.25 1 0;
+    min-height: 110px;
     background: #08111c;
     /* No border and no radius: a 1px frame hugging the raster reads as a black
      * edge around the map, which the wall display must not show. */
@@ -223,6 +247,10 @@ html, body {
 /* One world is fitted to the full pane width, so the raster reaches both
  * edges and only vertical ocean bands are cropped. */
 #map { position: absolute; inset: 0; background: #08111c; }
+
+/* 传播读数比地图更值得占高度：观众要读的是 SFI/K/A、MUF 和各段通不通，
+ * 地图只要能证明落点是真地方。 */
+.group.grow.env-group { flex: 1.85 1 0; }
 
 .layer-tag {
     position: absolute;
@@ -276,24 +304,9 @@ html, body {
     filter: drop-shadow(0 0 2px rgba(0, 0, 0, .9));
 }
 
-/* ---------- rail ---------- */
-.rail {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    min-height: 0;
-    min-width: 0;
-    /* Never paint over the trend strip: a short viewport trims rows instead
-     * (see trimRows), and anything left over is clipped here rather than
-     * drawn on top of the score curve. */
-    overflow: hidden;
-}
-.rail-left { grid-area: left; }
-.rail-right { grid-area: right; }
-
 /* A group is one category: a labelled rule plus the cards that belong to it.
- * The labelled groups keep environment / station / score / opponents apart
- * even though they share the two rails. */
+ * The labelled groups keep rig / propagation / results / opponents apart even
+ * though they share the columns. */
 .group {
     display: flex;
     flex-direction: column;
@@ -305,6 +318,7 @@ html, body {
 .group-head {
     display: flex;
     align-items: baseline;
+    flex-wrap: wrap;
     gap: 6px;
     margin: 0;
     padding: 0 2px 3px;
@@ -315,23 +329,26 @@ html, body {
     border-bottom: 1px solid var(--line);
 }
 .group-head span { font-size: var(--fs-micro); letter-spacing: 1.5px; color: rgba(124, 140, 163, .45); }
+/* Inline key next to a panel title: the reader never has to hunt for the
+ * legend, so decoding the wall does not interrupt reading it. */
+.group-head .legend-hint {
+    font-style: normal;
+    font-size: var(--fs-micro);
+    letter-spacing: .4px;
+    color: rgba(124, 140, 163, .75);
+    margin-left: auto;
+    white-space: normal;
+}
+.group-head .legend-hint + .legend-hint { margin-left: 0; }
 
-/* Trend strip: the base of the U, five cards under the map (station nameplates,
- * the cumulative score curve, the live rate and the two minute-level charts).
- * The row is a fixed content strip, so the map row above it absorbs every
- * remaining pixel of the screen. Inline-size containment keeps the cards from
- * widening the shared column: the column must be exactly as wide as the map
- * pane, otherwise the strip's content would push the column wider and leave a
- * gap beside the map. */
+/* Trend strip: the full-width base of the wall. Four charts on one time axis
+ * answer the only question a visitor asks after the score: how fast is it
+ * growing right now, and can it go faster? Inline-size containment keeps the
+ * cards from widening the shared grid columns. */
 .trend {
     grid-area: trend;
     display: grid;
-    /* The station card and the score curve carry the most information and get
-     * the widest slots; the rate card keeps enough for its headline number and
-     * the two minute charts stay narrow. The station slot has to hold two
-     * columns of nameplates — band, frequency, mode and operator on every one —
-     * so it gets the largest share or the figures start ellipsizing. */
-    grid-template-columns: 2.5fr 1.35fr .95fr .8fr .8fr;
+    grid-template-columns: 1.6fr 1fr 1fr 1fr;
     gap: 8px;
     min-height: 0;
     contain: inline-size;
@@ -354,9 +371,9 @@ html, body {
 }
 .card h3 span { margin-left: 4px; font-size: var(--fs-micro); letter-spacing: 0; color: rgba(124, 140, 163, .55); }
 
-/* space weather: the card is a fixed slice of the rail, so the eight cells are
- * single-line (label left, figure right) instead of stacked. That halves the
- * grid height and leaves the rest of the card to the SFI trend canvas. */
+/* space weather: the card is a fixed slice of the map column, so the eight
+ * cells are single-line (label left, figure right) instead of stacked. That
+ * halves the grid height and leaves the rest of the card to the SFI trend. */
 .card.sw-card {
     flex: 1 1 0;
     display: flex;
@@ -395,8 +412,8 @@ html, body {
 /* band conditions: eight bands as four columns by two rows, and every tile is
  * two lines — "band + condition" on the first line, a three-step condition meter
  * underneath. The stacked variant needed four rows and pushed the whole
- * environment group past the bottom of the rail on a short viewport. */
-.card.bandcard { flex: 1 1 0; overflow: hidden; }
+ * environment group past the bottom of the column on a short viewport. */
+.card.bandcard { flex: 1.35 1 0; overflow: hidden; }
 .band-bar {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -424,9 +441,11 @@ html, body {
     font-size: var(--fs-micro);
     letter-spacing: .3px;
     text-align: right;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    /* 传播状态词在不同语言里长短不一（如「propagation perturbée」），
+     * 宁可折行也绝不省略号——观众看到 "prop…" 反而是噪音。 */
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.15;
 }
 .band .meter {
     grid-column: 1 / -1;
@@ -448,48 +467,13 @@ html, body {
 .band.poor .meter u.on { background: var(--poor); }
 .band.closed { opacity: .4; }
 
-/* radio cards: the station card lives in the bottom strip now, so the grid
- * fills its height as a 2x2 block; each cell carries three short lines so the
- * name, frequency and band/mode stay readable without clipping. */
-.card.radios-card { display: flex; flex-direction: column; overflow: hidden; }
-.radios {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    /* auto（而不是 1fr）：行高由内容决定，空间富余时 align-content 的 stretch
-     * 会把多余高度均摊给各行，空间不足时铭牌会溢出容器而不是被压扁，
-     * 由 trimRows 删掉放不下的席位并标 "+N"。 */
-    grid-auto-rows: auto;
-    gap: 5px;
-    flex: 1 1 0;
-    min-height: 0;
-    overflow: hidden;
-}
-.radios .rows-more { grid-column: 1 / -1; }
-.radio {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    gap: 0;
-    padding: clamp(2px, 0.3vh, 4px) clamp(4px, 0.55vh, 8px);
-    background: var(--panel-2);
-    border: 1px solid var(--line);
-    border-inline-start: 3px solid var(--accent);
-    border-radius: 5px;
-    min-width: 0;
-    overflow: hidden;
-}
-.radio.tx { border-inline-start-color: var(--poor); }
-.radio label { font-size: var(--fs-micro); line-height: 1.15; letter-spacing: .5px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.radio b { font-size: var(--fs-body); line-height: 1.15; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.radio span { font-size: var(--fs-micro); line-height: 1.15; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
 /* QSO rate: the headline number stays, but the hourly history is drawn as a
  * line so the card shows a shape instead of two bare figures. */
 .card.rate { display: flex; flex-direction: column; overflow: hidden; }
 /* The per-minute figure sits under the headline instead of beside it: at the
  * larger scale the pair no longer fits on one line in a narrow rate card. */
 .rate-nums { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; }
-.rate-nums b { font-size: var(--fs-headline); font-weight: 600; color: var(--accent); line-height: 1.1; }
+.rate-nums b { font-size: clamp(26px, 3.4vh, 60px); font-weight: 600; color: var(--accent); line-height: 1.08; }
 .rate-nums span { flex: 1 1 100%; font-size: var(--fs-small); color: var(--dim); white-space: nowrap; }
 .rate-nums i { font-style: normal; font-size: var(--fs-body); font-weight: 600; color: var(--text); }
 .card.rate canvas {
@@ -515,26 +499,8 @@ html, body {
     min-height: 0;
     overflow: hidden;
 }
-/* 行高由字号决定，不允许被压扁；放不下由 trimRows 删行并标 "+N"。 */
-.hbar {
-    flex: 0 0 auto;
-    display: grid;
-    grid-template-columns: clamp(52px, 6.0vh, 120px) minmax(0, 1fr) clamp(30px, 3.5vh, 66px);
-    align-items: center;
-    gap: clamp(4px, 0.5vh, 12px);
-    font-size: var(--fs-small);
-}
-.hbar .k { color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.hbar .track {
-    display: block;
-    height: clamp(6px, 0.75vh, 15px);
-    border-radius: 4px;
-    background: rgba(122, 168, 255, .12);
-    overflow: hidden;
-}
-.hbar .track > i { display: block; height: 100%; border-radius: 4px; background: var(--accent); }
-.hbar em { font-style: normal; text-align: right; font-size: var(--fs-body); font-weight: 600; color: var(--text); }
-/* 被裁掉的行数标记：一屏放不下的行不是消失，而是明确标出还剩多少。 */
+/* 被裁掉的行数标记：一屏放不下的行不是消失，而是明确标出还剩多少；
+ * 行高由字号决定，不允许被压扁，放不下由 trimRows 删行。 */
 .rows-more {
     flex: 0 0 auto;
     font-family: var(--mono);
@@ -584,7 +550,7 @@ html, body {
     transition: opacity .22s ease;
 }
 .spark canvas.switching { opacity: .12; }
-/* The space-weather card shares its rail slice with the band grid, so its
+/* space weather: the card shares its column slice with the band grid, so its
  * canvas only needs a readable trend line, not a full-size chart. */
 .card.sw-card .spark { margin-top: clamp(3px, 0.4vh, 7px); }
 .card.sw-card .spark canvas { min-height: 18px; }
@@ -624,23 +590,30 @@ html, body {
 }
 
 /* ============================================================
- * 台站设备组：天线指向罗盘 / 天线使用矩阵 / 波段占用矩阵
+ * 天线指向罗盘 / 天线归属 / 波段占用
  * ============================================================ */
-.card.rotor-card { flex: 1.2 1 0; display: flex; flex-direction: column; overflow: hidden; }
+.card.rotor-card { flex: 1 1 0; display: flex; flex-direction: column; overflow: hidden; }
 .card.matrix-card,
 .card.occ-card { display: flex; flex-direction: column; overflow: hidden; }
-.card.matrix-card { flex: 1.45 1 0; }
-.card.occ-card { flex: .95 1 0; }
+/* 天线归属一行一副天线，要能装下整套天线；波段占用每行有「波段+占比条」和
+ * 「谁在这一段」两行信息，由自己那一栏整段高度兜住。 */
+.card.matrix-card { flex: 1.55 1 0; }
+.card.occ-card { flex: 1 1 0; }
+/* 战况栏：波段占用给足一整列的段数，对手监测占剩下的部分。 */
+.col-score .group.grow { flex: 1 1 0; }
+/* 波段占用是这段的主角：十一段都要落在同一屏里，所以它拿大头，
+ * 对手监测卡只要放得下前两名对手就够观众读懂态势。 */
+.col-score .group.grow:first-of-type { flex: 2.05 1 0; }
 
 /* ---------- 天线指向：一圈刻度 + 一根实心指针 ---------- */
 /* 罗盘用 SVG 画，刻度、方位字母和指针都跟着 --c 走，转动中的天线指针发烫。 */
-/* 一列一行放不下就换成两行，两行会把罗盘压扁，所以固定单行：
- * 席位多的时候每个表盘变窄，刻度环自适应，读数仍在同一水平线上。 */
+/* 表盘按可用宽度自动排：一个放得下就一行一个，放不下就折行，
+ * 每个表盘的刻度环自适应，读数始终在同一水平线上。 */
 .dials {
     display: grid;
-    grid-auto-flow: column;
-    grid-auto-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(0, 1fr);
+    grid-template-columns: repeat(auto-fill, minmax(clamp(84px, 8.6vh, 138px), 1fr));
+    grid-auto-rows: minmax(64px, 1fr);
+    align-content: start;
     gap: clamp(3px, 0.45vh, 8px);
     flex: 1 1 0;
     min-height: 0;
@@ -696,22 +669,35 @@ html, body {
     text-align: center;
     flex: 0 0 auto;
 }
+/* 天线名与席位标签一律允许折行：宁可占两行高度，也不显示半个天线名。 */
 .dial .dial-name,
 .dial .dial-seat {
     font-style: normal;
     font-size: var(--fs-micro);
-    line-height: 1.15;
+    line-height: 1.12;
     max-width: 100%;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    white-space: normal;
+    overflow-wrap: anywhere;
     text-align: center;
     flex: 0 0 auto;
 }
 .dial .dial-name { color: var(--dim); }
-.dial .dial-seat { color: rgba(122, 168, 255, .6); letter-spacing: .5px; }
-.dial.owned { border-color: rgba(255, 179, 71, .42); background: rgba(255, 179, 71, .06); }
-.dial.owned .dial-seat { color: var(--amber); }
+/* 席位标签前面点一个该席位颜色的圆点，和席位卡/QSO 流水同一个色。 */
+.dial .dial-seat { color: var(--seat, rgba(124, 140, 163, .7)); letter-spacing: .3px; }
+.dial .dial-seat.has-seat::before {
+    content: '';
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--seat, var(--dim));
+    margin-inline-end: 3px;
+    vertical-align: middle;
+}
+/* 有人用的天线：左侧一条席位色竖标，指针热色；没人用的天线压暗。 */
+.dial.used { border-inline-start: 3px solid var(--seat, var(--accent)); }
+.dial.unused { opacity: .5; }
+/* 天线正在转动：整块罗盘呼吸式发光，观众一眼看出「这副天线在动」。 */
 .dial.moving svg { animation: dialSweep 1.8s ease-in-out infinite; }
 .dial.settled .dial-seat { color: var(--mint); }
 @keyframes dialSweep {
@@ -719,11 +705,91 @@ html, body {
     50% { filter: drop-shadow(0 0 6px rgba(255, 179, 71, .55)); }
 }
 
-/* ---------- 占用矩阵（波段 / 天线共用一套栅格） ---------- */
-/* 两张矩阵卡共用一套栅格。行高由字号决定、不参与收缩，一屏放不下的行由
- * trimRows 删掉并在页脚标出剩余数量；名称列宽度用变量分开，天线名比波段
- * 标签需要长得多的列。 */
-.matrix {
+/* ---------- 席位卡：谁在第几号机上 ----------
+ * 观众不需要知道 MM1:3 这类内部标识，只需要「席位 N + 当前操作员呼号 + 现在
+ * 打什么频率」。整张卡左侧的竖条与圆点就是该席位的颜色，这个颜色在席位卡、
+ * 天线归属、波段占用、QSO 流水和地图连线里始终代表同一个席位。 */
+.card.seats-card { flex: 1.5 1 0; }
+.seats {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(3px, 0.4vh, 7px);
+    flex: 1 1 0;
+    min-height: 0;
+    overflow: hidden;
+}
+.seat {
+    --seat: var(--dim);
+    flex: 0 0 auto;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0 7px;
+    padding: 3px 7px 3px 5px;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-inline-start: 3px solid var(--seat);
+    border-radius: 5px;
+}
+.seat-dot {
+    flex: 0 0 auto;
+    width: clamp(8px, 1vh, 17px);
+    height: clamp(8px, 1vh, 17px);
+    border-radius: 50%;
+    background: var(--seat);
+    box-shadow: 0 0 9px -1px var(--seat);
+}
+.seat-text { min-width: 0; display: flex; flex-direction: column; }
+.seat-text b {
+    font-size: var(--fs-body);
+    font-weight: 700;
+    line-height: 1.18;
+    /* 呼号与中文席位名一起允许折行：宁可两行也不出现半个呼号。 */
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+.seat-text b i {
+    font-style: normal;
+    font-size: var(--fs-micro);
+    font-weight: 700;
+    letter-spacing: .4px;
+    color: var(--seat);
+    margin-inline-end: 4px;
+}
+.seat-text span {
+    font-family: var(--mono);
+    font-size: var(--fs-micro);
+    line-height: 1.25;
+    color: var(--dim);
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+.seat-text em { font-style: normal; color: var(--amber); }
+.seat-num {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    line-height: 1.05;
+}
+.seat-num b { font-family: var(--mono); font-size: var(--fs-body); font-weight: 700; }
+.seat-num span { font-size: var(--fs-micro); letter-spacing: .5px; color: var(--dim); }
+/* 正在发射的席位：底色点亮 + 圆点呼吸，隔着房间也能看出哪台机在打。 */
+.seat.tx { background: rgba(53, 214, 164, .07); }
+.seat.tx .seat-dot { animation: seatPulse 1.5s ease-in-out infinite; }
+@keyframes seatPulse {
+    0%, 100% { box-shadow: 0 0 4px -1px var(--seat); transform: scale(1); }
+    50% { box-shadow: 0 0 14px 1px var(--seat); transform: scale(1.18); }
+}
+/* 这台机今天没人打（离线）：整块压暗，但仍占一行，观众知道它是空的。 */
+.seat.idle { opacity: .58; }
+
+/* ---------- 天线归属：一行一副天线，行尾是此刻用它的那几个席位 ----------
+ * 以前的「天线 × 席位」矩阵要观众同时读横竖两轴才知道色块是什么意思；现在
+ * 直接把结论写出来：天线名 + 谁在用它。行高由内容决定、不参与收缩，放不下
+ * 的整行由 trimRows 删掉并在页脚标出剩余数量；天线名允许折行，绝不裁字。
+ * 左侧竖条是该天线当前所在波段的波段色。 */
+.ants {
     display: flex;
     flex-direction: column;
     gap: clamp(2px, 0.26vh, 5px);
@@ -731,91 +797,157 @@ html, body {
     min-height: 0;
     overflow: hidden;
 }
-.occ-row {
-    display: grid;
-    grid-template-columns: var(--label-w, clamp(30px, 3.6vh, 60px)) repeat(var(--cols, 1), minmax(0, 1fr));
-    align-items: stretch;
-    gap: 3px;
-    /* 行高由内容决定：被 flex 压扁会让上下两行的文字叠在一起。 */
+.ant-row {
+    --c: rgba(122, 168, 255, .22);
     flex: 0 0 auto;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 2px 6px;
+    padding: 2px 6px 3px 5px;
+    background: var(--panel-2);
+    border-inline-start: 3px solid var(--c);
+    border-radius: 4px;
 }
-.occ-row.occ-head,
-.occ-row.ant-head { flex: 0 0 auto; }
-.occ-row.occ-head b,
-.occ-row.ant-head b {
-    font-family: var(--mono);
+.ant-row.free { opacity: .66; }
+.ant-name {
+    flex: 1 1 90px;
+    min-width: 0;
     font-size: var(--fs-micro);
     font-weight: 600;
-    letter-spacing: .5px;
-    text-align: center;
-    color: rgba(124, 140, 163, .85);
-    min-width: 0;
-    overflow: hidden;
+    line-height: 1.2;
+    color: var(--text);
+    white-space: normal;
+    overflow-wrap: anywhere;
 }
-.occ-tag { display: block; min-width: 0; }
-b.occ-tag {
-    display: flex;
+/* 席位徽章 = 色点 + 「席位 N」。这个色在全墙一致：席位卡、天线归属、波段
+ * 占用、QSO 流水和地图连线用同一个颜色代表同一个席位，观众跟着颜色走即可。
+ * 正在发射的席位整块点亮。 */
+.seat-badge {
+    --seat: var(--dim);
+    display: inline-flex;
     align-items: center;
     gap: 3px;
-    font-family: var(--mono);
     font-size: var(--fs-micro);
-    font-weight: 700;
-    letter-spacing: .3px;
-    color: var(--text);
+    padding: 0 5px 0 4px;
+    /* 徽章是波段行的高度上限：行高从 21 收到 17，十一段波段才挤得进同一张卡。 */
+    line-height: 1.2;
+    border-radius: 999px;
+    color: var(--seat);
+    border: 1px solid var(--seat);
+    background: rgba(122, 168, 255, .05);
     white-space: nowrap;
-    overflow: hidden;
 }
-b.occ-tag::before {
+.seat-badge::before {
     content: '';
     flex: 0 0 auto;
-    width: 4px;
-    height: clamp(7px, 1.0vh, 18px);
-    border-radius: 2px;
-    background: var(--c, var(--accent));
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--seat);
 }
-.occ-cell {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 0;
-    min-height: 0;
-    border-radius: 4px;
-    background: rgba(122, 168, 255, .07);
-    border: 1px solid rgba(122, 168, 255, .08);
-}
-.occ-cell u {
-    font-size: var(--fs-micro);
-    text-decoration: none;
-    letter-spacing: .3px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 100%;
-}
-.occ-cell.on {
-    background: var(--c, var(--accent));
-    border-color: transparent;
+.seat-badge.tx {
+    background: var(--seat);
     color: #050c14;
-}
-.occ-cell.on u { font-weight: 700; }
-.occ-cell.on.tx {
-    border-color: #fff;
+    font-weight: 700;
     animation: txFlash 1.5s ease-in-out infinite;
+}
+.ant-badges { display: flex; flex-wrap: wrap; gap: 3px; }
+.ant-idle {
+    font-style: normal;
+    font-size: var(--fs-micro);
+    color: rgba(124, 140, 163, .62);
+    white-space: nowrap;
 }
 @keyframes txFlash {
     0%, 100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, .0); }
-    50% { box-shadow: 0 0 0 2px rgba(255, 255, 255, .55), 0 0 12px rgba(255, 255, 255, .35); }
+    50% { box-shadow: 0 0 0 2px rgba(255, 255, 255, .5), 0 0 10px rgba(255, 255, 255, .3); }
 }
+
+/* ---------- 波段占用：一行一个波段 ----------
+ * 第一行读完「这个波段通了多少、占比多大」，第二行读完「此刻谁在这个波段
+ * 上」。波段名保持自己的波段色，席位徽章用席位色，两套颜色互不冲突。 */
+.bands {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(2px, 0.26vh, 5px);
+    flex: 1 1 0;
+    min-height: 0;
+    overflow: hidden;
+}
+.band-row {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    /* 波段占用一共十一段，卡片高度只有三百多像素：每一段必须压到三十四像素
+     * 以内才放得下，所以行距与内边距都收到最小，宁可紧一点也不让最后几段消失。 */
+    gap: 0;
+    padding: 1px 6px 2px;
+    background: var(--panel-2);
+    border-radius: 4px;
+}
+.band-top {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 7px;
+}
+.band-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-family: var(--mono);
+    font-size: var(--fs-small);
+    font-weight: 700;
+    letter-spacing: .3px;
+    color: var(--c, var(--text));
+    white-space: nowrap;
+}
+.band-tag::before {
+    content: '';
+    flex: 0 0 auto;
+    width: 4px;
+    height: clamp(8px, 1.1vh, 19px);
+    border-radius: 2px;
+    background: var(--c, var(--accent));
+}
+.band-gauge {
+    display: block;
+    height: clamp(6px, 0.75vh, 14px);
+    border-radius: 4px;
+    background: rgba(122, 168, 255, .12);
+    overflow: hidden;
+}
+.band-gauge i {
+    display: block;
+    height: 100%;
+    border-radius: 4px;
+    background: var(--c, var(--accent));
+    box-shadow: 0 0 8px -2px var(--c, var(--accent));
+}
+.band-count {
+    font-family: var(--mono);
+    font-size: var(--fs-small);
+    font-weight: 700;
+    color: var(--text);
+    white-space: nowrap;
+}
+.band-count em { font-style: normal; color: var(--dim); font-weight: 400; }
+.band-live { display: flex; flex-wrap: wrap; gap: 3px; }
+.band-row.silent { opacity: .5; }
+.band-row.live .band-tag::before { animation: txFlash 1.5s ease-in-out infinite; }
+/* 卡片页脚：只剩「空闲」与「发射中」两种状态说明；颜色一律由席位决定，
+ * 不再有「本席/他席」这种只有操作员本人视角才成立的图例。 */
 .occ-legend {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 3px 7px;
+    gap: 3px 8px;
     margin-top: auto;
     flex: 0 0 auto;
-    line-height: 1.1;
+    line-height: 1.2;
     font-size: var(--fs-micro);
-    letter-spacing: .5px;
+    letter-spacing: .3px;
     color: var(--dim);
 }
 .occ-legend .lg {
@@ -826,47 +958,17 @@ b.occ-tag::before {
     margin-right: 3px;
     vertical-align: middle;
 }
-.occ-legend .lg.mine { background: var(--red); }
-.occ-legend .lg.other { background: var(--yellow); }
-.occ-legend .lg.idle { background: rgba(53, 214, 164, .28); border: 1px solid rgba(53, 214, 164, .55); }
-.occ-legend .lg.on { background: var(--accent); }
-.occ-legend .lg.tx { background: var(--accent); border: 1px solid #fff; }
-.occ-legend .more { font-style: normal; margin-left: auto; color: rgba(124, 140, 163, .6); }
-
-/* 天线行：名称列宽、色块列等宽，色块即「这副天线此刻归谁」。
- * 支持的波段只留在 title 里——单独一行的波段徽章会让每行变成两行高度，
- * 七副天线就把整张卡撑出栏外。 */
-/* 天线名是矩阵唯一可索引的列，「40M 八木 2 单元 ★」这类长名要完整读得出来。 */
-.card.matrix-card .occ-row { --label-w: clamp(104px, 12vh, 220px); }
-.card.occ-card .occ-row { --label-w: clamp(40px, 4.6vh, 74px); }
-.ant-row { align-items: center; }
-.ant-name {
-    font-size: var(--fs-micro);
-    font-weight: 600;
-    line-height: 1.1;
-    color: var(--text);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    min-width: 0;
-}
-.ant-cell {
-    height: clamp(8px, 1.15vh, 22px);
-    min-height: 0;
-    border-radius: 3px;
-    background: rgba(53, 214, 164, .16);
-    border: 1px solid rgba(53, 214, 164, .4);
-}
-.ant-cell.mine { background: var(--red); border-color: rgba(255, 107, 107, .8); }
-.ant-cell.other { background: var(--yellow); border-color: rgba(232, 197, 71, .8); }
+.occ-legend .lg.idle { background: rgba(122, 168, 255, .18); }
+.occ-legend .lg.tx { background: #fff; }
+.occ-legend .more { font-style: normal; margin-inline-start: auto; color: rgba(124, 140, 163, .6); }
 
 /* ---------- 各操作员：呼号 + 占比条 + 分数 + 静默时长 ---------- */
 .oprows { gap: clamp(3px, 0.45vh, 9px); justify-content: flex-start; }
 .opbar {
     display: grid;
-    /* The callsign column gets the width the silent-forget column can spare:
-     * an operator reads names first, and "5m" is legible in 30 px. */
-    grid-template-columns: clamp(66px, 7vh, 140px) minmax(0, 1fr) clamp(26px, 3vh, 52px)
+    /* 呼号列同 .hbar：宽度由 JS 量出来后写入 --label-w，绝不裁字；
+     * 其余各列（占比条、QSO、分数、静默）保持右对齐，方便竖着比大小。 */
+    grid-template-columns: var(--label-w, clamp(66px, 7vh, 140px)) minmax(0, 1fr) clamp(26px, 3vh, 52px)
         clamp(34px, 4.2vh, 72px) clamp(24px, 2.8vh, 46px);
     align-items: center;
     gap: clamp(3px, 0.42vh, 10px);
@@ -879,9 +981,10 @@ b.occ-tag::before {
     letter-spacing: .4px;
     color: var(--c);
     white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
 }
+/* 名称列超过半栏宽时（例如"席位 12 BG7TVQ-15"），允许整字折成两行，
+ * 由 trimRows 少放一行来补偿——宁可少一人，也绝不显示半个呼号。 */
+.oprows.long .opbar .k { white-space: normal; line-height: 1.15; }
 .opbar .track {
     display: block;
     height: clamp(8px, 0.95vh, 18px);
@@ -933,91 +1036,109 @@ b.occ-tag::before {
 .chart-head .dot.score { background: var(--amber); box-shadow: 0 0 8px rgba(255, 179, 71, .6); }
 .chart-head .dot.qso { background: var(--mint); box-shadow: 0 0 8px rgba(53, 214, 164, .6); }
 
-/* ---------- 席位铭牌 ----------
- * 底部横带的电台格改成铭牌：两行读完「哪台机、什么波段、多少频率、什么模式、
- * 谁在打」。左侧色条就是当前波段色，发射时整块点亮，停机的席位压暗。 */
-.radio.plate {
-    gap: 0;
-    border-inline-start: 3px solid var(--c, var(--accent));
-    background: linear-gradient(180deg, rgba(122, 168, 255, .07), rgba(122, 168, 255, 0)), var(--panel-2);
-}
-.radio.plate label {
-    display: flex;
-    align-items: baseline;
-    gap: 5px;
-}
-.radio.plate label em {
-    margin-inline-start: auto;
-    font-style: normal;
-    font-family: var(--mono);
-    font-weight: 700;
-    font-size: var(--fs-micro);
-    line-height: 1.25;
-    padding: 0 4px;
-    border-radius: 3px;
-    color: var(--c, var(--accent));
-    border: 1px solid currentColor;
-    white-space: nowrap;
-    flex: 0 0 auto;
-}
-.radio.plate.tx {
-    border-inline-start-color: var(--poor);
-    background: linear-gradient(180deg, rgba(228, 87, 46, .22), rgba(228, 87, 46, 0)), var(--panel-2);
-}
-.radio.plate.tx label em { color: var(--poor); }
-.radio.plate.idle { opacity: .42; }
-.plate-freq {
-    display: flex;
-    align-items: baseline;
-    gap: 3px;
-    min-width: 0;
-}
-.plate-freq b {
-    font-family: var(--mono);
-    font-size: clamp(13px, 1.8vh, 34px);
-    font-weight: 700;
-    line-height: 1.06;
-    letter-spacing: -.5px;
-    color: var(--text);
-    white-space: nowrap;
-    /* 频率是铭牌上最要紧的数字，绝不参与收缩——收缩只留给操作员呼号。 */
-    flex: 0 0 auto;
-}
-.plate-freq span {
-    font-size: var(--fs-micro);
-    color: var(--dim);
-    white-space: nowrap;
-    flex: 0 0 auto;
-}
-.plate-freq .mode {
-    margin-inline-start: auto;
-    font-style: normal;
-    font-size: var(--fs-micro);
-    font-weight: 600;
-    letter-spacing: .5px;
-    color: var(--dim);
-    white-space: nowrap;
-    flex: 0 0 auto;
-}
-.plate-freq .op {
-    font-style: normal;
-    font-family: var(--mono);
-    font-weight: 700;
-    font-size: var(--fs-tiny);
-    letter-spacing: .4px;
-    color: var(--accent);
-    white-space: nowrap;
+/* ---------- QSO 流水（观众墙的主角） ----------
+ * 一条通联一行，12 个实测列：时间 / 席位 / 操作员 / 呼号 / 波段 / 频率 /
+ * 模式 / 报告 / 交换 / 网格 / 国家 / 分。列宽先让浏览器用 max-content 自己
+ * 排一遍，再读回每列的实际像素写进 --cols，所以这一屏不会出现半个呼号；
+ * 宽度不够时先丢可选列（频率→网格→交换→操作员），再缩字号，最后才整行
+ * 删除并在末尾标 "+N"。席位列的圆点就是该席位在席位卡/天线/地图上的同色。 */
+.card.log-card { flex: 1 1 0; display: flex; flex-direction: column; overflow: hidden; }
+.qso-log {
+    --cols: 62px 54px 66px 78px 34px 56px 34px 40px 60px 44px 34px 30px;
+    flex: 1 1 0;
+    min-height: 0;
     overflow: hidden;
-    text-overflow: ellipsis;
-    min-width: 0;
-    flex: 0 1 auto;
+    display: flex;
+    flex-direction: column;
 }
+.qso-head,
+.qso-row {
+    display: grid;
+    grid-template-columns: var(--cols);
+    gap: 0 6px;
+    align-items: baseline;
+    padding-inline: 3px;
+    flex: 0 0 auto;
+}
+.qso-head {
+    padding-block: 0 3px;
+    margin-bottom: 2px;
+    border-bottom: 1px solid var(--line);
+    font-size: var(--fs-micro);
+    letter-spacing: .3px;
+    color: var(--dim);
+}
+.qso-head .num { text-align: right; }
+.qso-row {
+    padding-block: 1px 1px;
+    font-family: var(--mono);
+    font-size: var(--fs-row, var(--fs-small));
+    line-height: 1.3;
+    border-bottom: 1px solid rgba(122, 168, 255, .055);
+}
+.qso-row:nth-child(odd) { background: rgba(122, 168, 255, .035); }
+.qso-row .call { color: var(--text); font-weight: 700; }
+.qso-row .num { text-align: right; }
+.qso-row .dim { color: rgba(124, 140, 163, .85); }
+.qso-row .seat-cell {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--seat, var(--dim));
+    white-space: nowrap;
+}
+.qso-row .seat-cell::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--seat, var(--dim));
+    flex: 0 0 auto;
+}
+.qso-row .score { color: var(--mint); font-weight: 700; }
+/* 倍率星标 ★ 不在等宽字体里，浏览器会回退到中文字形，行盒因此被撑到 30px 高。
+ * 钉成 inline-block 并把 line-height 收到 1，它就只能占自己那一小格，
+ * 一行始终是一行——流水卡靠这个才装得下三十条通联。 */
+.qso-row .score i {
+    display: inline-block;
+    font-style: normal;
+    font-size: .92em;
+    line-height: 1;
+    vertical-align: -.06em;
+    color: var(--amber);
+    margin-inline-start: 2px;
+}
+/* 新通联上屏时整行绿闪一下再熄灭，观众能看见"刚刚打进一条"。 */
+.qso-row.fresh { animation: qsoIn 2.8s ease-out 1; }
+@keyframes qsoIn {
+    from { background: rgba(53, 214, 164, .34); }
+    to { background: rgba(53, 214, 164, 0); }
+}
+.qso-empty {
+    margin-block: auto;
+    font-size: var(--fs-small);
+    text-align: center;
+    color: rgba(124, 140, 163, .55);
+}
+.qso-log .rows-more { margin-top: 2px; }
 
 /* opponents: one big card per rival, one small cell per active band.
  * Every list rule lives in shared/opponents/opponents.css so the OP view
  * renders the identical markup; only the wall card inset stays here. */
 .card.opp-card {
     padding: 7px;
+    overflow: hidden;
+}
+/* 观众墙零裁切家规：共享的对手样式（OP 端也用它）里有呼号胶囊与方位词用了
+ * 省略号，这里在墙内改成整字换行——呼号本来就短，只有极窄栏才会折，
+ * 但绝不会出现 "DL7A…" 这种半个呼号。 */
+.card.opp-card .oc-head { flex-wrap: wrap; row-gap: 2px; }
+.card.opp-card .oc-head b,
+.card.opp-card .ob-dir em {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+    overflow-wrap: anywhere;
 }
 
 /* ---------- footer ---------- */
@@ -1048,67 +1169,73 @@ b.occ-tag::before {
 
 /* ---------- short viewports ----------
  * A 1080p wall is the design target. Below ~900 px of usable height (a laptop
- * preview, a browser with toolbars) the rails stop making room for decoration:
- * the band badge already names the band, so the "MHz" unit, the redundant seat
- * caption on unclaimed dials and the occupancy legend hand their pixels back to
- * the figures. Nothing is clipped — the elements are simply dropped. The
- * nameplates keep every field, so they collapse to a single-line list instead
- * of two stacked lines, and the trend strip tightens its titles and headline. */
+ * preview, a browser with toolbars) the panels give back decoration instead of
+ * content: rows lose their padding, the trend strip tightens its titles. No
+ * field is dropped and nothing is clipped — when a box still cannot hold every
+ * row, trimRows removes whole rows and marks "+N", and the QSO ledger falls
+ * back to fewer measured rows rather than shorter text. */
 @media (max-height: 900px) {
-    .wall-body { grid-template-rows: minmax(0, 1fr) clamp(132px, 16.5vh, 400px); }
-    .plate-freq span { display: none; }
-    /* 席位铭牌：两列网格在这里放不下「名称+波段」与「频率+模式+操作员」两行
-     * （每行需要 ~33 px，只有 ~26 px），改成单列一行读完，五个席位全留得下。 */
-    .radios {
-        grid-template-columns: minmax(0, 1fr);
-        gap: 2px;
-    }
-    .radio.plate {
-        flex-direction: row;
-        align-items: baseline;
-        gap: 8px;
-        padding-block: 0;
-    }
-    .radio.plate label { flex: 0 1 auto; min-width: 0; gap: 4px; line-height: 1.3; }
-    .radio.plate label em { line-height: 1; padding: 0 3px; }
-    .plate-freq { flex: 1 1 auto; }
-    .plate-freq b { line-height: 1; }
-    .dial .dial-seat { display: none; }
-    .card.sw-card .sw-dots { display: none; }
-    .card.sw-card .spark .chart-head { display: none; }
+    .wall-body { grid-template-rows: minmax(0, 1fr) clamp(104px, 13vh, 300px); }
+    .seats { gap: 3px; }
+    .seat { padding: 2px 6px 2px 4px; gap: 0 7px; }
+    .seat-text span { line-height: 1.1; }
+    .ants,
+    .bands { gap: 2px; }
+    .ant-row,
+    .band-row { padding: 1px 5px 2px 4px; }
+    .qso-head { padding-block: 0 2px; margin-bottom: 1px; }
+    .qso-row { padding-block: 0 1px; }
     /* 速率卡放不下 7 px：把趋势带的小标题与主数字收紧，迷你图才有整条高度。 */
     .trend .card h3 { font-size: var(--fs-small); line-height: 1.2; margin-bottom: 3px; }
     .rate-nums b { font-size: clamp(26px, 3.1vh, 60px); }
     .card.rate canvas { min-height: 14px; }
 }
 
-/* ---------- small screens ---------- */
+/* ---------- narrow screens ----------
+ * Under 1200 px the five columns cannot hold the ledger's measured width, so the
+ * wall stacks in reading order (people → rig → map → situation → ledger →
+ * trends) and the page scrolls. The country KPI is the first thing to go: the
+ * score, QSO count and rate already fill the header at that width. */
 @media (max-width: 1200px) {
     html, body { overflow: auto; }
     .wall { height: auto; min-height: 100vh; grid-template-rows: auto auto 28px; }
     .kpi-strip { padding-inline: 12px; flex-wrap: wrap; }
+    .kpi.countries { display: none; }
     .wall-body {
         grid-template-columns: 1fr;
-        grid-template-rows: auto auto auto minmax(200px, auto);
-        grid-template-areas: "map" "left" "right" "trend";
+        grid-template-rows: auto auto auto auto minmax(260px, auto) minmax(200px, auto);
+        grid-template-areas: "people" "rig" "map" "score" "log" "trend";
     }
-    .rail { flex-direction: column; }
-    /* Stacked layout: one full-width column, so the pane keeps the width and
-     * takes its height from the width-driven ratio. */
-    .map-panel { justify-self: stretch; height: auto; max-width: none; }
-    .rail .group,
-    .rail .group.grow { flex: 1 1 100%; flex-direction: row; flex-wrap: wrap; align-items: stretch; }
-    .rail .group .group-head { flex: 1 1 100%; }
-    .rail .group .card { flex: 1 1 240px; }
-    .rail .group .card.grow { flex-basis: 100%; min-height: 220px; }
-    .card.rotor-card { flex: 1 1 100%; min-height: 190px; }
+    .col { overflow: visible; }
+    /* 堆叠之后每栏的高度由内容决定，可桌面期一批卡片和分组写的是 flex-basis:0
+     * （波段传播、空间天气、分数栏的两个分组）。在高度为 auto 的容器里它们没有
+     * “固有高度”可依，会被压成一条缝——实测分数栏 8px、波段卡 14px，内容整块被
+     * overflow:hidden 吃掉。而 .col-score .group.grow:first-of-type 比普通选择器
+     * 都具体，只能显式覆盖：窄屏一律按内容取高，不再参与拉伸。 */
+    .col > .group,
+    .col > .card,
+    .col .group > .card { flex: 0 0 auto !important; }
+    .col .group { flex: 0 0 auto; }
+    .col .card.grow { flex: 0 0 auto; min-height: 200px; }
+    .card.bandcard { min-height: 152px; }
+    .card.sw-card { min-height: 150px; }
+    .card.log-card { min-height: 320px; }
+    .map-panel { flex: 0 0 auto; height: clamp(220px, 34vw, 460px); }
+    .card.rotor-card { min-height: 190px; }
     .trend { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: minmax(150px, auto); }
-    .card.radios-card, .card.rate, .card.score-card { min-height: 150px; }
+    .card.rate, .card.score-card { min-height: 150px; }
+    /* 页脚原本是单行不换行、超出就 overflow:hidden。台子名（来源署名）和右侧
+     * 那串时间戳加起来比 880px 还宽，直接被剪掉半句——观众看到的就是一行断掉的字。
+     * 窄屏既然已经允许整页上下滚，页脚就该老实换行，而不是切字。
+     * min-height 不是装饰：grid 的 auto 行按 max-content 取高，而换行的 flex 容器
+     * 在 max-content 下只算一行（28px），第二行就会被剪掉 12px。这里预留三行。 */
+    .wall-foot { flex-wrap: wrap; row-gap: 2px; white-space: normal; min-height: 60px; overflow: visible; }
+    .wall-foot .foot-right { margin-inline-start: auto; }
 }
 
 /* ---------- Arabic (dir="rtl") ----------
  * The wall mirrors as a whole: the grid columns and flex rows follow the inline
- * direction, so the environment rail moves to the right edge. The map, its
+ * direction, so the environment column moves to the right edge. The map, its
  * legend and every numeric readout keep LTR order, otherwise times, frequencies
  * and coordinates would be reversed while the Latin digits stay unmirrored. */
 html[dir="rtl"] .map-panel,
@@ -1116,9 +1243,11 @@ html[dir="rtl"] .layer-tag,
 html[dir="rtl"] .map-legend,
 html[dir="rtl"] .clock,
 html[dir="rtl"] .kpi-strip,
-html[dir="rtl"] .matrix,
+html[dir="rtl"] .ants,
+html[dir="rtl"] .bands,
 html[dir="rtl"] .dials,
+html[dir="rtl"] .seat,
 html[dir="rtl"] .opbar,
-html[dir="rtl"] .radio.plate,
+html[dir="rtl"] .qso-log,
 html[dir="rtl"] .wall-foot { direction: ltr; }
 html[dir="rtl"] .wall-foot { text-align: left; }

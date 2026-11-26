@@ -21,12 +21,18 @@ import {
     renderBands,
     renderKpi,
     renderOperators,
+    renderQsoLog,
     renderQsoStats,
-    renderRadios,
     renderSpaceWeather,
     tickClock
 } from './wall-cards.mjs';
-import {renderAntennaUse, renderBandOccupancy, renderRotors} from './wall-rig.mjs';
+import {
+    buildSeats,
+    renderAntennaUse,
+    renderBandOccupancy,
+    renderRotors,
+    renderSeatRoster
+} from './wall-rig.mjs';
 import {createWallMap} from './wall-map.mjs';
 import {applyStatic, getLanguage, setLanguage, t} from './wall-i18n.mjs';
 
@@ -50,6 +56,7 @@ export async function startWallPage() {
         qsoRows: [],
         station: null,
         devices: null,
+        model: null,
         settingsKey: '',
         build: ''
     };
@@ -181,15 +188,15 @@ export async function startWallPage() {
                 applyStatic(document);
             }
             applyWallSettings();
-            wallMap.drawQso(state.qsoRows, state.settings.grid);
+            wallMap.drawQso(state.qsoRows, state.settings.grid, state.model);
             /* Re-render the text that the modules compose from the dictionary:
              * legend, opponent cards, chart captions and the station cards. */
             if (langChanged) {
                 tickClock(state.settings);
-                renderRadios(state.station);
                 renderRig();
                 renderKpi(state.station, state.qsoRows);
-                renderOperators(state.qsoRows);
+                renderOperators(state.qsoRows, state.model);
+                renderQsoLog($('#qsoLog'), state.qsoRows, state.model);
                 renderSpaceTrend(state.prop || {});
                 opponents.render(state.watchedRows, state.settings.myCall, state.watched);
             }
@@ -244,12 +251,25 @@ export async function startWallPage() {
         opponents.render(state.watchedRows, state.settings.myCall, state.watched);
     }
 
-    /* 台站设备三卡：天线指向、天线使用、波段占用。取不到快照时保留上一次
-     * 的画面，大屏不应该因为一次超时就把 RF 链路图清空。 */
+    /* 席位模型：把设备席位计划表、台站实时状态和 QSO 流水三方合到一张表上，
+     * 让"席位 N"这个编号在全页唯一，并且每一条 QSO 都能反查回它属于哪个席位。
+     * 三方数据各自的刷新节奏不同，所以任何一路回来都要重建一次。 */
+    function rebuildModel() {
+        state.model = buildSeats(state.station, state.devices, state.qsoRows);
+    }
+
+    /* 台站设备四卡：席位名单、天线归属、波段占用、天线指向。取不到快照时
+     * 保留上一次的画面，大屏不应该因为一次超时就把 RF 链路图清空。 */
     function renderRig() {
-        renderBandOccupancy(state.station);
-        renderAntennaUse(state.devices);
-        renderRotors(state.devices);
+        const bands = new Set();
+        const antennas = (state.devices && state.devices.ownership &&
+            state.devices.ownership.antennas) || [];
+        antennas.forEach(antenna => (antenna.bands || [])
+            .forEach(band => bands.add(String(band).toUpperCase())));
+        renderSeatRoster($('#seatCards'), state.model);
+        renderAntennaUse($('#antMatrix'), state.devices, state.model);
+        renderBandOccupancy($('#bandOcc'), state.qsoRows, state.model, [...bands]);
+        renderRotors($('#rotorDials'), state.devices, state.model);
     }
 
     async function refreshDevices() {
@@ -258,6 +278,7 @@ export async function startWallPage() {
         } catch (error) {
             /* Keep the previous device snapshot. */
         }
+        rebuildModel();
         renderRig();
     }
 
@@ -267,13 +288,15 @@ export async function startWallPage() {
         } catch (error) {
             /* Keep the previous QSOs. */
         }
-        wallMap.drawQso(state.qsoRows, state.settings.grid);
+        rebuildModel();
+        wallMap.drawQso(state.qsoRows, state.settings.grid, state.model);
         renderQsoStats(state.qsoRows);
         renderQsoTrend(state.qsoRows);
         renderRateTrend(state.qsoRows);
-        renderOperators(state.qsoRows);
+        renderOperators(state.qsoRows, state.model);
         renderScoreCurve(state.qsoRows);
         renderKpi(state.station, state.qsoRows);
+        renderQsoLog($('#qsoLog'), state.qsoRows, state.model);
     }
 
     async function refreshStation() {
@@ -282,8 +305,8 @@ export async function startWallPage() {
         } catch (error) {
             /* Keep the previous radios. */
         }
-        renderRadios(state.station);
-        renderBandOccupancy(state.station);
+        rebuildModel();
+        renderRig();
         renderKpi(state.station, state.qsoRows);
     }
 
@@ -335,6 +358,9 @@ export async function startWallPage() {
             renderScoreCurve(state.qsoRows);
             renderSpotTrend(state.spotRows);
             renderSpaceTrend(state.prop || {});
+            /* 栏宽变了，明细表的列宽和操作员名称列要重新量一次。 */
+            renderOperators(state.qsoRows, state.model);
+            renderQsoLog($('#qsoLog'), state.qsoRows, state.model);
         }, 200);
     });
     if (window.ResizeObserver) {
@@ -361,5 +387,12 @@ export async function startWallPage() {
         stationPoller.run(),
         devicesPoller.run()
     ]);
+    /* 三路数据的返回顺序不固定，最后统一重绘一次，保证明细表里的席位配色
+     * 用的是完整席位模型，而不是某一路数据先到时的那半个。 */
+    rebuildModel();
+    renderRig();
+    renderQsoLog($('#qsoLog'), state.qsoRows, state.model);
+    renderOperators(state.qsoRows, state.model);
+    renderKpi(state.station, state.qsoRows);
     pollers.forEach(poller => poller.start());
 }

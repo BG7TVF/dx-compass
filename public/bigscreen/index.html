@@ -13,7 +13,7 @@
 <div class="wall">
 
     <!-- 头栏：台名 + 总成绩 KPI + 竞赛倒计时 + UTC 时钟。KPI 常驻，
-         远距离一眼就能读到「现在多少分、打得快不快」。 -->
+         非本台人员站在远处也能一眼读到「现在多少分、打得快不快」。 -->
     <header class="wall-head">
         <div class="brand">
             <b id="wallName">DX-COMPASS</b>
@@ -31,15 +31,67 @@
         </div>
     </header>
 
+    <!-- 观众墙五栏，从左到右就是一条阅读线：谁在打 → 用什么打 → 电波怎么样
+         → 打得怎么样 → 刚刚每一条通联。每栏最多两张卡，卡片才有足够的高度
+         把整张席位表、整张天线表完整放下；最右侧一整栏是逐条 QSO 明细。 -->
     <main class="wall-body">
-        <!-- 地图居中，左右两条栏夹住它，趋势带在底部收口成 U 型。
-             左栏=环境 + 台站设备，右栏=成绩 + 对手监测。 -->
-        <aside class="rail rail-left">
+
+        <!-- ① 人：席位＝色点＋「席位 N」＋当前操作员呼号，一栏看完谁在哪个麦克风前 -->
+        <aside class="col col-people">
+            <div class="group grow">
+                <h4 class="group-head">
+                    <span data-i18n="wall.group.people">人员</span>
+                    <span data-lang-sub>PEOPLE</span>
+                </h4>
+
+                <section class="card grow seats-card">
+                    <h3><span data-i18n="wall.card.seats">席位与操作员</span> <span data-lang-sub>SEATS</span></h3>
+                    <div class="seats" id="seatCards"></div>
+                </section>
+
+                <section class="card grow list op-card">
+                    <h3><span data-i18n="wall.card.byOp">各操作员</span> <span data-lang-sub>BY OPERATOR</span></h3>
+                    <div class="rows oprows" id="opBars"></div>
+                </section>
+            </div>
+        </aside>
+
+        <!-- ② 设备：哪副天线被切给了哪个席位、天线此刻朝哪儿 -->
+        <aside class="col col-rig">
+            <div class="group grow">
+                <h4 class="group-head">
+                    <span data-i18n="wall.group.rig">台站设备</span>
+                    <span data-lang-sub>STATION</span>
+                </h4>
+
+                <section class="card grow matrix-card">
+                    <h3><span data-i18n="wall.card.antennaUse">天线使用</span> <span data-lang-sub>ANTENNAS</span></h3>
+                    <div class="ants" id="antMatrix"></div>
+                </section>
+
+                <section class="card grow rotor-card">
+                    <h3><span data-i18n="wall.card.rotors">天线指向</span> <span data-lang-sub>HEADING</span></h3>
+                    <div class="dials" id="rotorDials"></div>
+                </section>
+            </div>
+        </aside>
+
+        <!-- ③ 传播：地图只作覆盖证明，缩到一栏宽；真正的传播读数在下面 -->
+        <aside class="col col-map">
+            <section class="map-panel">
+                <div id="map"></div>
+                <div class="layer-tag" id="layerTag"></div>
+                <div class="map-legend" id="mapLegend"></div>
+            </section>
+
             <div class="group grow env-group">
-                <h4 class="group-head"><span data-i18n="wall.group.environment">环境</span> <span data-lang-sub>ENVIRONMENT</span></h4>
+                <h4 class="group-head">
+                    <span data-i18n="wall.group.environment">环境</span>
+                    <span data-lang-sub>PROPAGATION</span>
+                </h4>
 
                 <section class="card sw-card">
-                    <h3><span data-i18n="wall.card.spaceWx">空间天气</span> <span data-lang-sub>SPACE WEATHER</span></h3>
+                    <h3><span data-i18n="wall.card.spaceWx">空间天气</span> <span data-lang-sub>SPACE WX</span></h3>
                     <div class="sw-grid" id="swGrid"></div>
                     <div class="spark">
                         <div class="chart-head"><label id="swLabel" data-i18n="wall.chart.subtitle.sfi">SFI 30 日趋势</label><b id="swNow">—</b></div>
@@ -49,54 +101,31 @@
                 </section>
 
                 <section class="card bandcard">
-                    <h3><span data-i18n="wall.card.bandConditions">频段条件</span> <span data-lang-sub>BAND CONDITIONS</span></h3>
+                    <h3><span data-i18n="wall.card.bandConditions">频段条件</span> <span data-lang-sub>BAND STATES</span></h3>
                     <div class="band-bar" id="bandBar"></div>
-                </section>
-            </div>
-
-            <div class="group grow rig-group">
-                <h4 class="group-head"><span data-i18n="wall.group.rig">台站设备</span> <span data-lang-sub>STATION RIG</span></h4>
-
-                <section class="card rotor-card">
-                    <h3><span data-i18n="wall.card.rotors">天线指向</span> <span data-lang-sub>HEADING</span></h3>
-                    <div class="dials" id="rotorDials"></div>
-                </section>
-
-                <section class="card grow matrix-card">
-                    <h3><span data-i18n="wall.card.antennaUse">天线使用</span> <span data-lang-sub>ANTENNA USE</span></h3>
-                    <div class="matrix" id="antMatrix"></div>
-                </section>
-
-                <section class="card grow occ-card">
-                    <h3><span data-i18n="wall.card.bandOccupancy">波段占用</span> <span data-lang-sub>BAND MAP</span></h3>
-                    <div class="matrix" id="bandOcc"></div>
                 </section>
             </div>
         </aside>
 
-        <section class="map-panel">
-            <div id="map"></div>
-            <div class="layer-tag" id="layerTag"></div>
-            <div class="map-legend" id="mapLegend"></div>
-        </section>
-
-        <aside class="rail rail-right">
+        <!-- ④ 战况：哪些波段在出分、对手在忙什么 -->
+        <aside class="col col-score">
             <div class="group grow">
-                <h4 class="group-head"><span data-i18n="wall.group.score">成绩</span> <span data-lang-sub>SCORE</span></h4>
+                <h4 class="group-head">
+                    <span data-i18n="wall.group.score">战况</span>
+                    <span data-lang-sub>SITUATION</span>
+                </h4>
 
-                <section class="card list grow">
-                    <h3><span data-i18n="wall.card.byOp">各操作员</span> <span data-lang-sub>BY OPERATOR</span></h3>
-                    <div class="rows oprows" id="opBars"></div>
-                </section>
-
-                <section class="card list grow">
-                    <h3><span data-i18n="wall.card.byBand">各频段</span> <span data-lang-sub>BY BAND</span></h3>
-                    <div class="rows" id="bandList"></div>
+                <section class="card grow occ-card">
+                    <h3><span data-i18n="wall.card.bandOccupancy">波段占用</span> <span data-lang-sub>BANDS</span></h3>
+                    <div class="bands" id="bandOcc"></div>
                 </section>
             </div>
 
-            <div class="group grow opp-group">
-                <h4 class="group-head"><span data-i18n="wall.group.opponents">对手监测</span> <span data-lang-sub>OPPONENTS</span><i class="opp-sum" id="oppSummary"></i></h4>
+            <div class="group grow">
+                <h4 class="group-head">
+                    <span data-i18n="wall.group.opponents">对手监测</span>
+                    <span data-lang-sub>OPPONENTS</span><i class="opp-sum" id="oppSummary"></i>
+                </h4>
 
                 <section class="card grow opp-card">
                     <div class="opp-rows" id="oppRows"></div>
@@ -104,12 +133,26 @@
             </div>
         </aside>
 
-        <section class="trend">
-            <section class="card radios-card">
-                <h3><span data-i18n="wall.card.station">电台</span> <span data-lang-sub>STATION</span></h3>
-                <div class="radios" id="radioCards"></div>
-            </section>
+        <!-- ⑤ 明细：整栏通高留给逐条 QSO，这是全场信息密度最高的地方 -->
+        <section class="col col-log">
+            <div class="group grow">
+                <h4 class="group-head">
+                    <span data-i18n="wall.group.activity">通联实况</span>
+                    <span data-lang-sub>LIVE QSO</span>
+                    <i class="legend-hint" data-i18n="wall.legend.seatColor">颜色对应席位</i>
+                    <i class="legend-hint" data-i18n="wall.qso.multHint">★＝倍率</i>
+                </h4>
 
+                <section class="card grow log-card">
+                    <div class="qso-log" id="qsoLog"></div>
+                </section>
+            </div>
+        </section>
+
+        <!-- 底部收口：分数、速率与逐分钟趋势。四个图同轴，讲的是同一件事——
+             这一刻打得有多快、还能不能更快。它占据 .wall-body 的第二行（
+             grid-template-areas 的 "trend"），必须留在 main 里面。 -->
+        <section class="trend">
             <section class="card chart score-card">
                 <h3><span data-i18n="wall.card.scoreCurve">分数曲线</span> <span data-lang-sub>CUMULATIVE</span></h3>
                 <div class="chart-head">
@@ -134,6 +177,7 @@
                 <div class="chart-head"><label data-i18n="wall.chart.qsoPerMin">QSO / MIN</label><b id="qsoPeak">0</b></div>
                 <canvas id="qsoTrend"></canvas>
             </section>
+
             <section class="card chart">
                 <h3><span data-i18n="wall.card.spotTrend">SPOT 趋势</span> <span data-lang-sub>60 MIN</span></h3>
                 <div class="chart-head"><label data-i18n="wall.chart.spotPerMin">SPOT / MIN</label><b id="spotPeak">0</b></div>

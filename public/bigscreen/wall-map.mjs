@@ -17,7 +17,12 @@ import {
     mufColor, mufRgb, nightShadeAlpha, sampleMufGrid
 } from '../shared/propagation/forecast-view.mjs';
 
+import {seatColor} from './wall-cards.mjs';
+
 const COLORS = {qso: '#35d6a4', myspot: '#4cc9f0', dxspot: '#ff6b6b'};
+/* 大圆线只画最近的这些条：观众要的是"刚才是从哪里打进来的"，全量画线在
+ * 一场上千条的竞赛里会把地图糊成一团，反而看不出覆盖。落点圆点仍然全画。 */
+const QSO_TRACK_LIMIT = 90;
 const DEFAULT_TOP_LAT = 85;
 const DEFAULT_BOTTOM_LAT = -85;
 let viewTopLat = DEFAULT_TOP_LAT;
@@ -229,29 +234,35 @@ export function createWallMap() {
         });
     }
 
-    function drawQso(rows, grid) {
+    /* 地图是"覆盖证明"，不是主视图：每个落点用打出这条 QSO 的席位色，
+     * 观众把地图和右侧明细表一对，就知道是哪个席位打到哪儿。 */
+    function drawQso(rows, grid, model) {
         const group = views.qso;
         group.clearLayers();
         const home = gridToLatLon(grid);
-        rows.forEach(qso => {
+        const reached = [];
+        (rows || []).forEach(qso => {
             if (qso.lat === null || qso.lat === undefined ||
                 qso.lon === null || qso.lon === undefined) return;
+            const seat = model ? model.seatOfRow(qso) : null;
+            const hue = seat ? seat.color : COLORS.qso;
             L.circleMarker([qso.lat, qso.lon], {
-                radius: 2.6, color: COLORS.qso, weight: 1,
-                fillColor: COLORS.qso, fillOpacity: 0.8, interactive: false
+                radius: 2.8, color: hue, weight: 1,
+                fillColor: hue, fillOpacity: 0.85, interactive: false
             }).addTo(group);
-            if (home) {
-                addTrackPaths(map, trackPaths(home[0], home[1], qso.lat, qso.lon, 64), {
-                    L, group, color: COLORS.qso, weight: 1, opacity: 0.35
-                });
-            }
+            reached.push([qso, new Date(qso.timestamp).getTime() || 0, hue]);
         });
-        if (home) {
-            L.circleMarker(home, {
-                radius: 6, color: '#ffffff', weight: 2,
-                fillColor: COLORS.qso, fillOpacity: 1, interactive: false
-            }).addTo(group);
-        }
+        if (!home) return;
+        reached.sort((a, b) => b[1] - a[1]);
+        reached.slice(0, QSO_TRACK_LIMIT).forEach(([qso, , hue]) => {
+            addTrackPaths(map, trackPaths(home[0], home[1], qso.lat, qso.lon, 64), {
+                L, group, color: hue, weight: 1, opacity: 0.4
+            });
+        });
+        L.circleMarker(home, {
+            radius: 6, color: '#ffffff', weight: 2,
+            fillColor: COLORS.qso, fillOpacity: 1, interactive: false
+        }).addTo(group);
     }
 
     function drawAurora(data) {
