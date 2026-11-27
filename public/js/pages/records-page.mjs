@@ -47,7 +47,14 @@ export function createRecordsPage(ctx) {
             if (recorded) {
                 tr.innerHTML = `<td>${escapeHtml(row.date || '')}</td><td>${escapeHtml(row.time || '')}</td><td>${escapeHtml(row.call || '')}</td><td>${escapeHtml(row.de)}</td><td>${escapeHtml(row.band || '')}</td><td>${escapeHtml(row.freq || '')}</td><td>${modeBadge(row.mode)}</td><td>${escapeHtml(row.detail || '')}</td><td class="${snrClass(row)}">${row.snr ?? ''}</td><td>${row.distance_km || ''}</td><td title="${escapeHtml(row.comment || '')}">${escapeHtml(String(row.comment || '').substring(0, 30))}</td>`;
             } else {
-                tr.innerHTML = `<td>${formatTime(row.timestamp, ctx.settings)}</td><td>${escapeHtml(row.monitored_call)}</td><td>${escapeHtml(row.de)}</td><td>${escapeHtml(row.freq || '')}</td><td>${modeBadge(row.mode)}</td><td class="${signalClass(row)}">${escapeHtml(row.signal || '')}</td><td class="${snrClass(row)}">${row.snr ?? ''}</td><td>${row.distance_km || ''}</td><td title="${escapeHtml(row.comment || '')}">${escapeHtml(String(row.comment || '').substring(0, 30))}</td>`;
+                /* 「被监听」这一列要回退到 spot_call：PSKR 的区域邻台行（两端都不在
+                 * 监听名单、只是落在本台大网格）在服务端是有意把 monitored_call 置空的
+                 * ——这是为了不把它冒充成「名单里的台」（lib/spots/service.js 的注释就
+                 * 写了「置空后展示层回退到 spot_call=DX 本身」），但记录表一直没做这个
+                 * 回退，于是这类行显示成「只有监听台、被监听一片空白」，看上去像数据坏
+                 * 了。回退值是这条 SPOT 里真正被听到的那一端，语义和表头对得上。SPOT 分屏
+                 * 的弹窗早就是这么写的（spot.monitored_call || spot.spot_call）。 */
+                tr.innerHTML = `<td>${formatTime(row.timestamp, ctx.settings)}</td><td>${escapeHtml(row.monitored_call || row.spot_call || '')}</td><td>${escapeHtml(row.de)}</td><td>${escapeHtml(row.freq || '')}</td><td>${modeBadge(row.mode)}</td><td class="${signalClass(row)}">${escapeHtml(row.signal || '')}</td><td class="${snrClass(row)}">${row.snr ?? ''}</td><td>${row.distance_km || ''}</td><td title="${escapeHtml(row.comment || '')}">${escapeHtml(String(row.comment || '').substring(0, 30))}</td>`;
             }
             body.appendChild(tr);
         }

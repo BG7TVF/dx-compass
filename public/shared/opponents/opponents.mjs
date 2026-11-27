@@ -174,7 +174,9 @@ export function buildOpponents(rows, myCall, bearing, {
         .filter(Boolean));
     const opponents = new Map();
     (Array.isArray(rows) ? rows : []).forEach(row => {
-        const call = String(row.monitored_call || row.dx_call || '').toUpperCase();
+        /* 回退字段是 spot_call（DTO 里没有 dx_call，写错字段名回退恒为假）；
+         * 落空值也没关系，下面 allowed.has(call) 仍会把非名单呼号挡在对手之外。 */
+        const call = String(row.monitored_call || row.spot_call || '').toUpperCase();
         if (!call || call === my) return;
         if (!allowed.has(call)) return;
         const time = new Date(row.timestamp).getTime();

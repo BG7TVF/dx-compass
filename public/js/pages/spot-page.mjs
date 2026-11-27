@@ -261,6 +261,15 @@ export function createSpotPage(ctx) {
     }
 
     function addMarkerToCell(cell, spot, ttlMs) {
+        /* 一格只该画「谁听到了这个台」，所以监听台就是本格呼号自己的行必须挡掉。
+         * 客户现场实测：BY5HB 这格的热团压在它自己 QTH（PM00BB）上，那 2 行的 de 与
+         * monitored_call 都等于 BY5HB——因为它此刻是以监听台身份在上报，服务端把
+         * monitored.includes(de) 的那条分支命中了（lib/spots/service.js）。这类行既
+         * 不是别人在听它，也就不能算进它的监听密集度。另有一批 spot_call 兜底漏进来的
+         * 自报行（de=本格、monitored_call 为空），共享库 select() 的 spot_call 兜底被
+         * tests/shared-stores.test.mjs 钉住不能动，只能在唯一的进格入口按 de 拦。 */
+        const cellCall = String(cell.call || '').toUpperCase();
+        if (cellCall && String(spot.de || '').toUpperCase() === cellCall) return;
         const hasDe = spot.lat !== null && spot.lat !== undefined && spot.lon !== null && spot.lon !== undefined;
         const hasDx = spot.dx_lat !== null && spot.dx_lat !== undefined &&
             spot.dx_lon !== null && spot.dx_lon !== undefined;

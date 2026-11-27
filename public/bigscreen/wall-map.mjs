@@ -186,7 +186,10 @@ export function createWallMap() {
         rows.forEach(row => {
             const time = new Date(row.timestamp).getTime();
             if (!isFinite(time) || time < cutoff) return;
-            const call = String(row.monitored_call || row.dx_call || '').toUpperCase();
+            /* 回退字段是 spot_call（/api/spots 的行里只有它，没有 dx_call；
+             * 写错字段名会让回退恒为假）。PSKR 区域邻台行两端都不在名单时
+             * monitored_call 被有意置空，spot_call 才是真正被听到的那一端。 */
+            const call = String(row.monitored_call || row.spot_call || '').toUpperCase();
             const mine = String(row.monitored_call || '').toUpperCase() === my;
             if (!mine && !allowed.has(call)) return;
             const style = mine ? null : styles.get(call);
