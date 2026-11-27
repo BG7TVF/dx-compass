@@ -42,12 +42,9 @@ export function applyStatic(root = document) {
         const text = t(key);
         if (text !== key) element.textContent = text;
     });
-    /* English sub-labels next to the translated title would duplicate it in
-     * Chinese, where both would be Chinese; they only make sense for the
-     * bilingual Chinese wall, mirroring the original design. */
-    root.querySelectorAll('[data-lang-sub]').forEach(element => {
-        element.hidden = lang !== 'zh';
-    });
+    /* 标题旁的英文装饰后缀（SPACE WX / BAND STATES 一类）已整批移除：受众是非
+     * 操作员的参观观众，后缀既不翻译也不承载信息，只是和中文抢同一行的宽度。
+     * 因此这里不再需要按语言隐藏 [data-lang-sub]。 */
     document.documentElement.lang = lang;
     document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
 }

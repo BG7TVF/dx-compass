@@ -36,22 +36,18 @@
          把整张席位表、整张天线表完整放下；最右侧一整栏是逐条 QSO 明细。 -->
     <main class="wall-body">
 
-        <!-- ① 人：席位＝色点＋「席位 N」＋当前操作员呼号，一栏看完谁在哪个麦克风前 -->
+        <!-- ① 人：一栏一张卡。席位＝色条＋形状＋「席位 N」＋当前操作员呼号，
+             右侧四个短读数就是这位操作员的战果，原来单独一张「各操作员」卡
+             把呼号和 QSO 数重复了一遍，现在合并进同一行。 -->
         <aside class="col col-people">
             <div class="group grow">
                 <h4 class="group-head">
                     <span data-i18n="wall.group.people">人员</span>
-                    <span data-lang-sub>PEOPLE</span>
                 </h4>
 
                 <section class="card grow seats-card">
-                    <h3><span data-i18n="wall.card.seats">席位与操作员</span> <span data-lang-sub>SEATS</span></h3>
+                    <h3><span data-i18n="wall.card.seats">席位与操作员</span></h3>
                     <div class="seats" id="seatCards"></div>
-                </section>
-
-                <section class="card grow list op-card">
-                    <h3><span data-i18n="wall.card.byOp">各操作员</span> <span data-lang-sub>BY OPERATOR</span></h3>
-                    <div class="rows oprows" id="opBars"></div>
                 </section>
             </div>
         </aside>
@@ -61,16 +57,15 @@
             <div class="group grow">
                 <h4 class="group-head">
                     <span data-i18n="wall.group.rig">台站设备</span>
-                    <span data-lang-sub>STATION</span>
                 </h4>
 
                 <section class="card grow matrix-card">
-                    <h3><span data-i18n="wall.card.antennaUse">天线使用</span> <span data-lang-sub>ANTENNAS</span></h3>
+                    <h3><span data-i18n="wall.card.antennaUse">天线使用</span></h3>
                     <div class="ants" id="antMatrix"></div>
                 </section>
 
                 <section class="card grow rotor-card">
-                    <h3><span data-i18n="wall.card.rotors">天线指向</span> <span data-lang-sub>HEADING</span></h3>
+                    <h3><span data-i18n="wall.card.rotors">天线指向</span></h3>
                     <div class="dials" id="rotorDials"></div>
                 </section>
             </div>
@@ -80,6 +75,11 @@
         <aside class="col col-map">
             <section class="map-panel">
                 <div id="map"></div>
+                <!-- 左上角一句话简介：先告诉观众这张图在讲什么。右上角已被
+                     layer-tag 占住，两者各占一角互不重叠；pointer-events:none
+                     把鼠标事件全部还给地图。文案由 wall-page 经 tr() 写入，
+                     随语言切换刷新。 -->
+                <div class="map-title" id="mapTitle"></div>
                 <div class="layer-tag" id="layerTag"></div>
                 <div class="map-legend" id="mapLegend"></div>
             </section>
@@ -87,11 +87,10 @@
             <div class="group grow env-group">
                 <h4 class="group-head">
                     <span data-i18n="wall.group.environment">环境</span>
-                    <span data-lang-sub>PROPAGATION</span>
                 </h4>
 
                 <section class="card sw-card">
-                    <h3><span data-i18n="wall.card.spaceWx">空间天气</span> <span data-lang-sub>SPACE WX</span></h3>
+                    <h3><span data-i18n="wall.card.spaceWx">空间天气</span></h3>
                     <div class="sw-grid" id="swGrid"></div>
                     <div class="spark">
                         <div class="chart-head"><label id="swLabel" data-i18n="wall.chart.subtitle.sfi">SFI 30 日趋势</label><b id="swNow">—</b></div>
@@ -101,7 +100,7 @@
                 </section>
 
                 <section class="card bandcard">
-                    <h3><span data-i18n="wall.card.bandConditions">频段条件</span> <span data-lang-sub>BAND STATES</span></h3>
+                    <h3><span data-i18n="wall.card.bandConditions">频段条件</span></h3>
                     <div class="band-bar" id="bandBar"></div>
                 </section>
             </div>
@@ -112,11 +111,10 @@
             <div class="group grow">
                 <h4 class="group-head">
                     <span data-i18n="wall.group.score">战况</span>
-                    <span data-lang-sub>SITUATION</span>
                 </h4>
 
                 <section class="card grow occ-card">
-                    <h3><span data-i18n="wall.card.bandOccupancy">波段占用</span> <span data-lang-sub>BANDS</span></h3>
+                    <h3><span data-i18n="wall.card.bandOccupancy">波段占用</span></h3>
                     <div class="bands" id="bandOcc"></div>
                 </section>
             </div>
@@ -124,7 +122,7 @@
             <div class="group grow">
                 <h4 class="group-head">
                     <span data-i18n="wall.group.opponents">对手监测</span>
-                    <span data-lang-sub>OPPONENTS</span><i class="opp-sum" id="oppSummary"></i>
+                    <i class="opp-sum" id="oppSummary"></i>
                 </h4>
 
                 <section class="card grow opp-card">
@@ -138,8 +136,7 @@
             <div class="group grow">
                 <h4 class="group-head">
                     <span data-i18n="wall.group.activity">通联实况</span>
-                    <span data-lang-sub>LIVE QSO</span>
-                    <i class="legend-hint" data-i18n="wall.legend.seatColor">颜色对应席位</i>
+                    <i class="legend-hint" data-i18n="wall.legend.seatColor">颜色 / 形状 = 席位</i>
                     <i class="legend-hint" data-i18n="wall.qso.multHint">★＝倍率</i>
                 </h4>
 
@@ -149,12 +146,19 @@
             </div>
         </section>
 
-        <!-- 底部收口：分数、速率与逐分钟趋势。四个图同轴，讲的是同一件事——
-             这一刻打得有多快、还能不能更快。它占据 .wall-body 的第二行（
-             grid-template-areas 的 "trend"），必须留在 main 里面。 -->
+        <!-- 底部收口：两张图同轴，回答两个问题——总分还在不在涨（累计曲线）、
+             这一刻打得有多快（逐分钟节奏）。
+             原先这里是四张卡（分数曲线 / QSO 速率 / QSO 趋势 / SPOT 趋势），
+             后三张讲的是同一件事：速率就是每小时的 QSO 数，头栏 KPI 已经给过；
+             QSO 趋势与 SPOT 趋势是同一条时间轴上的两种「条/分钟」计数。四张卡
+             各占一栏宽，60 根柱子被压成一条条 5px 的锯齿，观众反而看不出节奏。
+             合成一张分组柱状图后：横轴只剩一条、单位只有一个（条/分钟），QSO 与
+             SPOT 并排同高可直接比，窗口也从 60 分钟收到 30 分钟。
+             它占据 .wall-body 的第二行（grid-template-areas 的 "trend"），
+             必须留在 main 里面。 -->
         <section class="trend">
             <section class="card chart score-card">
-                <h3><span data-i18n="wall.card.scoreCurve">分数曲线</span> <span data-lang-sub>CUMULATIVE</span></h3>
+                <h3><span data-i18n="wall.card.scoreCurve">分数曲线</span></h3>
                 <div class="chart-head">
                     <label><i class="dot score"></i><span data-i18n="wall.chart.cumulativeScore">累计分数</span> <b id="scoreNow">0</b></label>
                     <label><i class="dot qso"></i><span data-i18n="wall.chart.cumulativeQso">累计 QSO</span> <b id="scoreQso">0</b></label>
@@ -162,26 +166,14 @@
                 <canvas id="scoreCurve"></canvas>
             </section>
 
-            <section class="card rate">
-                <h3><span data-i18n="wall.card.rate">QSO 速率</span> <span data-lang-sub>RATE / H</span></h3>
-                <div class="rate-nums">
-                    <b id="rateHour">0</b>
-                    <span><span data-i18n="wall.chart.perMinute">每分钟</span> <i id="rateMin">0.0</i></span>
+            <section class="card chart minute-card">
+                <h3><span data-i18n="wall.card.qsoTrend">逐分钟节奏</span></h3>
+                <div class="chart-head">
+                    <label><i class="dot qso"></i><span data-i18n="wall.chart.qsoPerMin">QSO / MIN</span></label>
+                    <label><i class="dot spot"></i><span data-i18n="wall.chart.spotPerMin">SPOT / MIN</span></label>
+                    <label class="pace"><span data-i18n="wall.chart.perMinute">每分钟</span> <b id="rateMin">0.0</b></label>
                 </div>
-                <div class="chart-head"><label data-i18n="wall.chart.last12h">最近 12 小时</label></div>
-                <canvas id="rateTrend"></canvas>
-            </section>
-
-            <section class="card chart">
-                <h3><span data-i18n="wall.card.qsoTrend">QSO 趋势</span> <span data-lang-sub>60 MIN</span></h3>
-                <div class="chart-head"><label data-i18n="wall.chart.qsoPerMin">QSO / MIN</label><b id="qsoPeak">0</b></div>
-                <canvas id="qsoTrend"></canvas>
-            </section>
-
-            <section class="card chart">
-                <h3><span data-i18n="wall.card.spotTrend">SPOT 趋势</span> <span data-lang-sub>60 MIN</span></h3>
-                <div class="chart-head"><label data-i18n="wall.chart.spotPerMin">SPOT / MIN</label><b id="spotPeak">0</b></div>
-                <canvas id="spotTrend"></canvas>
+                <canvas id="minuteTrend"></canvas>
             </section>
         </section>
     </main>

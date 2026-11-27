@@ -500,8 +500,12 @@ export function createOpPage(ctx) {
             host.innerHTML = '<div class="op-empty">' + esc(t('op.empty.waiting')) + '</div>';
             return;
         }
-        host.innerHTML = spaceWeatherCells(state.prop).map(([key, value, className]) =>
-            '<div><label>' + esc(key) + '</label><b class="' + esc(className) + '">' +
+        /* spaceWeatherCells 的第 3 项已从单档 'bad' 扩成 good/fair/poor 三档，
+         * 本视图沿用原有的红字语义（只有 poor 标红）；标签吃第 4 项的国际通用
+         * 缩写——这里的标签位只有 9px，塞不进中文全称。 */
+        host.innerHTML = spaceWeatherCells(state.prop).map(([key, value, tier, abbr]) =>
+            '<div><label>' + esc(abbr || key) + '</label><b class="' +
+            (tier === 'poor' ? 'bad' : '') + '">' +
             esc(value) + '</b></div>').join('');
     }
 

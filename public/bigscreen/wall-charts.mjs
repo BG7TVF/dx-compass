@@ -22,22 +22,27 @@ const xrayClass = flux => {
     return order[Math.max(0, Math.min(4, exponent + 8))] +
         (mantissa >= 1 ? mantissa.toFixed(1) : '1.0');
 };
+/* 折线一律走中性色：这块小区一次只显示一条序列，八种颜色里没有一种在承担区分
+ * 职责——区分靠的是旁边的序列名和进度点。留着八色只会让「空间天气」这一栏在观众
+ * 眼里多出一套没人能解码的色板。用 --text 同值的近白，既不加新色相，也不会让
+ * 1.4px 的细线被底色吞掉。 */
+const SPACE_LINE = '#dbe6f5';
 const SPACE_METRICS = [
-    {key: 'sfi', label: 'SFI', color: '#e8c547', digits: 0,
+    {key: 'sfi', label: 'SFI', color: SPACE_LINE, digits: 0,
         values: data => spaceColumn(data.sfi && data.sfi.list, 1)},
-    {key: 'ssn', label: 'SSN', color: '#f0a35e', digits: 0,
+    {key: 'ssn', label: 'SSN', color: SPACE_LINE, digits: 0,
         values: data => spaceColumn(data.ssn && data.ssn.list, 1)},
-    {key: 'kp', label: 'KP', color: '#f1c40f', digits: 1,
+    {key: 'kp', label: 'KP', color: SPACE_LINE, digits: 1,
         values: data => spaceColumn(data.kp && data.kp.list, 1)},
-    {key: 'dst', label: 'DST', color: '#e4572e', digits: 0,
+    {key: 'dst', label: 'DST', color: SPACE_LINE, digits: 0,
         values: data => spaceColumn(data.dst && data.dst.list, 1)},
-    {key: 'bz', label: 'BZ', color: '#4cc9f0', digits: 1,
+    {key: 'bz', label: 'BZ', color: SPACE_LINE, digits: 1,
         values: data => spaceColumn(data.mag && data.mag.list, 2)},
-    {key: 'bt', label: 'BT', color: '#8f7fff', digits: 1,
+    {key: 'bt', label: 'BT', color: SPACE_LINE, digits: 1,
         values: data => spaceColumn(data.mag && data.mag.list, 1)},
-    {key: 'wind', label: 'WIND', color: '#35d6a4', digits: 0,
+    {key: 'wind', label: 'WIND', color: SPACE_LINE, digits: 0,
         values: data => spaceColumn(data.wind && data.wind.list, 1)},
-    {key: 'xray', label: 'XRAY', color: '#ff9f43', log: true,
+    {key: 'xray', label: 'XRAY', color: SPACE_LINE, log: true,
         display: value => xrayClass(value),
         values: data => spaceColumn(data.xray && data.xray.list, 1)}
 ];
@@ -133,16 +138,94 @@ export function drawLine(selector, values, color, options) {
     ctx.globalAlpha = 1;
 }
 
-export function renderQsoTrend(rows) {
-    $('#qsoPeak').textContent = drawBars('#qsoTrend', perMinute(rows, 60), COLORS.qso);
+/* 逐分钟节奏：把旧版的三张卡（QSO 速率 / QSO 趋势 / SPOT 趋势）合成一张。
+ * 三张卡讲的是同一件事，而且 QSO/分 与 SPOT/分 单位相同（条/分钟），所以共用
+ * 一条纵轴画成分组柱：同一分钟两组柱子并排，谁高谁低直接比完，不必在两张卡
+ * 之间来回对时间轴。小时级的那条 12 小时速率折线一并删掉——它回答的是「今天
+ * 比上午慢了吗」，而分数曲线已经画出 12 小时均速虚线，斜率一比就有答案。
+ * 窗口也从 60 分钟收到 30 分钟：柱数减半，每柱反而更宽更好数。 */
+export const MINUTE_BINS = 30;
+
+export function renderMinuteTrend(qsoRows, spotRows) {
+    const cv = $('#minuteTrend');
+    if (!cv) return 0;
+    return drawGroupedBars(cv, [
+        {bins: perMinute(qsoRows, MINUTE_BINS), color: COLORS.qso},
+        {bins: perMinute(spotRows || [], MINUTE_BINS), color: COLORS.myspot}
+    ], Date.now());
 }
 
-export function renderRateTrend(rows) {
-    drawLine('#rateTrend', perHour(rows, 12), COLORS.qso);
-}
+/* 分组柱状图。峰值不写在卡片表头里——观众要的是「哪一分钟最猛」，把数值标在
+ * 最高的那组柱子上方，位置本身就是信息。左右两端标 UTC 时分，柱子才不是
+ * 一堵无语境的锯齿墙。 */
+function drawGroupedBars(cv, series, now) {
+    const {ctx, w, h} = canvasBox(cv);
+    ctx.clearRect(0, 0, w, h);
+    const bins = series[0].bins.length;
+    /* 画布里的字也在「3 米受众」的射程内：轴标签原来写死 9px、峰值 9–12px，投到
+     * 墙上就是两条认不出的时间轴和一个看不懂的数字。与 CSS 的字号下限同一条规则
+     * ——最小 14px，随画布高度长，20px 封顶。上下两条留白带必须跟着字号走，否则
+     * 标签会被画布边缘裁掉半截（画布内部的裁切探针看不见）。 */
+    const label = Math.min(20, Math.max(14, Math.round(h * 0.2)));
+    const labelRow = label + 2;
+    const padTop = label + 1;
+    const plotH = Math.max(6, h - padTop - labelRow);
+    const baseY = h - labelRow;
+    let peakValue = 0;
+    let peakIndex = -1;
+    series.forEach(entry => entry.bins.forEach((value, index) => {
+        if (value > peakValue) { peakValue = value; peakIndex = index; }
+    }));
+    const max = Math.max(1, peakValue);
+    const group = w / bins;
+    const bar = Math.max(1.5, (group - 3) / series.length);
 
-export function renderSpotTrend(rows) {
-    $('#spotPeak').textContent = drawBars('#spotTrend', perMinute(rows, 60), COLORS.myspot);
+    ctx.fillStyle = 'rgba(122,168,255,0.26)';
+    ctx.fillRect(0, baseY, w, 1);
+
+    series.forEach((entry, slot) => {
+        ctx.fillStyle = entry.color;
+        entry.bins.forEach((value, index) => {
+            const height = (value / max) * plotH;
+            if (height <= 0) return;
+            /* 越近越实、越远越淡：一眼就能看出这一小时的后半段在提速还是掉速。 */
+            ctx.globalAlpha = 0.35 + 0.65 * (index + 1) / bins;
+            ctx.fillRect(index * group + 1.5 + slot * (bar + 1), baseY - height, bar, height);
+        });
+    });
+    ctx.globalAlpha = 1;
+
+    if (peakIndex >= 0) {
+        const peakTop = baseY - (peakValue / max) * plotH;
+        ctx.font = '700 ' + label + 'px monospace';
+        ctx.textBaseline = 'bottom';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#dbe6f5';
+        const text = String(peakValue);
+        const half = ctx.measureText(text).width / 2;
+        ctx.fillText(text, Math.min(Math.max((peakIndex + 0.5) * group, half + 1), w - half - 1),
+            Math.max(1, peakTop - 2));
+    }
+
+    if (w > 220) {
+        ctx.font = label + 'px monospace';
+        ctx.fillStyle = '#98a8bd';
+        ctx.textBaseline = 'bottom';
+        ctx.textAlign = 'left';
+        ctx.fillText(utcLabel(now - (bins - 1) * 60000, now), 1, h);
+        ctx.textAlign = 'right';
+        ctx.fillText(utcLabel(now, now), w - 1, h);
+    }
+    /* 全零窗口（刚开局、或连续半小时没通上台）不能留一块纯黑：观众分不清「这半小时
+     * 没人通」和「图坏了」。和分数曲线用同一个约定——画一个居中的破折号当空态。 */
+    if (!peakValue) {
+        ctx.font = Math.round(label * 1.3) + 'px "JetBrains Mono", monospace';
+        ctx.fillStyle = '#98a8bd';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('—', w / 2, padTop + plotH / 2);
+    }
+    return peakValue;
 }
 
 /* 分数曲线：把日志按时间累加成「累计分数」与「累计 QSO」两条曲线，
@@ -162,7 +245,7 @@ export function renderScoreCurve(rows) {
     }).filter(qso => isFinite(qso.time) && qso.time <= now + 60000)
         .sort((a, b) => a.time - b.time);
     if (log.length < 2) {
-        ctx.font = '11px "JetBrains Mono", monospace';
+        ctx.font = Math.max(16, Math.round(h * 0.25)) + 'px "JetBrains Mono", monospace';
         ctx.fillStyle = 'rgba(119,143,176,.5)';
         ctx.textAlign = 'center';
         ctx.fillText('—', w / 2, h / 2);
@@ -193,7 +276,10 @@ export function renderScoreCurve(rows) {
     const maxQso = Math.max(1, qsoLine[buckets - 1]);
     const padX = 3;
     const padTop = 7;
-    const padBottom = 11;
+    /* 轴标签与 CSS 的字号下限同一条规则（最小 14px、20px 封顶），底部留白带跟着
+     * 字号走，否则抬大的时间轴会直接压在曲线身上。 */
+    const axisLabel = Math.min(20, Math.max(14, Math.round(h * 0.2)));
+    const padBottom = axisLabel + 2;
     const plot = height => padTop + (1 - height) * (h - padTop - padBottom);
     const plotX = position => padX + position / (buckets - 1) * (w - padX * 2);
 
@@ -247,8 +333,8 @@ export function renderScoreCurve(rows) {
     ctx.lineWidth = 1.6;
     ctx.stroke();
 
-    ctx.font = '9px "JetBrains Mono", monospace';
-    ctx.fillStyle = 'rgba(119,143,176,.78)';
+    ctx.font = axisLabel + 'px "JetBrains Mono", monospace';
+    ctx.fillStyle = '#98a8bd';
     ctx.textAlign = 'left';
     ctx.fillText(utcLabel(start, now), padX, h - 2);
     ctx.textAlign = 'center';

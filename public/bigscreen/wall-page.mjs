@@ -9,22 +9,22 @@ import {bearing} from '../shared/geo/coordinates.mjs';
 import {getJson} from '../shared/core/transport.mjs';
 import {createPoller} from '../shared/monitoring/poller.mjs';
 import {
-    renderQsoTrend,
-    renderRateTrend,
+    renderMinuteTrend,
     renderScoreCurve,
     renderSpaceTrend,
-    renderSpotTrend,
     setSpaceDwell
 } from './wall-charts.mjs';
-import {createOpponentRenderer, opponentColorGradient} from '../shared/opponents/opponents.mjs';
+import {buildOpponents, createOpponentRenderer, opponentColorGradient} from '../shared/opponents/opponents.mjs';
 import {
     renderBands,
     renderKpi,
-    renderOperators,
+    renderOpponentMatrix,
     renderQsoLog,
     renderQsoStats,
     renderSpaceWeather,
-    tickClock
+    SEAT_COLORS,
+    tickClock,
+    tr
 } from './wall-cards.mjs';
 import {
     buildSeats,
@@ -39,6 +39,14 @@ import {applyStatic, getLanguage, setLanguage, t} from './wall-i18n.mjs';
 const $ = selector => document.querySelector(selector);
 const LAYER_ORDER = ['prop', 'aurora', 'weather', 'qso', 'myspot', 'dxspot'];
 const COLORS = {qso: '#35d6a4', myspot: '#4cc9f0', dxspot: '#ff6b6b'};
+
+/* 地图图例的席位色块：与 opponentColorGradient() 同一手法（conic-gradient 硬分
+ * 段）。地图上的 QSO 落点按席位取色（见 wall-map 的 seat.color），原来那一颗
+ * 绿色圆点等于没说话。地图点位只有颜色、没有形状标记，所以图例里不提形状——
+ * 「颜色 / 形状 = 席位」那句话只挂在流水表表头上，那里两种编码都在。 */
+const seatColorGradient = () => 'conic-gradient(' + SEAT_COLORS.map((color, index) =>
+    color + ' ' + Math.round(index * 100 / SEAT_COLORS.length) + '% ' +
+    Math.round((index + 1) * 100 / SEAT_COLORS.length) + '%').join(',') + ')';
 
 export async function startWallPage() {
     const state = {
@@ -61,13 +69,16 @@ export async function startWallPage() {
         build: ''
     };
     const wallMap = createWallMap();
-    const opponents = createOpponentRenderer({
-        t,
-        bearing: (lat1, lon1, lat2, lon2) => bearing(
-            {lat: lat1, lon: lon1},
-            {lat: lat2, lon: lon2}
-        )
-    });
+    /* 同一个方位角函数既喂共享渲染器，也喂 buildOpponents 的家数判定，
+     * 保证「算不算对手」两边口径完全一致。 */
+    const bearingOf = (lat1, lon1, lat2, lon2) => bearing(
+        {lat: lat1, lon: lon1},
+        {lat: lat2, lon: lon2}
+    );
+    const opponents = createOpponentRenderer({t, bearing: bearingOf});
+    /* 非 null = 对手栏当前处于矩阵模式（对手 < 4 家）；resize 时重排矩阵，
+     * 而不是交给共享渲染器的 trim——它的 trim 会拿旧的大卡盖掉矩阵。 */
+    let oppMatrixRivals = null;
     const secSetting = (key, fallback, min, max) => {
         const value = Number(state.settings && state.settings[key]);
         return (Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback) * 1000;
@@ -76,6 +87,34 @@ export async function startWallPage() {
         const value = Number(state.settings && state.settings[key]);
         return Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback;
     };
+
+    /* ---------- 对手栏本地渲染 ----------
+     * 先用 buildOpponents 数出对手家数：不足 4 家时，共享渲染器的「一家一张
+     * 横条大卡」会让整栏高度被两三家占满、几乎没有信息量，改走 wall-cards 的
+     * 「波段 × 对手」紧凑矩阵（只有 1 家时矩阵退化成单列，仍然照画）；
+     * ≥4 家或一家都没有时沿用共享渲染器（空态文案也由它负责）。
+     * spot 列表、SPOT、语言切换、resize 四路刷新统一走这个入口，
+     * 保证任何一路数据变化都会按同一口径重算。 */
+    function renderOpponents() {
+        const rivals = buildOpponents(state.watchedRows, state.settings.myCall, bearingOf, {
+            windowMs: numSetting('opponentWindowMin', 30, 5, 180) * 60000,
+            concentrationMin: numSetting('concentrationMin', 0.4, 0, 1),
+            watched: state.watched
+        });
+        if (rivals.length && rivals.length < 4) {
+            oppMatrixRivals = rivals;
+            renderOpponentMatrix($('#oppRows'), rivals);
+            /* 摘要徽标与共享渲染器同口径：N 对手 · M 频段。 */
+            const bands = new Set();
+            rivals.forEach(rival => rival.bands.forEach(band => bands.add(band.band)));
+            $('#oppSummary').textContent =
+                t('wall.opp.summary', {count: rivals.length, bands: bands.size});
+        } else {
+            oppMatrixRivals = null;
+            $('#oppRows').classList.remove('opp-matrix');
+            opponents.render(state.watchedRows, state.settings.myCall, state.watched);
+        }
+    }
 
     function renderLegend(shown) {
         const parts = [];
@@ -92,8 +131,12 @@ export async function startWallPage() {
                 t('wall.layer.weather') + '</span>');
         }
         if (shown.includes('qso')) {
-            parts.push('<span><i class="dot" style="background:' + COLORS.qso + '"></i>' +
-                t('wall.layer.qso') + '</span>');
+            /* 地图上的 QSO 落点只按席位取色、没有形状标记，所以这句只说
+             * 「颜色 = 席位」。字典里现成的 wall.legend.seatColor 是流水表用的
+             * 「颜色 / 形状 = 席位」双编码说明，直接复用会提到图上不存在的
+             * 形状编码，因此走 tr 给地图专用的兜底文案。 */
+            parts.push('<span><i class="dot" style="background:' + seatColorGradient() + '"></i>' +
+                t('wall.layer.qso') + ' · ' + tr('wall.legend.mapSeatColor', '颜色 = 席位') + '</span>');
         }
         if (shown.includes('myspot')) {
             parts.push('<span><i class="dot" style="background:' + COLORS.myspot + '"></i>' +
@@ -111,6 +154,8 @@ export async function startWallPage() {
     function applyWallSettings() {
         const settings = state.settings;
         $('#wallName').textContent = settings.wallTitle || 'DX-COMPASS';
+        /* 地图左上角一句话简介，随语言切换刷新；layer-tag 占右上角，两不相碰。 */
+        $('#mapTitle').textContent = tr('wall.map.title', '电波覆盖 · 每条线 = 一条已通 QSO');
         const layers = Array.isArray(settings.wallLayers) ? settings.wallLayers : [];
         const selected = LAYER_ORDER.filter(key => layers.includes(key));
         state.selected = selected.length ? selected : ['prop'];
@@ -195,10 +240,9 @@ export async function startWallPage() {
                 tickClock(state.settings);
                 renderRig();
                 renderKpi(state.station, state.qsoRows);
-                renderOperators(state.qsoRows, state.model);
                 renderQsoLog($('#qsoLog'), state.qsoRows, state.model);
                 renderSpaceTrend(state.prop || {});
-                opponents.render(state.watchedRows, state.settings.myCall, state.watched);
+                renderOpponents();
             }
         }
         renderBands(state.prop && state.prop.forecast);
@@ -226,7 +270,7 @@ export async function startWallPage() {
             /* Keep the previous allowlist; the wall never widens it on error. */
             return;
         }
-        opponents.render(state.watchedRows, state.settings.myCall, state.watched);
+        renderOpponents();
     }
 
     async function refreshSpots() {
@@ -247,8 +291,8 @@ export async function startWallPage() {
             windowMin: numSetting('opponentWindowMin', 30, 5, 180),
             watched: state.watched
         });
-        renderSpotTrend(state.spotRows);
-        opponents.render(state.watchedRows, state.settings.myCall, state.watched);
+        renderMinuteTrend(state.qsoRows, state.spotRows);
+        renderOpponents();
     }
 
     /* 席位模型：把设备席位计划表、台站实时状态和 QSO 流水三方合到一张表上，
@@ -291,9 +335,7 @@ export async function startWallPage() {
         rebuildModel();
         wallMap.drawQso(state.qsoRows, state.settings.grid, state.model);
         renderQsoStats(state.qsoRows);
-        renderQsoTrend(state.qsoRows);
-        renderRateTrend(state.qsoRows);
-        renderOperators(state.qsoRows, state.model);
+        renderMinuteTrend(state.qsoRows, state.spotRows);
         renderScoreCurve(state.qsoRows);
         renderKpi(state.station, state.qsoRows);
         renderQsoLog($('#qsoLog'), state.qsoRows, state.model);
@@ -353,18 +395,22 @@ export async function startWallPage() {
         if (resizeTimer) clearTimeout(resizeTimer);
         resizeTimer = setTimeout(() => {
             resizeTimer = null;
-            renderQsoTrend(state.qsoRows);
-            renderRateTrend(state.qsoRows);
+            renderMinuteTrend(state.qsoRows, state.spotRows);
             renderScoreCurve(state.qsoRows);
-            renderSpotTrend(state.spotRows);
             renderSpaceTrend(state.prop || {});
-            /* 栏宽变了，明细表的列宽和操作员名称列要重新量一次。 */
-            renderOperators(state.qsoRows, state.model);
+            /* 栏宽变了，明细表的列宽要重新量一次；席位行右侧的四个读数、波段占用
+             * 与天线行也是先按宽度换行、再按高度整行删，所以一并重绘。 */
+            renderRig();
             renderQsoLog($('#qsoLog'), state.qsoRows, state.model);
         }, 200);
     });
     if (window.ResizeObserver) {
-        new ResizeObserver(() => opponents.trim()).observe($('#oppRows'));
+        /* 栏宽变化要重量：矩阵模式重排矩阵（列数不变，但 trimRows 要按新
+         * 高度重跑），否则交回共享渲染器的 trim。 */
+        new ResizeObserver(() => {
+            if (oppMatrixRivals) renderOpponentMatrix($('#oppRows'), oppMatrixRivals);
+            else opponents.trim();
+        }).observe($('#oppRows'));
         /* #map itself is observed inside createMapSurface(), so the pane's own
          * size changes (fonts, wrapped header, data cards) re-fit the map there
          * instead of keeping a second observer here. */
@@ -392,7 +438,6 @@ export async function startWallPage() {
     rebuildModel();
     renderRig();
     renderQsoLog($('#qsoLog'), state.qsoRows, state.model);
-    renderOperators(state.qsoRows, state.model);
     renderKpi(state.station, state.qsoRows);
     pollers.forEach(poller => poller.start());
 }
