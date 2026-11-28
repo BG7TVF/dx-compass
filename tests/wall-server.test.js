@@ -38,6 +38,9 @@ const MODULE_PATHS = [
     '/shared/map/surface.mjs',
     '/shared/map/markers.mjs',
     '/shared/map/terminator.mjs',
+    '/shared/map/marker-life.mjs',
+    '/shared/map/marker-fade.mjs',
+    '/shared/settings/schema.js',
     '/shared/map/data/land.js',
     '/shared/monitoring/poller.mjs',
     '/shared/propagation/forecast-view.mjs'

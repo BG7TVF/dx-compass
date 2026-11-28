@@ -25,6 +25,8 @@ import {bandConditionCells, spaceWeatherCells, bandOf} from '../../bigscreen/wal
 import {bearing} from '../../shared/geo/coordinates.mjs';
 import {gridToLatLon} from '../../shared/geo/maidenhead.mjs';
 import {createOpMap} from '../op/op-map.mjs';
+/* 标记生命周期与 SPOT 页、大屏同一份实现：改设置里的存活时长，这张地图必须跟着变。 */
+import {bornAtOf, dieAtOf, qsoTtlMs, ttlForMode} from '../../shared/map/marker-life.mjs';
 import {getDevicesSnapshot, sendDeviceCommand, setBandLink} from '../../shared/data/devices.mjs';
 import {changeFrequencyClaim} from '../../shared/data/station.mjs';
 
@@ -1039,10 +1041,18 @@ export function createOpPage(ctx) {
     }
 
     function spotsForSeat(key) {
-        const cutoff = Date.now() - (Number(ctx.settings.mySpotTtl) || 30) * 60000;
-        const live = state.mySpots.filter(spot => timeOf(spot.timestamp) >= cutoff);
+        const now = Date.now();
         const radio = radioOf(key);
         const freq = Number(radio && radio.freqKhz);
+        /* 时间窗按 SPOT 自己的模式取 settings.ttl（与 SPOT 页同一口径），
+         * 不再是 mySpotTtl：设置里改「标记存活（分钟）」必须在这张地图上也算数。 */
+        const live = [];
+        state.mySpots.forEach(spot => {
+            const bornAt = bornAtOf(spot);
+            const dieAt = dieAtOf(bornAt, ttlForMode(ctx.settings, spot.mode));
+            if (now >= dieAt) return;
+            live.push(Object.assign({}, spot, {_bornAt: bornAt === null ? now : bornAt, _dieAt: dieAt}));
+        });
         /* No radio state for this seat yet: the whole station's spots stay on
          * the map rather than an empty one. */
         if (!freq) return live;
@@ -1087,14 +1097,31 @@ export function createOpPage(ctx) {
         const keys = mapSeatKeys(current);
         const own = String(current);
         const perSeat = Math.max(20, Math.floor(limit / Math.max(1, keys.length)));
+        const now = Date.now();
+        const ttl = qsoTtlMs(ctx.settings);
         const rows = [];
         keys.forEach(seat => {
-            qsosFor(seat).slice(-perSeat).forEach(qso => {
-                rows.push(Object.assign({}, qso, {
-                    seatLane: seatLane(seat),
-                    ownSeat: seat === own
-                }));
-            });
+            /* 先按 qsoTtl 剪掉过期 QSO 再截数量：顺序反过来会让过期标记吃掉
+             * 名额，图上留下的反而是最老的那批。 */
+            qsosFor(seat)
+                .map(qso => {
+                    const bornAt = bornAtOf(qso);
+                    return {
+                        qso,
+                        bornAt: bornAt === null ? now : bornAt,
+                        dieAt: dieAtOf(bornAt, ttl)
+                    };
+                })
+                .filter(item => now < item.dieAt)
+                .slice(-perSeat)
+                .forEach(item => {
+                    rows.push(Object.assign({}, item.qso, {
+                        seatLane: seatLane(seat),
+                        ownSeat: seat === own,
+                        _bornAt: item.bornAt,
+                        _dieAt: item.dieAt
+                    }));
+                });
         });
         return rows;
     }
@@ -3010,6 +3037,16 @@ export function createOpPage(ctx) {
         handleStation,
         handleDevices,
         handleSpot,
-        showRuleAlert
+        showRuleAlert,
+        /* 淡出与剪枝由 main.mjs 按 fadeSec / pruneSec 的节奏统一驱动，
+         * 和 SPOT 页、QSO 页同一拍；OP 视图自己不再另设定时器。 */
+        tick(now) {
+            if (!state.active || !state.map) return;
+            state.map.tick(now);
+        },
+        prune(now) {
+            if (!state.active || !state.map) return;
+            state.map.prune(now);
+        }
     };
 }

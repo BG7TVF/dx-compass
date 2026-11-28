@@ -74,11 +74,9 @@ export function writeLocalExtras(values, storage = globalThis.localStorage) {
     }
 }
 
-export function ttlForMode(settings, mode) {
-    const key = String(mode || '').toUpperCase();
-    const minutes = settings.ttl[key] !== undefined ? settings.ttl[key] : settings.ttl.SSB;
-    return minutes * 60000;
-}
+/* 按模式的标记存活时长只有一个实现，放在 shared/map/marker-life.mjs：
+ * OP 视图和大屏的地图也要问同一个地方要 TTL，不能各算各的。 */
+export {ttlForMode} from '../shared/map/marker-life.mjs';
 
 export function bandColorOf(settings, band) {
     const key = normalizeBand(band).toLowerCase();

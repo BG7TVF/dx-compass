@@ -10,6 +10,7 @@ import {
 } from '../../shared/geo/coordinates.mjs';
 import {greatCirclePoints, trackPaths} from '../../shared/geo/great-circle.mjs';
 import {addTrackPaths} from '../../shared/map/layers.mjs';
+import {createMarkerFade} from '../../shared/map/marker-fade.mjs';
 import {qsoDotIcon} from '../../shared/map/markers.mjs';
 
 /* 席位泳道调色板：与 op.css 的 --op-r1..--op-r6 一一对应，
@@ -232,14 +233,23 @@ export function createOpMap(container, {onBearing, canRotate} = {}) {
         drawCoverage();
     }
 
+    /* 每次 setData 记下「这组图层属于哪条记录、什么时候出生、什么时候到期」，
+     * 于是淡出与剪枝能按 main.mjs 的 fadeSec / pruneSec 节奏增量刷新，不必为了
+     * 改透明度重建整张地图。TTL 由 OP 页用 shared/map/marker-life 算好后随行
+     * 带来（_bornAt / _dieAt，Infinity = 不限），这张地图只负责照着画；
+     * 淡出登记器与大屏共用 shared/map/marker-fade。 */
+    const fade = createMarkerFade();
+
     function setData({qsos = [], spots = [], radioFilter = 'all'} = {}) {
         qsoLayer.clear();
         spotLayer.clear();
+        fade.reset();
         if (!home) return;
 
         const lanes = radioColors();
         const spotColor = cssVar('--map-spot', '#8fe3ff');
         const spotFill = cssVar('--map-bg', '#0a1929');
+        const now = Date.now();
 
         for (const qso of qsos) {
             const at = pointOf(qso.lat, qso.lon);
@@ -254,7 +264,12 @@ export function createOpMap(container, {onBearing, canRotate} = {}) {
              * 现在把最淡的一档提到 1.4px / 0.62 透明度 / "5 5" 虚线，短线至少
              * 留下两段可见的虚线，长线则明显成弧。 */
             const own = qso.ownSeat !== false;
-            addTrackPaths(map, trackPaths(home.lat, home.lon, at[0], at[1], 64), {
+            const dieAt = Number(qso._dieAt);
+            const bornAt = Number(qso._bornAt);
+            /* OP 页已经按 qsoTtl 剪过一轮，这里再挡一次：全量重绘与增量 tick 的
+             * 时刻不同，过期的行不应该有任何机会重新出现在图上。 */
+            if (Number.isFinite(dieAt) && now >= dieAt) continue;
+            const tracks = addTrackPaths(map, trackPaths(home.lat, home.lon, at[0], at[1], 64), {
                 L,
                 group: qsoLayer.group,
                 color,
@@ -262,19 +277,25 @@ export function createOpMap(container, {onBearing, canRotate} = {}) {
                 opacity: own ? 0.9 : 0.62,
                 dashArray: own ? null : '5 5'
             });
-            L.marker(at, {
+            const marker = L.marker(at, {
                 interactive: false,
                 icon: qsoDotIcon(L, lane, {
                     className: 'op-map-dot ' + (own ? 'own' : 'other'),
                     size: own ? 12 : 7
                 })
             }).addTo(qsoLayer.group);
+            const entry = fade.add({group: qsoLayer.group, bornAt, dieAt});
+            entry.addTrack(tracks, own ? 0.9 : 0.62);
+            entry.addIcon(marker);
         }
 
         for (const spot of spots) {
             const at = pointOf(spot.lat, spot.lon);
             if (!at) continue;
-            addTrackPaths(map, trackPaths(home.lat, home.lon, at[0], at[1], 64), {
+            const dieAt = Number(spot._dieAt);
+            const bornAt = Number(spot._bornAt);
+            if (Number.isFinite(dieAt) && now >= dieAt) continue;
+            const tracks = addTrackPaths(map, trackPaths(home.lat, home.lon, at[0], at[1], 64), {
                 L,
                 group: spotLayer.group,
                 color: spotColor,
@@ -284,10 +305,13 @@ export function createOpMap(container, {onBearing, canRotate} = {}) {
             });
             /* 本席位被 spot 的位置同样用大圆点：半径 6px，是本席位 QSO 点的量级，
              * 细线只是「谁在听我」的连线，点才是答案。 */
-            L.circleMarker(at, {
+            const dot = L.circleMarker(at, {
                 radius: 6, color: spotColor, fillColor: spotFill,
                 fillOpacity: 0.55, weight: 1.4, interactive: false
             }).addTo(spotLayer.group);
+            const entry = fade.add({group: spotLayer.group, bornAt, dieAt});
+            entry.addTrack(tracks, 0.28);
+            entry.addDot(dot, 1, 0.55);
         }
     }
 
@@ -296,6 +320,8 @@ export function createOpMap(container, {onBearing, canRotate} = {}) {
         setHome,
         setData,
         setCoverage,
+        tick: now => fade.tick(now),
+        prune: now => fade.prune(now),
         resize() {
             return surface.fit();
         },

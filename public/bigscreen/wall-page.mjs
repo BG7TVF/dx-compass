@@ -14,6 +14,9 @@ import {
     renderSpaceTrend,
     setSpaceDwell
 } from './wall-charts.mjs';
+/* 标记淡出/剪枝的节拍与主视图共用一份实现：改设置里的 fadeSec / pruneSec，
+ * 大屏地图也跟着变。 */
+import {fadeTickMs, pruneTickMs} from '../shared/map/marker-life.mjs';
 import {buildOpponents, createOpponentRenderer, opponentColorGradient} from '../shared/opponents/opponents.mjs';
 import {
     renderBands,
@@ -221,6 +224,16 @@ export async function startWallPage() {
             state.settings.concentrationMin,
             state.settings.opponentCompactMin,
             state.settings.opponentBandsMax,
+            /* 地图标记的存活时长与淡出/剪章节拍：改了这些必须立刻重画地图，
+             * 否则大屏上的点会一直挂到下一次轮询才变。ttl 是对象，
+             * 按固定键展开，避免序列化顺序抖动导致无谓重绘。 */
+            state.settings.qsoTtl,
+            state.settings.fadeSec,
+            state.settings.pruneSec,
+            state.settings.markerMax,
+            (state.settings.ttl || {}).CW,
+            (state.settings.ttl || {}).SSB,
+            (state.settings.ttl || {}).DIGI,
             state.settings.myCall,
             state.settings.grid,
             lang
@@ -233,7 +246,7 @@ export async function startWallPage() {
                 applyStatic(document);
             }
             applyWallSettings();
-            wallMap.drawQso(state.qsoRows, state.settings.grid, state.model);
+            wallMap.drawQso(state.qsoRows, state.settings.grid, state.model, {settings: state.settings});
             /* Re-render the text that the modules compose from the dictionary:
              * legend, opponent cards, chart captions and the station cards. */
             if (langChanged) {
@@ -289,7 +302,8 @@ export async function startWallPage() {
         }
         wallMap.drawSpots(state.watchedRows, state.settings.myCall, {
             windowMin: numSetting('opponentWindowMin', 30, 5, 180),
-            watched: state.watched
+            watched: state.watched,
+            settings: state.settings
         });
         renderMinuteTrend(state.qsoRows, state.spotRows);
         renderOpponents();
@@ -333,7 +347,7 @@ export async function startWallPage() {
             /* Keep the previous QSOs. */
         }
         rebuildModel();
-        wallMap.drawQso(state.qsoRows, state.settings.grid, state.model);
+        wallMap.drawQso(state.qsoRows, state.settings.grid, state.model, {settings: state.settings});
         renderQsoStats(state.qsoRows);
         renderMinuteTrend(state.qsoRows, state.spotRows);
         renderPointsCurve(state.qsoRows);
@@ -417,7 +431,22 @@ export async function startWallPage() {
     }
 
     tickClock(state.settings);
-    setInterval(() => tickClock(state.settings), 1000);
+    /* 一秒一跳，但地图只按各自设定的节奏重画透明度 / 摘掉过期标记，
+     * 与 main.mjs 里 QSO、SPOT 视图的做法完全一致。 */
+    let lastFade = 0;
+    let lastPrune = 0;
+    setInterval(() => {
+        const now = Date.now();
+        tickClock(state.settings, new Date(now));
+        if (now - lastFade >= fadeTickMs(state.settings)) {
+            lastFade = now;
+            wallMap.tick(now);
+        }
+        if (now - lastPrune >= pruneTickMs(state.settings)) {
+            lastPrune = now;
+            wallMap.prune(now);
+        }
+    }, 1000);
     applyStatic(document);
 
     await settingsPoller.run();

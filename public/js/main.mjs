@@ -14,6 +14,7 @@ import {createPropagationPage} from './pages/propagation-page.mjs';
 import {createOpPage} from './pages/op-page.mjs';
 import {createDevicesPage} from './pages/devices-page.mjs';
 import {createVoiceAlert} from '../shared/alerts/voice.mjs';
+import {fadeTickMs, pruneTickMs} from '../shared/map/marker-life.mjs';
 
 async function start() {
     const i18n = createI18n({lang: 'zh'});
@@ -147,14 +148,16 @@ async function start() {
     }, 250);
     setInterval(() => {
         const now = Date.now();
-        if (now - lastTick >= clampSec(ctx.settings.fadeSec, 10, 5, 60) * 1000) {
+        if (now - lastTick >= fadeTickMs(ctx.settings)) {
             lastTick = now;
             ctx.spot.tick(now);
             ctx.qso.tick(now);
+            ctx.op.tick?.(now);
         }
-        if (now - lastPrune >= clampSec(ctx.settings.pruneSec, 30, 10, 300) * 1000) {
+        if (now - lastPrune >= pruneTickMs(ctx.settings)) {
             lastPrune = now;
             ctx.spot.prune(now);
+            ctx.op.prune?.(now);
         }
     }, 1000);
     window.addEventListener('resize', () => {

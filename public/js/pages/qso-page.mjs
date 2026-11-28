@@ -2,6 +2,9 @@ import {getLeaflet} from '../../shared/map/leaflet.mjs';
 import {createBaseMap, fitPoints, fitWorld, setWorldMinZoom} from '../../shared/map/base-map.mjs';
 import {createTerminator} from '../../shared/map/terminator.mjs';
 import {addTrackPaths} from '../../shared/map/layers.mjs';
+import {
+    qsoTtlMs as sharedQsoTtlMs, bornAtOf as sharedBornAtOf, dieAtOf as sharedDieAtOf
+} from '../../shared/map/marker-life.mjs';
 import {greatCirclePaths} from '../../shared/geo/great-circle.mjs';
 import {gridToLatLon} from '../../shared/geo/maidenhead.mjs';
 import {createQsoStore, fetchQsos} from '../../shared/data/qsos.mjs';
@@ -40,19 +43,14 @@ export function createQsoPage(ctx) {
     const home = () => gridToLatLon(ctx.settings.grid);
     const color = band => bandColorOf(ctx.settings, band);
     /* QSO 标记存活时间：0/非法值 = 永久（仅受 qsoMax 数量上限约束）；>0 = 自该 QSO
-     * 时间(ts)起多少分钟后淡出移除。仅影响地图显示层，日志数据仍完整持久化。 */
-    function qsoTtlMs() {
-        const raw = Number(ctx.settings.qsoTtl);
-        return Number.isFinite(raw) && raw > 0 ? raw * 60000 : 0;
-    }
-    function qsoBornAt(qso) {
-        const ts = new Date(qso && qso.ts).getTime();
-        return Number.isFinite(ts) ? ts : Date.now();
-    }
-    function qsoDieAt(bornAt) {
-        const ttl = qsoTtlMs();
-        return ttl > 0 ? bornAt + ttl : Infinity;
-    }
+     * 时间(ts)起多少分钟后淡出移除。仅影响地图显示层，日志数据仍完整持久化。
+     * 算法在 shared/map/marker-life.mjs，OP 视图与大屏地图共用同一份。 */
+    const qsoTtlMs = () => sharedQsoTtlMs(ctx.settings);
+    const qsoBornAt = qso => {
+        const born = sharedBornAtOf(qso);
+        return born === null ? Date.now() : born;
+    };
+    const qsoDieAt = bornAt => sharedDieAtOf(bornAt, qsoTtlMs());
     const settingNumber = (key, fallback, min, max) => {
         const value = Number(ctx.settings && ctx.settings[key]);
         if (!Number.isFinite(value)) return fallback;

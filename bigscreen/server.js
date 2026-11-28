@@ -83,6 +83,13 @@ const STATIC = {
     '/shared/map/surface.mjs': ['map/surface.mjs', JS, 'shared'],
     '/shared/map/markers.mjs': ['map/markers.mjs', JS, 'shared'],
     '/shared/map/terminator.mjs': ['map/terminator.mjs', JS, 'shared'],
+    /* 标记的 TTL / 淡出/剪章节拍（marker-life）与淡出登记器（marker-fade）：
+     * 大屏地图要靠它们让 qsoTtl、ttl[模式]、fadeSec、pruneSec 真正生效。
+     * marker-life 会副作用导入 settings/schema.js 取 ttl 的默认值，所以这个
+     * 只读的默认值模块也必须一起放行，否则整张大屏地图的脚本都会 404 挂掉。 */
+    '/shared/map/marker-life.mjs': ['map/marker-life.mjs', JS, 'shared'],
+    '/shared/map/marker-fade.mjs': ['map/marker-fade.mjs', JS, 'shared'],
+    '/shared/settings/schema.js': ['settings/schema.js', JS, 'shared'],
     '/shared/monitoring/poller.mjs': ['monitoring/poller.mjs', JS, 'shared'],
     '/shared/opponents/opponents.mjs': ['opponents/opponents.mjs', JS, 'shared'],
     '/shared/opponents/opponents.css': ['opponents/opponents.css', 'text/css; charset=utf-8', 'shared'],

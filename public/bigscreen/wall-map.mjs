@@ -13,6 +13,10 @@ import {
     setLayerVisible
 } from '../shared/map/layers.mjs';
 import {
+    bornAtOf, dieAtOf, isExpired, qsoTtlMs, ttlForMode
+} from '../shared/map/marker-life.mjs';
+import {createMarkerFade} from '../shared/map/marker-fade.mjs';
+import {
     MUF_LAYER_ALPHA, MUF_LEGEND_VALUES, NIGHT_ALPHA, TWILIGHT_ELEVATION_DEG,
     mufColor, mufRgb, nightShadeAlpha, sampleMufGrid
 } from '../shared/propagation/forecast-view.mjs';
@@ -133,6 +137,17 @@ export function createWallMap() {
     let nightOverlay = null;
     let lastMufGrid = null;
 
+    /* ---------- 标记生命周期（TTL / 淡出 / 剪枝） ----------
+     * 大屏以前只按 opponentWindowMin 一次性重画，设置里的「标记存活」对这张图
+     * 完全没有作用。现在 QSO 走 qsoTtl、SPOT 走 settings.ttl[模式]（与 SPOT 页
+     * 同一口径），淡出与剪枝的节奏复用 fadeSec / pruneSec，由 wall-page 的 1 秒
+     * 心跳按拍调用 tick()/prune()。
+     * 淡出的具体做法（改哪个属性、摘哪些图层）与 OP 视图完全一样，因此用
+     * shared/map/marker-fade 的登记器；两个图层组各自一份账本：drawQso 只清
+     * qso，drawSpots 只清 myspot/dxspot。 */
+    const fadeQso = createMarkerFade();
+    const fadeSpot = createMarkerFade();
+
     function setVisible(key, on) {
         visible[key] = Boolean(on);
         if (key === 'prop') {
@@ -166,10 +181,9 @@ export function createWallMap() {
         setLayerVisible(map, nightOverlay, visible.prop);
     }
 
-    function drawSpots(rows, myCall, {windowMin = 30, watched = []} = {}) {
+    function drawSpots(rows, myCall, {windowMin = 30, watched = [], settings = null, now = Date.now()} = {}) {
         const my = String(myCall || '').toUpperCase();
         const windowMs = Math.min(180, Math.max(5, Number(windowMin) || 30)) * 60000;
-        const cutoff = Date.now() - windowMs;
         /* Same allowlist as the opponent panel: PSKR regional rows carry the
          * receiving station in monitored_call, so only monitored calls are
          * rivals; my own rows stay in the "my spots" layer. */
@@ -178,14 +192,19 @@ export function createWallMap() {
             .filter(Boolean));
         /* Same call -> colour + glyph assignment as the opponent panel, so a
          * rival's markers and its card always match. Calls the panel cannot
-         * aggregate (no band) keep the neutral DX red dot. */
+         * aggregate (no band) keep the neutral DX red dot.
+         * 面板聚合口径不变（仍然只看 windowMs），变的是地图上留不留这颗点。 */
         const styles = opponentStyleMap(rows, my, {windowMs, watched});
-        const painted = new Set();
+        const painted = new Map();
         views.myspot.clearLayers();
         views.dxspot.clearLayers();
+        fadeSpot.reset();
         rows.forEach(row => {
-            const time = new Date(row.timestamp).getTime();
-            if (!isFinite(time) || time < cutoff) return;
+            /* 存活时长按这条 SPOT 自己的模式取 settings.ttl，缺键回退 SSB；
+             * 时间戳非法就当不过期（宁可多留，别把历史数据算成过期）。 */
+            const bornAt = bornAtOf(row, now);
+            const dieAt = dieAtOf(bornAt, ttlForMode(settings, row.mode));
+            if (isExpired(dieAt, now)) return;
             /* 回退字段是 spot_call（/api/spots 的行里只有它，没有 dx_call；
              * 写错字段名会让回退恒为假）。PSKR 区域邻台行两端都不在名单时
              * monitored_call 被有意置空，spot_call 才是真正被听到的那一端。 */
@@ -199,68 +218,90 @@ export function createWallMap() {
                 row.lon !== null && row.lon !== undefined;
             const hasDx = row.dx_lat !== null && row.dx_lat !== undefined &&
                 row.dx_lon !== null && row.dx_lon !== undefined;
+            const entry = fadeSpot.add({group, bornAt, dieAt});
             if (hasDx) {
                 /* One marker per rival position: repeat spots from the same
                  * op keep a single glyph instead of stacking dozens of icons. */
                 const key = call + '|' + row.dx_lat + '|' + row.dx_lon;
-                if (!painted.has(key)) {
-                    painted.add(key);
+                const keeper = painted.get(key);
+                if (keeper) {
+                    /* 同一个位置被反复点到：glyph 只由第一条画，这里把那条的寿命
+                     * 延长到最后一次被听到，否则先画的到期时会把还在响的位置一起带走。 */
+                    if (entry.dieAt > keeper.dieAt) {
+                        keeper.dieAt = entry.dieAt;
+                        keeper.bornAt = entry.bornAt;
+                    }
+                } else {
                     if (style) {
-                        L.marker([row.dx_lat, row.dx_lon], {
+                        const icon = L.marker([row.dx_lat, row.dx_lon], {
                             icon: opponentIcon(L, style, 16),
                             interactive: false,
                             keyboard: false
                         }).addTo(group);
+                        entry.addIcon(icon);
                     } else {
-                        L.circleMarker([row.dx_lat, row.dx_lon], {
+                        const dot = L.circleMarker([row.dx_lat, row.dx_lon], {
                             radius: 3, color, weight: 1, fillColor: color, fillOpacity: 0.85,
                             interactive: false
                         }).addTo(group);
+                        entry.addDot(dot, 1, 0.85);
                     }
+                    painted.set(key, entry);
                 }
             }
             if (hasDe) {
                 /* Spotter points keep their existing neutral colour; only the
                  * rival's own marker and path carry the identity colour. */
                 const spotter = mine ? COLORS.myspot : COLORS.dxspot;
-                L.circleMarker([row.lat, row.lon], {
+                const dot = L.circleMarker([row.lat, row.lon], {
                     radius: 2.4, color: spotter, weight: 1, fillColor: spotter, fillOpacity: 0.55,
                     interactive: false
                 }).addTo(group);
+                entry.addDot(dot, 1, 0.55);
             }
             if (hasDe && hasDx) {
                 const track = style ? trackStyle(style.shapeIndex) : {weight: 1.1, opacity: 0.45};
-                addTrackPaths(map, trackPaths(row.dx_lat, row.dx_lon, row.lat, row.lon, 64), {
+                const base = Number(track.opacity);
+                entry.addTrack(addTrackPaths(map, trackPaths(row.dx_lat, row.dx_lon, row.lat, row.lon, 64), {
                     L, group, color, ...track
-                });
+                }), base);
             }
+            if (!entry.layers.length) fadeSpot.drop(entry);
         });
     }
 
     /* 地图是"覆盖证明"，不是主视图：每个落点用打出这条 QSO 的席位色，
      * 观众把地图和右侧明细表一对，就知道是哪个席位打到哪儿。 */
-    function drawQso(rows, grid, model) {
+    function drawQso(rows, grid, model, {settings = null, now = Date.now()} = {}) {
         const group = views.qso;
         group.clearLayers();
+        fadeQso.reset();
         const home = gridToLatLon(grid);
+        const ttl = qsoTtlMs(settings);
         const reached = [];
         (rows || []).forEach(qso => {
             if (qso.lat === null || qso.lat === undefined ||
                 qso.lon === null || qso.lon === undefined) return;
+            /* qsoTtl 从这条 QSO 自己的时间算起；0 = 不限（只受数量约束）。 */
+            const bornAt = bornAtOf(qso, now);
+            const dieAt = dieAtOf(bornAt, ttl);
+            if (isExpired(dieAt, now)) return;
             const seat = model ? model.seatOfRow(qso) : null;
             const hue = seat ? seat.color : COLORS.qso;
-            L.circleMarker([qso.lat, qso.lon], {
+            const dot = L.circleMarker([qso.lat, qso.lon], {
                 radius: 2.8, color: hue, weight: 1,
                 fillColor: hue, fillOpacity: 0.85, interactive: false
             }).addTo(group);
-            reached.push([qso, new Date(qso.timestamp).getTime() || 0, hue]);
+            const entry = fadeQso.add({group, bornAt, dieAt});
+            entry.addDot(dot, 1, 0.85);
+            reached.push([qso, Number.isFinite(bornAt) ? bornAt : 0, hue, entry]);
         });
         if (!home) return;
         reached.sort((a, b) => b[1] - a[1]);
-        reached.slice(0, QSO_TRACK_LIMIT).forEach(([qso, , hue]) => {
-            addTrackPaths(map, trackPaths(home[0], home[1], qso.lat, qso.lon, 64), {
+        reached.slice(0, QSO_TRACK_LIMIT).forEach(([qso, , hue, entry]) => {
+            entry.addTrack(addTrackPaths(map, trackPaths(home[0], home[1], qso.lat, qso.lon, 64), {
                 L, group, color: hue, weight: 1, opacity: 0.4
-            });
+            }), 0.4);
         });
         L.circleMarker(home, {
             radius: 6, color: '#ffffff', weight: 2,
@@ -340,6 +381,16 @@ export function createWallMap() {
         renderProp,
         drawSpots,
         drawQso,
+        /* 淡出与剪枝：由 wall-page 的 1 秒心跳按 fadeSec / pruneSec 的节奏调用，
+         * 只改透明度、只摘到期的图层，不重建整张地图。 */
+        tick(now = Date.now()) {
+            fadeQso.tick(now);
+            fadeSpot.tick(now);
+        },
+        prune(now = Date.now()) {
+            fadeQso.prune(now);
+            fadeSpot.prune(now);
+        },
         drawAurora,
         drawWeather,
         fit,
