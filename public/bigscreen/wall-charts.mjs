@@ -228,10 +228,11 @@ function drawGroupedBars(cv, series, now) {
     return peakValue;
 }
 
-/* 分数曲线：把日志按时间累加成「累计分数」与「累计 QSO」两条曲线，
+/* 点数曲线：把日志按时间累加成「累计 QSO 点数」与「累计 QSO」两条曲线，
  * 各自归一到自己的最大值——竞赛大屏看的是势头（曲线凹凸）而不是绝对刻度，
- * 因此末端直接标出真实数值，另画一条从原点到终点的虚线作为均速参照。 */
-export function renderScoreCurve(rows) {
+ * 因此末端直接标出真实数值，另画一条从原点到终点的虚线作为均速参照。
+ * 申报总分只由头部 KPI 读取 station.score，这里不再冒充「分数」。 */
+export function renderPointsCurve(rows) {
     const cv = $('#scoreCurve');
     if (!cv) return;
     const box = canvasBox(cv);

@@ -573,16 +573,23 @@ export function renderQsoLog(box, rows, model) {
     trimRows(box, {rowClass: 'qso-row', extra: Math.max(0, source.length - entries.length)});
 }
 
-/* 头部 KPI 条：总分优先取 N1MM 的 Score 报文，缺报文时用日志自行累加，
- * 保证大屏在 N1MM 没发分数的竞赛里也不会空着。
- * 「已通国家」是给观众看的一格：不懂竞赛规则也能看出这台机器已经打到了
- * 多少个不同的地方，所以它紧挨着倍率排在速率之前。 */
+/* 头部 KPI 条：总分/QSO/乘数只读服务端 station.score，与 5758 完全同源。
+ * 大屏不再用 QSO 行自行累加分数或乘数——QSO 点数之和不是申报总分，
+ * 逐行 is_mult 之和也不是总乘数，两套算法只会让两块屏对不上。
+ * 「已通国家」与「速率」是大屏特有的观众指标，仍从共享 QSO 数据派生。 */
 export function renderKpi(station, rows) {
     const box = $('#kpiStrip');
     if (!box) return;
     const score = station && station.score || {};
-    const logged = rows.reduce((total, qso) => total + (Number(qso.points) || 0), 0);
-    const mults = rows.reduce((total, qso) => total + (qso.is_mult ? 1 : 0), 0);
+    const numberOrNull = value => {
+        if (value === null || value === undefined || value === '') return null;
+        const number = Number(value);
+        return Number.isFinite(number) ? number : null;
+    };
+    const show = value => value === null ? '—' : value;
+    const totalScore = numberOrNull(score.score);
+    const totalQso = numberOrNull(score.qsos);
+    const totalMult = numberOrNull(score.mults);
     const entities = new Set();
     rows.forEach(qso => {
         const entity = String(qso.countryprefix || '').trim().toUpperCase();
@@ -593,18 +600,14 @@ export function renderKpi(station, rows) {
         const time = new Date(qso.timestamp).getTime();
         return isFinite(time) && now - time <= 60 * 60 * 1000;
     }).length;
-    const pick = (value, fallback) => {
-        const number = Number(value);
-        return Number.isFinite(number) && number >= 0 ? number : fallback;
-    };
     /* KPI 不再按卡片换色相：这类装饰性用色会和席位色抢同一个视觉变量——旧的
      * --mint/--amber/--cyan/--violet/#f472b6 五个值逐字节就是旧色板的席位
      * 1/2/3/5/6，观众会把「已通国家 29」的粉色读成 6 号席位的数据。数值统一
      * 用 --text，左侧强调条与内阴影统一 --accent（见 bigscreen.css .kpi）。 */
     const cells = [
-        {key: 'score', label: t('wall.kpi.score'), value: pick(score.points, logged)},
-        {key: 'qsos', label: t('wall.kpi.qsos'), value: pick(score.qsos, rows.length)},
-        {key: 'mults', label: t('wall.kpi.mults'), value: pick(score.mults, mults)},
+        {key: 'score', label: t('wall.kpi.score'), value: show(totalScore)},
+        {key: 'qsos', label: t('wall.kpi.qsos'), value: show(totalQso === null ? rows.length : totalQso)},
+        {key: 'mults', label: t('wall.kpi.mults'), value: show(totalMult)},
         {key: 'countries', label: tr('wall.kpi.countries', 'Entities'),
             value: entities.size, extra: 'countries'},
         {key: 'rate', label: t('wall.kpi.rate'), value: hour, suffix: '/h'}

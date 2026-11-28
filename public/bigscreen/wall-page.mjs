@@ -10,7 +10,7 @@ import {getJson} from '../shared/core/transport.mjs';
 import {createPoller} from '../shared/monitoring/poller.mjs';
 import {
     renderMinuteTrend,
-    renderScoreCurve,
+    renderPointsCurve,
     renderSpaceTrend,
     setSpaceDwell
 } from './wall-charts.mjs';
@@ -336,7 +336,7 @@ export async function startWallPage() {
         wallMap.drawQso(state.qsoRows, state.settings.grid, state.model);
         renderQsoStats(state.qsoRows);
         renderMinuteTrend(state.qsoRows, state.spotRows);
-        renderScoreCurve(state.qsoRows);
+        renderPointsCurve(state.qsoRows);
         renderKpi(state.station, state.qsoRows);
         renderQsoLog($('#qsoLog'), state.qsoRows, state.model);
     }
@@ -396,7 +396,7 @@ export async function startWallPage() {
         resizeTimer = setTimeout(() => {
             resizeTimer = null;
             renderMinuteTrend(state.qsoRows, state.spotRows);
-            renderScoreCurve(state.qsoRows);
+            renderPointsCurve(state.qsoRows);
             renderSpaceTrend(state.prop || {});
             /* 栏宽变了，明细表的列宽要重新量一次；席位行右侧的四个读数、波段占用
              * 与天线行也是先按宽度换行、再按高度整行删，所以一并重绘。 */
