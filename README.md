@@ -511,7 +511,7 @@ BIGSCREEN_PORT=5860 BIGSCREEN_UPSTREAM=http://127.0.0.1:5758 node bigscreen/serv
 
 - 只接受 `GET` / `HEAD`，其它方法一律 405
 - 只代理 `/api/settings`、`/api/callsigns`、`/api/spots`、`/api/qsos`、`/api/station/state`、`/api/prop`、`/api/devices` 七个读接口；其它路径在大屏服务上直接 404，不会透传到 Node-RED
-- 静态文件按固定文件名提供（页面、样式、脚本、陆地轮廓），不做目录遍历
+- 静态文件按固定文件名提供（页面、样式、脚本、陆地轮廓），不做目录遍历。这张白名单（`bigscreen/server.js` 的 `STATIC`）是**进程启动时**加载的，且为**精确匹配 URL**：大屏脚本新增 `public/shared/**` 模块时，必须同时把它的 URL 加进 `STATIC`（`tests/wall-server.test.js` 会逐条断言），然后 `sudo systemctl restart dx-compass-wall` 才生效。漏加或只 `git pull` 不重启的表现是：**页面骨架正常、内容永远不出**——因为 `.mjs` 的导入链在 404 那一步整体抛错，`startWallPage()` 根本没执行（对比：5758 走 Node-RED 的 `httpStatic` 目录服务，`public/**` 改完刷新即生效，无需重启）
 - 不写数据库、不改流程、不动全局上下文，适合长期挂在场边
 
 **版面**
@@ -653,6 +653,7 @@ npm install --omit=dev --registry=https://registry.npmmirror.com
 - 老版本安装没有这个服务：到 `/opt/dx-compass` 执行 `git pull` 后重新运行 `sudo bash install.sh` 即可补装
 - 云服务器外网访问超时，多半是**安全组未放行 TCP 5859**（`ufw` 放行只能解决本机防火墙）：`sudo ufw allow 5859/tcp` 之后仍需在云控制台放行入方向 5859
 - 页面能打开但没有数据：先在 5758 的监测页确认 spot / QSO 正常；大屏只代理 6 个只读接口，上游 Node-RED 未运行时所有数据请求都会返回 502
+- **骨架出来了、内容一直是空**（不是数据问题，是脚本没跑）：打开浏览器控制台看有没有 `/shared/....mjs` 报 404。这条多半是刚 `git pull` 过、大屏新增了一个共享模块，但 `dx-compass-wall` 进程还在跑旧的静态白名单（详见[只读大屏](#只读大屏wall-display)的只读边界）。服务器上一行确认：`curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:5859/shared/map/marker-life.mjs`，返回 404 就 `sudo systemctl restart dx-compass-wall`
 - 端口 / 上游可用环境变量调整：`BIGSCREEN_PORT=5860 BIGSCREEN_UPSTREAM=http://127.0.0.1:5758 node bigscreen/server.js`（systemd 部署时改单元的 `Environment=`）
 
 **7. 升级到 v2.1 后保存设置报 404，或设置页缺少「数据 / 传播」页签？**
