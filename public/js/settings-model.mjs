@@ -81,27 +81,79 @@ export function ttlForMode(settings, mode) {
 }
 
 export function bandColorOf(settings, band) {
-    let key = String(band || '').toLowerCase();
-    if (/^\d+$/.test(key)) key += 'm';
+    const key = normalizeBand(band).toLowerCase();
     return settings.bandColors[key] || '#00e5ff';
 }
 
-export function bandLabel(band, freqKhz) {
-    let value = parseFloat(String(band || '').replace(/[^0-9.]/g, ''));
-    if (!Number.isFinite(value) || value <= 0) {
-        value = typeof freqKhz === 'number' ? freqKhz / 1000 : 0;
-        if (!value) return '';
+/* 频率 → 米波名（kHz）。与后端 lib/radio/bands.js 保持同一张表。 */
+const KHZ_BANDS = [
+    [1800, 2000, '160M'], [3500, 4000, '80M'], [5330, 5410, '60M'],
+    [6900, 7300, '40M'], [10000, 10200, '30M'], [13950, 14350, '20M'],
+    [18068, 18200, '17M'], [20950, 21450, '15M'], [24800, 25000, '12M'],
+    [27900, 29700, '10M'], [49000, 54000, '6M'], [70000, 71000, '4M'],
+    [143000, 148000, '2M'], [420000, 450000, '70CM']
+];
+const METER_BANDS = [160, 80, 60, 40, 30, 20, 17, 15, 12, 10, 6, 4, 2];
+/* N1MM 的 band 字段是兆赫数值（20m=14、15m=21），这些整数必须先按 MHz 解释。 */
+const MHZ_BANDS = [7, 10, 14, 18, 21, 24, 28, 50, 70, 144];
+const MHZ_RANGES = [
+    [0, 2, '160M'], [2, 4.6, '80M'], [4.6, 6.5, '60M'], [6.5, 8.6, '40M'],
+    [8.6, 11.6, '30M'], [11.6, 16, '20M'], [16, 19.6, '17M'], [19.6, 22.6, '15M'],
+    [22.6, 26.6, '12M'], [26.6, 30, '10M'], [30, 54, '6M'], [54, 76, '4M'],
+    [76, 148, '2M'], [148, 470, '70CM']
+];
+
+function bandFromKhz(freqKhz) {
+    const freq = Number(freqKhz);
+    if (!Number.isFinite(freq) || freq <= 0) return '';
+    for (const [low, high, name] of KHZ_BANDS) {
+        if (freq >= low && freq <= high) return name;
     }
-    if (SETTINGS_SCHEMA.BAND_METERS.includes(Math.round(value))) return `${Math.round(value)}M`;
-    const meters = 300 / value;
-    const best = SETTINGS_SCHEMA.BAND_METERS.reduce((a, b) => Math.abs(b - meters) < Math.abs(a - meters) ? b : a);
-    return `${best}M`;
+    return '';
+}
+
+function metersFromMhz(mhz) {
+    if (!Number.isFinite(mhz) || mhz <= 0) return '';
+    for (const [low, high, name] of MHZ_RANGES) {
+        if (mhz >= low && mhz < high) return name;
+    }
+    return '';
+}
+
+/**
+ * 统一波段写法，输出「米波」大写展示名（20M / 15M / 70CM）。
+ * 频率可用时以频率为准；否则把 N1MM 的兆赫数值（14/21）换算成米波，
+ * 纯数字米波（20/40）仍按米波解释。所有页面共用这一处，避免 15M 与 21m 并存。
+ */
+export function normalizeBand(band, freqKhz) {
+    const byFreq = bandFromKhz(freqKhz);
+    if (byFreq) return byFreq;
+    const text = String(band === null || band === undefined ? '' : band).trim().toLowerCase();
+    if (!text) return '';
+    const cm = /^(\d+(?:\.\d+)?)\s*(?:cm|厘米)$/.exec(text);
+    if (cm) return `${parseFloat(cm[1])}CM`;
+    const meter = /^(\d+(?:\.\d+)?)\s*(?:m|米|meter|meters)$/.exec(text);
+    if (meter) return `${parseFloat(meter[1])}M`;
+    const numeric = /^(\d+(?:\.\d+)?)$/.exec(text);
+    if (numeric) {
+        const value = parseFloat(numeric[1]);
+        if (numeric[1].includes('.')) return metersFromMhz(value) || `${value}M`;
+        if (value > 160 || MHZ_BANDS.includes(value)) return metersFromMhz(value) || text.toUpperCase();
+        if (METER_BANDS.includes(value)) return `${value}M`;
+        return text.toUpperCase();
+    }
+    return text.toUpperCase();
+}
+
+export function bandLabel(band, freqKhz) {
+    return normalizeBand(band, freqKhz);
 }
 
 export function dbRowToQso(row) {
     return {
         type: 'qso', n1mmId: row.n1mm_id, ts: row.timestamp, mycall: row.mycall,
-        operator: row.operator, call: row.call, band: row.band, freqKhz: row.freq_khz,
+        operator: row.operator, call: row.call, band: normalizeBand(row.band, row.freq_khz),
+        freqKhz: row.freq_khz,
         mode: row.mode, rstSnt: row.rst_snt, rstRcv: row.rst_rcv, exchange: row.exchange,
         points: row.points, isMult: Boolean(row.is_mult), lat: row.lat, lon: row.lon,
         radioNr: row.radionr === undefined ? null : row.radionr,

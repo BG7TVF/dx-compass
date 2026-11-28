@@ -57,6 +57,11 @@ test('main QSO display adapters preserve band and N1MM fields', () => {
     assert.equal(bandLabel('14', 14000), '20M');
     assert.equal(bandLabel('20', 14000), '20M');
     assert.equal(bandLabel('', 7100), '40M');
+    // N1MM 报文里的兆赫数值必须换算成米波，不能显示成 21m/14m。
+    assert.equal(bandLabel('21'), '15M');
+    assert.equal(bandLabel('14'), '20M');
+    assert.equal(bandLabel('70cm'), '70CM');
+    assert.equal(dbRowToQso({band: '21', freq_khz: 21013.4}).band, '15M');
     const qso = dbRowToQso({
         n1mm_id: 42, timestamp: '2026-11-08T12:00:00Z', call: 'K1ABC', band: '20',
         freq_khz: 14001.5, rst_snt: '59', rst_rcv: '57', is_mult: 1, lat: 40, lon: -75
@@ -64,5 +69,6 @@ test('main QSO display adapters preserve band and N1MM fields', () => {
     assert.equal(qso.n1mmId, 42);
     assert.equal(qso.ts, '2026-11-08T12:00:00Z');
     assert.equal(qso.freqKhz, 14001.5);
+    assert.equal(qso.band, '20M');
     assert.equal(qso.isMult, true);
 });

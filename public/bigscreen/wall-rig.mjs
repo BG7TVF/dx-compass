@@ -5,7 +5,7 @@
  * 天线徽章、波段徽章、QSO 流水和地图连线上永远是同一个颜色。这里不存在
  * 「本席 / 他席」的区分，观众墙没有“我”的视角。 */
 
-import {bandOf, seatColor, seatMark, tr, trimRows} from './wall-cards.mjs';
+import {bandOf, normalizeBand, seatColor, seatMark, tr, trimRows} from './wall-cards.mjs';
 import {WALL_BAND_COLORS} from '../shared/opponents/opponents.mjs';
 import {t} from './wall-i18n.mjs';
 
@@ -80,7 +80,7 @@ export function buildSeats(station, devices, rows) {
         if (!no) return;
         const entry = ensure(no);
         entry.online = !!seat.online;
-        entry.band = String(seat.band || '').toUpperCase();
+        entry.band = normalizeBand(seat.band);
         entry.operator = String(seat.operator || '').trim();
         entry.stationName = String(seat.station_name || '').trim();
         entry.computerName = String(seat.computer_name || '').trim();
@@ -202,7 +202,7 @@ export function renderSeatRoster(box, model) {
         const details = [
             frequency ? frequency + ' MHz' : '—',
             seat.mode || '—',
-            bandLabel(seat.band || bandOf(seat.freqKhz) || '')
+            bandLabel(normalizeBand(seat.band, seat.freqKhz) || '')
         ].join(' · ');
         const stats = statLabels.map(([field, label]) =>
             '<span class="ss s-' + field + '"><b>' + Number(seat[field] || 0) +
@@ -278,7 +278,7 @@ export function renderBandOccupancy(box, rows, model, antennaBands) {
     if (!box) return;
     const byBand = new Map();
     (rows || []).forEach(row => {
-        const key = String(row.band || bandOf(row.freq_khz) || '').toUpperCase() || '—';
+        const key = normalizeBand(row.band, row.freq_khz) || '—';
         const entry = byBand.get(key) || {qsos: 0, seats: new Set()};
         entry.qsos += 1;
         byBand.set(key, entry);
@@ -286,7 +286,7 @@ export function renderBandOccupancy(box, rows, model, antennaBands) {
     const seats = (model && model.seats) || [];
     const txKeys = (model && model.txKeys) || new Set();
     seats.forEach(seat => {
-        const key = String(seat.band || bandOf(seat.freqKhz) || '').toUpperCase();
+        const key = normalizeBand(seat.band, seat.freqKhz);
         if (!key) return;
         if (!byBand.has(key)) byBand.set(key, {qsos: 0, seats: new Set()});
         byBand.get(key).seats.add(seat.no);

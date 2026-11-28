@@ -71,6 +71,8 @@ test('规则规范化：列表、波段小写、布尔默认值', () => {
     assert.equal(result.rule.name, 'EU 20m');
     assert.equal(result.rule.call, 'DL1ABC,K1ABC/P');
     assert.equal(result.rule.band, '20m,40m');
+    // 手填兆赫数值（21=15m、7=40m）也归一到米波，才能与 spot 行匹配。
+    assert.equal(service.normalizeRule({name: 'n', band: '21, 7'}).rule.band, '15m,40m');
     assert.equal(result.rule.mode, 'CW');
     assert.equal(result.rule.seat, 'PC-A:1,PC-B:2');
     assert.equal(result.rule.snrMin, 10);

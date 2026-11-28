@@ -15,7 +15,8 @@ test('contactinfo 容忍小写字段、数组/标量混用与缺失字段', () =
     assert.equal(qso.call, 'K1ABC');
     assert.equal(qso.n1mmId, 'DXI|LOCAL|42');
     assert.equal(qso.rawId, '42');
-    assert.equal(qso.band, '20');
+    // 入库前 band 统一成米波名；报文里的 20 指 20 米波。
+    assert.equal(qso.band, '20m');
     assert.equal(qso.mode, 'CW');
     assert.equal(qso.freqKhz, 14025);
     assert.equal(qso.ts, '2026-11-08T12:30:00.000Z');
@@ -23,6 +24,19 @@ test('contactinfo 容忍小写字段、数组/标量混用与缺失字段', () =
     assert.equal(qso.isMult, false);
     assert.equal(qso.grid, '');
     assert.equal(qso.lat, null);
+});
+
+test('N1MM 的 band 字段按兆赫数值换算成米波名', () => {
+    const make = band => n1mm.parseContact({contactinfo: {
+        ID: '1', call: 'JA1XX', band, mode: 'CW', rxfreq: '21013000'
+    }}, NOW).band;
+    assert.equal(make('21'), '15m');
+    assert.equal(make('14'), '20m');
+    assert.equal(make('7'), '40m');
+    assert.equal(make('3.5'), '80m');
+    assert.equal(make('28'), '10m');
+    // 已经是米波名的写法保持幂等。
+    assert.equal(make('15M'), '15m');
 });
 
 test('频率单位兼容 Hz / 10 Hz / kHz', () => {
@@ -66,6 +80,21 @@ test('分数报文遍历全部 breakdown，而不是只看第一条', () => {
         ]
     }}, NOW);
     assert.deepEqual([score.qsos, score.mults, score.points, score.score], [12, 5, 36, 1000]);
+});
+
+test('总乘数按 type 求和，点数读取 N1MM 的单数 point 标签', () => {
+    const score = n1mm.parseScore({dynamicresults: {
+        contest: ['CQ-WW-CW'], score: ['34668'],
+        breakdown: [{
+            qso: [{$: {band: 'total', mode: 'ALL'}, _: '368'}],
+            mult: [
+                {$: {band: 'total', mode: 'ALL', type: 'zone'}, _: '26'},
+                {$: {band: 'total', mode: 'ALL', type: 'country'}, _: '28'}
+            ],
+            point: [{$: {band: 'total', mode: 'ALL'}, _: '642'}]
+        }]
+    }}, NOW);
+    assert.deepEqual([score.qsos, score.mults, score.points], [368, 54, 642]);
 });
 
 test('未知或空包返回 unknown，不抛异常', () => {

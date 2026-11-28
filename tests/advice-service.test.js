@@ -62,6 +62,25 @@ test('给定聚合行与电台状态时能算出真实建议', () => {
     assert.equal(typeof result.environment.ap, 'number');
 });
 
+test('N1MM 的 14/21 与活跃度 20m/15m 归一到同一套数字米波', () => {
+    const mixed = [
+        {kind: 'band', band: '14', qsos: 120, points: 360, mults: 30,
+            first_ts: '2026-11-08T06:00:00.000Z', last_ts: '2026-11-08T12:00:00.000Z'},
+        {kind: 'band', band: '21', qsos: 80, points: 240, mults: 20,
+            first_ts: '2026-11-08T06:00:00.000Z', last_ts: '2026-11-08T12:00:00.000Z'},
+        {kind: 'bucket', band: '14', bucket: '2026-11-08T11:50', qsos: 3, points: 9},
+        {kind: 'bucket', band: '20m', bucket: '2026-11-08T12:00', qsos: 3, points: 9}
+    ];
+    const result = service.complete(service.prepare({}, SETTINGS, NOW), mixed, {
+        radio: {freqKhz: 14025, mode: 'CW', isRunning: true}
+    });
+    assert.equal(result.currentBand, '20');
+    assert.ok(result.bandsAvailable.includes('20'));
+    assert.ok(result.bandsAvailable.includes('15'));
+    assert.ok(!result.bandsAvailable.includes('14'));
+    assert.ok(!result.bandsAvailable.includes('20m'));
+});
+
 test('缺少 VFO 时规则整体仍可计算，只降级依赖项', () => {
     const prepared = service.prepare({}, SETTINGS, NOW);
     const result = service.complete(prepared, rows(), {prop: PROP, radio: {}});

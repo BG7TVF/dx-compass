@@ -240,6 +240,62 @@ export function bandOf(freqKhz) {
     return 'VHF';
 }
 
+/* 与 lib/radio/bands.js、settings-model.mjs 同一套米波归一化。
+ * N1MM 的 QSO 行是 14/21（兆赫），席位表是 15M，两者必须落到同一个键，
+ * 否则大屏会把 15 米波拆成「15M」和「21」两行。 */
+const KHZ_BANDS = [
+    [1800, 2000, '160M'], [3500, 4000, '80M'], [5330, 5410, '60M'],
+    [6900, 7300, '40M'], [10000, 10200, '30M'], [13950, 14350, '20M'],
+    [18068, 18200, '17M'], [20950, 21450, '15M'], [24800, 25000, '12M'],
+    [27900, 29700, '10M'], [49000, 54000, '6M'], [70000, 71000, '4M'],
+    [143000, 148000, '2M'], [420000, 450000, '70CM']
+];
+const METER_BANDS = [160, 80, 60, 40, 30, 20, 17, 15, 12, 10, 6, 4, 2];
+const MHZ_BANDS = [7, 10, 14, 18, 21, 24, 28, 50, 70, 144];
+const MHZ_RANGES = [
+    [0, 2, '160M'], [2, 4.6, '80M'], [4.6, 6.5, '60M'], [6.5, 8.6, '40M'],
+    [8.6, 11.6, '30M'], [11.6, 16, '20M'], [16, 19.6, '17M'], [19.6, 22.6, '15M'],
+    [22.6, 26.6, '12M'], [26.6, 30, '10M'], [30, 54, '6M'], [54, 76, '4M'],
+    [76, 148, '2M'], [148, 470, '70CM']
+];
+
+function bandFromKhz(freqKhz) {
+    const freq = Number(freqKhz);
+    if (!Number.isFinite(freq) || freq <= 0) return '';
+    for (const [low, high, name] of KHZ_BANDS) {
+        if (freq >= low && freq <= high) return name;
+    }
+    return '';
+}
+
+function metersFromMhz(mhz) {
+    if (!Number.isFinite(mhz) || mhz <= 0) return '';
+    for (const [low, high, name] of MHZ_RANGES) {
+        if (mhz >= low && mhz < high) return name;
+    }
+    return '';
+}
+
+export function normalizeBand(band, freqKhz) {
+    const byFreq = bandFromKhz(freqKhz);
+    if (byFreq) return byFreq;
+    const text = String(band === null || band === undefined ? '' : band).trim().toLowerCase();
+    if (!text) return '';
+    const cm = /^(\d+(?:\.\d+)?)\s*(?:cm|厘米)$/.exec(text);
+    if (cm) return `${parseFloat(cm[1])}CM`;
+    const meter = /^(\d+(?:\.\d+)?)\s*(?:m|米|meter|meters)$/.exec(text);
+    if (meter) return `${parseFloat(meter[1])}M`;
+    const numeric = /^(\d+(?:\.\d+)?)$/.exec(text);
+    if (numeric) {
+        const value = parseFloat(numeric[1]);
+        if (numeric[1].includes('.')) return metersFromMhz(value) || `${value}M`;
+        if (value > 160 || MHZ_BANDS.includes(value)) return metersFromMhz(value) || text.toUpperCase();
+        if (METER_BANDS.includes(value)) return `${value}M`;
+        return text.toUpperCase();
+    }
+    return text.toUpperCase();
+}
+
 /* ---------- 席位配色：观众墙唯一的身份系统 ----------
  * 席位身份用「色 + 形」双编码：颜色回答「这是第几号席位」，形状在同一席位
  * 色相被环境吃掉（远距离、色弱、黑白投影）时补一层保险。席位卡、天线徽章、
@@ -390,7 +446,7 @@ function qsoCell(row, key, model) {
         case 'operator': return String(row.operator || '').trim() || '—';
         case 'call': return String(row.call || '—').trim() || '—';
         case 'band':
-            return String(row.band || (row.freq_khz ? bandOf(row.freq_khz) : '') || '—').toUpperCase();
+            return normalizeBand(row.band, row.freq_khz) || '—';
         case 'freq': return row.freq_khz ? (Number(row.freq_khz) / 1000).toFixed(3) : '—';
         case 'mode': return String(row.mode || '—').trim().toUpperCase() || '—';
         case 'rst': {

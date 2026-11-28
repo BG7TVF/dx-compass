@@ -45,7 +45,8 @@ const timeOf = value => {
     const time = new Date(value).getTime();
     return Number.isFinite(time) ? time : 0;
 };
-const bandKey = value => String(value || '').toUpperCase();
+/* 波段键统一走米波归一化：QSO 行可能带 N1MM 的 14/21，不能原样当波段名。 */
+const bandKey = value => bandLabel(value) || '';
 const mini = value => (value === null || value === undefined || value === '' ? '—' : value);
 
 export function createOpPage(ctx) {

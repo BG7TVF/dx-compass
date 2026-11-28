@@ -162,6 +162,17 @@ test('没有设置窗口时用最近一届赛事推断，并给出提示', async
     assert.ok(empty.warnings.includes('no-window'));
 });
 
+test('N1MM 兆赫数值的波段归并到米波列', async () => {
+    const rows = [
+        row('K1ABC', '14', 'CW', '2026-11-05T00:00:00.000Z', 'CQWW'),
+        row('JA1XX', '21', 'CW', '2026-11-05T01:00:00.000Z', 'CQWW')
+    ];
+    const result = await matrix({mode: 'ALL'}, {}, rows);
+    assert.deepEqual(result.bands, ['20m', '15m']);
+    assert.deepEqual(entity(result, 291).cells && Object.keys(entity(result, 291).cells), ['20m']);
+    assert.deepEqual(Object.keys(entity(result, 339).cells), ['15m']);
+});
+
 test('无法解析的呼号不参与实体统计', async () => {
     const rows = [row('QQ1ZZZ', '20m', 'CW', '2026-11-05T00:00:00.000Z', 'CQWW')];
     const result = await matrix({mode: 'ALL'}, {}, rows);
