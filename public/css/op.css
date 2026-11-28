@@ -936,6 +936,10 @@ body[data-theme="light"] {
 .op-work-foot { padding: 5px 6px; font-size: 8px; color: var(--text-dim); line-height: 1.35; border-top: 1px solid var(--border); }
 
 .op-suspect { padding: 6px; margin-bottom: 6px; border: 1px solid color-mix(in srgb, var(--orange) 55%, var(--border)); border-radius: var(--r-sm); background: color-mix(in srgb, var(--orange) 8%, var(--panel-2)); }
+.op-suspect.checking { border-color: var(--border); background: var(--panel-2); }
+.op-suspect.unverified { border-color: var(--border); background: var(--panel-2); }
+.op-suspect.passed { border-color: var(--green); background: color-mix(in srgb, var(--green) 8%, var(--panel-2)); }
+.op-suspect.passed .op-suspect-reason { color: var(--green); }
 .op-suspect-head { display: flex; align-items: center; gap: 6px; }
 .op-suspect-head b { font-size: 14px; color: var(--text-strong); letter-spacing: .03em; }
 .op-suspect-head span { margin-left: auto; font-size: 9px; color: var(--text-dim); }

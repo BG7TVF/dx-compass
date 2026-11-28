@@ -67,6 +67,7 @@ export function createOpPage(ctx) {
         multBand: '',
         multExpanded: false,
         suspects: new Map(),
+        checked: new Set(),
         review: loadReview(),
         adviceDismissed: new Set(),
         adviceEngine: null,
@@ -107,17 +108,6 @@ export function createOpPage(ctx) {
         return ctx.qso && ctx.qso.state && ctx.qso.state.radios || {};
     }
 
-    function radioKeys() {
-        const keys = Object.keys(radios()).sort((a, b) => {
-            const an = radioNrOfKey(a);
-            const bn = radioNrOfKey(b);
-            return an - bn || a.localeCompare(b);
-        });
-        if (keys.length) return keys;
-        // 还没有电台状态时保留旧占位：双 lane 组别给两个，其余给一个。
-        const cat = category();
-        return cat === 'SO2R' || cat === 'M2' ? ['1', '2'] : ['1'];
-    }
 
     function radioNrOfKey(key) {
         const value = String(key || '');
@@ -950,6 +940,24 @@ export function createOpPage(ctx) {
         return {pending: 0, new: 1, worked: 2}[status] || 3;
     }
 
+    function suspectReason(item) {
+        if (item.status === 'checking') return t('op.suspect.checking');
+        if (!item.scp && !item.qrz) {
+            if (item.status === 'passed') return t('op.suspect.passed');
+            if (item.status === 'unverified') return t('op.suspect.unverified');
+            return t('op.suspect.qrzNotFound');
+        }
+        // SCP 与 QRZ 各自给一句结果，不因其中一层未配置就省略另一层。
+        const scpKey = {
+            hit: 'scpPassed', miss: 'scpMissed', disabled: 'scpDisabled'
+        }[item.scp && item.scp.status] || 'scpUnavailable';
+        const qrzKey = {
+            found: 'qrzPassed', 'not-found': 'qrzMissed',
+            disabled: 'qrzDisabled', unavailable: 'qrzUnavailable'
+        }[item.qrz && item.qrz.status] || 'qrzError';
+        return t('op.suspect.' + scpKey) + t('op.suspect.sep') + t('op.suspect.' + qrzKey);
+    }
+
     function renderSuspects() {
         const host = $('#opSuspicious');
         const credit = '<div class="op-scp-credit">' + esc(t('op.suspect.scpCredit')) + '</div>';
@@ -957,30 +965,36 @@ export function createOpPage(ctx) {
             host.innerHTML = '<div class="op-empty">' + esc(t('op.suspect.empty')) + '</div>' + credit;
             return;
         }
-        const list = [...state.suspects.values()].filter(item => item.visible);
+        // 只显示当前席位的记录：其他席位即使有待确认项也留在内存里，切回时再显示。
+        const allowed = new Set(visibleSeats().map(String));
+        const rank = item => item.status === 'failed' ? 0 : item.status === 'checking' ? 1 : 2;
+        const list = [...state.suspects.values()]
+            .filter(item => allowed.has(String(item.seat)))
+            .sort((a, b) => rank(a) - rank(b) || timeOf(b.ts) - timeOf(a.ts));
         if (!list.length) {
             host.innerHTML = '<div class="op-empty">' + esc(t('op.suspect.empty')) + '</div>' + credit;
             return;
         }
         host.innerHTML = list.map(item => {
             const radio = radioTheme(item.radioNr);
-            const reason = item.status === 'checking'
-                ? t('op.suspect.checking')
-                : [item.scp && item.scp.status === 'miss'
-                    ? t('op.suspect.scpMiss', {release: item.scp.release || '—'}) : '',
-                    t('op.suspect.qrzNotFound')].filter(Boolean).join(' · ');
-            return '<div class="op-suspect ' + radio + '">' +
+            const failed = item.status === 'failed' || item.status === 'not-found';
+            const statusClass = item.status === 'passed' ? ' passed'
+                : failed ? ' failed'
+                : item.status === 'checking' ? ' checking' : ' unverified';
+            return '<div class="op-suspect ' + radio + statusClass + '">' +
                 '<div class="op-suspect-head"><b>' + esc(item.call) + '</b><span>' +
                 esc(t('op.suspect.radio', {n: item.radioNr})) + ' · ' +
                 esc(bandKey(item.band || bandLabel(item.freqKhz))) + ' · ' +
                 esc(new Date(item.ts).toISOString().slice(11, 16) + 'Z') + '</span></div>' +
-                '<div class="op-suspect-reason">' + esc(reason) + '</div>' +
-                '<div class="op-suspect-note">' + esc(t('op.suspect.note')) + '</div>' +
-                '<div class="op-suspect-actions">' +
-                '<button type="button" class="primary" data-op-ok="' + esc(item.key) + '">' +
-                esc(t('op.suspect.ok')) + '</button>' +
-                '<button type="button" class="warn" data-op-fixed="' + esc(item.key) + '">' +
-                esc(t('op.suspect.fixed')) + '</button></div>' +
+                '<div class="op-suspect-reason">' + esc(suspectReason(item)) + '</div>' +
+                (failed
+                    ? '<div class="op-suspect-note">' + esc(t('op.suspect.note')) + '</div>' +
+                        '<div class="op-suspect-actions">' +
+                        '<button type="button" class="primary" data-op-ok="' + esc(item.key) + '">' +
+                        esc(t('op.suspect.ok')) + '</button>' +
+                        '<button type="button" class="warn" data-op-fixed="' + esc(item.key) + '">' +
+                        esc(t('op.suspect.fixed')) + '</button></div>'
+                    : '') +
             '</div>';
         }).join('') + credit;
     }
@@ -2485,94 +2499,128 @@ export function createOpPage(ctx) {
 
     function scheduleSuspects() {
         if (!ctx.settings.opSuspiciousCheck) return;
-        const keys = radioKeys();
+        // 只看当前席位的最新一条 QSO，其他席位的记录不参与检查也不显示。
         const candidates = [];
-        for (const key of keys) {
-            const latest = lastQsoFor(key);
-            if (latest) candidates.push(latest);
-        }
-        // Only the newest QSO per radio is relevant; clear stale items so a
-        // new contact cannot leave an older warning behind.
-        const latestKeys = new Set(candidates.map(reviewKey));
-        for (const key of [...state.suspects.keys()]) {
-            if (!latestKeys.has(key)) state.suspects.delete(key);
+        for (const seat of visibleSeats()) {
+            const latest = lastQsoFor(seat);
+            if (latest) candidates.push({seat: String(seat), qso: latest});
         }
         const confirmed = confirmedCalls();
-        // 别的席位刚点过「无误」：这条提醒已经不该再挂着了。
-        for (const [key, item] of [...state.suspects.entries()]) {
-            if (confirmed.has(item.call)) state.suspects.delete(key);
+        // 同一条 QSO 被 N1MM 改了呼号时，旧呼号的提醒要跟着消失；
+        // 但新 QSO 不会清掉任何尚未处理的提醒。
+        const liveCallById = new Map();
+        for (const qso of state.qsos.values()) {
+            if (qso.n1mmId !== undefined && qso.n1mmId !== null) {
+                liveCallById.set(String(qso.n1mmId), String(qso.call || '').trim().toUpperCase());
+            }
         }
-        for (const qso of candidates) {
+        const allowed = new Set(visibleSeats().map(String));
+        for (const [key, item] of [...state.suspects.entries()]) {
+            // 别的席位刚点过「无误」：这条提醒已经不该再挂着了。
+            if (confirmed.has(item.call)) {
+                state.suspects.delete(key);
+                continue;
+            }
+            if (!allowed.has(String(item.seat))) continue;
+            const liveCall = liveCallById.get(String(item.n1mmId));
+            if (liveCall && liveCall !== item.call) state.suspects.delete(key);
+        }
+        for (const {seat, qso} of candidates) {
             const key = reviewKey(qso);
             const call = String(qso.call || '').trim().toUpperCase();
-            // 「已确认无误」的呼号是全部席位共享的记忆，不再重复提示。
-            if (confirmed.has(call) || state.review[key] || state.suspects.has(key)) continue;
+            // 「已确认无误」的呼号是全部席位共享的记忆；已核对过的 QSO 也不再重复请求。
+            if (confirmed.has(call) || state.review[key] || state.checked.has(key) || state.suspects.has(key)) continue;
             state.suspects.set(key, {
                 key,
                 call,
+                n1mmId: qso.n1mmId,
+                seat,
                 radioNr: qso.radioNr || 1,
                 ts: qso.ts,
                 band: qso.band,
                 freqKhz: qso.freqKhz,
-                status: 'checking',
-                visible: true
+                status: 'checking'
             });
         }
         renderSuspects();
-        if (candidates.length) queueChecks(candidates);
+        queueChecks();
     }
 
-    function queueChecks(candidates) {
-        const pending = candidates.filter(qso => {
-            const item = state.suspects.get(reviewKey(qso));
-            return item && item.status === 'checking';
-        });
-        if (!pending.length) return;
+    function queueChecks() {
         if (state.checking) return;
+        const allowed = new Set(visibleSeats().map(String));
+        const pending = [...state.suspects.values()]
+            .filter(item => item.status === 'checking' && allowed.has(String(item.seat)))
+            .sort((a, b) => timeOf(a.ts) - timeOf(b.ts));
+        if (!pending.length) return;
         state.checking = (async () => {
-            for (const qso of pending) {
+            for (const item of pending) {
                 if (!state.active) break;
-                await checkOne(qso);
+                // 切到别的席位后，旧席位的待检项先让路；切回来会重新入队。
+                if (!visibleSeats().map(String).includes(String(item.seat))) continue;
+                await checkOne(item);
                 await new Promise(resolve => setTimeout(resolve, 1200));
             }
         })().finally(() => {
             state.checking = null;
-            // New QSOs may have arrived while the queue was busy.
-            const waiting = [...state.suspects.values()].some(item => item.status === 'checking');
-            if (waiting && state.active) scheduleSuspects();
+            // 队列忙的时候可能又来了新 QSO，或切换了席位：按当前席位的待检项补一轮。
+            const now = new Set(visibleSeats().map(String));
+            const waiting = [...state.suspects.values()]
+                .some(item => item.status === 'checking' && now.has(String(item.seat)));
+            if (waiting && state.active) queueChecks();
         });
     }
 
-    async function checkOne(qso) {
-        const key = reviewKey(qso);
-        const item = state.suspects.get(key);
-        if (!item) return;
+    function settleSuspect(item, status, reason, result) {
+        const live = state.suspects.get(item.key);
+        if (!live) return;
+        live.status = status;
+        live.reason = reason || '';
+        if (result) {
+            live.scp = result.scp || live.scp || null;
+            live.qrz = result.qrz || live.qrz || null;
+        }
+        state.checked.add(item.key);
+        renderSuspects();
+        // 「校验通过 / 未完成」只是过程反馈，留几秒让 OP 看到后自动收起；
+        // 需要人工确认的失败项不会走这里，会一直保留到 OP 点按钮。
+        setTimeout(() => {
+            const current = state.suspects.get(item.key);
+            if (current && current.status === status) {
+                state.suspects.delete(item.key);
+                renderSuspects();
+            }
+        }, 8000);
+    }
+
+    async function checkOne(item) {
+        if (!state.suspects.has(item.key)) return;
         try {
-            const result = await checkCallsign(qso.call, qso.n1mmId, {
+            const result = await checkCallsign(item.call, item.n1mmId, {
                 qrz: Boolean(ctx.settings.opSuspiciousQrz),
                 scp: Boolean(ctx.settings.opScpCheck)
             });
-            // SCP hit or QRZ match is a confirmation: drop the row.
-            if (result.status === 'scp' || result.status === 'qrz-found') {
-                state.suspects.delete(key);
+            if (!state.suspects.has(item.key)) return;
+            const scp = result.scp || {status: 'unavailable'};
+            const qrz = result.qrz || {status: 'disabled'};
+            // SCP 或 QRZ 任一命中都算通过；QRZ 没配置不影响 SCP 的结论。
+            const passed = scp.status === 'hit' || qrz.status === 'found'
+                || result.status === 'scp' || result.status === 'qrz-found';
+            if (passed) {
+                settleSuspect(item, 'passed', '', result);
+                return;
+            }
+            // 只有 QRZ 明确查无此呼号才要求 OP 确认；SCP 未命中只是辅助信息。
+            if (qrz.status === 'not-found' || result.status === 'qrz-not-found') {
+                item.status = 'failed';
+                item.scp = scp;
+                item.qrz = qrz;
                 renderSuspects();
                 return;
             }
-            // Only an explicit "QRZ has no record" is shown. A disabled or
-            // failed QRZ lookup stays silent instead of accusing the call.
-            if (result.status === 'qrz-not-found') {
-                item.status = 'not-found';
-                item.scp = result.scp || null;
-                item.visible = true;
-                renderSuspects();
-                return;
-            }
-            state.suspects.delete(key);
-            renderSuspects();
+            settleSuspect(item, 'unverified', result.reason || '', result);
         } catch (error) {
-            // Network failure is not evidence against the call: stay silent.
-            state.suspects.delete(key);
-            renderSuspects();
+            settleSuspect(item, 'unverified', 'qrz-error');
         }
     }
 
@@ -2724,6 +2772,10 @@ export function createOpPage(ctx) {
         for (const [key, qso] of state.qsos.entries()) {
             if (String(qso.n1mmId) === String(id)) state.qsos.delete(key);
         }
+        for (const [key, item] of [...state.suspects.entries()]) {
+            if (String(item.n1mmId) === String(id)) state.suspects.delete(key);
+        }
+        renderSuspects();
         renderMap();
         renderBottom();
         renderAdvice();
@@ -2798,6 +2850,7 @@ export function createOpPage(ctx) {
             refreshAll();
             renderMap();
             renderMultipliers();
+            scheduleSuspects();
             loadAdvice();
         });
         $('#opBottom')?.addEventListener('click', async event => {
