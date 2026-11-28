@@ -161,3 +161,88 @@ test('QRZ success updates coordinates and session failures request relogin', () 
     assert.equal(failure.kind, 'sessionError');
     assert.match(qsoApi.callsignQuery(qso, 'secret').url, /callsign=K1ABC/);
 });
+
+test('QRZ conclusion is stored as one statement and never for transient errors', () => {
+    const found = {status: 'found', callsign: {call: 'W2IUK', name: "Bob O'Neil", fname: 'Bob',
+        country: 'USA', grid: 'FN31PR', dxcc: '291', lat: '41.7', lon: '-72.6', qslmgr: ''}};
+    const sql = storage.qrz.upsert('w2iuk ', found, '2026-11-28T01:02:03.000Z');
+    assert.match(sql, /^INSERT INTO qrz_calls \(/);
+    assert.match(sql, /VALUES \('W2IUK', 'found'/);
+    // 单引号必须转义，否则会拼坏语句。
+    assert.match(sql, /'Bob O''Neil'/);
+    assert.match(sql, /'2026-11-28T01:02:03\.000Z', '2026-11-28T01:02:03\.000Z'\)/);
+    // 换波段重复遇到同一呼号：只更新结论，first_seen 保留首次时间。
+    assert.match(sql, /ON CONFLICT\(call\) DO UPDATE SET status = excluded\.status/);
+    assert.match(sql, /first_seen = qrz_calls\.first_seen, last_seen = excluded\.last_seen;$/);
+    // sqlite 节点的 msg.topic 模式走 db.all，只能喂一条语句。
+    assert.equal(sql.split(';').filter(part => part.trim()).length, 1);
+    // 经纬度写成数值，空字段写 NULL，qslmgr 为空不落成空串。
+    assert.match(sql, /41\.7, -72\.6, NULL, '2026/);
+    assert.doesNotMatch(sql, /'', '2026-11-28/);
+
+    const missing = storage.qrz.upsert('VE3XYZ', {status: 'not-found', error: 'Callsign not found'});
+    assert.match(missing, /VALUES \('VE3XYZ', 'not-found'/);
+    assert.match(missing, /NULL, NULL, NULL, 'Callsign not found'/);
+    // 会话/网络错误不入库，下次照常重试。
+    assert.equal(storage.qrz.upsert('VE3XYZ', {status: 'error', error: 'Session expired'}), null);
+    assert.equal(storage.qrz.upsert('', found), null);
+    assert.equal(storage.qrz.upsert('VE3XYZ', null), null);
+});
+
+test('qrz_calls table is created idempotently and read back newest-first', () => {
+    const ddl = storage.qrz.create();
+    assert.equal(ddl.length, 2);
+    assert.match(ddl[0], /^CREATE TABLE IF NOT EXISTS qrz_calls \(/);
+    assert.match(ddl[0], /call TEXT PRIMARY KEY/);
+    assert.match(ddl[0], /first_seen TEXT NOT NULL,\s+last_seen TEXT NOT NULL/);
+    assert.match(ddl[1], /^CREATE INDEX IF NOT EXISTS idx_qrz_calls_seen ON qrz_calls\(last_seen\);$/);
+    assert.match(storage.qrz.recentQuery(), /^SELECT \* FROM qrz_calls ORDER BY last_seen DESC LIMIT 5000;$/);
+    assert.match(storage.qrz.recentQuery(10), /LIMIT 10;$/);
+    assert.match(storage.qrz.recentQuery(0), /LIMIT 5000;$/);
+    assert.match(storage.qrz.recentQuery(-3), /LIMIT 1;$/);
+    assert.match(storage.qrz.recentQuery(999999), /LIMIT 50000;$/);
+});
+
+test('stored QRZ rows prime the cache so a band change costs no extra lookup', () => {
+    const at = Date.now();
+    const iso = ms => new Date(ms).toISOString();
+    const rows = [
+        {call: 'DL1ABC', status: 'found', name: 'Hans', country: 'Germany', dxcc: '230',
+            lat: 52.4, lon: 13.4, last_seen: iso(at - 60000)},
+        {call: 'EA9ABC', status: 'not-found', error: 'Callsign not found', last_seen: iso(at - 60000)},
+        {call: 'ZS9OLD', status: 'not-found', error: 'Callsign not found', last_seen: iso(at - 40 * 60 * 1000)},
+        {call: 'G3BAD', status: 'error', error: 'Session expired', last_seen: iso(at - 60000)},
+        {call: 'G4NODATE', status: 'found', name: 'No Stamp'}
+    ];
+    const size = qsoApi.primeCache(rows);
+    assert.ok(size >= 2);
+    const dl = qsoApi.cachedLookup('dl1abc');
+    assert.equal(dl.status, 'found');
+    // 与 QRZ 接口返回同形：坐标保持字符串，由 applyCached 统一 parseFloat。
+    assert.equal(dl.callsign.lat, '52.4');
+    assert.equal(dl.callsign.lon, '13.4');
+    assert.equal(dl.callsign.country, 'Germany');
+    // not-found 同样是结论，复核侧不必再打接口。
+    assert.equal(qsoApi.cachedLookup('EA9ABC').status, 'not-found');
+    // not-found 只保留 30 分钟，新登记的呼号还能及时查到。
+    assert.equal(qsoApi.cachedLookup('ZS9OLD'), null);
+    // 错误结论与缺时间戳的行不回填。
+    assert.equal(qsoApi.cachedLookup('G3BAD'), null);
+    assert.equal(qsoApi.cachedLookup('G4NODATE'), null);
+    assert.equal(qsoApi.primeCache(null), qsoApi.primeCache([]));
+
+    const qso = {n1mmId: 'DXI|SHACK|{D1}', call: 'DL1ABC', band: '15', lat: null, lon: null};
+    const applied = qsoApi.applyCached(qso, dl);
+    assert.equal(applied.kind, 'coords');
+    assert.equal(qso.lat, 52.4);
+    assert.match(applied.topic, /UPDATE qsos SET lat=52\.4, lon=13\.4 WHERE n1mm_id='DXI\|SHACK\|\{D1\}';/);
+    // 复用结论同样生成入库语句，把 last_seen 推到本次比赛。
+    assert.match(qsoApi.upsertSql('DL1ABC', dl), /ON CONFLICT\(call\) DO UPDATE/);
+    const gone = {call: 'EA9ABC', lat: null, lon: null};
+    assert.deepEqual(qsoApi.applyCached(gone, qsoApi.cachedLookup('EA9ABC')), {kind: 'fallback', qso: gone});
+    // found 但没有可用坐标时不猜测，交给调用方继续走网格/spots。
+    assert.equal(qsoApi.applyCached({call: 'XX1Y'}, {status: 'found', callsign: {lat: '', lon: ''}}), null);
+    assert.equal(qsoApi.applyCached(null, dl), null);
+    assert.equal(qsoApi.applyCached({call: 'XX1Y'}, null), null);
+    assert.equal(qsoApi.upsertSql('XX1Y', {status: 'error'}), null);
+});

@@ -373,7 +373,7 @@
         "type": "function",
         "z": "dxc0000000000001",
         "name": "Create neighbors schema",
-        "func": "const dx = global.get('dx');\nconst s = dx.storage.schema;\nconst list = s.createNeighbors()\n    .concat(s.createActivity ? s.createActivity() : [])\n    .concat(s.createN1mm ? s.createN1mm() : []);\nmsg.topic = list.join('\\n');\nreturn msg;",
+        "func": "const dx = global.get('dx');\nconst s = dx.storage.schema;\nconst list = s.createNeighbors()\n    .concat(s.createActivity ? s.createActivity() : [])\n    .concat(s.createN1mm ? s.createN1mm() : [])\n    .concat(dx.storage.qrz.create());\nmsg.topic = list.join('\\n');\nreturn msg;",
         "outputs": 1,
         "noerr": 0,
         "initialize": "",
@@ -1746,7 +1746,7 @@
         "y": 280,
         "wires": [
             [
-                "dxc00000000000c1"
+                "dxqz0000000001"
             ],
             [
                 "dxc00000000000a4"
@@ -2166,8 +2166,8 @@
         "type": "function",
         "z": "dxc0000000000090",
         "name": "QRZ result",
-        "func": "const dx = global.get('dx');\nconst result = dx.qso.parseResult(msg.payload, msg.qso);\nif (!result) return null;\nif (result.kind === 'coords') {\n    msg.topic = result.topic;\n    msg.payload = result.qso;\n    return [msg, null, null];\n}\nif (result.kind === 'sessionError') {\n    flow.set('qrzkey', null);\n    node.status({fill: 'red', shape: 'ring', text: result.error});\n    return [null, msg, msg];\n}\nreturn [null, msg, null];",
-        "outputs": 3,
+        "func": "const dx = global.get('dx');\nconst parsed = dx.qso.parseResult(msg.payload, msg.qso);\nif (!parsed) return null;\n// 结论入库，同一呼号换波段或重启后都不必再查。\nconst sql = dx.qso.upsertSql(msg.qso && msg.qso.call, parsed.result);\nconst store = sql ? {topic: sql} : null;\nif (parsed.kind === 'coords') {\n    msg.topic = parsed.topic;\n    msg.payload = parsed.qso;\n    return [msg, null, null, store];\n}\nif (parsed.kind === 'sessionError') {\n    flow.set('qrzkey', null);\n    node.status({fill: 'red', shape: 'ring', text: parsed.error});\n    return [null, msg, msg, null];\n}\nreturn [null, msg, null, store];",
+        "outputs": 4,
         "timeout": "",
         "noerr": 0,
         "initialize": "",
@@ -2184,6 +2184,9 @@
             ],
             [
                 "dxc00000000000c9"
+            ],
+            [
+                "dxqz0000000002"
             ]
         ]
     },
@@ -4183,7 +4186,7 @@
         "type": "function",
         "z": "dxc0000000000090",
         "name": "Resolve call check",
-        "func": "const dx = global.get('dx');\nconst rows = Array.isArray(msg.payload) ? msg.payload : [];\nconst first = rows[0] || {};\nconst n = Number(first.n !== undefined ? first.n : (first[0] !== undefined ? first[0] : 0)) || 0;\nconst call = msg._call;\nconst scp = msg._scp || {status:'unavailable'};\nconst base = {ok:true, call, scp, local:{known:n > 0, count:n}, qrz:null};\nconst scpHit = scp.status === 'hit';\n// QRZ 没配置也要保留 SCP 结果：SCP 命中同样算校验通过。\nif (msg._qrz === false) {\n    msg.statusCode = 200;\n    msg.headers = {'Content-Type':'application/json'};\n    msg.payload = Object.assign({}, base, {\n        status: scpHit ? 'scp' : 'unverified',\n        reason: scpHit ? '' : 'qrz-disabled',\n        qrz: {status:'disabled', reason:'qrz-disabled'}\n    });\n    return [null, msg];\n}\nconst key = flow.get('qrzkey');\nconst request = dx.qso.lookupQuery(call, key);\nif (!request) {\n    msg.statusCode = 200;\n    msg.headers = {'Content-Type':'application/json'};\n    msg.payload = Object.assign({}, base, {\n        status: scpHit ? 'scp' : 'unverified',\n        reason: scpHit ? '' : 'qrz-session-unavailable',\n        qrz: {status:'unavailable', reason:'qrz-session-unavailable'}\n    });\n    return [null, msg];\n}\nmsg._base = base;\nObject.assign(msg, request);\nreturn [msg, null];",
+        "func": "const dx = global.get('dx');\nconst rows = Array.isArray(msg.payload) ? msg.payload : [];\nconst first = rows[0] || {};\nconst n = Number(first.n !== undefined ? first.n : (first[0] !== undefined ? first[0] : 0)) || 0;\nconst call = msg._call;\nconst scp = msg._scp || {status:'unavailable'};\nconst base = {ok:true, call, scp, local:{known:n > 0, count:n}, qrz:null};\nconst scpHit = scp.status === 'hit';\nconst reply = (qrz, reason) => {\n    const status = scpHit ? 'scp'\n        : qrz.status === 'found' ? 'qrz-found'\n        : qrz.status === 'not-found' ? 'qrz-not-found' : 'unverified';\n    msg.statusCode = 200;\n    msg.headers = {'Content-Type':'application/json'};\n    msg.payload = Object.assign({}, base, {\n        status,\n        reason: (status === 'scp' || status === 'qrz-found') ? '' : reason,\n        qrz\n    });\n    return [null, msg];\n};\n// QRZ 没配置也要保留 SCP 结果：SCP 命中同样算校验通过。\nif (msg._qrz === false) {\n    return reply({status:'disabled', reason:'qrz-disabled'}, 'qrz-disabled');\n}\nconst key = flow.get('qrzkey');\nif (!key) {\n    return reply({status:'unavailable', reason:'qrz-session-unavailable'}, 'qrz-session-unavailable');\n}\n// QSO 地图已经为这条 QSO 查过 QRZ 时直接复用；复核先到就等它一下，\n// 避免同一个呼号同时打两次 QRZ。\nlet cached = dx.qso.cachedLookup(call);\nif (!cached) cached = await dx.qso.waitForLookup(call, 2500);\nif (cached) {\n    return reply(cached, cached.status === 'not-found' ? 'qrz-not-found' : 'qrz-error');\n}\nconst request = dx.qso.lookupQuery(call, key);\nif (!request) {\n    return reply({status:'unavailable', reason:'qrz-session-unavailable'}, 'qrz-session-unavailable');\n}\nmsg._base = base;\nObject.assign(msg, request);\nreturn [msg, null];",
         "outputs": 2,
         "timeout": "",
         "noerr": 0,
@@ -4245,8 +4248,8 @@
         "type": "function",
         "z": "dxc0000000000090",
         "name": "Resolve QRZ lookup",
-        "func": "const dx = global.get('dx');\nconst result = dx.qso.parseLookup(msg.payload);\nif (result.status === 'error' && /session|timeout|invalid|denied/i.test(result.error || '')) flow.set('qrzkey', null);\nmsg.statusCode = 200;\nmsg.headers = {'Content-Type':'application/json'};\nconst base = msg._base || {ok:true, call:msg._call, scp:{status:'unavailable'}};\nconst scpHit = base.scp && base.scp.status === 'hit';\n// SCP 与 QRZ 都查，任一命中即通过；结果分别返回给 OP 视图展示。\nconst status = scpHit ? 'scp'\n    : result.status === 'found' ? 'qrz-found'\n    : result.status === 'not-found' ? 'qrz-not-found' : 'unverified';\nconst reason = scpHit || result.status === 'found' ? ''\n    : result.status === 'not-found' ? 'qrz-not-found' : 'qrz-error';\nmsg.payload = Object.assign({}, base, {status, reason, qrz: result});\nreturn msg;",
-        "outputs": 1,
+        "func": "const dx = global.get('dx');\nconst result = dx.qso.parseLookup(msg.payload, msg._call);\nif (result.status === 'error' && /session|timeout|invalid|denied/i.test(result.error || '')) flow.set('qrzkey', null);\nmsg.statusCode = 200;\nmsg.headers = {'Content-Type':'application/json'};\nconst base = msg._base || {ok:true, call:msg._call, scp:{status:'unavailable'}};\nconst scpHit = base.scp && base.scp.status === 'hit';\n// SCP 与 QRZ 都查，任一命中即通过；结论入库后换波段复用。\nconst status = scpHit ? 'scp'\n    : result.status === 'found' ? 'qrz-found'\n    : result.status === 'not-found' ? 'qrz-not-found' : 'unverified';\nconst reason = scpHit || result.status === 'found' ? ''\n    : result.status === 'not-found' ? 'qrz-not-found' : 'qrz-error';\nmsg.payload = Object.assign({}, base, {status, reason, qrz: result});\nconst sql = dx.qso.upsertSql(msg._call, result);\nreturn [msg, sql ? {topic: sql} : null];",
+        "outputs": 2,
         "timeout": "",
         "noerr": 0,
         "initialize": "",
@@ -4257,6 +4260,9 @@
         "wires": [
             [
                 "dxo0000000000008"
+            ],
+            [
+                "dxqz0000000002"
             ]
         ]
     },
@@ -6037,6 +6043,125 @@
         "name": "Apply band link audit",
         "x": 1090,
         "y": 1160,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "dxqz0000000001",
+        "type": "function",
+        "z": "dxc0000000000090",
+        "name": "Cached QRZ coords",
+        "func": "const dx = global.get('dx');\nconst qso = msg.qso;\nconst cached = qso ? dx.qso.cachedLookup(qso.call) : null;\nif (!cached) return [null, msg, null];\n// 同一呼号换波段：上次查到的结论直接复用，不再打 QRZ。\nif (cached.status === 'not-found') return [null, null, msg];\nconst applied = dx.qso.applyCached(qso, cached);\nif (applied && applied.topic) {\n    msg.topic = applied.topic;\n    msg.payload = applied.qso;\n    return [msg, null, null];\n}\nif (applied) {\n    msg.payload = applied.qso;\n    return [null, null, msg];\n}\nreturn [null, msg, null];",
+        "outputs": 3,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1380,
+        "y": 400,
+        "wires": [
+            [
+                "dxc00000000000c5"
+            ],
+            [
+                "dxc00000000000c1"
+            ],
+            [
+                "dxc00000000000c6"
+            ]
+        ]
+    },
+    {
+        "id": "dxqz0000000002",
+        "type": "sqlite",
+        "z": "dxc0000000000090",
+        "mydb": "dxc0000000000027",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "Save QRZ result",
+        "x": 2140,
+        "y": 400,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "dxqz0000000003",
+        "type": "inject",
+        "z": "dxc0000000000090",
+        "name": "Load QRZ cache on start",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "10",
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 1180,
+        "y": 480,
+        "wires": [
+            [
+                "dxqz0000000004"
+            ]
+        ]
+    },
+    {
+        "id": "dxqz0000000004",
+        "type": "function",
+        "z": "dxc0000000000090",
+        "name": "Build QRZ cache query",
+        "func": "const dx = global.get('dx');\nmsg.topic = dx.storage.qrz.recentQuery();\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1390,
+        "y": 480,
+        "wires": [
+            [
+                "dxqz0000000005"
+            ]
+        ]
+    },
+    {
+        "id": "dxqz0000000005",
+        "type": "sqlite",
+        "z": "dxc0000000000090",
+        "mydb": "dxc0000000000027",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "Read QRZ cache",
+        "x": 1610,
+        "y": 480,
+        "wires": [
+            [
+                "dxqz0000000006"
+            ]
+        ]
+    },
+    {
+        "id": "dxqz0000000006",
+        "type": "function",
+        "z": "dxc0000000000090",
+        "name": "Prime QRZ cache",
+        "func": "const dx = global.get('dx');\nconst count = dx.qso.primeCache(msg.payload);\nnode.status({fill: 'green', shape: 'dot', text: count + ' 条结论'});\nreturn null;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1830,
+        "y": 480,
         "wires": [
             []
         ]
